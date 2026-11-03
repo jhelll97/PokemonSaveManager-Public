@@ -153,6 +153,7 @@ class SwitchBdspTextSpeedActivity : Activity() {
         val hash = expectedHash ?: return
         val selected = speed.selectedItemPosition
         val plan = try { when (setting) {
+            BdspEditableSetting.BGM_VOLUME -> BdspTextSpeedEditing.stageMusicVolume(bytes, hash, selected)
             BdspEditableSetting.TEXT_SPEED -> BdspTextSpeedEditing.stage(bytes, hash, selected)
             BdspEditableSetting.BATTLE_STYLE -> BdspTextSpeedEditing.stageBattleStyle(bytes, hash, selected)
             BdspEditableSetting.MOVE_ANIMATIONS -> BdspTextSpeedEditing.stageMoveAnimations(bytes, hash, selected)
