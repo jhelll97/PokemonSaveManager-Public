@@ -537,6 +537,11 @@ class SwitchReadOnlyActivity : Activity() {
                     isAllCaps = false; textSize = 17f; isEnabled = !busy
                     setOnClickListener { if (session === bound && !dashboardBusy) showSwitchBank(bound) }
                 })
+                dashboardRoot.addView(Button(this).apply {
+                    text = "▤  Safe Backups"
+                    isAllCaps = false; textSize = 17f; isEnabled = !busy && bound.supports(SwitchReadCapability.SAFE_BACKUPS)
+                    setOnClickListener { if (session === bound && !dashboardBusy) showSwitchSafeBackups(bound) }
+                })
             }
         }
         if (bound.letsGoDayCare != null) dashboardRoot.addView(Button(this).apply {
@@ -1295,6 +1300,94 @@ class SwitchReadOnlyActivity : Activity() {
         list.addView(nav); dialog.show()
     }
 
+    private fun showSwitchSafeBackups(bound: SwitchReadSession) {
+        if (session !== bound) return
+        val entries = SwitchSafeBackupStore.listVerified(this, bound.profile.family)
+        val labels = entries.map { entry ->
+            entry.file.name + "\n" + entry.byteCount + " bytes • SHA-256 " + entry.sha256.take(12) + "…"
+        }
+        val builder = AlertDialog.Builder(this)
+            .setTitle("PSE Safe Backups • " + bound.displayName)
+            .setPositiveButton("Close", null)
+            .setNeutralButton("Create verified backup") { _, _ -> createSwitchSafeBackup(bound) }
+        if (entries.isEmpty()) {
+            builder.setMessage("No verified backups exist for this Switch title. Opening this screen never creates a backup; use Create verified backup to copy the unchanged source after its identity and native integrity are rechecked.")
+        } else {
+            builder.setItems(labels.toTypedArray()) { _, index ->
+                if (session === bound) showSwitchSafeBackupEntry(bound, entries[index])
+            }
+        }
+        builder.show()
+    }
+
+    private fun createSwitchSafeBackup(bound: SwitchReadSession) {
+        if (session !== bound) return
+        try {
+            val bytes = verifiedCurrentSwitchSource(bound)
+            val entry = SwitchSafeBackupStore.createVerified(this, bound.profile.family, bytes)
+            AlertDialog.Builder(this).setTitle("Verified backup created")
+                .setMessage(entry.file.name + "\n\n" + entry.byteCount + " bytes\nSHA-256: " + entry.sha256 +
+                    "\n\nThe selected Switch save was not changed.")
+                .setPositiveButton("Back to Safe Backups") { _, _ -> if (session === bound) showSwitchSafeBackups(bound) }
+                .setNegativeButton("Close", null).show()
+        } catch (error: Exception) {
+            AlertDialog.Builder(this).setTitle("Backup was not created")
+                .setMessage((error.message ?: "The source could not be verified.") + "\n\nThe selected Switch save was not changed.")
+                .setPositiveButton("Close", null).show()
+        }
+    }
+
+    private fun verifiedCurrentSwitchSource(bound: SwitchReadSession): ByteArray {
+        require(session === bound) { "The active save changed. Reopen Safe Backups." }
+        val uri = selectedSourceUri ?: throw IllegalStateException("The selected save is no longer available.")
+        val original = bound.snapshot.bytesCopy()
+        val current = contentResolver.openInputStream(uri)?.use { input ->
+            val bytes = input.readBytes()
+            require(bytes.size <= SwitchReadSnapshot.MAX_SAVE_BYTES) { "The selected file exceeds the 16 MiB intake limit." }
+            bytes
+        } ?: throw java.io.IOException("The selected save could not be reopened.")
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        require(java.security.MessageDigest.isEqual(digest.digest(original), digest.digest(current))) {
+            "The selected save changed after it was opened. Reopen it before creating a backup."
+        }
+        return current
+    }
+
+    private fun showSwitchSafeBackupEntry(bound: SwitchReadSession, opened: SwitchSafeBackupEntry) {
+        if (session !== bound) return
+        val entry = runCatching {
+            SwitchSafeBackupStore.inspect(this, bound.profile.family, opened.file)
+        }.getOrElse { error ->
+            AlertDialog.Builder(this).setTitle("Backup could not be verified")
+                .setMessage(error.message ?: "The backup was left unchanged.")
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val dialog = AlertDialog.Builder(this).setTitle("Safe Backup • " + bound.displayName)
+            .setMessage(entry.file.name + "\n\n" + entry.byteCount + " bytes\nSHA-256: " + entry.sha256 +
+                "\n\nNative title and integrity validation passed. This backup is an exact source snapshot.")
+            .setNegativeButton("Close", null).create()
+        dialog.setButton(AlertDialog.BUTTON_POSITIVE, "Delete Backup",
+            null as android.content.DialogInterface.OnClickListener?)
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                try {
+                    require(session === bound) { "The active save changed; the backup was left unchanged." }
+                    SwitchSafeBackupStore.removeVerified(this, bound.profile.family, entry.file, entry.sha256)
+                    dialog.dismiss()
+                    AlertDialog.Builder(this).setTitle("Backup deleted")
+                        .setMessage(entry.file.name + " was removed. The selected Switch save was not changed.")
+                        .setPositiveButton("Back to Safe Backups") { _, _ -> if (session === bound) showSwitchSafeBackups(bound) }
+                        .setNegativeButton("Close", null).show()
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Backup was not deleted")
+                        .setMessage(error.message ?: "The backup was left unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }
+        }
+        dialog.show()
+    }
     private fun showSwitchBank(bound: SwitchReadSession) {
         if (session !== bound) return
         when (bound.profile.family) {

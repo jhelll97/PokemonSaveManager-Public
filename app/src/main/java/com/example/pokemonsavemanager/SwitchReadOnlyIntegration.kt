@@ -16,7 +16,7 @@ enum class SwitchGameFamily(val displayName: String, val generation: Int) {
 
 enum class SwitchReadCapability {
     SAVE_IDENTITY, TRAINER_PROFILE, PARTY, PC_OR_BOXES, PASTURES,
-    POKEMON_DETAILS, POKEDEX, POKEDEX_AND_PROGRESS, PSE_BANK_READ_ONLY, INVENTORY
+    POKEMON_DETAILS, POKEDEX, POKEDEX_AND_PROGRESS, PSE_BANK_READ_ONLY, SAFE_BACKUPS, INVENTORY
 }
 
 /** Implemented readers are separate from planned sections and per-file validation. */
@@ -28,27 +28,27 @@ class SwitchCapabilityProfile internal constructor(val family: SwitchGameFamily)
         if (family == SwitchGameFamily.LEGENDS_ARCEUS) SwitchReadCapability.PASTURES
         else SwitchReadCapability.PC_OR_BOXES,
         SwitchReadCapability.POKEMON_DETAILS, SwitchReadCapability.POKEDEX, SwitchReadCapability.POKEDEX_AND_PROGRESS,
-        SwitchReadCapability.PSE_BANK_READ_ONLY, SwitchReadCapability.INVENTORY
+        SwitchReadCapability.PSE_BANK_READ_ONLY, SwitchReadCapability.SAFE_BACKUPS, SwitchReadCapability.INVENTORY
     )
     val capabilities: Set<SwitchReadCapability> get() =
         if (family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE) setOf(SwitchReadCapability.SAVE_IDENTITY,
             SwitchReadCapability.PARTY, SwitchReadCapability.PC_OR_BOXES, SwitchReadCapability.POKEMON_DETAILS,
-            SwitchReadCapability.TRAINER_PROFILE, SwitchReadCapability.POKEDEX, SwitchReadCapability.INVENTORY)
+            SwitchReadCapability.TRAINER_PROFILE, SwitchReadCapability.POKEDEX, SwitchReadCapability.INVENTORY, SwitchReadCapability.SAFE_BACKUPS)
         else if (family == SwitchGameFamily.SWORD_SHIELD) setOf(SwitchReadCapability.SAVE_IDENTITY,
             SwitchReadCapability.PARTY, SwitchReadCapability.PC_OR_BOXES, SwitchReadCapability.POKEMON_DETAILS,
-            SwitchReadCapability.TRAINER_PROFILE, SwitchReadCapability.POKEDEX, SwitchReadCapability.INVENTORY)
+            SwitchReadCapability.TRAINER_PROFILE, SwitchReadCapability.POKEDEX, SwitchReadCapability.INVENTORY, SwitchReadCapability.SAFE_BACKUPS)
         else if (family == SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL) setOf(SwitchReadCapability.SAVE_IDENTITY,
             SwitchReadCapability.PARTY, SwitchReadCapability.PC_OR_BOXES, SwitchReadCapability.POKEMON_DETAILS,
-            SwitchReadCapability.TRAINER_PROFILE, SwitchReadCapability.POKEDEX, SwitchReadCapability.INVENTORY)
+            SwitchReadCapability.TRAINER_PROFILE, SwitchReadCapability.POKEDEX, SwitchReadCapability.INVENTORY, SwitchReadCapability.SAFE_BACKUPS)
         else if (family == SwitchGameFamily.LEGENDS_ARCEUS) setOf(SwitchReadCapability.SAVE_IDENTITY,
             SwitchReadCapability.PARTY, SwitchReadCapability.PASTURES, SwitchReadCapability.POKEMON_DETAILS,
-            SwitchReadCapability.TRAINER_PROFILE, SwitchReadCapability.POKEDEX, SwitchReadCapability.INVENTORY)
+            SwitchReadCapability.TRAINER_PROFILE, SwitchReadCapability.POKEDEX, SwitchReadCapability.INVENTORY, SwitchReadCapability.SAFE_BACKUPS)
         else if (family == SwitchGameFamily.SCARLET_VIOLET) setOf(SwitchReadCapability.SAVE_IDENTITY,
             SwitchReadCapability.PARTY, SwitchReadCapability.PC_OR_BOXES, SwitchReadCapability.POKEMON_DETAILS,
-            SwitchReadCapability.TRAINER_PROFILE, SwitchReadCapability.POKEDEX, SwitchReadCapability.INVENTORY)
+            SwitchReadCapability.TRAINER_PROFILE, SwitchReadCapability.POKEDEX, SwitchReadCapability.INVENTORY, SwitchReadCapability.SAFE_BACKUPS)
         else if (family == SwitchGameFamily.LEGENDS_ZA) setOf(SwitchReadCapability.SAVE_IDENTITY,
             SwitchReadCapability.PARTY, SwitchReadCapability.PC_OR_BOXES, SwitchReadCapability.POKEMON_DETAILS,
-            SwitchReadCapability.TRAINER_PROFILE, SwitchReadCapability.POKEDEX, SwitchReadCapability.INVENTORY)
+            SwitchReadCapability.TRAINER_PROFILE, SwitchReadCapability.POKEDEX, SwitchReadCapability.INVENTORY, SwitchReadCapability.SAFE_BACKUPS)
         else emptySet()
     fun supports(capability: SwitchReadCapability): Boolean = capability in capabilities
 }
@@ -596,7 +596,7 @@ class SwitchReadSession(val snapshot: SwitchReadSnapshot) {
         ?: scarletVioletStorageAttempt?.exceptionOrNull()?.message
         ?: legendsZaStorageAttempt?.exceptionOrNull()?.message
     fun supports(capability: SwitchReadCapability): Boolean =
-        isFormatVerified && (capability == SwitchReadCapability.SAVE_IDENTITY ||
+        isFormatVerified && (capability in setOf(SwitchReadCapability.SAVE_IDENTITY, SwitchReadCapability.SAFE_BACKUPS) ||
             ((letsGoInventory != null || swordShieldInventory != null || bdspInventory != null || legendsArceusInventory != null || scarletVioletInventory != null || legendsZaInventory != null) && capability == SwitchReadCapability.INVENTORY) ||
             ((letsGoPokedex != null || swordShieldPokedex != null || bdspPokedex != null || legendsArceusPokedex != null || scarletVioletPokedex != null || legendsZaPokedex != null) && capability == SwitchReadCapability.POKEDEX) ||
             (legendsArceusStorage != null && capability in setOf(SwitchReadCapability.PARTY,
