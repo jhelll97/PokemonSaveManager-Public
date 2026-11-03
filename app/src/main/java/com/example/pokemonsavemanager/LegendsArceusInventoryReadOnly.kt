@@ -9,8 +9,9 @@ data class LegendsArceusInventoryItem(val itemId: Int, val count: Int, val slot:
     val isRecorded: Boolean get() = rawItemId != 0 || rawCount != 0
 }
 
-class LegendsArceusInventoryPocket internal constructor(val name: String, val capacity: Int,
-    val referenceMaxCount: Int, val items: List<LegendsArceusInventoryItem>) {
+class LegendsArceusInventoryPocket internal constructor(val name: String, val blockKey: UInt,
+    val capacity: Int, val referenceMaxCount: Int, val allowsCataloguedAdd: Boolean,
+    val items: List<LegendsArceusInventoryItem>) {
     val recordedItems: List<LegendsArceusInventoryItem> = immutable(items.filter { it.isRecorded })
     val residualCount: Int get() = recordedItems.count { !it.withinActiveCapacity }
 }
@@ -48,15 +49,15 @@ object LegendsArceusInventoryReadOnly {
             (favorites[id / 8].toInt() and (1 shl (id % 8))) != 0
         }
         return LegendsArceusInventorySnapshot(immutable(listOf(
-            pocket("Satchel", regular, 675, regularCapacity, 999, favorites),
-            pocket("Key Items", keyItems, KEY_ITEM_CAPACITY, KEY_ITEM_CAPACITY, 1, favorites),
-            pocket("Item Storage", stored, STORED_ITEM_CAPACITY, STORED_ITEM_CAPACITY, 999, favorites),
-            pocket("Crafting Recipes", recipes, RECIPE_CAPACITY, RECIPE_CAPACITY, 1, favorites)
+            pocket("Satchel", REGULAR_BLOCK_KEY, regular, 675, regularCapacity, 999, true, favorites),
+            pocket("Key Items", KEY_BLOCK_KEY, keyItems, KEY_ITEM_CAPACITY, KEY_ITEM_CAPACITY, 1, false, favorites),
+            pocket("Item Storage", STORED_BLOCK_KEY, stored, STORED_ITEM_CAPACITY, STORED_ITEM_CAPACITY, 999, true, favorites),
+            pocket("Crafting Recipes", RECIPE_BLOCK_KEY, recipes, RECIPE_CAPACITY, RECIPE_CAPACITY, 1, false, favorites)
         )), rawSatchelUpgrades, immutable(flags))
     }
 
-    private fun pocket(name: String, data: ByteArray, slots: Int, capacity: Int,
-        maximum: Int, favorites: ByteArray): LegendsArceusInventoryPocket {
+    private fun pocket(name: String, blockKey: UInt, data: ByteArray, slots: Int, capacity: Int,
+        maximum: Int, allowsCataloguedAdd: Boolean, favorites: ByteArray): LegendsArceusInventoryPocket {
         require(data.size == slots * RECORD_BYTES) { "The Arceus $name block has the wrong size." }
         val items = (0 until slots).map { index ->
             val rawId = u16(data, index * RECORD_BYTES)
@@ -67,7 +68,7 @@ object LegendsArceusInventoryReadOnly {
             LegendsArceusInventoryItem(id, rawCount.toShort().toInt(), index, rawId, rawCount,
                 favorite, index < capacity)
         }
-        return LegendsArceusInventoryPocket(name, capacity, maximum, immutable(items))
+        return LegendsArceusInventoryPocket(name, blockKey, capacity, maximum, allowsCataloguedAdd, immutable(items))
     }
 
     private fun u16(data: ByteArray, offset: Int): Int =

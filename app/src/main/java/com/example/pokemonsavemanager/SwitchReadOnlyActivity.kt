@@ -3511,7 +3511,7 @@ class SwitchReadOnlyActivity : Activity() {
         val bag = bound.legendsArceusInventory ?: return
         val labels = bag.pockets.map { "${it.name} • ${it.recordedItems.size} recorded slots" } +
             "Favorite flags • ${bag.favoriteItemIds.size} saved flags"
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Inventory • Read-only")
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Items")
             .setItems(labels.toTypedArray()) { _, index ->
                 if (session === bound) showLegendsArceusInventoryPocket(bound, index, 0)
             }.setNegativeButton("Close", null).show()
@@ -3530,8 +3530,17 @@ class SwitchReadOnlyActivity : Activity() {
         root.addView(TextView(this).apply {
             text = if (pocket == null) "Saved favorite flags include items absent from the bag. A favorite flag does not prove ownership."
                 else "${pocket.capacity} active slots • ${pocket.items.size} physical slots • ${pocket.residualCount} recorded beyond active capacity\n" +
-                    "Satchel upgrades: ${bag.rawSatchelUpgrades}\nSaved order and signed quantities are retained. Select an item for details."
+                    "Satchel upgrades: ${bag.rawSatchelUpgrades}\nSaved order and signed quantities are retained. Catalogued records in active slots can be changed through a reviewed new copy; unusual and residual records remain locked."
             textSize = 16f; setTextIsSelectable(true)
+        })
+        val emptySlot = pocket?.takeIf { it.allowsCataloguedAdd }?.items
+            ?.firstOrNull { it.withinActiveCapacity && !it.isRecorded }
+        if (pocket != null && emptySlot != null) root.addView(Button(this).apply {
+            text = "＋  Add item • Save new copy"
+            isAllCaps = false
+            setOnClickListener {
+                if (session === bound) launchLegendsArceusItemEditor(bound, index, emptySlot.slot, true)
+            }
         })
         if (total == 0) root.addView(TextView(this).apply { text = "No saved records in this section."; textSize = 16f })
         if (pocket != null) for (entry in pocket.recordedItems.drop(page * 20).take(20)) root.addView(Button(this).apply {
@@ -3553,15 +3562,42 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound) return
         val pocket = bound.legendsArceusInventory?.pockets?.getOrNull(pocketIndex) ?: return
         val entry = pocket.items.getOrNull(slot) ?: return
+        val editable = entry.withinActiveCapacity && entry.count > 0 &&
+            LegendsArceusItemNames.isCatalogued(entry.itemId)
         val detail = "${entry.itemName} (#${entry.itemId}) • Read-only\n${pocket.name} • Slot ${slot + 1}\n\n" +
             "Saved signed quantity: ${entry.count}\nRaw item word: ${entry.rawItemId}\nRaw quantity word: ${entry.rawCount}\n" +
             "Favorite: ${entry.isFavorite}\nWithin active capacity: ${entry.withinActiveCapacity}\nReference maximum: ${pocket.referenceMaxCount}\n\n" +
-            "Duplicate IDs, zero or negative quantities and records beyond the active satchel are retained. Reference maxima are descriptive; no legality or ownership is inferred."
+            "Duplicate IDs, zero or negative quantities and records beyond the active satchel are retained. Reference maxima are descriptive; no legality or ownership is inferred. " +
+            if (editable) "Use Edit item to review a quantity change or removal saved to a new copy. The independent favorite flag remains unchanged."
+            else "This unusual or inactive record remains locked."
         val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
             text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
         }) }
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • ${entry.itemName}")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        val builder = AlertDialog.Builder(this).setTitle("${bound.displayName} • ${entry.itemName}")
+            .setView(scroll).setNegativeButton("Close", null)
+        if (editable) builder.setPositiveButton("Edit item • New copy") { _, _ ->
+            if (session === bound) launchLegendsArceusItemEditor(bound, pocketIndex, slot, false)
+        }
+        builder.show()
+    }
+
+    private fun launchLegendsArceusItemEditor(
+        bound: SwitchReadSession,
+        pocketIndex: Int,
+        slot: Int,
+        add: Boolean
+    ) {
+        val source = selectedSourceUri ?: return
+        if (session !== bound) return
+        startActivity(
+            Intent(this, SwitchLegendsArceusItemActivity::class.java)
+                .setData(source)
+                .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                .putExtra("pse.switch.item.pocket", pocketIndex)
+                .putExtra("pse.switch.item.slot", slot)
+                .putExtra("pse.switch.item.add", add)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        )
     }
 
     private fun showScarletVioletInventoryPockets(bound: SwitchReadSession) {

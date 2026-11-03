@@ -291,5 +291,7 @@ object LegendsArceusItemNames {
         1828 to "Legend Plate",
     )
     fun name(itemId: Int): String = names[itemId] ?: "Item #$itemId"
+    fun isCatalogued(itemId: Int): Boolean = itemId in names
+    fun cataloguedItemIds(): List<Int> = names.keys.sorted()
 }
 

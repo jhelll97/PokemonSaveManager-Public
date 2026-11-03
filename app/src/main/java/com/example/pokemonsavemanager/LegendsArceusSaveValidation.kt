@@ -22,6 +22,8 @@ internal data class LegendsArceusTrainerBlocks(val version: LegendsArceusVersion
 internal data class LegendsArceusInventoryBlocks(val regular: ByteArray, val keyItems: ByteArray,
     val stored: ByteArray, val recipes: ByteArray, val favorites: ByteArray, val satchelUpgrades: Long)
 
+internal data class LegendsArceusInventoryWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
+
 /** Independent read-only container gate; pinned format evidence is in SWITCH_READ_ONLY_FORMATS.md. */
 object LegendsArceusSaveValidation {
     private val knownSizes = setOf(0x136DDE, 0x13AD06)
@@ -31,6 +33,8 @@ object LegendsArceusSaveValidation {
     private val intro = decodeHex("9ec99cd70ed33c44fb9303dceb39b42a1947e9634ba2334416bf82a2ba6355b63d9df24b5f7b6ab2621dc21b68e5c8b53a059000e8a8103de2ecf00cb2ed4f6d")
     private val outro = decodeHex("d6c01c598bc8b8cb46e153fc828c757513e045df32693c75f059f8d9a25fb217e08052dbea8973997579afcb2e8007e6f126e0030ae66ff641bf7e59c2ae55fd")
     private val pad = decodeHex("a092d10607db32a1ae01f5c51e844fe353ca37f4a7b04da018b7c297da5f532b75fa4816f8d48a6f6105f4e2fd04b5a30ffc4492cb32e61bb9b12e01b0565336d2d1503dde5b2e0e52fddf2f7bca6350a4675d2317c052e1a6307c2bb670365b2a276933f5637b363f269ba3ed7a5300a448b3509e14a052de7e102b1b776e")
+    private val inventoryObjects = mapOf(0x9FE2790AL to 0xA8C, 0x59A4D0C3L to 0x190,
+        0x8E434F0DL to 0x2D0, 0xF5D9F4A5L to 0x118)
 
     fun inspect(source: ByteArray): LegendsArceusValidation = inspect(source, null)
 
@@ -66,15 +70,13 @@ object LegendsArceusSaveValidation {
 
     /** Inventory-specific shapes add checks without changing existing reader gates. */
     internal fun readInventoryBlocks(source: ByteArray): LegendsArceusInventoryBlocks {
-        val objects = mapOf(0x9FE2790AL to 0xA8C, 0x59A4D0C3L to 0x190,
-            0x8E434F0DL to 0x2D0, 0xF5D9F4A5L to 0x118)
-        val captured = (objects.keys + setOf(0x00EF4BAEL, 0x75CE2CF6L))
+        val captured = (inventoryObjects.keys + setOf(0x00EF4BAEL, 0x75CE2CF6L))
             .associateWith { ByteArray(0) }.toMutableMap()
-        val checked = inspect(source, captured, setOf(0x75CE2CF6L), objects, mapOf(0x00EF4BAEL to 0x140))
+        val checked = inspect(source, captured, setOf(0x75CE2CF6L), inventoryObjects, mapOf(0x00EF4BAEL to 0x140))
         require(checked is LegendsArceusValidation.Verified) {
             (checked as? LegendsArceusValidation.Invalid)?.reason ?: "A validated native Arceus save is required."
         }
-        require(objects.all { (key, size) -> captured.getValue(key).size == size } &&
+        require(inventoryObjects.all { (key, size) -> captured.getValue(key).size == size } &&
             captured.getValue(0x00EF4BAEL).size == 0x140 && captured.getValue(0x75CE2CF6L).size == 4) {
             "Arceus inventory blocks or the saved satchel upgrade counter are missing."
         }
@@ -82,6 +84,73 @@ object LegendsArceusSaveValidation {
         val upgrades = (0..3).fold(0L) { value, i -> value or ((raw[i].toLong() and 255) shl (i * 8)) }
         return LegendsArceusInventoryBlocks(captured.getValue(0x9FE2790AL), captured.getValue(0x59A4D0C3L),
             captured.getValue(0x8E434F0DL), captured.getValue(0xF5D9F4A5L), captured.getValue(0x00EF4BAEL), upgrades)
+    }
+
+    /** Replaces one decoded four-byte inventory record and rebuilds native container integrity. */
+    internal fun writeInventoryRecord(source: ByteArray, blockKey: UInt, relativeOffset: Int,
+        rawItemId: Int, rawCount: Int): LegendsArceusInventoryWriteResult {
+        readInventoryBlocks(source)
+        val keyValue = blockKey.toLong()
+        val blockSize = inventoryObjects[keyValue]
+            ?: throw IllegalArgumentException("The selected Legends: Arceus inventory block is unsupported.")
+        require(relativeOffset in 0..blockSize - 4 && relativeOffset % 4 == 0) {
+            "The native Legends: Arceus item slot is outside its inventory block."
+        }
+        require(rawItemId in 0..0xFFFF && rawCount in 0..0xFFFF) {
+            "The native Legends: Arceus item record is outside its unsigned word range."
+        }
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var absoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            if (key == keyValue) {
+                require(type == 4 && length == blockSize.toLong()) {
+                    "The Legends: Arceus inventory block has the wrong native type or size."
+                }
+                repeat(relativeOffset) { stream.next() }
+                val decoded = byteArrayOf(
+                    rawItemId.toByte(), (rawItemId ushr 8).toByte(),
+                    rawCount.toByte(), (rawCount ushr 8).toByte()
+                )
+                repeat(decoded.size) { byteIndex ->
+                    payload[blockStart + relativeOffset + byteIndex] =
+                        (decoded[byteIndex].toInt() xor stream.next()).toByte()
+                }
+                absoluteOffset = blockStart + relativeOffset
+            }
+            cursor.skip(length.toInt())
+        }
+        require(absoluteOffset >= 0) { "The selected Legends: Arceus inventory block is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readInventoryBlocks(edited)
+        return LegendsArceusInventoryWriteResult(edited, absoluteOffset)
     }
 
     private fun inspect(source: ByteArray, captured: MutableMap<Long, ByteArray>?, uintKeys: Set<Long> = emptySet(),
@@ -168,7 +237,8 @@ object LegendsArceusSaveValidation {
     }
 
     private class Cursor(private val bytes: ByteArray) {
-        private var position = 0
+        var position = 0
+            private set
         val remaining: Int get() = bytes.size - position
         fun byte(): Int {
             require(remaining >= 1) { "The native block stream is truncated." }
