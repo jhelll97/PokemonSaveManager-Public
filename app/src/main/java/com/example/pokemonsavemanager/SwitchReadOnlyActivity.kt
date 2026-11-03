@@ -517,7 +517,7 @@ class SwitchReadOnlyActivity : Activity() {
         val entries = SwitchReadDashboard.entries(bound)
         val detailGroups = SwitchReadGameDetails.groups(bound)
         if (bound.profile.family == SwitchGameFamily.SWORD_SHIELD) dashboardRoot.addView(Button(this).apply {
-            text = "PSE Bank • Sword/Shield PK8"
+            text = "PSE Bank • Sword/Shield PK8 • Manage"
             isAllCaps = false; textSize = 17f; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldBank(bound) }
         })
