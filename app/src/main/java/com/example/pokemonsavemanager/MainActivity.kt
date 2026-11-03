@@ -4194,6 +4194,17 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun persistGrantedUriPermission(uri: Uri, flags: Int) {
+        val read = Intent.FLAG_GRANT_READ_URI_PERMISSION
+        val write = Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        when (flags and (read or write)) {
+            read -> contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            write -> contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            (read or write) -> contentResolver.takePersistableUriPermission(uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        }
+    }
+
     @Deprecated("Deprecated in Android API, retained for minSdk-compatible prototype")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -4201,7 +4212,7 @@ class MainActivity : Activity() {
             if (resultCode != RESULT_OK) return
             val uri = data?.data ?: return
             if (uri.scheme != "content") { showDialog("Save source", "Choose an Android document or folder."); return }
-            try { contentResolver.takePersistableUriPermission(uri, data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
+            try { persistGrantedUriPermission(uri, data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
             if (requestCode == PICK_SWITCH_SOURCE) {
                 val name = queryDisplayName(uri) ?: "save"
                 val progress = AlertDialog.Builder(this).setTitle("Reading Switch save").setMessage("Validating the original source…").setCancelable(false).create()
@@ -4242,7 +4253,7 @@ class MainActivity : Activity() {
             val uri = data?.data ?: return
             val flags = data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION
             try {
-                contentResolver.takePersistableUriPermission(uri, flags)
+                persistGrantedUriPermission(uri, flags)
             } catch (_: Exception) { }
             handleGen6ConverterTemplate(uri)
             return
@@ -4259,7 +4270,7 @@ class MainActivity : Activity() {
             rememberedSaveRepairTarget = null
             val uri = data?.data ?: return
             val flags = data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            try { contentResolver.takePersistableUriPermission(uri, flags) } catch (_: Exception) { }
+            try { persistGrantedUriPermission(uri, flags) } catch (_: Exception) { }
             val name = queryDisplayName(uri) ?: target.displayName
             val progress = AlertDialog.Builder(this)
                 .setTitle("Reconnecting ${rememberedCardGame(target)}")
@@ -4279,7 +4290,7 @@ class MainActivity : Activity() {
         if (requestCode == PICK_DS_SAVE) {
             val uri = data?.data ?: return
             val flags = data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            try { contentResolver.takePersistableUriPermission(uri, flags) } catch (_: Exception) { }
+            try { persistGrantedUriPermission(uri, flags) } catch (_: Exception) { }
             val name = queryDisplayName(uri) ?: "selected.sav"
             val scanned = inspectDsScannedSave(uri, name, name)
             if (scanned == null) showDialog("Nintendo DS save not recognised", "That file is not a supported standard 512 KB Gen 4 / Gen 5 Pokémon .sav image.") else importDsSave(scanned)
@@ -4288,12 +4299,12 @@ class MainActivity : Activity() {
         if (requestCode == PICK_DS_TREE) {
             val uri = data?.data ?: return
             val flags = data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            try { contentResolver.takePersistableUriPermission(uri, flags) } catch (_: Exception) { }
+            try { persistGrantedUriPermission(uri, flags) } catch (_: Exception) { }
             getSharedPreferences("pse_scanner", MODE_PRIVATE).edit().putString("ds_tree", uri.toString()).apply(); scanDsTree(uri); return
         }
 
         if (requestCode == PICK_GBA_SAVE) {
-            val uri=data?.data?:return;val flags=data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION);try{contentResolver.takePersistableUriPermission(uri,flags)}catch(_:Exception){}
+            val uri=data?.data?:return;val flags=data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION);try{persistGrantedUriPermission(uri, flags)}catch(_:Exception){}
             val name=queryDisplayName(uri)?:"selected.sav"
             val scanned=inspectGen3ScannedSave(uri,name,name)
             if(scanned!=null) importGbaSave(scanned)
@@ -4305,7 +4316,7 @@ class MainActivity : Activity() {
             return
         }
         if (requestCode == PICK_GBA_TREE) {
-            val uri=data?.data?:return;val flags=data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION);try{contentResolver.takePersistableUriPermission(uri,flags)}catch(_:Exception){};getSharedPreferences("pse_scanner",MODE_PRIVATE).edit().putString("gba_tree",uri.toString()).apply();scanGbaTree(uri);return
+            val uri=data?.data?:return;val flags=data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION);try{persistGrantedUriPermission(uri, flags)}catch(_:Exception){};getSharedPreferences("pse_scanner",MODE_PRIVATE).edit().putString("gba_tree",uri.toString()).apply();scanGbaTree(uri);return
         }
 
         if (requestCode == PICK_PIZZABOYC_SAVE) {
@@ -4313,7 +4324,7 @@ class MainActivity : Activity() {
             val flags = data.flags and (
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
-            try { contentResolver.takePersistableUriPermission(uri, flags) } catch (_: Exception) { }
+            try { persistGrantedUriPermission(uri, flags) } catch (_: Exception) { }
             val scanned = inspectPickedGen1Save(uri)
             if (scanned == null) {
                 // Do not trust the picker path as the format. If a user selects a Ruby,
@@ -4337,7 +4348,7 @@ class MainActivity : Activity() {
             val flags = data.flags and (
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
-            try { contentResolver.takePersistableUriPermission(treeUri, flags) } catch (_: Exception) { }
+            try { persistGrantedUriPermission(treeUri, flags) } catch (_: Exception) { }
             getSharedPreferences("pse_scanner", MODE_PRIVATE).edit().putString("pizzaboyc_tree", treeUri.toString()).apply()
             scanPizzaBoyCTree(treeUri)
             return
@@ -4349,7 +4360,7 @@ class MainActivity : Activity() {
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
             try {
-                contentResolver.takePersistableUriPermission(treeUri, flags)
+                persistGrantedUriPermission(treeUri, flags)
             } catch (_: Exception) { }
             getSharedPreferences("pse_scanner", MODE_PRIVATE).edit().putString("azahar_tree", treeUri.toString()).apply()
             scanAzaharTree(treeUri)
@@ -4362,7 +4373,7 @@ class MainActivity : Activity() {
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
             try {
-                contentResolver.takePersistableUriPermission(treeUri, flags)
+                persistGrantedUriPermission(treeUri, flags)
             } catch (_: Exception) { }
             getSharedPreferences("pse_safe_files", MODE_PRIVATE).edit()
                 .putString("tree_uri", treeUri.toString())
