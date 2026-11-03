@@ -43,6 +43,19 @@ object SwordShieldInventoryReadOnly {
         SwordShieldInventoryPocket.INGREDIENTS to setOf(1084, 1085, 1086, 1087, 1088, 1089, 1090, 1091, 1092, 1093, 1094, 1095, 1096, 1097, 1098, 1099, 1256, 1257, 1258, 1259, 1260, 1261, 1262, 1263, 1264),
         SwordShieldInventoryPocket.KEY_ITEMS to setOf(78, 628, 629, 631, 632, 638, 703, 847, 943, 944, 945, 946, 1074, 1075, 1076, 1077, 1080, 1081, 1100, 1255, 1266, 1267, 1269, 1270, 1271, 1278, 1583, 1584, 1585, 1586, 1587, 1589, 1590, 1591, 1593, 1594, 1595, 1596, 1597, 1598, 1599, 1600, 1601, 1602, 1603, 1605, 1607)
     )
+
+    fun allowedItemIds(pocket: SwordShieldInventoryPocket): List<Int> =
+        allowed.getValue(pocket).sorted()
+
+    fun referenceMaxCount(pocket: SwordShieldInventoryPocket, itemId: Int): Int? {
+        if (itemId !in allowed.getValue(pocket)) return null
+        return when {
+            pocket == SwordShieldInventoryPocket.MACHINES && itemId !in 1130..1229 -> 1
+            pocket == SwordShieldInventoryPocket.KEY_ITEMS -> 1
+            else -> 999
+        }
+    }
+
     fun read(source: ByteArray): SwordShieldInventoryRead {
         val checked = SwordShieldSaveValidation.readInventoryBlock(source)
         val bytes = checked.items
@@ -53,11 +66,7 @@ object SwordShieldInventoryReadOnly {
                 val item = (raw and 0x7FF).toInt()
                 val count = ((raw ushr 15) and 0x3FF).toInt()
                 val listed = item in allowed.getValue(pocket)
-                val maximum = if (!listed) null else when {
-                    pocket == SwordShieldInventoryPocket.MACHINES && item !in 1130..1229 -> 1
-                    pocket == SwordShieldInventoryPocket.KEY_ITEMS -> 1
-                    else -> 999
-                }
+                val maximum = referenceMaxCount(pocket, item)
                 SwordShieldInventorySlotRead(i + 1, raw, item, count, raw and 0x40000000L != 0L, raw and 0x80000000L != 0L,
                     (raw and 0x7FFF).toInt(), ((raw ushr 15) and 0x7FFF).toInt(), raw and 0x3E007800L, listed, maximum)
             }

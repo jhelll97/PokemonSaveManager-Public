@@ -10,5 +10,6 @@
         <activity android:name=".SwitchReadOnlyActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspTextSpeedActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoItemActivity" android:exported="false"/>
+        <activity android:name=".SwitchSwordShieldItemActivity" android:exported="false"/>
     </application>
 </manifest>

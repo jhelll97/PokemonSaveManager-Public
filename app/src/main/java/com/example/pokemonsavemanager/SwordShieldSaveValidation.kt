@@ -14,12 +14,13 @@ sealed class SwordShieldValidation {
 
 internal data class SwordShieldPokemonBlocks(val version: SwordShieldVersion, val boxes: ByteArray, val party: ByteArray)
 internal data class SwordShieldInventoryBlock(val version: SwordShieldVersion, val items: ByteArray)
+internal data class SwordShieldInventoryWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldTrainerBlock(val version: SwordShieldVersion, val status: ByteArray)
 
 internal data class SwordShieldDexBlocks(val version: SwordShieldVersion, val galar: ByteArray,
     val armor: ByteArray?, val crown: ByteArray?)
 
-/** Independent read-only container gate; pinned format evidence is in SWITCH_READ_ONLY_FORMATS.md. */
+/** Native container gate plus the bounded inventory-word writer; format evidence is pinned in SWITCH_READ_ONLY_FORMATS.md. */
 object SwordShieldSaveValidation {
     private val knownSizes = setOf(0x1716B3, 0x17195E, 0x180B19, 0x180AD0,
         0x1876B1, 0x187693, 0x187668, 0x18764A)
@@ -61,6 +62,60 @@ object SwordShieldSaveValidation {
         val items = captured.getValue(0x1177C2C4L)
         require(items.size == 0x12F8) { "The native Sword/Shield inventory object is missing." }
         return SwordShieldInventoryBlock(checked.version, items)
+    }
+
+    /** Replaces one decoded inventory word, then rebuilds the container encryption and SHA-256 footer. */
+    internal fun writeInventoryWord(source: ByteArray, relativeOffset: Int, rawValue: Long): SwordShieldInventoryWriteResult {
+        readInventoryBlock(source)
+        require(relativeOffset in 0..0x12F4 && relativeOffset % 4 == 0) {
+            "The native Sword/Shield item slot is outside the inventory object."
+        }
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var absoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            if (key == 0x1177C2C4L) {
+                require(type == 4 && length == 0x12F8L) { "The Sword/Shield inventory block has the wrong native type or size." }
+                repeat(relativeOffset) { stream.next() }
+                repeat(4) { byteIndex ->
+                    val decoded = ((rawValue ushr (byteIndex * 8)) and 0xFF).toInt()
+                    payload[blockStart + relativeOffset + byteIndex] = (decoded xor stream.next()).toByte()
+                }
+                absoluteOffset = blockStart + relativeOffset
+            }
+            cursor.skip(length.toInt())
+        }
+        require(absoluteOffset >= 0) { "The native Sword/Shield inventory object is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readInventoryBlock(edited)
+        return SwordShieldInventoryWriteResult(edited, absoluteOffset)
     }
 
     private fun captureObjects(source: ByteArray, keys: Set<Long>): Pair<SwordShieldValidation.Verified, Map<Long, ByteArray>> {
@@ -144,7 +199,8 @@ object SwordShieldSaveValidation {
     }
 
     private class Cursor(private val bytes: ByteArray) {
-        private var position = 0
+        var position = 0
+            private set
         val remaining: Int get() = bytes.size - position
         fun byte(): Int {
             require(remaining >= 1) { "The native block stream is truncated." }
