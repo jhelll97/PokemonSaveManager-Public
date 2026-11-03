@@ -152,6 +152,36 @@ class SwitchReadSnapshot private constructor(
     internal fun readBdspPokedex(): BdspPokedexRead = BdspPokedexReadOnly.read(sourceBytes)
     internal fun readBdspTrainer(): BdspTrainerRead = BdspTrainerReadOnly.read(sourceBytes)
     internal fun readBdspStorage(): BdspStorageRead = BdspStorageReadOnly.read(sourceBytes)
+    internal fun readBdspRecord(location: String): ByteArray {
+        require(inspectBdsp() is BdspValidation.Verified) { "A validated native BDSP save is required." }
+        readBdspStorage()
+        val size = BdspPokemonReadOnly.RECORD_SIZE
+        val box = Regex("^Box ([0-9]+) • Slot ([0-9]+)$").matchEntire(location)
+        val party = Regex("^Party ([0-9]+)$").matchEntire(location)
+        return when {
+            box != null -> {
+                val boxIndex = box.groupValues[1].toInt() - 1
+                val slot = box.groupValues[2].toInt() - 1
+                require(boxIndex in 0 until 40 && slot in 0 until 30) { "BDSP box slot is out of range." }
+                val start = 0x14EF4 + (boxIndex * 30 + slot) * size
+                sourceBytes.copyOfRange(start, start + size)
+            }
+            party != null -> {
+                val slot = party.groupValues[1].toInt() - 1
+                require(slot in 0 until 6) { "BDSP party slot is out of range." }
+                val partyOffset = 0x14098
+                val count = sourceBytes[partyOffset + 6 * size].toInt() and 255
+                require(slot < count) { "That party slot is not occupied." }
+                val start = partyOffset + slot * size
+                sourceBytes.copyOfRange(start, start + size)
+            }
+            else -> throw IllegalArgumentException("Choose a Pokémon directly from its native BDSP box or party slot.")
+        }.also { record ->
+            require(BdspPokemonReadOnly.read(record) is BdspSlotRead.Pokemon) {
+                "Only a checksum-valid native Pokémon record can be added to Bank."
+            }
+        }
+    }
 
     internal fun readLegendsArceusInventory(): LegendsArceusInventorySnapshot = LegendsArceusInventoryReadOnly.read(sourceBytes)
     internal fun readLegendsArceusPokedex(): LegendsArceusPokedexRead = LegendsArceusPokedexReadOnly.read(sourceBytes)

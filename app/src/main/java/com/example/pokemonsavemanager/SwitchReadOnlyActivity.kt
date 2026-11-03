@@ -526,7 +526,8 @@ class SwitchReadOnlyActivity : Activity() {
             dashboardRoot.addView(row)
             if (pairIndex == 0 && bound.profile.family in setOf(
                     SwitchGameFamily.LETS_GO_PIKACHU_EEVEE,
-                    SwitchGameFamily.SWORD_SHIELD
+                    SwitchGameFamily.SWORD_SHIELD,
+                    SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL
                 )) {
                 dashboardRoot.addView(Button(this).apply {
                     text = "◇  PSE Bank • Manage"
@@ -1296,6 +1297,7 @@ class SwitchReadOnlyActivity : Activity() {
         when (bound.profile.family) {
             SwitchGameFamily.LETS_GO_PIKACHU_EEVEE -> showLetsGoBank(bound)
             SwitchGameFamily.SWORD_SHIELD -> showSwordShieldBank(bound)
+            SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL -> showBdspBank(bound)
             else -> return
         }
     }
@@ -1368,6 +1370,85 @@ class SwitchReadOnlyActivity : Activity() {
                     AlertDialog.Builder(this).setTitle("Removed from PSE Bank")
                         .setMessage(entry.name + " was removed. The Switch save was not changed.")
                         .setPositiveButton("Back to Bank") { _, _ -> if (session === bound) showLetsGoBank(bound) }
+                        .setNegativeButton("Close", null).show()
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not remove Bank entry")
+                        .setMessage(error.message ?: "The entry was left unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showBdspBank(bound: SwitchReadSession) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank")
+        val entries = directory.listFiles()?.filter {
+            it.isFile && it.name.startsWith("switch_bdsp_") && it.extension == "pb8"
+        }?.sortedBy { it.name }.orEmpty()
+        val labels = entries.map { file ->
+            val parsed = runCatching { BdspPokemonReadOnly.read(file.readBytes()) }.getOrNull()
+            val pokemon = (parsed as? BdspSlotRead.Pokemon)?.value
+            if (pokemon == null) file.name + " • unreadable"
+            else pokemon.nickname.ifBlank { SwordShieldSpeciesNames.name(pokemon.species) } +
+                " (#" + pokemon.species + ")" + (if (pokemon.shiny) " • Shiny" else "") + " • PB8"
+        }
+        val builder = AlertDialog.Builder(this)
+            .setTitle("PSE Bank • " + entries.size + " BDSP Pokémon")
+            .setPositiveButton("Close", null)
+        if (entries.isEmpty()) {
+            builder.setMessage("No BDSP Pokémon are stored. Open Pokémon Boxes, choose a Pokémon, then tap Add to PSE Bank.")
+        } else {
+            builder.setItems(labels.toTypedArray()) { _, index ->
+                if (session === bound) showBdspBankEntry(bound, entries[index])
+            }
+        }
+        builder.show()
+    }
+
+    private fun showBdspBankEntry(bound: SwitchReadSession, file: File) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = file.canonicalFile
+        val parsed = runCatching {
+            require(entry.parentFile == directory && entry.name.startsWith("switch_bdsp_") && entry.extension == "pb8") {
+                "This is not a BDSP Bank entry."
+            }
+            BdspPokemonReadOnly.read(entry.readBytes())
+        }.getOrElse { BdspSlotRead.Invalid(it.message ?: "The Bank entry could not be read.") }
+        if (parsed !is BdspSlotRead.Pokemon) {
+            AlertDialog.Builder(this).setTitle("Unreadable PSE Bank entry")
+                .setMessage((parsed as? BdspSlotRead.Invalid)?.reason ?: "The Bank entry is empty.")
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val p = parsed.value
+        val detail = buildString {
+            append("${SwordShieldSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form}\n")
+            append("Nickname: ${p.nickname.ifBlank { "None" }}\nCached level: ${p.cachedLevel}\n")
+            append("Shiny: ${if (p.shiny) "Yes" else "No"}\nOriginal trainer: ${p.originalTrainer}\n\n")
+            append("Native PB8 checksum passed. Removing this Bank copy never changes the Switch save.")
+        }
+        val dialog = AlertDialog.Builder(this).setTitle("PSE Bank • BDSP")
+            .setMessage(detail).setNegativeButton("Close", null).create()
+        dialog.setButton(AlertDialog.BUTTON_POSITIVE, "Remove from PSE Bank",
+            null as android.content.DialogInterface.OnClickListener?)
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                try {
+                    require(session === bound) { "The active save changed; the Bank entry was left unchanged." }
+                    require(entry.parentFile == directory && entry.name.startsWith("switch_bdsp_") && entry.extension == "pb8") {
+                        "This is not a removable BDSP Bank entry."
+                    }
+                    require(BdspPokemonReadOnly.read(entry.readBytes()) is BdspSlotRead.Pokemon) {
+                        "The Bank record is invalid; it was left unchanged."
+                    }
+                    require(entry.delete()) { "The Bank entry could not be removed." }
+                    dialog.dismiss()
+                    AlertDialog.Builder(this).setTitle("Removed from PSE Bank")
+                        .setMessage(entry.name + " was removed. The Switch save was not changed.")
+                        .setPositiveButton("Back to Bank") { _, _ -> if (session === bound) showBdspBank(bound) }
                         .setNegativeButton("Close", null).show()
                 } catch (error: Exception) {
                     AlertDialog.Builder(this).setTitle("Could not remove Bank entry")
@@ -1586,7 +1667,47 @@ class SwitchReadOnlyActivity : Activity() {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
         }
-        AlertDialog.Builder(this).setTitle("$location • Read-only").setView(scroll).setPositiveButton("Close", null).show()
+        val canAddToBank = Regex("^(Box [0-9]+ • Slot [0-9]+|Party [0-9]+)$").matches(location)
+        val dialog = AlertDialog.Builder(this).setTitle("$location • Read-only")
+            .setView(scroll).setNegativeButton("Close", null).create()
+        if (canAddToBank) {
+            dialog.setButton(AlertDialog.BUTTON_POSITIVE, "Add to PSE Bank",
+                null as android.content.DialogInterface.OnClickListener?)
+            dialog.setOnShowListener {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    if (session !== bound) { dialog.dismiss(); return@setOnClickListener }
+                    try {
+                        val raw = bdspRecordBytes(bound, location)
+                        val entry = SwitchPseBankStore.depositBdsp(this, raw)
+                        dialog.dismiss()
+                        AlertDialog.Builder(this).setTitle("Added to PSE Bank")
+                            .setMessage(p.nickname.ifBlank { SwordShieldSpeciesNames.name(p.species) } +
+                                " copied as native PB8. The Switch save was not changed.\n\n" + entry.name)
+                            .setPositiveButton("Close", null).show()
+                    } catch (error: Exception) {
+                        AlertDialog.Builder(this).setTitle("Could not add to PSE Bank")
+                            .setMessage(error.message ?: "The save could not be read again.")
+                            .setPositiveButton("Close", null).show()
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun bdspRecordBytes(bound: SwitchReadSession, location: String): ByteArray {
+        val uri = selectedSourceUri ?: throw IllegalStateException("The selected save is no longer available.")
+        val original = bound.snapshot.bytesCopy()
+        val current = contentResolver.openInputStream(uri)?.use { input ->
+            val bytes = input.readBytes()
+            require(bytes.size <= 16 * 1024 * 1024) { "The selected file exceeds the 16 MiB intake limit." }
+            bytes
+        } ?: throw java.io.IOException("The selected save could not be reopened.")
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        require(java.security.MessageDigest.isEqual(digest.digest(original), digest.digest(current))) {
+            "The selected save changed after it was opened. Reopen it before adding Pokémon to Bank."
+        }
+        return bound.snapshot.readBdspRecord(location)
     }
 
     private fun showSwordShieldTrainer(bound: SwitchReadSession) {
