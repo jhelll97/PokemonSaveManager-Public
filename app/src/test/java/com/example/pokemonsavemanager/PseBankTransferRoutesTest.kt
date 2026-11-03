@@ -43,7 +43,7 @@ class PseBankTransferRoutesTest {
         )
         val routeCounts = gen2Titles.map { PseBankTransferRoutes.forSource(it).size }
         assertEquals(1, routeCounts.distinct().size)
-        assertEquals(25, routeCounts.first())
+        assertEquals(35, routeCounts.first())
     }
 
     @Test
@@ -86,7 +86,7 @@ class PseBankTransferRoutesTest {
         )
 
         gen2Titles.forEach { source ->
-            assertEquals(22, PseBankTransferRoutes.forwardFrom(source).size)
+            assertEquals(32, PseBankTransferRoutes.forwardFrom(source).size)
             assertEquals(3, PseBankTransferRoutes.backwardFrom(source).size)
         }
     }
