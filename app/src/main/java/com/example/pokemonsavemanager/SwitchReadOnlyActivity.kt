@@ -3405,7 +3405,7 @@ class SwitchReadOnlyActivity : Activity() {
             bound.bdspSealStickers?.let { "Seal Stickers • Read-only" },
             bound.bdspBallCapsules?.let { "Ball Capsules • Read-only" },
             bound.bdspContest?.let { "Contest Records • Read-only" })
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Inventory • Read-only")
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Items")
             .setItems(menu.toTypedArray()) { _, index ->
                 if (session === bound) {
                     when {
@@ -3432,8 +3432,18 @@ class SwitchReadOnlyActivity : Activity() {
         root.addView(TextView(this).apply {
             text = "${entries.size} nonzero records • ${bag.revision.displayName}\n\n" +
                 (if (pocket == null) "Unlisted item indices in native array order. " else "Saved sort-number order; ties use item ID, zero-sort residuals remain last. ") +
-                "Counts, flags and sort numbers are saved values. Zero-quantity and unusual records are retained. No editing or cleanup."
+                "Counts, flags and sort numbers are saved values. Zero-quantity and unusual records are retained. Catalogued non-empty records can be changed through an explicitly reviewed new copy; unusual records remain locked."
             textSize = 16f; setTextIsSelectable(true)
+        })
+        val emptyItem = pocket?.let { selectedPocket ->
+            BdspInventoryReadOnly.allowedItemIds(selectedPocket).firstOrNull { bag.slot(it).isEmpty }
+        }
+        if (pocket != null && emptyItem != null) root.addView(Button(this).apply {
+            text = "＋  Add item • Save new copy"
+            isAllCaps = false
+            setOnClickListener {
+                if (session === bound) launchBdspItemEditor(bound, pocket, -1, true)
+            }
         })
         if (entries.isEmpty()) root.addView(TextView(this).apply { text = "No nonzero saved records in this section."; textSize = 16f })
         for (entry in entries.drop(page * 20).take(20)) root.addView(Button(this).apply {
@@ -3460,13 +3470,40 @@ class SwitchReadOnlyActivity : Activity() {
             append("Raw count word: ${entry.rawCount}\nRaw seen word: ${entry.rawSeenFlag}\nRaw favorite word: ${entry.rawFavoriteFlag}\nAlignment word: ${entry.alignment}\n\n")
             append("Item ID is the native array index. Full-width flag getters use exact equality, not a low bit or nonzero check. ")
             append("Zero quantities, negative counts, conflicting markers and alignment bytes are retained. Catalogue/maxima are descriptive, not a legality verdict. ")
-            append("A completely zero record has no saved sort marker and is hidden from this list, even though the native New getter returns true. No save writing, merging, repair or replacement.")
+            append("A completely zero record has no saved sort marker and is hidden from this list, even though the native New getter returns true. ")
+            append(if (entry.pocket != null && entry.count > 0 && entry.referenceMaxCount != null) "Use Edit item to review a quantity change or removal saved to a new copy." else "This unusual record remains locked.")
         }
         val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
             text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
         }) }
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • ${entry.itemName}")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        val builder = AlertDialog.Builder(this).setTitle("${bound.displayName} • ${entry.itemName}")
+            .setView(scroll).setNegativeButton("Close", null)
+        val selectedPocket = entry.pocket
+        if (selectedPocket != null && entry.count > 0 && entry.referenceMaxCount != null) {
+            builder.setPositiveButton("Edit item • New copy") { _, _ ->
+                if (session === bound) launchBdspItemEditor(bound, selectedPocket, entry.itemId, false)
+            }
+        }
+        builder.show()
+    }
+
+    private fun launchBdspItemEditor(
+        bound: SwitchReadSession,
+        pocket: BdspInventoryPocket,
+        itemId: Int,
+        add: Boolean
+    ) {
+        val source = selectedSourceUri ?: return
+        if (session !== bound) return
+        startActivity(
+            Intent(this, SwitchBdspItemActivity::class.java)
+                .setData(source)
+                .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                .putExtra("pse.switch.item.pocket", pocket.name)
+                .putExtra("pse.switch.item.id", itemId)
+                .putExtra("pse.switch.item.add", add)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        )
     }
 
     private fun showLegendsArceusInventoryPockets(bound: SwitchReadSession) {

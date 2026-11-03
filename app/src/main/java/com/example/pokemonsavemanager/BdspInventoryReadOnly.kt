@@ -16,6 +16,7 @@ data class BdspInventorySlotRead(val itemId: Int, val count: Int, val rawCount: 
     val isFavorite: Boolean get() = rawFavoriteFlag == 1L
     val hasSortOrder: Boolean get() = sortOrder != 0
     val isRecorded: Boolean get() = rawCount != 0L || rawSeenFlag != 0L || rawFavoriteFlag != 0L || sortOrder != 0 || alignment != 0
+    val isEmpty: Boolean get() = !isRecorded
     val referenceMaxCount: Int? get() = when (pocket) { null -> null; BdspInventoryPocket.KEY_ITEMS -> 1; else -> 999 }
     val exceedsReferenceMax: Boolean get() = referenceMaxCount?.let { count > it } ?: false
     val hasUnusualMetadata: Boolean get() = count < 0 || rawSeenFlag !in 0L..1L || rawFavoriteFlag !in 0L..1L || alignment != 0 || exceedsReferenceMax || pocket == null
@@ -61,6 +62,7 @@ object BdspInventoryReadOnly {
         val pockets = BdspInventoryPocket.values().map { p -> BdspInventoryPocketRead(p, immutable(slots.filter { it.pocket == p })) }
         return BdspInventoryRead(checked.version, checked.revision, immutable(slots), immutable(pockets))
     }
+    fun allowedItemIds(pocket: BdspInventoryPocket): List<Int> = allowed.getValue(pocket).sorted()
     private fun u16(b: ByteArray, offset: Int): Int = (b[offset].toInt() and 255) or ((b[offset + 1].toInt() and 255) shl 8)
     private fun u32(b: ByteArray, offset: Int): Long = (0..3).fold(0L) { n, i -> n or ((b[offset + i].toLong() and 255) shl (8 * i)) }
     private fun <T> immutable(values: List<T>): List<T> = Collections.unmodifiableList(ArrayList(values))
