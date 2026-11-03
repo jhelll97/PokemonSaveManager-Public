@@ -16,10 +16,11 @@ enum class BdspEditableSetting(val label: String, val offset: Int, val width: In
     FOSSIL_CAMERA_SHAKE("fossil camera shake", 0x79B98, 1),
     AUTO_REPORT("auto-report preference", 0x79BA4, 1),
     KANJI_SCRIPT("Kanji-script preference", 0x79B7C, 1),
-    BGM_VOLUME("music volume", 0x79BB0, 1);
+    BGM_VOLUME("music volume", 0x79BB0, 1),
+    SOUND_EFFECTS_VOLUME("sound-effects volume", 0x79BB1, 1);
 
     val choices: List<String> get() = when (this) {
-        BGM_VOLUME -> (0..10).map { it.toString() }
+        BGM_VOLUME, SOUND_EFFECTS_VOLUME -> (0..10).map { it.toString() }
         TEXT_SPEED -> listOf("Slow", "Normal", "Fast")
         BATTLE_STYLE -> listOf("Switch", "Set")
         MOVE_ANIMATIONS -> listOf("On", "Off")
@@ -36,6 +37,7 @@ enum class BdspEditableSetting(val label: String, val offset: Int, val width: In
     }
     fun current(options: BdspGameOptionsRead): Long = when (this) {
         BGM_VOLUME -> options.bgmVolume.toLong()
+        SOUND_EFFECTS_VOLUME -> options.soundEffectsVolume.toLong()
         TEXT_SPEED -> options.textSpeedId
         BATTLE_STYLE -> options.battleStyleId.toLong()
         MOVE_ANIMATIONS -> options.moveAnimationsId.toLong()
@@ -51,7 +53,7 @@ enum class BdspEditableSetting(val label: String, val offset: Int, val width: In
         KANJI_SCRIPT -> options.flag(BdspGameOptionFlag.KANJI).rawByte.toLong()
     }
     fun acceptsSaved(value: Long): Boolean = when (this) {
-        BGM_VOLUME -> value in 0L..10L
+        BGM_VOLUME, SOUND_EFFECTS_VOLUME -> value in 0L..10L
         TEXT_SPEED -> value in 0L..3L
         BATTLE_STYLE -> value in 0L..1L
         MOVE_ANIMATIONS -> value in 0L..1L
@@ -67,7 +69,7 @@ enum class BdspEditableSetting(val label: String, val offset: Int, val width: In
         KANJI_SCRIPT -> value in 0L..1L
     }
     fun savedLabel(value: Long): String? = when (this) {
-        BGM_VOLUME -> if (acceptsSaved(value)) value.toString() else null
+        BGM_VOLUME, SOUND_EFFECTS_VOLUME -> if (acceptsSaved(value)) value.toString() else null
         TEXT_SPEED -> BdspGameOptionNames.textSpeed(value)
         BATTLE_STYLE -> if (acceptsSaved(value)) BdspGameOptionNames.battleStyle(value.toInt()) else null
         MOVE_ANIMATIONS -> if (acceptsSaved(value)) BdspGameOptionNames.moveAnimations(value.toInt()) else null
@@ -148,6 +150,9 @@ object BdspTextSpeedEditing {
 
     fun stageMusicVolume(source: ByteArray, expectedSha256: String, volume: Int): BdspTextSpeedCopyPlan =
         stageSetting(source, expectedSha256, volume, BdspEditableSetting.BGM_VOLUME)
+
+    fun stageSoundEffectsVolume(source: ByteArray, expectedSha256: String, volume: Int): BdspTextSpeedCopyPlan =
+        stageSetting(source, expectedSha256, volume, BdspEditableSetting.SOUND_EFFECTS_VOLUME)
 
     private fun stageSetting(source: ByteArray, expectedSha256: String, speed: Int, setting: BdspEditableSetting): BdspTextSpeedCopyPlan {
         val original = source.copyOf()

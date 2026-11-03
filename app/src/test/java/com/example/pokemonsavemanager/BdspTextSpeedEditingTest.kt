@@ -518,7 +518,7 @@ class BdspTextSpeedEditingTest {
             assertEquals(1, p.setting.width)
             for (earlier in BdspEditableSetting.values().filter {
                 it != BdspEditableSetting.SHOW_NICKNAMES && it != BdspEditableSetting.NICKNAME_REGISTRATION &&
-                    it != BdspEditableSetting.GYRO_SENSOR && it != BdspEditableSetting.FOSSIL_CAMERA_SHAKE && it != BdspEditableSetting.AUTO_REPORT && it != BdspEditableSetting.KANJI_SCRIPT && it != BdspEditableSetting.BGM_VOLUME
+                    it != BdspEditableSetting.GYRO_SENSOR && it != BdspEditableSetting.FOSSIL_CAMERA_SHAKE && it != BdspEditableSetting.AUTO_REPORT && it != BdspEditableSetting.KANJI_SCRIPT && it != BdspEditableSetting.BGM_VOLUME && it != BdspEditableSetting.SOUND_EFFECTS_VOLUME
             }) assertEquals(4, earlier.width)
             assertEquals(BdspGameOptionsReadOnly.read(original).inputModeId, read.inputModeId)
             assertEquals(listOf(target), output.slice(0x79BAC..0x79BAC).map { it.toInt() and 255 })
@@ -627,7 +627,7 @@ class BdspTextSpeedEditingTest {
             assertEquals(BdspEditableSetting.NICKNAME_REGISTRATION, p.setting)
             assertEquals(1, p.setting.width)
             for (earlier in BdspEditableSetting.values().filter { it != p.setting })
-                assertEquals(if (earlier == BdspEditableSetting.SHOW_NICKNAMES || earlier == BdspEditableSetting.GYRO_SENSOR || earlier == BdspEditableSetting.FOSSIL_CAMERA_SHAKE || earlier == BdspEditableSetting.AUTO_REPORT || earlier == BdspEditableSetting.KANJI_SCRIPT || earlier == BdspEditableSetting.BGM_VOLUME) 1 else 4, earlier.width)
+                assertEquals(if (earlier == BdspEditableSetting.SHOW_NICKNAMES || earlier == BdspEditableSetting.GYRO_SENSOR || earlier == BdspEditableSetting.FOSSIL_CAMERA_SHAKE || earlier == BdspEditableSetting.AUTO_REPORT || earlier == BdspEditableSetting.KANJI_SCRIPT || earlier == BdspEditableSetting.BGM_VOLUME || earlier == BdspEditableSetting.SOUND_EFFECTS_VOLUME) 1 else 4, earlier.width)
             assertEquals(BdspGameOptionsReadOnly.read(original).inputModeId, read.inputModeId)
             assertEquals(listOf(target), output.slice(0x79B90..0x79B90).map { it.toInt() and 255 })
             assertTrue(original.indices.all { it in 0x79B90..0x79B90 || it in 0xE9818..0xE9827 || original[it] == output[it] })
@@ -738,7 +738,7 @@ class BdspTextSpeedEditingTest {
             assertEquals(BdspEditableSetting.GYRO_SENSOR, p.setting)
             assertEquals(1, p.setting.width)
             for (earlier in BdspEditableSetting.values().filter { it != p.setting })
-                assertEquals(if (earlier == BdspEditableSetting.SHOW_NICKNAMES || earlier == BdspEditableSetting.NICKNAME_REGISTRATION || earlier == BdspEditableSetting.FOSSIL_CAMERA_SHAKE || earlier == BdspEditableSetting.AUTO_REPORT || earlier == BdspEditableSetting.KANJI_SCRIPT || earlier == BdspEditableSetting.BGM_VOLUME) 1 else 4, earlier.width)
+                assertEquals(if (earlier == BdspEditableSetting.SHOW_NICKNAMES || earlier == BdspEditableSetting.NICKNAME_REGISTRATION || earlier == BdspEditableSetting.FOSSIL_CAMERA_SHAKE || earlier == BdspEditableSetting.AUTO_REPORT || earlier == BdspEditableSetting.KANJI_SCRIPT || earlier == BdspEditableSetting.BGM_VOLUME || earlier == BdspEditableSetting.SOUND_EFFECTS_VOLUME) 1 else 4, earlier.width)
             assertEquals(BdspGameOptionsReadOnly.read(original).inputModeId, read.inputModeId)
             assertEquals(listOf(target), output.slice(0x79B94..0x79B94).map { it.toInt() and 255 })
             assertTrue(original.indices.all { it in 0x79B94..0x79B94 || it in 0xE9818..0xE9827 || original[it] == output[it] })
@@ -852,7 +852,7 @@ class BdspTextSpeedEditingTest {
             assertEquals(BdspEditableSetting.FOSSIL_CAMERA_SHAKE, p.setting)
             assertEquals(1, p.setting.width)
             for (earlier in BdspEditableSetting.values().filter { it != p.setting })
-                assertEquals(if (earlier == BdspEditableSetting.SHOW_NICKNAMES || earlier == BdspEditableSetting.NICKNAME_REGISTRATION || earlier == BdspEditableSetting.GYRO_SENSOR || earlier == BdspEditableSetting.AUTO_REPORT || earlier == BdspEditableSetting.KANJI_SCRIPT || earlier == BdspEditableSetting.BGM_VOLUME) 1 else 4, earlier.width)
+                assertEquals(if (earlier == BdspEditableSetting.SHOW_NICKNAMES || earlier == BdspEditableSetting.NICKNAME_REGISTRATION || earlier == BdspEditableSetting.GYRO_SENSOR || earlier == BdspEditableSetting.AUTO_REPORT || earlier == BdspEditableSetting.KANJI_SCRIPT || earlier == BdspEditableSetting.BGM_VOLUME || earlier == BdspEditableSetting.SOUND_EFFECTS_VOLUME) 1 else 4, earlier.width)
             assertEquals(BdspGameOptionsReadOnly.read(original).inputModeId, read.inputModeId)
             assertEquals(listOf(target), output.slice(0x79B98..0x79B98).map { it.toInt() and 255 })
             assertTrue(original.indices.all { it in 0x79B98..0x79B98 || it in 0xE9818..0xE9827 || original[it] == output[it] })
@@ -969,7 +969,7 @@ class BdspTextSpeedEditingTest {
             assertEquals(BdspEditableSetting.AUTO_REPORT, p.setting)
             assertEquals(1, p.setting.width)
             for (earlier in BdspEditableSetting.values().filter { it != p.setting })
-                assertEquals(if (earlier == BdspEditableSetting.SHOW_NICKNAMES || earlier == BdspEditableSetting.NICKNAME_REGISTRATION || earlier == BdspEditableSetting.GYRO_SENSOR || earlier == BdspEditableSetting.FOSSIL_CAMERA_SHAKE || earlier == BdspEditableSetting.KANJI_SCRIPT || earlier == BdspEditableSetting.BGM_VOLUME) 1 else 4, earlier.width)
+                assertEquals(if (earlier == BdspEditableSetting.SHOW_NICKNAMES || earlier == BdspEditableSetting.NICKNAME_REGISTRATION || earlier == BdspEditableSetting.GYRO_SENSOR || earlier == BdspEditableSetting.FOSSIL_CAMERA_SHAKE || earlier == BdspEditableSetting.KANJI_SCRIPT || earlier == BdspEditableSetting.BGM_VOLUME || earlier == BdspEditableSetting.SOUND_EFFECTS_VOLUME) 1 else 4, earlier.width)
             assertEquals(BdspGameOptionsReadOnly.read(original).inputModeId, read.inputModeId)
             assertEquals(listOf(target), output.slice(0x79BA4..0x79BA4).map { it.toInt() and 255 })
             assertTrue(original.indices.all { it in 0x79BA4..0x79BA4 || it in 0xE9818..0xE9827 || original[it] == output[it] })
@@ -1090,7 +1090,7 @@ class BdspTextSpeedEditingTest {
             assertEquals(BdspEditableSetting.KANJI_SCRIPT, p.setting)
             assertEquals(1, p.setting.width)
             for (earlier in BdspEditableSetting.values().filter { it != p.setting })
-                assertEquals(if (earlier == BdspEditableSetting.SHOW_NICKNAMES || earlier == BdspEditableSetting.NICKNAME_REGISTRATION || earlier == BdspEditableSetting.GYRO_SENSOR || earlier == BdspEditableSetting.FOSSIL_CAMERA_SHAKE || earlier == BdspEditableSetting.AUTO_REPORT || earlier == BdspEditableSetting.BGM_VOLUME) 1 else 4, earlier.width)
+                assertEquals(if (earlier == BdspEditableSetting.SHOW_NICKNAMES || earlier == BdspEditableSetting.NICKNAME_REGISTRATION || earlier == BdspEditableSetting.GYRO_SENSOR || earlier == BdspEditableSetting.FOSSIL_CAMERA_SHAKE || earlier == BdspEditableSetting.AUTO_REPORT || earlier == BdspEditableSetting.BGM_VOLUME || earlier == BdspEditableSetting.SOUND_EFFECTS_VOLUME) 1 else 4, earlier.width)
             assertEquals(BdspGameOptionsReadOnly.read(original).inputModeId, read.inputModeId)
             assertEquals(listOf(target), output.slice(0x79B7C..0x79B7C).map { it.toInt() and 255 })
             assertTrue(original.indices.all { it in 0x79B7C..0x79B7C || it in 0xE9818..0xE9827 || original[it] == output[it] })
@@ -1410,6 +1410,61 @@ class BdspTextSpeedEditingTest {
         val b = musicFixture(); val original = b.copyOf(); var out = byteArrayOf()
         var backup = byteArrayOf(); var discarded = false
         val p = BdspTextSpeedEditing.stageMusicVolume(b, BdspTextSpeedEditing.sha256(b), 10)
+        assertThrows(IllegalStateException::class.java) {
+            p.saveNewCopy({ b }, { backup = it.copyOf(); it }, { out }, { out = it.copyOf(100) },
+                { discarded = true; out = byteArrayOf(); true })
+        }
+        assertTrue(discarded); assertTrue(out.isEmpty()); assertArrayEquals(original, backup)
+        assertArrayEquals(original, b)
+    }
+
+    private fun soundEffectsFixture(revision: BdspSaveRevision = BdspSaveRevision.V1_3, title: Int = 0, volume: Int = 5) =
+        fixture(revision, title, 3).also { it[0x79BB1] = volume.toByte(); seal(it) }
+
+    @Test fun soundEffectsVolumeReopensBothTitlesAllRevisionsWithOnlyOneByteAndDigestChanged() {
+        for (revision in BdspSaveRevision.values()) for (title in 0..1) for (target in listOf(0, 6, 10)) {
+            val source = soundEffectsFixture(revision, title); val original = source.copyOf()
+            val p = BdspTextSpeedEditing.stageSoundEffectsVolume(source, BdspTextSpeedEditing.sha256(source), target)
+            var out = byteArrayOf(); var backup = byteArrayOf()
+            p.saveNewCopy({ source }, { backup = it.copyOf(); it }, { out }, { out = it }, { false })
+            assertEquals(target, BdspGameOptionsReadOnly.read(out).soundEffectsVolume)
+            assertEquals(1, p.setting.width); assertEquals(0x79BB1, p.setting.offset)
+            assertEquals((0..10).map { it.toString() }, p.setting.choices)
+            assertTrue(BdspSaveValidation.inspect(out) is BdspValidation.Verified)
+            assertTrue(original.indices.all { it == 0x79BB1 || it in 0xE9818..0xE9827 || it.let { i -> original[i] == out[i] } })
+            assertArrayEquals(original, source); assertArrayEquals(original, backup)
+        }
+    }
+
+    @Test fun soundEffectsVolumeRejectsUnsupportedSavedValuesTargetsNoopAndStaleSource() {
+        for (old in listOf(11, 128, 255)) {
+            val b = soundEffectsFixture(volume = old)
+            assertThrows(IllegalArgumentException::class.java) { BdspTextSpeedEditing.stageSoundEffectsVolume(b, BdspTextSpeedEditing.sha256(b), 0) }
+        }
+        val b = soundEffectsFixture(); val hash = BdspTextSpeedEditing.sha256(b)
+        for (target in listOf(-1, 11, 255, 5))
+            assertThrows(IllegalArgumentException::class.java) { BdspTextSpeedEditing.stageSoundEffectsVolume(b, hash, target) }
+        assertThrows(IllegalArgumentException::class.java) { BdspTextSpeedEditing.stageSoundEffectsVolume(b, "stale", 0) }
+        val invalid = b.copyOf().also { it[100] = (it[100].toInt() xor 1).toByte() }
+        assertThrows(IllegalArgumentException::class.java) { BdspTextSpeedEditing.stageSoundEffectsVolume(invalid, BdspTextSpeedEditing.sha256(invalid), 0) }
+    }
+
+    @Test fun soundEffectsVolumeRejectsAdjacentAudioChangesEvenWithValidDigest() {
+        val b = soundEffectsFixture(); var out = byteArrayOf()
+        BdspTextSpeedEditing.stageSoundEffectsVolume(b, BdspTextSpeedEditing.sha256(b), 10)
+            .saveNewCopy({ b }, { it }, { out }, { out = it }, { true })
+        for (offset in listOf(0x79BAF, 0x79BB0, 0x79BB2, 0x79BB3)) {
+            val changed = out.copyOf().also { it[offset] = (it[offset].toInt() xor 1).toByte(); seal(it) }
+            assertThrows(IllegalArgumentException::class.java) {
+                BdspTextSpeedEditing.verify(b, changed, 10, BdspEditableSetting.SOUND_EFFECTS_VOLUME)
+            }
+        }
+    }
+
+    @Test fun soundEffectsVolumeKeepsBackupAndDiscardsFailedPersistedCopy() {
+        val b = soundEffectsFixture(); val original = b.copyOf(); var out = byteArrayOf()
+        var backup = byteArrayOf(); var discarded = false
+        val p = BdspTextSpeedEditing.stageSoundEffectsVolume(b, BdspTextSpeedEditing.sha256(b), 10)
         assertThrows(IllegalStateException::class.java) {
             p.saveNewCopy({ b }, { backup = it.copyOf(); it }, { out }, { out = it.copyOf(100) },
                 { discarded = true; out = byteArrayOf(); true })
