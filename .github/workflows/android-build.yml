@@ -53,8 +53,20 @@ jobs:
           yes | "$sdkmanager" --licenses >/dev/null || true
           "$sdkmanager" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Compile and lint without APK packaging
-        run: gradle :app:compileDebugSources :app:lintDebug --no-daemon --max-workers=2
+      # Keep compiler state out of lint's heap; each --no-daemon invocation exits.
+      # In-process compilation avoids retaining a separate 4-GiB Kotlin daemon.
+      - name: Compile sources without APK packaging
+        run: >-
+          gradle :app:compileDebugSources --no-daemon --max-workers=1
+          -Pkotlin.compiler.execution.strategy=in-process
+          "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=512m -XX:+UseG1GC"
+
+      # Exact run 41649172635 exhausted the shared 3-GiB heap during lint analysis.
+      - name: Lint sources in a fresh heap
+        run: >-
+          gradle :app:lintDebug --no-daemon --max-workers=1
+          -Pkotlin.compiler.execution.strategy=in-process
+          "-Dorg.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=512m -XX:+UseG1GC"
 
   signed-release:
     name: Build signed APK on request
