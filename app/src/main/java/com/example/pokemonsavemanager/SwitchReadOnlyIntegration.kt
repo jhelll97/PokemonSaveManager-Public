@@ -86,6 +86,31 @@ class SwitchReadSnapshot private constructor(
     internal fun readSwordShieldInventory(): SwordShieldInventoryRead = SwordShieldInventoryReadOnly.read(sourceBytes)
     internal fun readSwordShieldPokedex(): SwordShieldPokedexRead = SwordShieldPokedexReadOnly.read(sourceBytes)
     internal fun readSwordShieldStorage(): SwordShieldStorageRead = SwordShieldStorageReadOnly.read(sourceBytes)
+    internal fun readSwordShieldRecord(location: String): ByteArray {
+        require(inspectSwordShield() is SwordShieldValidation.Verified) { "A validated native Sword/Shield save is required." }
+        val blocks = SwordShieldSaveValidation.readPokemonBlocks(sourceBytes)
+        val size = SwordShieldPokemonReadOnly.RECORD_SIZE
+        val match = Regex("^(Box|Party) ([0-9]+) • Slot ([0-9]+)$").matchEntire(location)
+            ?: throw IllegalArgumentException("Choose a Pokémon directly from its native box or party slot.")
+        val area = match.groupValues[1]
+        val first = match.groupValues[2].toInt()
+        val slot = match.groupValues[3].toInt() - 1
+        return if (area == "Box") {
+            require(first in 1..32 && slot in 0..29) { "Sword/Shield box slot is out of range." }
+            val start = ((first - 1) * 30 + slot) * size
+            blocks.boxes.copyOfRange(start, start + size)
+        } else {
+            require(first == 1 && slot in 0..5) { "Sword/Shield party slot is out of range." }
+            val count = blocks.party[6 * size].toInt() and 255
+            require(slot < count) { "That party slot is not occupied." }
+            val start = slot * size
+            blocks.party.copyOfRange(start, start + size)
+        }.also { record ->
+            require(SwordShieldPokemonReadOnly.read(record) is SwordShieldSlotRead.Pokemon) {
+                "Only a checksum-valid native Pokémon record can be added to Bank."
+            }
+        }
+    }
     internal fun readSwordShieldTrainer(): SwordShieldTrainerRead = SwordShieldTrainerReadOnly.read(sourceBytes)
     internal fun readBdspMenuSelection(): BdspMenuSelectionRead = BdspMenuSelectionReadOnly.read(sourceBytes)
     internal fun readBdspRandomGroups(): BdspRandomGroupsRead = BdspRandomGroupsReadOnly.read(sourceBytes)
