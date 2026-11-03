@@ -24,7 +24,9 @@ The observed Gen 1 home editor order is:
 
 The validated shared parity step is **Trainer Data**. Every supported Switch family exposes it first with the Gen 1 label and control treatment, backed by that title's validated native trainer reader.
 
-The active shared parity step is **Pokémon Boxes**. Its single Gen 1-ordered PSE card opens the same Party / PC Boxes choice for every supported Switch family, then dispatches to that title's validated native party and storage reader. Legends: Arceus Pastures and Let's Go Pokémon Storage remain native data-handling details behind the shared control.
+The validated shared parity steps are **Trainer Data** and **Pokémon Boxes**. The Boxes card opens the same Party / PC Boxes choice for every supported Switch family, then dispatches to that title's validated native party and storage reader.
+
+The active shared parity step is **PSE Bank**. Native byte-preserving deposit, list, inspect, and remove flows are available for Let's Go PB7 and Sword/Shield PK8 records without changing the source save. BDSP, Legends: Arceus, Scarlet/Violet, and Legends: Z-A remain absent from the Bank UI until their own native record adapters are implemented and validated.
 
 ### Phase 2 — Implement the shared Gen 1 features in the same order
 

@@ -3,19 +3,34 @@ package com.example.pokemonsavemanager
 import java.io.File
 import java.security.MessageDigest
 
-/** Byte-preserving local PSE Bank storage for validated native Sword/Shield PK8 records. */
+/** Byte-preserving local PSE Bank storage for validated native Switch Pokémon records. */
 object SwitchPseBankStore {
-    private val recordSize = SwordShieldPokemonReadOnly.RECORD_SIZE
+    fun depositLetsGo(context: android.content.Context, record: ByteArray): File {
+        require(record.size == LetsGoPokemonReadOnly.RECORD_SIZE) { "A complete native PB7 record is required." }
+        require(LetsGoPokemonReadOnly.read(record) is LetsGoSlotRead.Pokemon) {
+            "Only a readable, checksum-valid Let's Go Pokémon can be added to PSE Bank."
+        }
+        return deposit(context, "switch_lgpe_", "pb7", record)
+    }
 
     fun depositSwordShield(context: android.content.Context, record: ByteArray): File {
-        require(record.size == recordSize) { "A complete native PK8 record is required." }
+        require(record.size == SwordShieldPokemonReadOnly.RECORD_SIZE) { "A complete native PK8 record is required." }
         require(SwordShieldPokemonReadOnly.read(record) is SwordShieldSlotRead.Pokemon) {
             "Only a readable, checksum-valid Sword/Shield Pokémon can be added to PSE Bank."
         }
+        return deposit(context, "switch_swsh_", "pk8", record)
+    }
+
+    private fun deposit(
+        context: android.content.Context,
+        prefix: String,
+        extension: String,
+        record: ByteArray
+    ): File {
         val directory = File(context.filesDir, "pse_bank").apply { mkdirs() }
         val digest = MessageDigest.getInstance("SHA-256").digest(record)
             .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
-        val target = File(directory, "switch_swsh_" + digest + ".pk8")
+        val target = File(directory, prefix + digest + "." + extension)
         if (target.exists()) {
             require(target.readBytes().contentEquals(record)) { "Bank entry hash collision; no data was changed." }
             return target
@@ -26,8 +41,9 @@ object SwitchPseBankStore {
             require(temporary.readBytes().contentEquals(record)) { "Bank write verification failed." }
             if (!temporary.renameTo(target)) {
                 if (target.exists() && target.readBytes().contentEquals(record)) return target
-                error("Could not add the PK8 record to PSE Bank.")
+                error("Could not add the native Pokémon record to PSE Bank.")
             }
+            require(target.readBytes().contentEquals(record)) { "Persisted Bank verification failed." }
             return target
         } finally {
             if (temporary.exists()) temporary.delete()

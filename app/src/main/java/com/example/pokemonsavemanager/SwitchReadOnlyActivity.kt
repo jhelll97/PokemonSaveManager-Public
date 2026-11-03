@@ -524,11 +524,14 @@ class SwitchReadOnlyActivity : Activity() {
             }, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
             else if (pair.size == 1) row.addView(android.view.View(this), LinearLayout.LayoutParams(0, 0, 1f))
             dashboardRoot.addView(row)
-            if (pairIndex == 0 && bound.profile.family == SwitchGameFamily.SWORD_SHIELD) {
+            if (pairIndex == 0 && bound.profile.family in setOf(
+                    SwitchGameFamily.LETS_GO_PIKACHU_EEVEE,
+                    SwitchGameFamily.SWORD_SHIELD
+                )) {
                 dashboardRoot.addView(Button(this).apply {
-                    text = "◇  PSE Bank • Sword/Shield PK8 • Manage"
+                    text = "◇  PSE Bank • Manage"
                     isAllCaps = false; textSize = 17f; isEnabled = !busy
-                    setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldBank(bound) }
+                    setOnClickListener { if (session === bound && !dashboardBusy) showSwitchBank(bound) }
                 })
             }
         }
@@ -1195,8 +1198,44 @@ class SwitchReadOnlyActivity : Activity() {
         scroll.addView(TextView(this).apply {
             text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
         })
-        AlertDialog.Builder(this).setTitle("Storage #${slot.index + 1} • Read-only")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        val dialog = AlertDialog.Builder(this).setTitle("Storage #${slot.index + 1} • Read-only")
+            .setView(scroll).setNegativeButton("Close", null).create()
+        dialog.setButton(AlertDialog.BUTTON_POSITIVE, "Add to PSE Bank",
+            null as android.content.DialogInterface.OnClickListener?)
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (session !== bound) { dialog.dismiss(); return@setOnClickListener }
+                try {
+                    val raw = letsGoRecordBytes(bound, slot.index)
+                    val entry = SwitchPseBankStore.depositLetsGo(this, raw)
+                    dialog.dismiss()
+                    AlertDialog.Builder(this).setTitle("Added to PSE Bank")
+                        .setMessage(p.nickname.ifBlank { LetsGoSpeciesNames.name(p.species) } +
+                            " copied as native PB7. The Switch save was not changed.\n\n" + entry.name)
+                        .setPositiveButton("Close", null).show()
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not add to PSE Bank")
+                        .setMessage(error.message ?: "The save could not be read again.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun letsGoRecordBytes(bound: SwitchReadSession, index: Int): ByteArray {
+        val uri = selectedSourceUri ?: throw IllegalStateException("The selected save is no longer available.")
+        val original = bound.snapshot.bytesCopy()
+        val current = contentResolver.openInputStream(uri)?.use { input ->
+            val bytes = input.readBytes()
+            require(bytes.size <= 16 * 1024 * 1024) { "The selected file exceeds the 16 MiB intake limit." }
+            bytes
+        } ?: throw java.io.IOException("The selected save could not be reopened.")
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        require(java.security.MessageDigest.isEqual(digest.digest(original), digest.digest(current))) {
+            "The selected save changed after it was opened. Reopen it before adding Pokémon to Bank."
+        }
+        return bound.snapshot.readLetsGoRecord(index)
     }
 
     private fun swordShieldLabel(read: SwordShieldSlotRead): String = when (read) {
@@ -1250,6 +1289,94 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { dialog.dismiss(); if (session === bound) showSwordShieldBox(bound, box + 1) }
         }, LinearLayout.LayoutParams(0, -2, 1f))
         list.addView(nav); dialog.show()
+    }
+
+    private fun showSwitchBank(bound: SwitchReadSession) {
+        if (session !== bound) return
+        when (bound.profile.family) {
+            SwitchGameFamily.LETS_GO_PIKACHU_EEVEE -> showLetsGoBank(bound)
+            SwitchGameFamily.SWORD_SHIELD -> showSwordShieldBank(bound)
+            else -> return
+        }
+    }
+
+    private fun showLetsGoBank(bound: SwitchReadSession) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank")
+        val entries = directory.listFiles()?.filter {
+            it.isFile && it.name.startsWith("switch_lgpe_") && it.extension == "pb7"
+        }?.sortedBy { it.name }.orEmpty()
+        val labels = entries.map { file ->
+            val parsed = runCatching { LetsGoPokemonReadOnly.read(file.readBytes()) }.getOrNull()
+            val pokemon = (parsed as? LetsGoSlotRead.Pokemon)?.value
+            if (pokemon == null) file.name + " • unreadable"
+            else pokemon.nickname.ifBlank { LetsGoSpeciesNames.name(pokemon.species) } +
+                " (#" + pokemon.species + ")" + (if (pokemon.shiny) " • Shiny" else "") + " • PB7"
+        }
+        val builder = AlertDialog.Builder(this)
+            .setTitle("PSE Bank • " + entries.size + " Let's Go Pokémon")
+            .setPositiveButton("Close", null)
+        if (entries.isEmpty()) {
+            builder.setMessage("No Let's Go Pokémon are stored. Open Pokémon Boxes, choose a Pokémon, then tap Add to PSE Bank.")
+        } else {
+            builder.setItems(labels.toTypedArray()) { _, index ->
+                if (session === bound) showLetsGoBankEntry(bound, entries[index])
+            }
+        }
+        builder.show()
+    }
+
+    private fun showLetsGoBankEntry(bound: SwitchReadSession, file: File) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = file.canonicalFile
+        val parsed = runCatching {
+            require(entry.parentFile == directory && entry.name.startsWith("switch_lgpe_") && entry.extension == "pb7") {
+                "This is not a Let's Go Bank entry."
+            }
+            LetsGoPokemonReadOnly.read(entry.readBytes())
+        }.getOrElse { LetsGoSlotRead.Invalid(it.message ?: "The Bank entry could not be read.") }
+        if (parsed !is LetsGoSlotRead.Pokemon) {
+            AlertDialog.Builder(this).setTitle("Unreadable PSE Bank entry")
+                .setMessage((parsed as? LetsGoSlotRead.Invalid)?.reason ?: "The Bank entry is empty.")
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val p = parsed.value
+        val detail = buildString {
+            append("${LetsGoSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form}\n")
+            append("Nickname: ${p.nickname.ifBlank { "None" }}\nCached level: ${p.cachedLevel}\n")
+            append("Shiny: ${if (p.shiny) "Yes" else "No"}\nOriginal trainer: ${p.originalTrainer}\n\n")
+            append("Native PB7 checksum passed. Removing this Bank copy never changes the Switch save.")
+        }
+        val dialog = AlertDialog.Builder(this).setTitle("PSE Bank • Let's Go")
+            .setMessage(detail).setNegativeButton("Close", null).create()
+        dialog.setButton(AlertDialog.BUTTON_POSITIVE, "Remove from PSE Bank",
+            null as android.content.DialogInterface.OnClickListener?)
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                try {
+                    require(session === bound) { "The active save changed; the Bank entry was left unchanged." }
+                    require(entry.parentFile == directory && entry.name.startsWith("switch_lgpe_") && entry.extension == "pb7") {
+                        "This is not a removable Let's Go Bank entry."
+                    }
+                    require(LetsGoPokemonReadOnly.read(entry.readBytes()) is LetsGoSlotRead.Pokemon) {
+                        "The Bank record is invalid; it was left unchanged."
+                    }
+                    require(entry.delete()) { "The Bank entry could not be removed." }
+                    dialog.dismiss()
+                    AlertDialog.Builder(this).setTitle("Removed from PSE Bank")
+                        .setMessage(entry.name + " was removed. The Switch save was not changed.")
+                        .setPositiveButton("Back to Bank") { _, _ -> if (session === bound) showLetsGoBank(bound) }
+                        .setNegativeButton("Close", null).show()
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not remove Bank entry")
+                        .setMessage(error.message ?: "The entry was left unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun showSwordShieldBank(bound: SwitchReadSession) {

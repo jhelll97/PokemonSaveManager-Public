@@ -83,6 +83,17 @@ class SwitchReadSnapshot private constructor(
     internal fun readLetsGoPlayTime(): LetsGoPlayTimeRead = LetsGoPlayTimeReadOnly.read(sourceBytes)
     internal fun readLetsGoTrainer(): LetsGoTrainerRead = LetsGoTrainerReadOnly.read(sourceBytes)
     internal fun readLetsGoStorage(): LetsGoStorageRead = LetsGoStorageReadOnly.read(sourceBytes)
+    internal fun readLetsGoRecord(index: Int): ByteArray {
+        require(inspectLetsGo() is LetsGoValidation.Verified) { "A validated native Let's Go save is required." }
+        val storage = readLetsGoStorage()
+        require(index in 0 until storage.count) { "Let's Go storage index is out of range." }
+        val start = 0x5C00 + index * LetsGoPokemonReadOnly.RECORD_SIZE
+        return sourceBytes.copyOfRange(start, start + LetsGoPokemonReadOnly.RECORD_SIZE).also { record ->
+            require(LetsGoPokemonReadOnly.read(record) is LetsGoSlotRead.Pokemon) {
+                "Only a checksum-valid native Pokémon record can be added to Bank."
+            }
+        }
+    }
     internal fun readSwordShieldInventory(): SwordShieldInventoryRead = SwordShieldInventoryReadOnly.read(sourceBytes)
     internal fun readSwordShieldPokedex(): SwordShieldPokedexRead = SwordShieldPokedexReadOnly.read(sourceBytes)
     internal fun readSwordShieldStorage(): SwordShieldStorageRead = SwordShieldStorageReadOnly.read(sourceBytes)
