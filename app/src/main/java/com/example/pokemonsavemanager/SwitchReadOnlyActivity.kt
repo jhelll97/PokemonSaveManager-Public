@@ -1242,7 +1242,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         val dialog = AlertDialog.Builder(this).setTitle("$location • Sword/Shield")
             .setView(scroll).setNegativeButton("Close", null).create()
-        dialog.setButton(AlertDialog.BUTTON_POSITIVE, "Add to PSE Bank", null)
+        dialog.setButton(AlertDialog.BUTTON_POSITIVE, "Add to PSE Bank", null as android.content.DialogInterface.OnClickListener?)
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 if (session !== bound) { dialog.dismiss(); return@setOnClickListener }
