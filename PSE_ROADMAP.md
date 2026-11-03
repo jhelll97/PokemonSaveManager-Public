@@ -22,7 +22,9 @@ The observed Gen 1 home editor order is:
 6. Pokédex
 7. Events
 
-The active shared parity step is **Trainer Data**. Every supported Switch family exposes this first with the Gen 1 label and control treatment, backed by that title's validated native trainer reader.
+The validated shared parity step is **Trainer Data**. Every supported Switch family exposes it first with the Gen 1 label and control treatment, backed by that title's validated native trainer reader.
+
+The active shared parity step is **Pokémon Boxes**. Its single Gen 1-ordered PSE card opens the same Party / PC Boxes choice for every supported Switch family, then dispatches to that title's validated native party and storage reader. Legends: Arceus Pastures and Let's Go Pokémon Storage remain native data-handling details behind the shared control.
 
 ### Phase 2 — Implement the shared Gen 1 features in the same order
 

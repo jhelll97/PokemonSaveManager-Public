@@ -202,34 +202,16 @@ class SwitchReadOnlyActivity : Activity() {
             } }
         }
         root.addView(trainerButton)
+        storageButton = Button(this).apply {
+            text = "◉  Pokémon Boxes • Read-only"; isEnabled = false
+            setOnClickListener { session?.let { showSwitchPokemonBoxes(it) } }
+        }
         partyButton = Button(this).apply {
             text = "Party Pokémon • Read-only"; isEnabled = false
-            setOnClickListener { session?.let {
-                when {
-                    it.legendsZaStorage != null -> showLegendsZaParty(it)
-                    it.scarletVioletStorage != null -> showScarletVioletParty(it)
-                    it.legendsArceusStorage != null -> showLegendsArceusParty(it)
-                    it.bdspStorage != null -> showBdspParty(it)
-                    it.swordShieldStorage != null -> showSwordShieldParty(it)
-                    else -> showLetsGoParty(it)
-                }
-            } }
+            setOnClickListener { session?.let { openSwitchParty(it) } }
         }
-        storageButton = Button(this).apply {
-            text = "Pokémon Storage • Read-only"; isEnabled = false
-            setOnClickListener { session?.let {
-                when {
-                    it.legendsZaStorage != null -> showLegendsZaBox(it, 0)
-                    it.scarletVioletStorage != null -> showScarletVioletBox(it, 0)
-                    it.legendsArceusStorage != null -> showLegendsArceusPasture(it, 0)
-                    it.bdspStorage != null -> showBdspBox(it, 0)
-                    it.swordShieldStorage != null -> showSwordShieldBox(it, 0)
-                    else -> showLetsGoStorage(it, 0)
-                }
-            } }
-        }
-        root.addView(partyButton)
         root.addView(storageButton)
+        root.addView(partyButton)
         rideButton = Button(this).apply {
             text = "Ride Pokémon • Read-only"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { bound -> bound.scarletVioletStorage?.let {
@@ -403,8 +385,7 @@ class SwitchReadOnlyActivity : Activity() {
         partyButton.isEnabled = !busy && session?.supports(SwitchReadCapability.PARTY) == true
         storageButton.isEnabled = !busy && (session?.supports(SwitchReadCapability.PC_OR_BOXES) == true ||
             session?.supports(SwitchReadCapability.PASTURES) == true)
-        storageButton.text = if (session?.profile?.family == SwitchGameFamily.LEGENDS_ARCEUS)
-            "Pastures • Read-only" else "Pokémon Storage • Read-only"
+        storageButton.text = "◉  Pokémon Boxes • Read-only"
         menuSelectionButton.isEnabled = !busy && session?.bdspMenuSelection != null
         menuSelectionButton.visibility = if (session?.profile?.family == SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL) android.view.View.VISIBLE else android.view.View.GONE
         randomGroupsButton.isEnabled = !busy && session?.bdspRandomGroups != null
@@ -512,16 +493,11 @@ class SwitchReadOnlyActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(18) })
         dashboardRoot.addView(label(status.text.toString(), 14f))
         dashboardRoot.addView(label(if (busy) "Reading selected source…" else "EDITOR • READ-ONLY", 13f, accent))
-        val targets = mapOf("trainer" to trainerButton, "storage" to storageButton, "party" to partyButton,
+        val targets = mapOf("trainer" to trainerButton, "storage" to storageButton,
             "inventory" to inventoryButton, "pokedex" to pokedexButton)
         val entries = SwitchReadDashboard.entries(bound)
         val detailGroups = SwitchReadGameDetails.groups(bound)
-        if (bound.profile.family == SwitchGameFamily.SWORD_SHIELD) dashboardRoot.addView(Button(this).apply {
-            text = "PSE Bank • Sword/Shield PK8 • Manage"
-            isAllCaps = false; textSize = 17f; isEnabled = !busy
-            setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldBank(bound) }
-        })
-        for (pair in entries.chunked(2)) {
+        for ((pairIndex, pair) in entries.chunked(2).withIndex()) {
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             for (entry in pair) {
                 val target = targets.getValue(entry.section)
@@ -548,6 +524,13 @@ class SwitchReadOnlyActivity : Activity() {
             }, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
             else if (pair.size == 1) row.addView(android.view.View(this), LinearLayout.LayoutParams(0, 0, 1f))
             dashboardRoot.addView(row)
+            if (pairIndex == 0 && bound.profile.family == SwitchGameFamily.SWORD_SHIELD) {
+                dashboardRoot.addView(Button(this).apply {
+                    text = "◇  PSE Bank • Sword/Shield PK8 • Manage"
+                    isAllCaps = false; textSize = 17f; isEnabled = !busy
+                    setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldBank(bound) }
+                })
+            }
         }
         if (bound.letsGoDayCare != null) dashboardRoot.addView(Button(this).apply {
             text = "Day Care • Read-only"; isAllCaps = false; isEnabled = !busy && nurseryButton.isEnabled
@@ -1048,6 +1031,77 @@ class SwitchReadOnlyActivity : Activity() {
                 }
             }
         }
+    }
+
+    private fun openSwitchParty(bound: SwitchReadSession) {
+        if (session !== bound) return
+        when {
+            bound.legendsZaStorage != null -> showLegendsZaParty(bound)
+            bound.scarletVioletStorage != null -> showScarletVioletParty(bound)
+            bound.legendsArceusStorage != null -> showLegendsArceusParty(bound)
+            bound.bdspStorage != null -> showBdspParty(bound)
+            bound.swordShieldStorage != null -> showSwordShieldParty(bound)
+            else -> showLetsGoParty(bound)
+        }
+    }
+
+    private fun openSwitchStorage(bound: SwitchReadSession) {
+        if (session !== bound) return
+        when {
+            bound.legendsZaStorage != null -> showLegendsZaBox(bound, 0)
+            bound.scarletVioletStorage != null -> showScarletVioletBox(bound, 0)
+            bound.legendsArceusStorage != null -> showLegendsArceusPasture(bound, 0)
+            bound.bdspStorage != null -> showBdspBox(bound, 0)
+            bound.swordShieldStorage != null -> showSwordShieldBox(bound, 0)
+            else -> showLetsGoStorage(bound, 0)
+        }
+    }
+
+    private fun showSwitchPokemonBoxes(bound: SwitchReadSession) {
+        if (session !== bound) return
+        val nativeStorage = when (bound.profile.family) {
+            SwitchGameFamily.LEGENDS_ARCEUS -> "Pastures"
+            SwitchGameFamily.LETS_GO_PIKACHU_EEVEE -> "Pokémon Storage"
+            else -> "PC Boxes"
+        }
+        val gap = (12 * resources.displayMetrics.density).toInt()
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(gap, gap, gap, gap)
+        }
+        root.addView(TextView(this).apply {
+            text = "${bound.displayName} • Read-only\nChoose the same Party or PC Boxes view used by Gen 1. Native storage: $nativeStorage."
+            setPadding(0, 0, 0, gap)
+        })
+        val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val party = Button(this).apply {
+            text = "Party"
+            isAllCaps = false
+            isEnabled = bound.supports(SwitchReadCapability.PARTY)
+        }
+        val boxes = Button(this).apply {
+            text = "PC Boxes"
+            isAllCaps = false
+            isEnabled = bound.supports(SwitchReadCapability.PC_OR_BOXES) ||
+                bound.supports(SwitchReadCapability.PASTURES)
+        }
+        tabs.addView(party, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = gap / 2 })
+        tabs.addView(boxes, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = gap / 2 })
+        root.addView(tabs)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Pokémon Boxes")
+            .setView(root)
+            .setNegativeButton("←  Back to PSE", null)
+            .create()
+        party.setOnClickListener {
+            dialog.dismiss()
+            if (session === bound) openSwitchParty(bound)
+        }
+        boxes.setOnClickListener {
+            dialog.dismiss()
+            if (session === bound) openSwitchStorage(bound)
+        }
+        dialog.show()
     }
 
     private fun slotLabel(slot: LetsGoStorageSlot): String {
