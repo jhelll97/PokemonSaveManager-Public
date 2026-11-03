@@ -111,7 +111,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { pickSource() }
         }
         root.addView(openButton)
-        status = label("Let’s Go Pikachu/Eevee, Sword/Shield and BDSP: native detection, party, storage and Pokémon details are available after validation. Let’s Go, Sword/Shield and BDSP also have trainer profiles. Sword/Shield has regional Pokédex browsing with saved form and Gigantamax flags. BDSP has 493-species Pokédex records with gender/shiny, form, language and Spinda data. Let’s Go has a read-only Pokédex with saved flags, languages and size records. Legends: Arceus also supports a trainer profile, party, 32 pastures and Pokémon details with Alpha, Noble and saved Ganbaru values. Scarlet/Violet also supports a trainer profile, party, 32 boxes, ride Pokémon and details including saved Tera values. Legends: Z-A also supports a trainer profile, party, 32 boxes and Pokémon details including Alpha, scale and obedience.")
+        status = label("Let’s Go Pikachu/Eevee, Sword/Shield and BDSP: native detection, party, storage and Pokémon details are available after validation. Let’s Go, Sword/Shield and BDSP also have Trainer Data. Sword/Shield has regional Pokédex browsing with saved form and Gigantamax flags. BDSP has 493-species Pokédex records with gender/shiny, form, language and Spinda data. Let’s Go has a read-only Pokédex with saved flags, languages and size records. Legends: Arceus also supports a Trainer Data, party, 32 pastures and Pokémon details with Alpha, Noble and saved Ganbaru values. Scarlet/Violet also supports a Trainer Data, party, 32 boxes, ride Pokémon and details including saved Tera values. Legends: Z-A also supports a Trainer Data, party, 32 boxes and Pokémon details including Alpha, scale and obedience.")
         root.addView(status)
         preview = label("No Switch file open. File inspection is available for all six game families. Save contents remain unvalidated.")
             .apply { setTextIsSelectable(true) }
@@ -188,6 +188,20 @@ class SwitchReadOnlyActivity : Activity() {
             }
         }
         root.addView(clearButton)
+        trainerButton = Button(this).apply {
+            text = "◎  Trainer Data • Read-only"; isEnabled = false
+            setOnClickListener { session?.let {
+                when {
+                    it.legendsZaTrainer != null -> showLegendsZaTrainer(it)
+                    it.scarletVioletTrainer != null -> showScarletVioletTrainer(it)
+                    it.legendsArceusTrainer != null -> showLegendsArceusTrainer(it)
+                    it.bdspTrainer != null -> showBdspTrainer(it)
+                    it.letsGoTrainer != null -> showLetsGoTrainer(it)
+                    else -> showSwordShieldTrainer(it)
+                }
+            } }
+        }
+        root.addView(trainerButton)
         partyButton = Button(this).apply {
             text = "Party Pokémon • Read-only"; isEnabled = false
             setOnClickListener { session?.let {
@@ -223,20 +237,6 @@ class SwitchReadOnlyActivity : Activity() {
             } } }
         }
         root.addView(rideButton)
-        trainerButton = Button(this).apply {
-            text = "Trainer Profile • Read-only"; isEnabled = false
-            setOnClickListener { session?.let {
-                when {
-                    it.legendsZaTrainer != null -> showLegendsZaTrainer(it)
-                    it.scarletVioletTrainer != null -> showScarletVioletTrainer(it)
-                    it.legendsArceusTrainer != null -> showLegendsArceusTrainer(it)
-                    it.bdspTrainer != null -> showBdspTrainer(it)
-                    it.letsGoTrainer != null -> showLetsGoTrainer(it)
-                    else -> showSwordShieldTrainer(it)
-                }
-            } }
-        }
-        root.addView(trainerButton)
         pokedexButton = Button(this).apply {
             text = "Pokédex • Read-only"; isEnabled = false
             setOnClickListener { session?.let {
@@ -1427,7 +1427,7 @@ class SwitchReadOnlyActivity : Activity() {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
         }
-        AlertDialog.Builder(this).setTitle("Trainer Profile • Read-only")
+        AlertDialog.Builder(this).setTitle("Trainer Data • Read-only")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 
@@ -1770,7 +1770,7 @@ class SwitchReadOnlyActivity : Activity() {
             "Unknown upper 24 bits: ${read.unknownUpperBits} (hex ${read.unknownUpperBits.toString(16).uppercase().padStart(6, '0')})\n" +
             "Raw word: ${read.rawWord} (signed ${read.signedConfigValue})\n" +
             "Word bits: ${read.rawWord.toString(16).uppercase().padStart(8, '0')}\nRaw bytes: " + read.rawBytes.joinToString(" ") { "%02X".format(it) } +
-            "\n\nThe configuration language may differ from the trainer profile. Text-speed menu choices and meanings of the upper bits are not inferred. All values remain exactly as saved. No option changes, normalization, export, replacement or save writing."
+            "\n\nThe configuration language may differ from the Trainer Data. Text-speed menu choices and meanings of the upper bits are not inferred. All values remain exactly as saved. No option changes, normalization, export, replacement or save writing."
         AlertDialog.Builder(this).setTitle("Game options • Read-only")
             .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
@@ -1822,7 +1822,7 @@ class SwitchReadOnlyActivity : Activity() {
         val starterGender = listOf("Male", "Female", "Genderless").getOrNull(trainer.starterGenderId)
             ?: "Unknown (${trainer.starterGenderId})"
         val detail = buildString {
-            append("${trainer.version.displayName} • Trainer Profile • Read-only\n\n")
+            append("${trainer.version.displayName} • Trainer Data • Read-only\n\n")
             append("Trainer: ${trainer.name.ifBlank { "Not set" }}\nGender: $gender\n")
             append("Language: ${trainer.languageName} (ID ${trainer.languageId})\n")
             append("Displayed trainer ID: ${trainer.displayTrainerId}\n")
@@ -1838,7 +1838,7 @@ class SwitchReadOnlyActivity : Activity() {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
         }
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Trainer Profile")
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Trainer Data")
             .setView(scroll).setPositiveButton("Close", null)
             .setNeutralButton("Recorded playtime") { _, _ -> if (session === bound && !dashboardBusy) showLetsGoPlayTime(bound) }
             .setNegativeButton("Game options") { _, _ -> if (session === bound && !dashboardBusy) showLetsGoGameOptions(bound) }.show()
@@ -1848,7 +1848,7 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound) return
         val trainer = bound.bdspTrainer ?: return
         val detail = buildString {
-            append("${trainer.version.displayName} • Trainer Profile • Read-only\n")
+            append("${trainer.version.displayName} • Trainer Data • Read-only\n")
             append("Save layout: ${trainer.revision.displayName}\n\n")
             append("Trainer: ${trainer.name.ifBlank { "Not set" }}\nGender: ${if (trainer.gender == 0) "Male" else "Female"}\n")
             append("Language: ${trainer.languageName} (ID ${trainer.languageId})\n")
@@ -1906,7 +1906,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound) showBdspMenuSelection(bound) }
         })
         val scroll = ScrollView(this).apply { addView(body) }
-        val builder = AlertDialog.Builder(this).setTitle("${bound.displayName} • Trainer Profile")
+        val builder = AlertDialog.Builder(this).setTitle("${bound.displayName} • Trainer Data")
             .setView(scroll).setPositiveButton("Close", null)
         if (bound.bdspNursery != null) builder.setNeutralButton("Nursery") { _, _ -> if (session === bound) showBdspNursery(bound) }
         if (bound.bdspBattleTower != null) builder.setNegativeButton("Battle Tower") { _, _ -> if (session === bound) showBdspBattleTower(bound) }
@@ -1918,7 +1918,7 @@ class SwitchReadOnlyActivity : Activity() {
         val trainer = bound.legendsArceusTrainer ?: return
         fun saved(value: Long?): String = value?.toString() ?: "Not present"
         val detail = buildString {
-            append("${trainer.version.displayName} • Trainer Profile • Read-only\n\n")
+            append("${trainer.version.displayName} • Trainer Data • Read-only\n\n")
             append("Trainer: ${trainer.name.ifBlank { "Not set" }}\nGender: ${if (trainer.gender == 0) "Male" else "Female"}\n")
             append("Language: ${trainer.languageName} (ID ${trainer.languageId})\n")
             append("Displayed trainer ID: ${trainer.displayTrainerId}\n")
@@ -1934,7 +1934,7 @@ class SwitchReadOnlyActivity : Activity() {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
         }
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Trainer Profile")
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Trainer Data")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 
@@ -1943,7 +1943,7 @@ class SwitchReadOnlyActivity : Activity() {
         val trainer = bound.scarletVioletTrainer ?: return
         fun saved(value: Long?): String = value?.toString() ?: "Not present"
         val detail = buildString {
-            append("${trainer.version.displayName} • Trainer Profile • Read-only\n\n")
+            append("${trainer.version.displayName} • Trainer Data • Read-only\n\n")
             append("Trainer: ${trainer.name.ifBlank { "Not set" }}\nGender: ${if (trainer.gender == 0) "Male" else "Female"}\n")
             append("Language: ${trainer.languageName} (ID ${trainer.languageId})\n")
             append("Displayed trainer ID: ${trainer.displayTrainerId}\n")
@@ -1960,7 +1960,7 @@ class SwitchReadOnlyActivity : Activity() {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
         }
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Trainer Profile")
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Trainer Data")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 
@@ -1969,7 +1969,7 @@ class SwitchReadOnlyActivity : Activity() {
         val trainer = bound.legendsZaTrainer ?: return
         fun saved(value: Long?): String = value?.toString() ?: "Not present"
         val detail = buildString {
-            append("${trainer.version.displayName} • Trainer Profile • Read-only\n\n")
+            append("${trainer.version.displayName} • Trainer Data • Read-only\n\n")
             append("Revision marker: ${trainer.revision?.displayName ?: "Not present"}\n")
             append("Trainer: ${trainer.name.ifBlank { "Not set" }}\nGender: ${if (trainer.gender == 0) "Male" else "Female"}\n")
             append("Language: ${trainer.languageName} (ID ${trainer.languageId})\n")
@@ -1990,7 +1990,7 @@ class SwitchReadOnlyActivity : Activity() {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
         }
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Trainer Profile")
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Trainer Data")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 

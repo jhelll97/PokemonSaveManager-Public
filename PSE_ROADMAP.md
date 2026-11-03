@@ -12,6 +12,18 @@ Gen 1 is the completed reference game for the shared PSE feature set, feature or
 
 The baseline follows the existing Gen 1 feature set, including applicable save opening and identity/integrity handling, trainer/profile, party and storage, Pokémon details and editing, Pokédex, inventory/items, progression/badges, events, and PSE Bank/transfer routes.
 
+The observed Gen 1 home editor order is:
+
+1. Trainer Data
+2. Pokémon Boxes
+3. PSE Bank
+4. Safe Backups
+5. Items
+6. Pokédex
+7. Events
+
+The active shared parity step is **Trainer Data**. Every supported Switch family exposes this first with the Gen 1 label and control treatment, backed by that title's validated native trainer reader.
+
 ### Phase 2 — Implement the shared Gen 1 features in the same order
 
 Follow the exact Gen 1 feature order from first screen to last. Implement each applicable feature for the Switch titles using the same PSE layout and interaction pattern, adapting only the native data handling. Complete the shared feature for every applicable Switch title before advancing to the next Gen 1 feature.

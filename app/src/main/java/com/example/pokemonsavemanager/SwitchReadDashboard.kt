@@ -13,7 +13,7 @@ object SwitchReadDashboard {
             else -> "Pokémon Boxes"
         }
         return Collections.unmodifiableList(listOf(
-            SwitchDashboardEntry("trainer", "Trainer Data", session.supports(SwitchReadCapability.TRAINER_PROFILE)),
+            SwitchDashboardEntry("trainer", "◎  Trainer Data", session.supports(SwitchReadCapability.TRAINER_PROFILE)),
             SwitchDashboardEntry("storage", storage, session.supports(SwitchReadCapability.PC_OR_BOXES) || session.supports(SwitchReadCapability.PASTURES)),
             SwitchDashboardEntry("party", "Party Pokémon", session.supports(SwitchReadCapability.PARTY)),
             SwitchDashboardEntry("inventory", "Items", session.supports(SwitchReadCapability.INVENTORY)),
