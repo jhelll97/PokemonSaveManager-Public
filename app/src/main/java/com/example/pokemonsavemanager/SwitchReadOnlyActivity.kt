@@ -1240,12 +1240,39 @@ class SwitchReadOnlyActivity : Activity() {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
         }
+        val bankEntryName = location.takeIf { it.startsWith("PSE Bank • ") }
+            ?.removePrefix("PSE Bank • ")
         val dialog = AlertDialog.Builder(this).setTitle("$location • Sword/Shield")
             .setView(scroll).setNegativeButton("Close", null).create()
-        dialog.setButton(AlertDialog.BUTTON_POSITIVE, "Add to PSE Bank", null as android.content.DialogInterface.OnClickListener?)
+        dialog.setButton(AlertDialog.BUTTON_POSITIVE,
+            if (bankEntryName == null) "Add to PSE Bank" else "Remove from PSE Bank",
+            null as android.content.DialogInterface.OnClickListener?)
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 if (session !== bound) { dialog.dismiss(); return@setOnClickListener }
+                if (bankEntryName != null) {
+                    try {
+                        val directory = File(filesDir, "pse_bank").canonicalFile
+                        val entry = File(directory, bankEntryName).canonicalFile
+                        require(entry.parentFile == directory && entry.name.startsWith("switch_swsh_") && entry.extension == "pk8") {
+                            "This is not a removable Sword/Shield Bank entry."
+                        }
+                        require(SwordShieldPokemonReadOnly.read(entry.readBytes()) is SwordShieldSlotRead.Pokemon) {
+                            "The Bank record is invalid; it was left unchanged."
+                        }
+                        require(entry.delete()) { "The Bank entry could not be removed." }
+                        dialog.dismiss()
+                        AlertDialog.Builder(this).setTitle("Removed from PSE Bank")
+                            .setMessage(bankEntryName + " was removed. The Switch save was not changed.")
+                            .setPositiveButton("Back to Bank") { _, _ -> if (session === bound) showSwordShieldBank(bound) }
+                            .setNegativeButton("Close", null).show()
+                    } catch (error: Exception) {
+                        AlertDialog.Builder(this).setTitle("Could not remove Bank entry")
+                            .setMessage(error.message ?: "The entry was left unchanged.")
+                            .setPositiveButton("Close", null).show()
+                    }
+                    return@setOnClickListener
+                }
                 try {
                     val raw = swordShieldRecordBytes(bound, location)
                     val entry = SwitchPseBankStore.depositSwordShield(this, raw)
