@@ -1,24 +1,47 @@
 # PSE Development Roadmap
 
-## Active priority — Switch saves first, gradual writes
+## Current priority — Gen 1 feature parity across Switch games (Generations 7–9)
 
-- Continue Switch-save development before returning to generation-specific work.
-- Preserve existing Switch read-only viewers, Gen 1 behavior, and cumulative generation requirements.
-- Add one bounded, title-specific write at a time with usable UI/API, explicit before/after review, source identity checks, native validation, verified recovery backup, exact byte scope, checksum recalculation, persisted reopen verification, and rollback/failed-copy cleanup.
-- BDSP retains thirteen reviewed native preference edits plus music- and sound-effects-volume editing. Current candidate adds voice-volume editing (0–10) to a new copy; unsupported saved values are blocked. Source replacement and other write features remain unavailable until separately implemented and validated.
-- Pause new Gen 3 features and Gen 6/Gen 7 converter work.
-- Every feature change must include its usable UI, API wiring, and relevant validation/integrity protections.
-- Do not build, sign, upload, dispatch, or report APK artifacts unless explicitly requested. Automatic public validation compiles debug sources and runs lint without APK packaging or artifact upload. The signed-release path remains available only through an explicit manual request.
+Gen 1 is the completed reference game for the shared PSE feature set and screen layout. This roadmap is limited to Switch-save titles in Generations 7–9. Do not start feature work for other generations until the shared and title-specific Switch work below is complete.
+
+### Phase 1 — Map the Gen 1 baseline
+
+- Inventory the existing Gen 1 screens, actions, and working features in PSE. Use that inventory as the definitive parity checklist; do not invent a different shared feature set.
+- Reuse the same PSE navigation, screen order, layout, and interaction pattern for each Switch title. Adapt the data readers and writers to that title’s native save format behind the shared UI.
+- Map each applicable Gen 1 feature to every Switch title. Mark a feature “not applicable” only when that title has no equivalent native save data, and record the reason. Do not show placeholders or imply unsupported data was read or edited.
+
+The checklist covers each shared Gen 1 feature where the title supports it, including save opening and identity/integrity handling, trainer/profile, party and storage, Pokémon details and editing, Pokédex, inventory/items, progression/badges, events, and PSE Bank/transfer routes.
+
+### Phase 2 — Complete shared-feature parity for every Switch title
+
+Work through the shared checklist across all listed games before adding title-only features. A feature is complete only when its usable UI and native data handling are both present for every applicable title.
+
+| Generation | Switch games |
+|---|---|
+| 7 | Pokémon: Let’s Go, Pikachu! / Let’s Go, Eevee! |
+| 8 | Pokémon Sword / Shield; Brilliant Diamond / Shining Pearl; Legends: Arceus |
+| 9 | Pokémon Scarlet / Violet; Legends: Z-A |
+
+Preserve the Gen 1 layout and terminology so the same feature is in the same place across games. Keep title-specific parsing and save structures separate where their native formats differ.
+
+### Phase 3 — Add each title’s unique save features
+
+Only after the shared Gen 1 checklist is complete across all applicable Switch titles, add features that are unique to the game being worked on. Confirm each feature against that title’s native save data and provide its usable UI in the matching PSE layout.
+
+### Out of scope
+
+- Do not add PSE controls for preferences that players can change in the game itself, including music, sound-effects, or voice volume and text speed.
+- Do not prioritize other generations while this Switch roadmap is active.
+- Do not build, sign, upload, or report APK artifacts unless explicitly requested.
+
+### Save-integrity requirements
+
+For any save edit, retain source identity checks, a verified recovery backup, a narrowly scoped native change, required checksum handling, before/after review, persisted reopen validation, and rollback or failed-copy cleanup. Keep the original source unchanged unless that specific write path is separately implemented and validated.
+
+Normal repository build validation continues as configured. Do not add a separate broad test phase ahead of the feature roadmap; defer extra checks until requested or needed for the safety of a specific save write.
 
 ## Public repository safeguards
 
-- Work only on `pse-phone-auto-v2-test`; keep `main` and the private repository unchanged.
-- Use new, matching build events only. Verify repository, branch, SHA, run ID, attempt, result, and current branch HEAD. Deduplicate events and do not replay or overlap work.
+- Work only on `pse-phone-auto-v2-test`; keep `main`, `pse-phone-auto`, and the original private repository unchanged.
+- Use only new, matching build events. Verify repository, branch, SHA, run ID, attempt, result, and current branch HEAD. Deduplicate events and do not replay or overlap work.
 - Keep the public snapshot free of real save files, runtime captures, credentials, signing material, and private repository history.
-
-## Current bounded candidate
-
-- Add voice-volume selection to the BDSP Edit options chooser and existing reviewed new-copy editor. Only byte `0x79BB2` and the native digest may change. Music, sound effects, other options and the source remain unchanged.
-- Use a conservative supported range of 0–10; native storage is one byte. Layout evidence: [PKHeX ConfigSave8b](https://github.com/kwsch/PKHeX/blob/0660d1e1f4924b8478daec73281bb8071a82ad19/PKHeX.Core/Saves/Substructures/Gen8/BS/ConfigSave8b.cs), VolumeVoice at config +0x3E.
-- Preserve native validation, source identity, synced verified recovery backup, empty destination checks, exact persisted reopen and failed-copy cleanup. No source replacement.
-- Parent `115db4a43af224ec60dcdb450ce438964c215b3e` passed run `41704724372`, attempt 1, push, including compilation and blocking lint. Candidate CI and device/provider acceptance remain pending; await its own new Slack event before another push.
