@@ -41,6 +41,20 @@ object LetsGoInventoryReadOnly {
         LetsGoInventoryPocket.ITEMS to setOf(76, 77, 78, 79, 86, 87, 88, 89, 90, 91, 92, 93, 101, 102, 103, 113, 115, 121, 122, 123, 124, 125, 126, 127, 128, 442, 571, 632, 651, 795, 796, 872, 873, 874, 875, 876, 877, 878, 885, 886, 887, 888, 889, 890, 891, 892, 893, 894, 895, 896, 900, 901, 902)
     )
     private val keyItems = setOf(113, 115, 121, 122, 123, 124, 125, 126, 127, 128, 442, 632, 651, 872, 873, 874, 875, 876, 877, 878, 885, 886, 887, 888, 889, 890, 891, 892, 893, 894, 895, 896)
+
+    fun allowedItemIds(pocket: LetsGoInventoryPocket): List<Int> =
+        allowed.getValue(pocket).sorted()
+
+    fun referenceMaxCount(pocket: LetsGoInventoryPocket, itemId: Int): Int? {
+        if (itemId !in allowed.getValue(pocket)) return null
+        return when {
+            pocket == LetsGoInventoryPocket.TMS -> 1
+            pocket == LetsGoInventoryPocket.BATTLE && itemId > 100 -> 1
+            pocket == LetsGoInventoryPocket.ITEMS && itemId in keyItems -> 1
+            else -> 999
+        }
+    }
+
     fun read(source: ByteArray): LetsGoInventoryRead {
         val checked = LetsGoSaveValidation.inspect(source)
         require(checked is LetsGoValidation.Verified) { "A validated native Let's Go inventory save is required." }
@@ -51,12 +65,7 @@ object LetsGoInventoryReadOnly {
                 val item = (raw and 0x7FF).toInt()
                 val count = ((raw ushr 15) and 0x3FF).toInt()
                 val listed = item in allowed.getValue(pocket)
-                val maximum = if (!listed) null else when {
-                    pocket == LetsGoInventoryPocket.TMS -> 1
-                    pocket == LetsGoInventoryPocket.BATTLE && item > 100 -> 1
-                    pocket == LetsGoInventoryPocket.ITEMS && item in keyItems -> 1
-                    else -> 999
-                }
+                val maximum = referenceMaxCount(pocket, item)
                 LetsGoInventorySlotRead(i + 1, raw, item, count, raw and 0x40000000L != 0L,
                     (raw and 0x7FFF).toInt(), ((raw ushr 15) and 0x7FFF).toInt(), raw and 0xBE007800L, listed, maximum)
             }

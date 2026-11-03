@@ -235,7 +235,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(pokedexButton)
         inventoryButton = Button(this).apply {
-            text = "Inventory • Read-only"; isEnabled = false
+            text = "Items • Read-only"; isEnabled = false
             setOnClickListener { session?.let { if (it.legendsZaInventory != null) showLegendsZaInventoryPockets(it) else if (it.scarletVioletInventory != null) showScarletVioletInventoryPockets(it) else if (it.legendsArceusInventory != null) showLegendsArceusInventoryPockets(it) else if (it.bdspInventory != null) showBdspInventoryPockets(it) else if (it.swordShieldInventory != null) showSwordShieldInventoryPockets(it) else showLetsGoInventoryPockets(it) } }
         }
         root.addView(inventoryButton)
@@ -3234,8 +3234,16 @@ class SwitchReadOnlyActivity : Activity() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16) }
         root.addView(TextView(this).apply {
             text = "${table.recordedCount}/${table.slots.size} recorded slots • ${table.slots.size - table.recordedCount} zero slots\n\n" +
-                "Native slot order, including duplicate items and unusual nonzero records. Counts and flags are saved values; no editing or inventory cleanup."
+                "Native slot order, including duplicate items and unusual nonzero records. Counts and flags are saved values. Catalogued records can be changed through an explicitly reviewed new copy; unusual records remain locked."
             textSize = 16f; setTextIsSelectable(true)
+        })
+        val emptySlot = table.slots.firstOrNull { it.isEmpty }
+        if (emptySlot != null) root.addView(Button(this).apply {
+            text = "＋  Add item • Save new copy"
+            isAllCaps = false
+            setOnClickListener {
+                if (session === bound) launchLetsGoItemEditor(bound, pocket, emptySlot.slot, true)
+            }
         })
         if (entries.isEmpty()) root.addView(TextView(this).apply { text = "This pocket contains no nonzero saved records."; textSize = 16f })
         for (entry in entries.drop(page * 20).take(20)) root.addView(Button(this).apply {
@@ -3254,18 +3262,44 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound) return
         val entry = bound.letsGoInventory?.pocket(pocket)?.slot(slot) ?: return
         val detail = buildString {
-            append("${pocket.displayName} • Native slot ${entry.slot}\n${entry.itemName} (#${entry.itemId}) • Read-only\n\n")
+            append("${pocket.displayName} • Native slot ${entry.slot}\n${entry.itemName} (#${entry.itemId})\n\n")
             append("Saved count: ${entry.count}\nNew flag: ${entry.isNew}\nListed in this pocket's native catalogue: ${entry.listedInPocket}\n")
             append("Reference stack maximum: ${entry.referenceMaxCount?.toString() ?: "Unknown for this record"}\nExceeds reference maximum: ${entry.exceedsReferenceMax}\n\n")
             append("Raw packed value: ${entry.rawValue}\nRaw 15-bit item field: ${entry.rawItemField}\nRaw 15-bit count field: ${entry.rawCountField}\nOther saved bits: ${entry.unknownBits}\n\n")
             append("Item/count display follows the native getter masks. Unusual IDs, zero counts, duplicate slots and unknown bits are retained. ")
-            append("Reference catalogues and maxima are descriptive, not a legality verdict. Reserved bits are not labelled favorites. No editing, sorting, merging or save replacement.")
+            append("Reference catalogues and maxima are descriptive, not a legality verdict. Reserved bits are not labelled favorites. ")
+            append(if (entry.listedInPocket && entry.referenceMaxCount != null) "Use Edit item to review a quantity change or removal saved to a new copy." else "This unusual record remains locked.")
         }
         val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
             text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
         }) }
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • ${entry.itemName}")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        val builder = AlertDialog.Builder(this).setTitle("${bound.displayName} • ${entry.itemName}")
+            .setView(scroll).setNegativeButton("Close", null)
+        if (entry.listedInPocket && entry.referenceMaxCount != null) {
+            builder.setPositiveButton("Edit item • New copy") { _, _ ->
+                if (session === bound) launchLetsGoItemEditor(bound, pocket, entry.slot, false)
+            }
+        }
+        builder.show()
+    }
+
+    private fun launchLetsGoItemEditor(
+        bound: SwitchReadSession,
+        pocket: LetsGoInventoryPocket,
+        slot: Int,
+        add: Boolean
+    ) {
+        val source = selectedSourceUri ?: return
+        if (session !== bound) return
+        startActivity(
+            Intent(this, SwitchLetsGoItemActivity::class.java)
+                .setData(source)
+                .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                .putExtra("pse.switch.item.pocket", pocket.name)
+                .putExtra("pse.switch.item.slot", slot)
+                .putExtra("pse.switch.item.add", add)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        )
     }
 
     private fun showSwordShieldInventoryPockets(bound: SwitchReadSession) {

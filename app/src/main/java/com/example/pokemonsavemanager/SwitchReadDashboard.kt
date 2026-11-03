@@ -4,7 +4,7 @@ import java.util.Collections
 
 data class SwitchDashboardEntry(val section: String, val label: String, val enabled: Boolean)
 
-/** Read-only navigation uses per-file readers, never planned capabilities or family hints as proof. */
+/** Navigation uses per-file readers, never planned capabilities or family hints as proof. */
 object SwitchReadDashboard {
     fun entries(session: SwitchReadSession): List<SwitchDashboardEntry> =
         Collections.unmodifiableList(listOf(
@@ -15,7 +15,7 @@ object SwitchReadDashboard {
                 session.supports(SwitchReadCapability.PARTY) &&
                     (session.supports(SwitchReadCapability.PC_OR_BOXES) || session.supports(SwitchReadCapability.PASTURES))
             ),
-            SwitchDashboardEntry("inventory", "Items", session.supports(SwitchReadCapability.INVENTORY)),
+            SwitchDashboardEntry("inventory", "▦  Items", session.supports(SwitchReadCapability.INVENTORY)),
             SwitchDashboardEntry("pokedex", "Pokédex", session.supports(SwitchReadCapability.POKEDEX))
         ))
 }
