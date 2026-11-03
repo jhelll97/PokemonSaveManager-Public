@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   debug:
-    name: Compile unsigned debug APK
+    name: Compile and lint source without APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -53,16 +53,11 @@ jobs:
           yes | "$sdkmanager" --licenses >/dev/null || true
           "$sdkmanager" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Compile Android app
-        run: gradle :app:assembleDebug --no-daemon --max-workers=2
+      - name: Validate automatic workflow safeguards
+        run: python3 tools/tests/test_public_workflow_policy.py
 
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: PokemonSaveManager-debug-${{ github.sha }}
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-          retention-days: 7
+      - name: Compile and lint without APK packaging
+        run: gradle :app:compileDebugSources :app:lintDebug --no-daemon --max-workers=2
 
   signed-release:
     name: Build signed APK on request

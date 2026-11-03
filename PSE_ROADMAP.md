@@ -8,7 +8,7 @@
 - Current write scope: BDSP text-speed editing to a new copy. Source replacement and other write features remain unavailable until each is separately implemented and validated.
 - Pause new Gen 3 features and Gen 6/Gen 7 converter work.
 - Every feature change must include its usable UI, API wiring, and relevant validation/integrity protections.
-- Do not build, sign, upload, or report a signed APK unless explicitly requested. The ordinary public workflow compiles the unsigned debug APK for each development push.
+- Do not build, sign, upload, dispatch, or report APK artifacts unless explicitly requested. Automatic public validation compiles debug sources and runs lint without APK packaging or artifact upload. The signed-release path remains available only through an explicit manual request.
 
 ## Public repository safeguards
 
