@@ -11,6 +11,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
+import java.io.File
 import java.util.concurrent.Executors
 
 /** Isolated from MainActivity's working save and all existing save-writing routes. */
@@ -1199,7 +1200,27 @@ class SwitchReadOnlyActivity : Activity() {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
         }
-        AlertDialog.Builder(this).setTitle("$location • Read-only").setView(scroll).setPositiveButton("Close", null).show()
+        val dialog = AlertDialog.Builder(this).setTitle("$location • Sword/Shield")
+            .setView(scroll).setNegativeButton("Close", null).create()
+        dialog.setButton(AlertDialog.BUTTON_POSITIVE, "Add to PSE Bank", null)
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (session !== bound) { dialog.dismiss(); return@setOnClickListener }
+                try {
+                    val raw = swordShieldRecordBytes(bound, location)
+                    val entry = SwitchPseBankStore.depositSwordShield(this, raw)
+                    dialog.dismiss()
+                    AlertDialog.Builder(this).setTitle("Added to PSE Bank")
+                        .setMessage(p.nickname.ifBlank { SwordShieldSpeciesNames.name(p.species) } + " copied as native PK8. The Switch save was not changed.\n\n" + entry.name)
+                        .setPositiveButton("Close", null).show()
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not add to PSE Bank")
+                        .setMessage(error.message ?: "The save could not be read again.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun bdspLabel(read: BdspSlotRead): String = when (read) {
