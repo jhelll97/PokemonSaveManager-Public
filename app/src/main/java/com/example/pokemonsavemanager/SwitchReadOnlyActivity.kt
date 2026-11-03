@@ -528,7 +528,8 @@ class SwitchReadOnlyActivity : Activity() {
                     SwitchGameFamily.LETS_GO_PIKACHU_EEVEE,
                     SwitchGameFamily.SWORD_SHIELD,
                     SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL,
-                    SwitchGameFamily.LEGENDS_ARCEUS
+                    SwitchGameFamily.LEGENDS_ARCEUS,
+                    SwitchGameFamily.SCARLET_VIOLET
                 )) {
                 dashboardRoot.addView(Button(this).apply {
                     text = "◇  PSE Bank • Manage"
@@ -1300,6 +1301,7 @@ class SwitchReadOnlyActivity : Activity() {
             SwitchGameFamily.SWORD_SHIELD -> showSwordShieldBank(bound)
             SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL -> showBdspBank(bound)
             SwitchGameFamily.LEGENDS_ARCEUS -> showLegendsArceusBank(bound)
+            SwitchGameFamily.SCARLET_VIOLET -> showScarletVioletBank(bound)
             else -> return
         }
     }
@@ -1543,6 +1545,86 @@ class SwitchReadOnlyActivity : Activity() {
         dialog.show()
     }
 
+    private fun showScarletVioletBank(bound: SwitchReadSession) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank")
+        val entries = directory.listFiles()?.filter {
+            it.isFile && it.name.startsWith("switch_sv_") && it.extension == "pk9"
+        }?.sortedBy { it.name }.orEmpty()
+        val labels = entries.map { file ->
+            val parsed = runCatching { ScarletVioletPokemonReadOnly.read(file.readBytes()) }.getOrNull()
+            val pokemon = (parsed as? ScarletVioletSlotRead.Pokemon)?.value
+            if (pokemon == null) file.name + " • unreadable"
+            else pokemon.nickname.ifBlank { ScarletVioletSpeciesNames.name(pokemon.species) } +
+                " (#" + pokemon.species + ")" + (if (pokemon.shiny) " • Shiny" else "") +
+                (if (pokemon.isEgg) " • Egg" else "") + " • PK9"
+        }
+        val builder = AlertDialog.Builder(this)
+            .setTitle("PSE Bank • " + entries.size + " Scarlet/Violet Pokémon")
+            .setPositiveButton("Close", null)
+        if (entries.isEmpty()) {
+            builder.setMessage("No Scarlet/Violet Pokémon are stored. Open Pokémon Boxes, choose a Pokémon, then tap Add to PSE Bank.")
+        } else {
+            builder.setItems(labels.toTypedArray()) { _, index ->
+                if (session === bound) showScarletVioletBankEntry(bound, entries[index])
+            }
+        }
+        builder.show()
+    }
+
+    private fun showScarletVioletBankEntry(bound: SwitchReadSession, file: File) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = file.canonicalFile
+        val parsed = runCatching {
+            require(entry.parentFile == directory && entry.name.startsWith("switch_sv_") && entry.extension == "pk9") {
+                "This is not a Scarlet/Violet Bank entry."
+            }
+            ScarletVioletPokemonReadOnly.read(entry.readBytes())
+        }.getOrElse { ScarletVioletSlotRead.Invalid(it.message ?: "The Bank entry could not be read.") }
+        if (parsed !is ScarletVioletSlotRead.Pokemon) {
+            AlertDialog.Builder(this).setTitle("Unreadable PSE Bank entry")
+                .setMessage((parsed as? ScarletVioletSlotRead.Invalid)?.reason ?: "The Bank entry is empty.")
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val p = parsed.value
+        val detail = buildString {
+            append("${ScarletVioletSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form}\n")
+            append("Nickname: ${p.nickname.ifBlank { "None" }}\n")
+            append("Shiny: ${if (p.shiny) "Yes" else "No"} • Egg: ${if (p.isEgg) "Yes" else "No"}\n")
+            append("Original trainer: ${p.originalTrainer}\n\n")
+            append("Native PK9 checksum passed. Removing this Bank copy never changes the Switch save.")
+        }
+        val dialog = AlertDialog.Builder(this).setTitle("PSE Bank • Scarlet/Violet")
+            .setMessage(detail).setNegativeButton("Close", null).create()
+        dialog.setButton(AlertDialog.BUTTON_POSITIVE, "Remove from PSE Bank",
+            null as android.content.DialogInterface.OnClickListener?)
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                try {
+                    require(session === bound) { "The active save changed; the Bank entry was left unchanged." }
+                    require(entry.parentFile == directory && entry.name.startsWith("switch_sv_") && entry.extension == "pk9") {
+                        "This is not a removable Scarlet/Violet Bank entry."
+                    }
+                    require(ScarletVioletPokemonReadOnly.read(entry.readBytes()) is ScarletVioletSlotRead.Pokemon) {
+                        "The Bank record is invalid; it was left unchanged."
+                    }
+                    require(entry.delete()) { "The Bank entry could not be removed." }
+                    dialog.dismiss()
+                    AlertDialog.Builder(this).setTitle("Removed from PSE Bank")
+                        .setMessage(entry.name + " was removed. The Switch save was not changed.")
+                        .setPositiveButton("Back to Bank") { _, _ -> if (session === bound) showScarletVioletBank(bound) }
+                        .setNegativeButton("Close", null).show()
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not remove Bank entry")
+                        .setMessage(error.message ?: "The entry was left unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }
+        }
+        dialog.show()
+    }
     private fun showSwordShieldBank(bound: SwitchReadSession) {
         if (session !== bound) return
         val directory = File(filesDir, "pse_bank")
@@ -2041,7 +2123,47 @@ class SwitchReadOnlyActivity : Activity() {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
         }
-        AlertDialog.Builder(this).setTitle("$location • Read-only").setView(scroll).setPositiveButton("Close", null).show()
+        val canAddToBank = Regex("^(Box [0-9]+ • Slot [0-9]+|Party [0-9]+|Ride Pokémon)$").matches(location)
+        val dialog = AlertDialog.Builder(this).setTitle("$location • Read-only")
+            .setView(scroll).setNegativeButton("Close", null).create()
+        if (canAddToBank) {
+            dialog.setButton(AlertDialog.BUTTON_POSITIVE, "Add to PSE Bank",
+                null as android.content.DialogInterface.OnClickListener?)
+            dialog.setOnShowListener {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    if (session !== bound) { dialog.dismiss(); return@setOnClickListener }
+                    try {
+                        val raw = scarletVioletRecordBytes(bound, location)
+                        val entry = SwitchPseBankStore.depositScarletViolet(this, raw)
+                        dialog.dismiss()
+                        AlertDialog.Builder(this).setTitle("Added to PSE Bank")
+                            .setMessage(p.nickname.ifBlank { ScarletVioletSpeciesNames.name(p.species) } +
+                                " copied as native PK9. The Switch save was not changed.\n\n" + entry.name)
+                            .setPositiveButton("Close", null).show()
+                    } catch (error: Exception) {
+                        AlertDialog.Builder(this).setTitle("Could not add to PSE Bank")
+                            .setMessage(error.message ?: "The save could not be read again.")
+                            .setPositiveButton("Close", null).show()
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun scarletVioletRecordBytes(bound: SwitchReadSession, location: String): ByteArray {
+        val uri = selectedSourceUri ?: throw IllegalStateException("The selected save is no longer available.")
+        val original = bound.snapshot.bytesCopy()
+        val current = contentResolver.openInputStream(uri)?.use { input ->
+            val bytes = input.readBytes()
+            require(bytes.size <= 16 * 1024 * 1024) { "The selected file exceeds the 16 MiB intake limit." }
+            bytes
+        } ?: throw java.io.IOException("The selected save could not be reopened.")
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        require(java.security.MessageDigest.isEqual(digest.digest(original), digest.digest(current))) {
+            "The selected save changed after it was opened. Reopen it before adding Pokémon to Bank."
+        }
+        return bound.snapshot.readScarletVioletRecord(location)
     }
 
     private fun legendsZaLabel(read: LegendsZaSlotRead): String = when (read) {

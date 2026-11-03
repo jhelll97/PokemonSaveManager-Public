@@ -230,6 +230,46 @@ class SwitchReadSnapshot private constructor(
     internal fun readScarletVioletTrainer(): ScarletVioletTrainerRead = ScarletVioletTrainerReadOnly.read(sourceBytes)
     internal fun readScarletVioletStorage(): ScarletVioletStorageRead = ScarletVioletStorageReadOnly.read(sourceBytes)
 
+    internal fun readScarletVioletRecord(location: String): ByteArray {
+        require(inspectScarletViolet() is ScarletVioletValidation.Verified) {
+            "A validated native Scarlet/Violet save is required."
+        }
+        readScarletVioletStorage()
+        val blocks = ScarletVioletSaveValidation.readPokemonBlocks(sourceBytes)
+        val box = Regex("^Box ([0-9]+) • Slot ([0-9]+)$").matchEntire(location)
+        val party = Regex("^Party ([0-9]+)$").matchEntire(location)
+        val size = ScarletVioletPokemonReadOnly.RECORD_SIZE
+        return when {
+            box != null -> {
+                val boxIndex = box.groupValues[1].toInt() - 1
+                val slot = box.groupValues[2].toInt() - 1
+                require(boxIndex in 0 until 32 && slot in 0 until 30) {
+                    "Scarlet/Violet box slot is out of range."
+                }
+                val start = (boxIndex * 30 + slot) * size
+                blocks.boxes.copyOfRange(start, start + size)
+            }
+            party != null -> {
+                val slot = party.groupValues[1].toInt() - 1
+                require(slot in 0 until 6) { "Scarlet/Violet party slot is out of range." }
+                val count = blocks.party[6 * size].toInt() and 255
+                require(slot < count) { "That party slot is not occupied." }
+                val start = slot * size
+                blocks.party.copyOfRange(start, start + size)
+            }
+            location == "Ride Pokémon" -> {
+                val start = 960 * size
+                blocks.boxes.copyOfRange(start, start + size)
+            }
+            else -> throw IllegalArgumentException(
+                "Choose a Pokémon directly from its native Scarlet/Violet box, party, or ride slot."
+            )
+        }.also { record ->
+            require(ScarletVioletPokemonReadOnly.read(record) is ScarletVioletSlotRead.Pokemon) {
+                "Only a checksum-valid native Pokémon record can be added to Bank."
+            }
+        }
+    }
     internal fun readLegendsZaInventory(): LegendsZaInventoryRead = LegendsZaInventoryReadOnly.read(sourceBytes)
     internal fun readLegendsZaPokedex(): LegendsZaPokedexRead = LegendsZaPokedexReadOnly.read(sourceBytes)
     internal fun readLegendsZaTrainer(): LegendsZaTrainerRead = LegendsZaTrainerReadOnly.read(sourceBytes)
