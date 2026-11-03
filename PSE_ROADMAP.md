@@ -26,7 +26,7 @@ The validated shared parity step is **Trainer Data**. Every supported Switch fam
 
 The validated shared parity steps are **Trainer Data** and **Pokémon Boxes**. The Boxes card opens the same Party / PC Boxes choice for every supported Switch family, then dispatches to that title's validated native party and storage reader.
 
-The active shared parity step is **PSE Bank**. Native byte-preserving deposit, list, inspect, and remove flows are available for Let's Go PB7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, and Scarlet/Violet PK9 records without changing the source save. Legends: Z-A remains absent from the Bank UI until its native record adapter is implemented and validated.
+The completed shared parity steps are **Trainer Data**, **Pokémon Boxes**, and **PSE Bank**. Native byte-preserving Bank deposit, list, inspect, and remove flows are available for Let's Go PB7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, Scarlet/Violet PK9, and Legends: Z-A PA9 records without changing the source save. The active shared parity step is now **Safe Backups**.
 
 ### Phase 2 — Implement the shared Gen 1 features in the same order
 

@@ -39,6 +39,13 @@ object SwitchPseBankStore {
         }
         return deposit(context, "switch_sv_", "pk9", record)
     }
+    fun depositLegendsZa(context: android.content.Context, record: ByteArray): File {
+        require(record.size == LegendsZaPokemonReadOnly.RECORD_SIZE) { "A complete native PA9 record is required." }
+        require(LegendsZaPokemonReadOnly.read(record) is LegendsZaSlotRead.Pokemon) {
+            "Only a readable, checksum-valid Legends: Z-A Pokémon can be added to PSE Bank."
+        }
+        return deposit(context, "switch_za_", "pa9", record)
+    }
     fun depositSwordShield(context: android.content.Context, record: ByteArray): File {
         require(record.size == SwordShieldPokemonReadOnly.RECORD_SIZE) { "A complete native PK8 record is required." }
         require(SwordShieldPokemonReadOnly.read(record) is SwordShieldSlotRead.Pokemon) {

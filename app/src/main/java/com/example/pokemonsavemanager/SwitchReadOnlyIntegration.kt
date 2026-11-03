@@ -275,6 +275,41 @@ class SwitchReadSnapshot private constructor(
     internal fun readLegendsZaTrainer(): LegendsZaTrainerRead = LegendsZaTrainerReadOnly.read(sourceBytes)
     internal fun readLegendsZaStorage(): LegendsZaStorageRead = LegendsZaStorageReadOnly.read(sourceBytes)
 
+    internal fun readLegendsZaRecord(location: String): ByteArray {
+        require(inspectLegendsZa() is LegendsZaValidation.Verified) {
+            "A validated native Legends: Z-A save is required."
+        }
+        val storage = readLegendsZaStorage()
+        val blocks = LegendsZaSaveValidation.readPokemonBlocks(sourceBytes)
+        val box = Regex("^Box ([0-9]+) • Slot ([0-9]+)$").matchEntire(location)
+        val party = Regex("^Party ([0-9]+)$").matchEntire(location)
+        val size = LegendsZaPokemonReadOnly.RECORD_SIZE
+        return when {
+            box != null -> {
+                val boxIndex = box.groupValues[1].toInt() - 1
+                val slot = box.groupValues[2].toInt() - 1
+                require(boxIndex in 0 until 32 && slot in 0 until 30) {
+                    "Legends: Z-A box slot is out of range."
+                }
+                val start = (boxIndex * 30 + slot) * LegendsZaStorageReadOnly.BOX_STRIDE
+                blocks.boxes.copyOfRange(start, start + size)
+            }
+            party != null -> {
+                val slot = party.groupValues[1].toInt() - 1
+                require(slot in 0 until 6) { "Legends: Z-A party slot is out of range." }
+                require(slot < storage.partyCount) { "That party slot is not occupied." }
+                val start = slot * LegendsZaStorageReadOnly.PARTY_STRIDE
+                blocks.party.copyOfRange(start, start + size)
+            }
+            else -> throw IllegalArgumentException(
+                "Choose a Pokémon directly from its native Legends: Z-A box or party slot."
+            )
+        }.also { record ->
+            require(LegendsZaPokemonReadOnly.read(record) is LegendsZaSlotRead.Pokemon) {
+                "Only a checksum-valid native Pokémon record can be added to Bank."
+            }
+        }
+    }
     companion object {
         // An intake resource limit, not a native format size or detection rule.
         const val MAX_SAVE_BYTES = 16 * 1024 * 1024
