@@ -13,5 +13,6 @@
         <activity android:name=".SwitchSwordShieldItemActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspItemActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusItemActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletItemActivity" android:exported="false"/>
     </application>
 </manifest>

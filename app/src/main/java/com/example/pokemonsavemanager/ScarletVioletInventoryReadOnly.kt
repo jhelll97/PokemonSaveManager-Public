@@ -15,6 +15,7 @@ data class ScarletVioletInventorySlotRead(val itemId: Int, val count: Int, val r
     val isNew: Boolean get() = rawFlags and 1L != 0L
     val isFavorite: Boolean get() = rawFlags and 2L != 0L
     val isObtained: Boolean get() = rawFlags and 4L != 0L
+    val hasKnownFlags: Boolean get() = rawFlags and 0xFFFFFFF8L == 0L
     // Early native saves can initialize every empty pouch word to FFFFFFFF.
     val isRecorded: Boolean get() = rawCount != 0L || rawFlags != 0L || padding != 0L ||
         (rawPouch != 0L && rawPouch != 0xFFFFFFFFL)
@@ -27,6 +28,8 @@ data class ScarletVioletInventorySlotRead(val itemId: Int, val count: Int, val r
     }
     private fun isAccessory(id: Int): Boolean = (id in 2311..2400 || id in 2417..2437) &&
         !(id in 2334..2342 || id in 2385..2394 || id == 2548)
+    val isEditable: Boolean get() = pocket != null && pouchMatchesCatalogue && isObtained &&
+        hasKnownFlags && padding == 0L && rawCount in 1L..(referenceMaxCount?.toLong() ?: 0L)
 }
 
 class ScarletVioletInventoryPocketRead internal constructor(val pocket: ScarletVioletInventoryPocket,
@@ -71,6 +74,8 @@ object ScarletVioletInventoryReadOnly {
             ScarletVioletInventoryPocket.values().map { p -> ScarletVioletInventoryPocketRead(p,
                 immutable(slots.filter { it.pocket == p })) }))
     }
+    fun allowedItemIds(pocket: ScarletVioletInventoryPocket): List<Int> =
+        catalogue.getValue(pocket).sorted()
     private fun u32(data: ByteArray, at: Int): Long =
         (0..3).fold(0L) { result, i -> result or ((data[at + i].toLong() and 255) shl (i * 8)) }
 }

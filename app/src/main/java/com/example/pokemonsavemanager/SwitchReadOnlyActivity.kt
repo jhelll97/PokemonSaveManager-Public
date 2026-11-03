@@ -3605,7 +3605,7 @@ class SwitchReadOnlyActivity : Activity() {
         val bag = bound.scarletVioletInventory ?: return
         val labels = bag.pockets.map { "${it.pocket.displayName} • ${it.recordedSlots.size} recorded items" } +
             "Other saved records • ${bag.unlistedRecords.size} unlisted indices"
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Inventory • Read-only")
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Items")
             .setItems(labels.toTypedArray()) { _, index ->
                 if (session === bound) showScarletVioletInventoryPocket(bound, index, 0)
             }.setNegativeButton("Close", null).show()
@@ -3622,8 +3622,16 @@ class SwitchReadOnlyActivity : Activity() {
         val page = requestedPage.coerceIn(0, lastPage)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16) }
         root.addView(TextView(this).apply {
-            text = "${entries.size} recorded items in native item-ID order. Zero quantities, unknown flags and mismatched saved pockets remain visible. Select an item for saved details."
+            text = "${entries.size} recorded items in native item-ID order. Zero quantities, unknown flags and mismatched saved pockets remain visible. Normal catalogued records can be changed through an explicitly reviewed new copy; unusual records remain locked."
             textSize = 16f; setTextIsSelectable(true)
+        })
+        if (pocket != null && ScarletVioletInventoryReadOnly.allowedItemIds(pocket.pocket)
+                .any { !bag.slot(it).isRecorded }) root.addView(Button(this).apply {
+            text = "＋  Add item • Save new copy"
+            isAllCaps = false
+            setOnClickListener {
+                if (session === bound) launchScarletVioletItemEditor(bound, pocket.pocket, -1, true)
+            }
         })
         if (entries.isEmpty()) root.addView(TextView(this).apply { text = "No saved records in this section."; textSize = 16f })
         for (entry in entries.drop(page * 20).take(20)) root.addView(Button(this).apply {
@@ -3647,12 +3655,38 @@ class SwitchReadOnlyActivity : Activity() {
             "Saved signed quantity: ${entry.count}\nRaw quantity word: ${entry.rawCount}\nSaved pouch word: ${entry.rawPouch}\n" +
             "Matches catalogue pocket: ${entry.pouchMatchesCatalogue}\nNew: ${entry.isNew}\nFavorite: ${entry.isFavorite}\nObtained flag: ${entry.isObtained}\n" +
             "Raw flag word: ${entry.rawFlags}\nPadding word: ${entry.padding}\nReference maximum: ${entry.referenceMaxCount?.toString() ?: "Unknown"}\n\n" +
-            "The item ID is the saved array index. Catalogue pockets and maxima describe the format; they do not establish legality or ownership. Empty 0/FFFFFFFF pouch-only records are hidden from lists. All 3,000 records remain in the read-only snapshot."
+            "The item ID is the saved array index. Catalogue pockets and maxima describe the format; they do not establish legality or ownership. Empty 0/FFFFFFFF pouch-only records are hidden from lists. All 3,000 records remain in the snapshot. " +
+            if (entry.isEditable) "Use Edit item to review a quantity change or removal saved to a new copy. New and favorite flags remain unchanged for quantity edits."
+            else "This unusual or mismatched record remains locked."
         val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
             text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
         }) }
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • ${entry.itemName}")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        val builder = AlertDialog.Builder(this).setTitle("${bound.displayName} • ${entry.itemName}")
+            .setView(scroll).setNegativeButton("Close", null)
+        val selectedPocket = entry.pocket
+        if (selectedPocket != null && entry.isEditable) builder.setPositiveButton("Edit item • New copy") { _, _ ->
+            if (session === bound) launchScarletVioletItemEditor(bound, selectedPocket, entry.itemId, false)
+        }
+        builder.show()
+    }
+
+    private fun launchScarletVioletItemEditor(
+        bound: SwitchReadSession,
+        pocket: ScarletVioletInventoryPocket,
+        itemId: Int,
+        add: Boolean
+    ) {
+        val source = selectedSourceUri ?: return
+        if (session !== bound) return
+        startActivity(
+            Intent(this, SwitchScarletVioletItemActivity::class.java)
+                .setData(source)
+                .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                .putExtra("pse.switch.item.pocket", pocket.name)
+                .putExtra("pse.switch.item.id", itemId)
+                .putExtra("pse.switch.item.add", add)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        )
     }
 
 

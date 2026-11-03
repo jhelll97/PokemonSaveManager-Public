@@ -22,6 +22,8 @@ internal data class ScarletVioletTrainerBlocks(val version: ScarletVioletVersion
 
 internal data class ScarletVioletInventoryBlock(val version: ScarletVioletVersion, val data: ByteArray)
 
+internal data class ScarletVioletInventoryWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
+
 /** Independent read-only container gate; pinned format evidence is in SWITCH_READ_ONLY_FORMATS.md. */
 object ScarletVioletSaveValidation {
     private val knownSizes = setOf(0x31626F, 0x31627C, 0x319DB3, 0x319DC0,
@@ -80,6 +82,66 @@ object ScarletVioletSaveValidation {
         }
         require(captured.getValue(0x21C9BD44L).size == 0xBB80) { "The native Scarlet/Violet inventory block is missing." }
         return ScarletVioletInventoryBlock(checked.version, captured.getValue(0x21C9BD44L))
+    }
+
+    /** Replaces one decoded 16-byte item record and rebuilds native container integrity. */
+    internal fun writeInventoryRecord(
+        source: ByteArray,
+        itemId: Int,
+        decodedRecord: ByteArray
+    ): ScarletVioletInventoryWriteResult {
+        readInventoryBlock(source)
+        require(itemId in 1 until 3000) { "The native Scarlet/Violet item index must be 1 through 2999." }
+        require(decodedRecord.size == 16) { "A native Scarlet/Violet item record must be 16 bytes." }
+        val relativeOffset = itemId * 16
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var absoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = payload.size - cursor.remaining
+            if (key == 0x21C9BD44L) {
+                require(type == 4 && length == 0xBB80L) {
+                    "The Scarlet/Violet inventory block has the wrong native type or size."
+                }
+                repeat(relativeOffset) { stream.next() }
+                repeat(decodedRecord.size) { byteIndex ->
+                    payload[blockStart + relativeOffset + byteIndex] =
+                        (decodedRecord[byteIndex].toInt() xor stream.next()).toByte()
+                }
+                absoluteOffset = blockStart + relativeOffset
+            }
+            cursor.skip(length.toInt())
+        }
+        require(absoluteOffset >= 0) { "The Scarlet/Violet inventory block is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readInventoryBlock(edited)
+        return ScarletVioletInventoryWriteResult(edited, absoluteOffset)
     }
 
     private fun inspect(source: ByteArray, captured: MutableMap<Long, ByteArray>?, uintKeys: Set<Long> = emptySet()): ScarletVioletValidation {
