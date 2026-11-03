@@ -66,7 +66,7 @@ jobs:
         run: >-
           gradle :app:lintDebug --no-daemon --max-workers=1
           -Pkotlin.compiler.execution.strategy=in-process
-          "-Dorg.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=512m -XX:+UseG1GC"
+          "-Dorg.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=512m -XX:+UseG1GC -Didea.max.intellisense.filesize=4096"
 
   signed-release:
     name: Build signed APK on request
