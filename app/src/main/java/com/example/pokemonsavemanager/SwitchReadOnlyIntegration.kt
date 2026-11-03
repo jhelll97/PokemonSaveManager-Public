@@ -187,6 +187,43 @@ class SwitchReadSnapshot private constructor(
     internal fun readLegendsArceusPokedex(): LegendsArceusPokedexRead = LegendsArceusPokedexReadOnly.read(sourceBytes)
     internal fun readLegendsArceusTrainer(): LegendsArceusTrainerRead = LegendsArceusTrainerReadOnly.read(sourceBytes)
     internal fun readLegendsArceusStorage(): LegendsArceusStorageRead = LegendsArceusStorageReadOnly.read(sourceBytes)
+    internal fun readLegendsArceusRecord(location: String): ByteArray {
+        require(inspectLegendsArceus() is LegendsArceusValidation.Verified) {
+            "A validated native Legends: Arceus save is required."
+        }
+        readLegendsArceusStorage()
+        val blocks = LegendsArceusSaveValidation.readPokemonBlocks(sourceBytes)
+        val pasture = Regex("^Pasture ([0-9]+) • Slot ([0-9]+)$").matchEntire(location)
+        val party = Regex("^Party ([0-9]+)$").matchEntire(location)
+        return when {
+            pasture != null -> {
+                val pastureIndex = pasture.groupValues[1].toInt() - 1
+                val slot = pasture.groupValues[2].toInt() - 1
+                require(pastureIndex in 0 until 32 && slot in 0 until 30) {
+                    "Legends: Arceus pasture slot is out of range."
+                }
+                val size = LegendsArceusPokemonReadOnly.STORED_SIZE
+                val start = (pastureIndex * 30 + slot) * size
+                blocks.pastures.copyOfRange(start, start + size)
+            }
+            party != null -> {
+                val slot = party.groupValues[1].toInt() - 1
+                require(slot in 0 until 6) { "Legends: Arceus party slot is out of range." }
+                val size = LegendsArceusPokemonReadOnly.PARTY_SIZE
+                val count = blocks.party[6 * size].toInt() and 255
+                require(slot < count) { "That party slot is not occupied." }
+                val start = slot * size
+                blocks.party.copyOfRange(start, start + size)
+            }
+            else -> throw IllegalArgumentException(
+                "Choose a Pokémon directly from its native pasture or party slot."
+            )
+        }.also { record ->
+            require(LegendsArceusPokemonReadOnly.read(record) is LegendsArceusSlotRead.Pokemon) {
+                "Only a checksum-valid native Pokémon record can be added to Bank."
+            }
+        }
+    }
 
     internal fun readScarletVioletInventory(): ScarletVioletInventoryRead = ScarletVioletInventoryReadOnly.read(sourceBytes)
     internal fun readScarletVioletPokedex(): ScarletVioletPokedexRead = ScarletVioletPokedexReadOnly.read(sourceBytes)

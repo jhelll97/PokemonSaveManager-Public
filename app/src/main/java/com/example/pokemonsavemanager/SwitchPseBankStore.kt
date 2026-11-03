@@ -21,6 +21,17 @@ object SwitchPseBankStore {
         return deposit(context, "switch_bdsp_", "pb8", record)
     }
 
+    fun depositLegendsArceus(context: android.content.Context, record: ByteArray): File {
+        require(record.size == LegendsArceusPokemonReadOnly.STORED_SIZE ||
+            record.size == LegendsArceusPokemonReadOnly.PARTY_SIZE) {
+            "A complete native stored or party PA8 record is required."
+        }
+        require(LegendsArceusPokemonReadOnly.read(record) is LegendsArceusSlotRead.Pokemon) {
+            "Only a readable, checksum-valid Legends: Arceus Pokémon can be added to PSE Bank."
+        }
+        return deposit(context, "switch_pla_", "pa8", record)
+    }
+
     fun depositSwordShield(context: android.content.Context, record: ByteArray): File {
         require(record.size == SwordShieldPokemonReadOnly.RECORD_SIZE) { "A complete native PK8 record is required." }
         require(SwordShieldPokemonReadOnly.read(record) is SwordShieldSlotRead.Pokemon) {
