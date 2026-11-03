@@ -75,6 +75,22 @@ object SwitchSafeBackupStore {
         return SwitchSafeBackupEntry(file, snapshot.sourceSha256, bytes.size, file.lastModified())
     }
 
+    fun readVerified(
+        context: android.content.Context, family: SwitchGameFamily, candidate: File, expectedSha256: String
+    ): ByteArray {
+        val entry = inspect(context, family, candidate)
+        require(entry.sha256 == expectedSha256) { "The backup changed after it was opened." }
+        val bytes = entry.file.readBytes()
+        val snapshot = validate(family, bytes)
+        require(snapshot.sourceSha256 == expectedSha256 && bytes.size == entry.byteCount) {
+            "The backup changed while it was being verified."
+        }
+        return bytes
+    }
+
+    fun validateSource(family: SwitchGameFamily, bytes: ByteArray): String =
+        validate(family, bytes).sourceSha256
+
     fun removeVerified(
         context: android.content.Context, family: SwitchGameFamily, candidate: File, expectedSha256: String
     ) {

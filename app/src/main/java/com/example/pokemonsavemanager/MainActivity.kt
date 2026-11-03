@@ -2900,7 +2900,7 @@ class MainActivity : Activity() {
             putExtra("pse.switch.family", source.switchFamily)
             putExtra("pse.switch.sha256", source.analysis.sha256)
             putExtra("pse.switch.section", section)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         })
         return true
     }
@@ -2924,11 +2924,11 @@ class MainActivity : Activity() {
                 if (action == -1) {
                     startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                         type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
                     }, PICK_SWITCH_SOURCE)
                 } else if (action == 0) {
                     startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
                     }, if (switchOnly) PICK_SWITCH_SOURCE_TREE else PICK_ALL_SOURCE_TREE)
                 } else if (saved != null) scanUnifiedSourceTree(Uri.parse(saved), switchOnly)
             }.setNegativeButton("Cancel", null).show()
@@ -4212,7 +4212,12 @@ class MainActivity : Activity() {
             if (resultCode != RESULT_OK) return
             val uri = data?.data ?: return
             if (uri.scheme != "content") { showDialog("Save source", "Choose an Android document or folder."); return }
-            try { persistGrantedUriPermission(uri, data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
+            try {
+                persistGrantedUriPermission(
+                    uri,
+                    data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                )
+            } catch (_: Exception) { }
             if (requestCode == PICK_SWITCH_SOURCE) {
                 val name = queryDisplayName(uri) ?: "save"
                 val progress = AlertDialog.Builder(this).setTitle("Reading Switch save").setMessage("Validating the original source…").setCancelable(false).create()

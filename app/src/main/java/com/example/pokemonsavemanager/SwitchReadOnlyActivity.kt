@@ -12,9 +12,10 @@ import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.Executors
 
-/** Isolated from MainActivity's working save and all existing save-writing routes. */
+/** Isolated from legacy writers; Safe Backups owns the guarded Switch source-restore path. */
 class SwitchReadOnlyActivity : Activity() {
     private val reader = Executors.newSingleThreadExecutor()
     private val pickRequest = 2101
@@ -1341,11 +1342,7 @@ class SwitchReadOnlyActivity : Activity() {
         require(session === bound) { "The active save changed. Reopen Safe Backups." }
         val uri = selectedSourceUri ?: throw IllegalStateException("The selected save is no longer available.")
         val original = bound.snapshot.bytesCopy()
-        val current = contentResolver.openInputStream(uri)?.use { input ->
-            val bytes = input.readBytes()
-            require(bytes.size <= SwitchReadSnapshot.MAX_SAVE_BYTES) { "The selected file exceeds the 16 MiB intake limit." }
-            bytes
-        } ?: throw java.io.IOException("The selected save could not be reopened.")
+        val current = readSelectedSwitchSource(uri)
         val digest = java.security.MessageDigest.getInstance("SHA-256")
         require(java.security.MessageDigest.isEqual(digest.digest(original), digest.digest(current))) {
             "The selected save changed after it was opened. Reopen it before creating a backup."
@@ -1366,11 +1363,15 @@ class SwitchReadOnlyActivity : Activity() {
         val dialog = AlertDialog.Builder(this).setTitle("Safe Backup • " + bound.displayName)
             .setMessage(entry.file.name + "\n\n" + entry.byteCount + " bytes\nSHA-256: " + entry.sha256 +
                 "\n\nNative title and integrity validation passed. This backup is an exact source snapshot.")
+            .setPositiveButton("Restore source", null)
+            .setNeutralButton("Delete backup", null)
             .setNegativeButton("Close", null).create()
-        dialog.setButton(AlertDialog.BUTTON_POSITIVE, "Delete Backup",
-            null as android.content.DialogInterface.OnClickListener?)
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                dialog.dismiss()
+                prepareSwitchSafeBackupRestore(bound, entry)
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
                 try {
                     require(session === bound) { "The active save changed; the backup was left unchanged." }
                     SwitchSafeBackupStore.removeVerified(this, bound.profile.family, entry.file, entry.sha256)
@@ -1387,6 +1388,140 @@ class SwitchReadOnlyActivity : Activity() {
             }
         }
         dialog.show()
+    }
+
+    private fun prepareSwitchSafeBackupRestore(bound: SwitchReadSession, entry: SwitchSafeBackupEntry) {
+        if (session !== bound) return
+        try {
+            val family = bound.profile.family
+            val current = verifiedCurrentSwitchSource(bound)
+            val backup = SwitchSafeBackupStore.readVerified(this, family, entry.file, entry.sha256)
+            require(!current.contentEquals(backup)) { "The selected source already matches this backup." }
+            requireSelectedSwitchSourceWriteAccess(
+                selectedSourceUri ?: throw IllegalStateException("The selected source is no longer available.")
+            )
+            val currentSha = SwitchSafeBackupStore.validateSource(family, current)
+            val backupSha = SwitchSafeBackupStore.validateSource(family, backup)
+            val rollback = SwitchSafeBackupStore.createVerified(this, family, current)
+            val rollbackBytes = SwitchSafeBackupStore.readVerified(this, family, rollback.file, rollback.sha256)
+            require(rollbackBytes.contentEquals(current)) { "The recovery snapshot does not match the current source." }
+
+            AlertDialog.Builder(this).setTitle("Restore backup to selected source?")
+                .setMessage(
+                    "Before • " + current.size + " bytes\nSHA-256: " + currentSha +
+                        "\n\nAfter • " + backup.size + " bytes\nSHA-256: " + backupSha +
+                        "\n\nWrite scope: replace the entire selected source with exactly " + backup.size +
+                        " verified backup bytes.\nRecovery snapshot: " + rollback.file.name +
+                        "\n\nThe source will be reopened and validated after persistence. Any failed write will immediately restore and verify the recovery snapshot."
+                )
+                .setPositiveButton("Restore source") { _, _ ->
+                    performSwitchSafeBackupRestore(bound, entry, current, backup, rollback)
+                }
+                .setNegativeButton("Cancel", null).show()
+        } catch (error: Exception) {
+            AlertDialog.Builder(this).setTitle("Restore is unavailable")
+                .setMessage((error.message ?: "The source or backup could not be verified.") +
+                    "\n\nNo source bytes were written.")
+                .setPositiveButton("Close", null).show()
+        }
+    }
+
+    private fun performSwitchSafeBackupRestore(
+        bound: SwitchReadSession,
+        entry: SwitchSafeBackupEntry,
+        expectedCurrent: ByteArray,
+        expectedBackup: ByteArray,
+        rollback: SwitchSafeBackupEntry
+    ) {
+        val uri = selectedSourceUri
+        var writeStarted = false
+        try {
+            require(session === bound && uri != null) { "The active source changed. Reopen Safe Backups." }
+            val family = bound.profile.family
+            val current = verifiedCurrentSwitchSource(bound)
+            require(current.contentEquals(expectedCurrent)) { "The selected source changed after review." }
+            val backup = SwitchSafeBackupStore.readVerified(this, family, entry.file, entry.sha256)
+            require(backup.contentEquals(expectedBackup)) { "The backup changed after review." }
+            val recovery = SwitchSafeBackupStore.readVerified(this, family, rollback.file, rollback.sha256)
+            require(recovery.contentEquals(expectedCurrent)) { "The recovery snapshot changed after review." }
+
+            writeSelectedSwitchSource(uri, backup) { writeStarted = true }
+            val persisted = readSelectedSwitchSource(uri)
+            require(persisted.contentEquals(backup)) { "The restored source did not persist byte-for-byte." }
+            require(SwitchSafeBackupStore.validateSource(family, persisted) == entry.sha256) {
+                "The restored source failed its expected native identity."
+            }
+
+            session = null
+            selectedSourceUri = null
+            AlertDialog.Builder(this).setTitle("Backup restored and verified")
+                .setMessage(
+                    "The selected source now matches " + entry.file.name +
+                        ".\n\nPersisted SHA-256: " + entry.sha256 +
+                        "\nRecovery snapshot retained: " + rollback.file.name +
+                        "\n\nReturn to PSE and rescan the restored save before making another change."
+                )
+                .setPositiveButton("Return to PSE") { _, _ -> finish() }
+                .setCancelable(false).show()
+        } catch (error: Exception) {
+            var rollbackVerified = false
+            var rollbackFailure: String? = null
+            if (writeStarted && uri != null) {
+                try {
+                    writeSelectedSwitchSource(uri, expectedCurrent)
+                    val recovered = readSelectedSwitchSource(uri)
+                    require(recovered.contentEquals(expectedCurrent)) { "Recovery bytes did not persist exactly." }
+                    SwitchSafeBackupStore.validateSource(bound.profile.family, recovered)
+                    rollbackVerified = true
+                } catch (rollbackError: Exception) {
+                    rollbackFailure = rollbackError.message ?: "Recovery verification failed."
+                }
+            }
+            val outcome = when {
+                !writeStarted -> "No source bytes were written."
+                rollbackVerified -> "The failed copy was replaced with the verified recovery snapshot and reopened successfully."
+                else -> "Automatic recovery could not be verified: " + rollbackFailure +
+                    "\nDo not use this source; recover it from " + rollback.file.name + "."
+            }
+            AlertDialog.Builder(this).setTitle(if (rollbackVerified || !writeStarted) "Restore was not completed" else "Restore and recovery failed")
+                .setMessage((error.message ?: "The restore could not be completed.") + "\n\n" + outcome +
+                    "\nThe Safe Backup and recovery snapshot were retained.")
+                .setPositiveButton("Close", null).show()
+        }
+    }
+
+    private fun readSelectedSwitchSource(uri: android.net.Uri): ByteArray =
+        contentResolver.openInputStream(uri)?.use { input ->
+            input.readBytes().also { bytes ->
+                require(bytes.isNotEmpty() && bytes.size <= SwitchReadSnapshot.MAX_SAVE_BYTES) {
+                    "The selected source is empty or exceeds the 16 MiB intake limit."
+                }
+            }
+        } ?: throw java.io.IOException("The selected source could not be reopened.")
+
+    private fun requireSelectedSwitchSourceWriteAccess(uri: android.net.Uri) {
+        contentResolver.openFileDescriptor(uri, "rw")?.use { return }
+        throw java.io.IOException("The selected source does not provide write access. Re-select it and grant file access.")
+    }
+
+    private fun writeSelectedSwitchSource(
+        uri: android.net.Uri,
+        bytes: ByteArray,
+        onWriteStarted: () -> Unit = {}
+    ) {
+        require(bytes.isNotEmpty() && bytes.size <= SwitchReadSnapshot.MAX_SAVE_BYTES) {
+            "The restore bytes are outside the Switch save intake limit."
+        }
+        val descriptor = contentResolver.openFileDescriptor(uri, "rwt")
+            ?: throw java.io.IOException("The selected source does not provide write access.")
+        descriptor.use { opened ->
+            FileOutputStream(opened.fileDescriptor).use { output ->
+                onWriteStarted()
+                output.write(bytes)
+                output.flush()
+                output.fd.sync()
+            }
+        }
     }
     private fun showSwitchBank(bound: SwitchReadSession) {
         if (session !== bound) return
