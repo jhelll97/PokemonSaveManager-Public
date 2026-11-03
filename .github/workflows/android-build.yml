@@ -144,3 +144,54 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 7
+
+  slack-result:
+    name: Send one V4 validation event
+    needs: [debug, signed-release]
+    if: ${{ always() && github.event_name == 'push' && github.ref_name == 'pse-phone-auto-v2-test' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Post exact validation event to Slack
+        shell: bash
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          DEBUG_RESULT: ${{ needs.debug.result }}
+          EVENT_REPOSITORY: ${{ github.repository }}
+          EVENT_BRANCH: ${{ github.ref_name }}
+          EVENT_SHA: ${{ github.sha }}
+          EVENT_RUN_ID: ${{ github.run_id }}
+          EVENT_ATTEMPT: ${{ github.run_attempt }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_WORKFLOW: ${{ github.workflow }}
+          EVENT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          test -n "$SLACK_BOT_TOKEN" || { echo "Missing SLACK_BOT_TOKEN repository secret"; exit 1; }
+          if [ "$DEBUG_RESULT" = "success" ]; then
+            result=PSE_BUILD_SUCCESS
+          else
+            result=PSE_BUILD_FAILURE
+          fi
+          export RESULT="$result"
+          payload="$(RESULT="$result" python3 - <<'PY'
+          import json, os
+          text = (
+              f"{os.environ['RESULT']} repository={os.environ['EVENT_REPOSITORY']} "
+              f"branch={os.environ['EVENT_BRANCH']} commit={os.environ['EVENT_SHA']} "
+              f"run_id={os.environ['EVENT_RUN_ID']} run_attempt={os.environ['EVENT_ATTEMPT']} "
+              f"event={os.environ['EVENT_NAME']} workflow={os.environ['EVENT_WORKFLOW']} "
+              f"conclusion={os.environ['DEBUG_RESULT']} run_url={os.environ['EVENT_RUN_URL']} "
+              f"<@U0C27Q6R8CT> verify this completed build event."
+          )
+          print(json.dumps({"channel": "C0C3C2QDMJL", "text": text}))
+          PY
+          )"
+          response="$(curl --connect-timeout 10 --max-time 20 --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+            -H 'Content-type: application/json; charset=utf-8' \
+            --data "$payload" \
+            https://slack.com/api/chat.postMessage)"
+          printf '%s' "$response" | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("ok") else 1)'
+          echo "Posted one PSE validation event."
