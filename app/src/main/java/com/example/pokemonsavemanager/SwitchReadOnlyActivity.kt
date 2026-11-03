@@ -1167,6 +1167,23 @@ class SwitchReadOnlyActivity : Activity() {
         list.addView(nav); dialog.show()
     }
 
+    private fun swordShieldRecordBytes(bound: SwitchReadSession, location: String): ByteArray {
+        val uri = selectedSourceUri ?: throw IllegalStateException("The selected save is no longer available.")
+        val original = bound.snapshot.bytesCopy()
+        val current = contentResolver.openInputStream(uri)?.use { input ->
+            val bytes = input.readBytes()
+            require(bytes.size <= 16 * 1024 * 1024) { "The selected file exceeds the 16 MiB intake limit." }
+            bytes
+        } ?: throw java.io.IOException("The selected save could not be reopened.")
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val originalHash = digest.digest(original)
+        val currentHash = digest.digest(current)
+        require(java.security.MessageDigest.isEqual(originalHash, currentHash)) {
+            "The selected save changed after it was opened. Reopen it before adding Pokémon to Bank."
+        }
+        return bound.snapshot.readSwordShieldRecord(location)
+    }
+
     private fun showSwordShieldPokemon(bound: SwitchReadSession, location: String, read: SwordShieldSlotRead) {
         if (session !== bound) return
         if (read !is SwordShieldSlotRead.Pokemon) {
