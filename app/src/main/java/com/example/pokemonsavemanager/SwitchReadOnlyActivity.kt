@@ -516,6 +516,11 @@ class SwitchReadOnlyActivity : Activity() {
             "inventory" to inventoryButton, "pokedex" to pokedexButton)
         val entries = SwitchReadDashboard.entries(bound)
         val detailGroups = SwitchReadGameDetails.groups(bound)
+        if (bound.profile.family == SwitchGameFamily.SWORD_SHIELD) dashboardRoot.addView(Button(this).apply {
+            text = "PSE Bank • Sword/Shield PK8"
+            isAllCaps = false; textSize = 17f; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldBank(bound) }
+        })
         for (pair in entries.chunked(2)) {
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             for (entry in pair) {
@@ -1165,6 +1170,24 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { dialog.dismiss(); if (session === bound) showSwordShieldBox(bound, box + 1) }
         }, LinearLayout.LayoutParams(0, -2, 1f))
         list.addView(nav); dialog.show()
+    }
+
+    private fun showSwordShieldBank(bound: SwitchReadSession) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank")
+        val entries = directory.listFiles()?.filter { it.isFile && it.name.startsWith("switch_swsh_") && it.extension == "pk8" }?.sortedBy { it.name }.orEmpty()
+        val labels = entries.map { file ->
+            val parsed = runCatching { SwordShieldPokemonReadOnly.read(file.readBytes()) }.getOrNull()
+            val pokemon = (parsed as? SwordShieldSlotRead.Pokemon)?.value
+            if (pokemon == null) file.name + " • unreadable" else pokemon.nickname.ifBlank { SwordShieldSpeciesNames.name(pokemon.species) } + " (#" + pokemon.species + ")" + (if (pokemon.shiny) " • Shiny" else "") + " • PK8"
+        }
+        AlertDialog.Builder(this).setTitle("PSE Bank • " + entries.size + " Sword/Shield Pokémon")
+            .setItems(labels.toTypedArray()) { _, index ->
+                if (session !== bound) return@setItems
+                val result = runCatching { SwordShieldPokemonReadOnly.read(entries[index].readBytes()) }.getOrNull()
+                showSwordShieldPokemon(bound, "PSE Bank • " + entries[index].name, result ?: SwordShieldSlotRead.Invalid("Bank record could not be read."))
+            }
+            .setPositiveButton("Close", null).show()
     }
 
     private fun swordShieldRecordBytes(bound: SwitchReadSession, location: String): ByteArray {
