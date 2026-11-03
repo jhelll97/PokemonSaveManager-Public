@@ -56,10 +56,28 @@ jobs:
       # Keep compiler state out of lint's heap; each --no-daemon invocation exits.
       # In-process compilation avoids retaining a separate 4-GiB Kotlin daemon.
       - name: Compile sources without APK packaging
-        run: >-
-          gradle :app:compileDebugSources --no-daemon --max-workers=1
-          -Pkotlin.compiler.execution.strategy=in-process
-          "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=512m -XX:+UseG1GC"
+        shell: bash
+        run: |
+          set -uo pipefail
+          log="$RUNNER_TEMP/compile-debug.log"
+          for attempt in 1 2 3; do
+            gradle :app:compileDebugSources --no-daemon --max-workers=1 \
+              -Pkotlin.compiler.execution.strategy=in-process \
+              "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=512m -XX:+UseG1GC" \
+              2>&1 | tee "$log"
+            status="${PIPESTATUS[0]}"
+            if [ "$status" -eq 0 ]; then
+              exit 0
+            fi
+            if ! grep -Fq "Received status code 429" "$log"; then
+              exit "$status"
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit "$status"
+            fi
+            echo "Maven returned HTTP 429; retrying dependency resolution after a bounded backoff."
+            sleep "$((attempt * 30))"
+          done
 
       # Exact run 41649172635 exhausted the shared 3-GiB heap during lint analysis.
       - name: Lint sources in a fresh heap
