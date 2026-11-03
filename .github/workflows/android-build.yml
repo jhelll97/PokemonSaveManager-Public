@@ -157,7 +157,6 @@ jobs:
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           DEBUG_RESULT: ${{ needs.debug.result }}
-          SIGNED_RESULT: ${{ needs.signed-release.result }}
           EVENT_REPOSITORY: ${{ github.repository }}
           EVENT_BRANCH: ${{ github.ref_name }}
           EVENT_SHA: ${{ github.sha }}
@@ -182,7 +181,8 @@ jobs:
               f"branch={os.environ['EVENT_BRANCH']} commit={os.environ['EVENT_SHA']} "
               f"run_id={os.environ['EVENT_RUN_ID']} run_attempt={os.environ['EVENT_ATTEMPT']} "
               f"event={os.environ['EVENT_NAME']} workflow={os.environ['EVENT_WORKFLOW']} "
-              f"conclusion={os.environ['DEBUG_RESULT']} run_url={os.environ['EVENT_RUN_URL']}"
+              f"conclusion={os.environ['DEBUG_RESULT']} run_url={os.environ['EVENT_RUN_URL']} "
+              f"<@U0C27Q6R8CT> verify this completed build event."
           )
           print(json.dumps({"channel": "C0C3C2QDMJL", "text": text}))
           PY
