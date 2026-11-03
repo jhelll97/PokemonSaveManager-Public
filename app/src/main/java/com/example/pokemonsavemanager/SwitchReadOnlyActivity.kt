@@ -766,6 +766,19 @@ class SwitchReadOnlyActivity : Activity() {
                 }
             }
         })
+        if (bound.bdspGameOptions?.voiceVolume?.let { it in 0..10 } == true && selectedSourceUri != null) editOptionsRoot.addView(Button(this).apply {
+            text = "Edit BDSP voice volume • Save new copy"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && !dashboardBusy && source != null) {
+                    editOptionsDialog?.dismiss()
+                    startActivity(Intent(this@SwitchReadOnlyActivity, SwitchBdspTextSpeedActivity::class.java)
+                        .setData(source).putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.switch.setting", BdspEditableSetting.VOICE_VOLUME.name)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                }
+            }
+        })
         if (editOptionsRoot.childCount > 0) {
             editOptionsRoot.addView(label("Choose one saved option. You will review the change before choosing a new copy; the source stays unchanged.", 16f), 0)
             dashboardRoot.addView(Button(this).apply {

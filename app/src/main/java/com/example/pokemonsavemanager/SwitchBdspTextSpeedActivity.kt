@@ -155,6 +155,7 @@ class SwitchBdspTextSpeedActivity : Activity() {
         val plan = try { when (setting) {
             BdspEditableSetting.BGM_VOLUME -> BdspTextSpeedEditing.stageMusicVolume(bytes, hash, selected)
             BdspEditableSetting.SOUND_EFFECTS_VOLUME -> BdspTextSpeedEditing.stageSoundEffectsVolume(bytes, hash, selected)
+            BdspEditableSetting.VOICE_VOLUME -> BdspTextSpeedEditing.stageVoiceVolume(bytes, hash, selected)
             BdspEditableSetting.TEXT_SPEED -> BdspTextSpeedEditing.stage(bytes, hash, selected)
             BdspEditableSetting.BATTLE_STYLE -> BdspTextSpeedEditing.stageBattleStyle(bytes, hash, selected)
             BdspEditableSetting.MOVE_ANIMATIONS -> BdspTextSpeedEditing.stageMoveAnimations(bytes, hash, selected)
