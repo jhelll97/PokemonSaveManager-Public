@@ -174,19 +174,6 @@ jobs:
           else
             result=PSE_BUILD_FAILURE
           fi
-          payload="$(python3 - <<'PY'
-          import json, os
-          text = (
-              f"{os.environ['RESULT']} repository={os.environ['EVENT_REPOSITORY']} "
-              f"branch={os.environ['EVENT_BRANCH']} commit={os.environ['EVENT_SHA']} "
-              f"run_id={os.environ['EVENT_RUN_ID']} run_attempt={os.environ['EVENT_ATTEMPT']} "
-              f"event={os.environ['EVENT_NAME']} workflow={os.environ['EVENT_WORKFLOW']} "
-              f"conclusion={os.environ['DEBUG_RESULT']} run_url={os.environ['EVENT_RUN_URL']}"
-          )
-          print(json.dumps({"channel": "C0C3C2QDMJL", "text": text}))
-          PY
-          )"
-          RESULT="$result" python3 -c 'import os; print(os.environ["RESULT"])' >/dev/null
           export RESULT="$result"
           payload="$(RESULT="$result" python3 - <<'PY'
           import json, os
