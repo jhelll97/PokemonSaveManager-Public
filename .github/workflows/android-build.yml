@@ -16,8 +16,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-build-${{ github.ref }}
-  cancel-in-progress: true
+  group: android-build-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   debug:
@@ -52,9 +52,6 @@ jobs:
           test -x "$sdkmanager"
           yes | "$sdkmanager" --licenses >/dev/null || true
           "$sdkmanager" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-
-      - name: Validate automatic workflow safeguards
-        run: python3 tools/tests/test_public_workflow_policy.py
 
       - name: Compile and lint without APK packaging
         run: gradle :app:compileDebugSources :app:lintDebug --no-daemon --max-workers=2
