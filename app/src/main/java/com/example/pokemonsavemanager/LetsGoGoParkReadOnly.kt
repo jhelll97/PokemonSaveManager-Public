@@ -57,6 +57,19 @@ object LetsGoGoParkReadOnly {
     internal const val RECORD_COUNT = SLOTS_PER_AREA * AREA_COUNT
     internal const val BLOCK_LENGTH = RECORD_SIZE * RECORD_COUNT
 
+    fun recordBytes(source: ByteArray, index: Int): ByteArray {
+        require(LetsGoSaveValidation.inspect(source) is LetsGoValidation.Verified) {
+            "A fully validated native Let's Go save is required."
+        }
+        require(index in 0 until RECORD_COUNT) { "GO Park slot is out of range." }
+        val offset = BLOCK_OFFSET + index * RECORD_SIZE
+        require(source.size >= offset + RECORD_SIZE) { "Native GO Park record is truncated." }
+        val species = (source[offset + 0x28].toInt() and 0xFF) or
+            ((source[offset + 0x29].toInt() and 0xFF) shl 8)
+        require(species != 0) { "That GO Park slot is empty." }
+        return source.copyOfRange(offset, offset + RECORD_SIZE)
+    }
+
     fun read(source: ByteArray): LetsGoGoParkRead {
         val checked = LetsGoSaveValidation.inspect(source)
         require(checked is LetsGoValidation.Verified) { "A fully validated native Let's Go save is required." }

@@ -2753,14 +2753,14 @@ class SwitchReadOnlyActivity : Activity() {
             if (entry.secondUsername.isNotBlank()) appendLine("Secondary trainer string: ${entry.secondUsername}")
             appendLine("City: ${entry.city.ifBlank { "Not saved" }}")
             appendLine()
-            append("All 21 native block CRCs passed before this record was read. This view does not infer encounter legality, convert the GP1 record, move it into storage, export it, delete it, or write the save.")
+            append("All 21 native block CRCs passed before this record was read. This view does not infer encounter legality, convert the GP1 record, or move it into storage. Slot actions can export the exact GP1 bytes or clear this slot in a reviewed new save copy.")
         }
         AlertDialog.Builder(this).setTitle(entry.displayName + " • GO Park")
             .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
             }) }).setPositiveButton("Back to GO Park ${entry.area}") { _, _ ->
                 if (session === bound && !dashboardBusy) showLetsGoGoParkArea(bound, entry.area)
-            }.setNeutralButton("Clear slot • New copy") { _, _ -> launchLetsGoGoParkEditor(bound, entry) }
+            }.setNeutralButton("Slot actions") { _, _ -> launchLetsGoGoParkEditor(bound, entry) }
             .setNegativeButton("Close", null).show()
     }
 
