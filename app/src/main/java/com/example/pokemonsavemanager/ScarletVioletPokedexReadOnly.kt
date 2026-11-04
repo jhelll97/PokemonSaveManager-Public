@@ -35,6 +35,8 @@ object ScarletVioletPokedexReadOnly {
         "Chinese (Simplified)", "Chinese (Traditional)")
     // Reuse the validated PK9 species permutation in reverse; dex records use internal, not national IDs.
     private val internalSpecies = (1..1025).associateBy { ScarletVioletPokemonReadOnly.nationalSpecies(it) }
+    internal fun nativeSpeciesId(speciesId: Int): Int = internalSpecies[speciesId]
+        ?: throw IllegalArgumentException("That species is outside the native Scarlet/Violet Pokédex table.")
     private val paldea = intArrayOf(
         906, 907, 908, 909, 910, 911, 912, 913, 914, 915, 916, 917, 918, 919, 920, 187, 188, 189, 661, 662,
         663, 921, 922, 923, 228, 229, 734, 735, 819, 820, 191, 192, 401, 402, 664, 665, 666, 415, 416, 821,

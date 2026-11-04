@@ -3203,13 +3203,27 @@ class SwitchReadOnlyActivity : Activity() {
             append("\nSaved display selections\n")
             for (display in entry.displays) append("${display.region.displayName}: form ID ${display.formId} • gender value ${display.rawGender} • shiny value ${display.rawShiny}\n")
             append("\nForm bits and display selections are native IDs, not legality verdicts. Unknown bits, raw values and contradictory flags remain unchanged. ")
-            append("Original saves have one state and form-seen flags; DLC-era saves have independent obtained/seen/heard/checked flags. No editing or save replacement.")
+            append("Original saves have one state and form-seen flags; DLC-era saves have independent obtained/seen/heard/checked flags. PSE can add one reviewed native form registration to a new copy while preserving display selections and unknown bits.")
         }
         val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
             text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
         }) }
         AlertDialog.Builder(this).setTitle("${region.displayName} • ${ScarletVioletSpeciesNames.name(entry.speciesId)}")
-            .setView(scroll).setPositiveButton("Close", null).show()
+            .setView(scroll).setNegativeButton("Close", null)
+            .setPositiveButton("Add registration • New copy") { _, _ ->
+                if (session === bound) launchScarletVioletPokedexEditor(bound, region, number)
+            }.show()
+    }
+
+    private fun launchScarletVioletPokedexEditor(bound: SwitchReadSession,
+        region: ScarletVioletDexRegion, number: Int) {
+        val source = selectedSourceUri ?: return
+        if (session !== bound) return
+        startActivity(Intent(this, SwitchScarletVioletPokedexActivity::class.java).setData(source)
+            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+            .putExtra("pse.switch.dex.region", region.name)
+            .putExtra("pse.switch.dex.number", number)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }
 
     private fun showLegendsZaDexSections(bound: SwitchReadSession) {

@@ -18,6 +18,7 @@
         <activity android:name=".SwitchLegendsArceusItemActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletItemActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaItemActivity" android:exported="false"/>
     </application>
 </manifest>
