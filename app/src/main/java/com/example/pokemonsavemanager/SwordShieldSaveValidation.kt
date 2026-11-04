@@ -83,6 +83,13 @@ internal data class SwordShieldAdventureStepBlocks(
     val friendshipWalkSteps: ByteArray
 )
 internal data class SwordShieldHallOfFameTimeBlock(val version: SwordShieldVersion, val value: ByteArray)
+internal data class SwordShieldPokedexViewStateBlocks(
+    val version: SwordShieldVersion,
+    val currentDex: ByteArray,
+    val galarEntry: ByteArray,
+    val armorEntry: ByteArray,
+    val crownEntry: ByteArray
+)
 
 internal data class SwordShieldDexBlocks(val version: SwordShieldVersion, val galar: ByteArray,
     val armor: ByteArray?, val crown: ByteArray?)
@@ -405,6 +412,34 @@ object SwordShieldSaveValidation {
         val value = captured.getValue(key)
         require(value.size == 8) { "The native Sword/Shield Hall of Fame timestamp is missing or has the wrong native type." }
         return SwordShieldHallOfFameTimeBlock(checked.version, value)
+    }
+
+    /** Reads PKHeX's documented regional Pokédex selector and last-viewed species IDs after the complete container gate passes. */
+    internal fun readPokedexViewStateBlocks(source: ByteArray): SwordShieldPokedexViewStateBlocks {
+        val currentDexKey = 0x9CF58395L
+        val galarEntryKey = 0x62743428L
+        val armorEntryKey = 0x789FF72DL
+        val crownEntryKey = 0x759FF274L
+        val (checked, captured) = captureObjects(
+            source,
+            setOf(currentDexKey, galarEntryKey, armorEntryKey, crownEntryKey),
+            scalarLayouts = mapOf(
+                currentDexKey to (14 to 4),
+                galarEntryKey to (13 to 2),
+                armorEntryKey to (13 to 2),
+                crownEntryKey to (13 to 2)
+            )
+        )
+        fun block(key: Long, expectedSize: Int): ByteArray = captured.getValue(key).also {
+            require(it.size == expectedSize) { "A documented Sword/Shield Pokédex view-state record is missing or has the wrong native type." }
+        }
+        return SwordShieldPokedexViewStateBlocks(
+            checked.version,
+            block(currentDexKey, 4),
+            block(galarEntryKey, 2),
+            block(armorEntryKey, 2),
+            block(crownEntryKey, 2)
+        )
     }
 
     /** Optional region type/length rules affect dex extraction only, never existing readers. */

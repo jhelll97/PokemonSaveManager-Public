@@ -626,6 +626,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Hall of Fame Time • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldHallOfFameTime(bound) }
         })
+        if (bound.swordShieldPokedexViewState != null) dashboardRoot.addView(Button(this).apply {
+            text = "Pokédex View State • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldPokedexViewState(bound) }
+        })
         if (bound.letsGoCaptureRecords != null) dashboardRoot.addView(Button(this).apply {
             text = "Capture Records"; isAllCaps = false; isEnabled = !busy && captureRecordsButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && captureRecordsButton.isEnabled) captureRecordsButton.performClick() }
@@ -2762,6 +2766,28 @@ class SwitchReadOnlyActivity : Activity() {
             })
         }
         AlertDialog.Builder(this).setTitle("Hall of Fame Time • Read-only")
+            .setView(scroll).setPositiveButton("Close", null).show()
+    }
+
+    private fun showSwordShieldPokedexViewState(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.swordShieldPokedexViewState ?: return
+        val detail = buildString {
+            append("${read.version.displayName} • Pokédex View State • Read-only\n\n")
+            append("Current regional Pokédex: ${read.currentDex} • ${read.currentDexLabel}\n\n")
+            append("Last viewed Galar species: ${read.speciesLabel(read.galarEntry)}\n")
+            append("Last viewed Isle of Armor species: ${read.speciesLabel(read.armorEntry)}\n")
+            append("Last viewed Crown Tundra species: ${read.speciesLabel(read.crownEntry)}\n\n")
+            append("The complete native container hash and exact UInt32 and UInt16 scalar layouts passed before display. ")
+            append("Only PKHeX's documented regional selector values are interpreted; every saved selector and species ID remains exact. ")
+            append("No regional selection, last-viewed entry, Pokédex registration, repair, export, or save-writing action is available here.")
+        }
+        val scroll = ScrollView(this).apply {
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Pokédex View State • Read-only")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 
