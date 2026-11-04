@@ -112,6 +112,7 @@ class SwitchReadSnapshot private constructor(
         }
     }
     internal fun readSwordShieldInventory(): SwordShieldInventoryRead = SwordShieldInventoryReadOnly.read(sourceBytes)
+    internal fun readSwordShieldPlayTime(): SwordShieldPlayTimeRead = SwordShieldPlayTimeReadOnly.read(sourceBytes)
     internal fun readSwordShieldPokedex(): SwordShieldPokedexRead = SwordShieldPokedexReadOnly.read(sourceBytes)
     internal fun readSwordShieldStorage(): SwordShieldStorageRead = SwordShieldStorageReadOnly.read(sourceBytes)
     internal fun readSwordShieldRecord(location: String): ByteArray {
@@ -534,6 +535,10 @@ class SwitchReadSession(val snapshot: SwitchReadSnapshot) {
     private val swordShieldInventoryAttempt = if (swordShieldValidation is SwordShieldValidation.Verified)
         runCatching { snapshot.readSwordShieldInventory() } else null
     val swordShieldInventory: SwordShieldInventoryRead? get() = swordShieldInventoryAttempt?.getOrNull()
+    private val swordShieldPlayTimeAttempt = if (swordShieldValidation is SwordShieldValidation.Verified)
+        runCatching { snapshot.readSwordShieldPlayTime() } else null
+    val swordShieldPlayTime: SwordShieldPlayTimeRead? get() = swordShieldPlayTimeAttempt?.getOrNull()
+    val swordShieldPlayTimeUnavailableReason: String? get() = swordShieldPlayTimeAttempt?.exceptionOrNull()?.message
     private val swordShieldBattleTowerAttempt = if (swordShieldValidation is SwordShieldValidation.Verified)
         runCatching { snapshot.readSwordShieldBattleTower() } else null
     val swordShieldBattleTower: SwordShieldBattleTowerRead? get() = swordShieldBattleTowerAttempt?.getOrNull()

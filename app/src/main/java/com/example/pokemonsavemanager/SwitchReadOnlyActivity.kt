@@ -578,6 +578,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Day Care • Read-only"; isAllCaps = false; isEnabled = !busy && nurseryButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && nurseryButton.isEnabled) nurseryButton.performClick() }
         })
+        if (bound.swordShieldPlayTime != null) dashboardRoot.addView(Button(this).apply {
+            text = "Recorded Playtime • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldPlayTime(bound) }
+        })
         if (bound.swordShieldBattleTower != null) dashboardRoot.addView(Button(this).apply {
             text = "Battle Tower Records • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldBattleTower(bound) }
@@ -2426,6 +2430,25 @@ class SwitchReadOnlyActivity : Activity() {
             })
         }
         AlertDialog.Builder(this).setTitle("Trainer Data • Read-only")
+            .setView(scroll).setPositiveButton("Close", null).show()
+    }
+
+    private fun showSwordShieldPlayTime(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.swordShieldPlayTime ?: return
+        val detail = buildString {
+            append("${read.version.displayName} • Recorded Playtime • Read-only\n\n")
+            append("Saved playtime: ${read.formatted}\n\n")
+            append("Hours are the native unsigned 16-bit counter; minutes and seconds are the native byte fields. ")
+            append("The complete Sword/Shield container hash and exact native scalar layout passed before display. ")
+            append("No date inference, reset, edit, repair, export, or save-writing action is available here.")
+        }
+        val scroll = ScrollView(this).apply {
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Recorded Playtime • Read-only")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 

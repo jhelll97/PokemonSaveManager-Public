@@ -83,6 +83,7 @@ internal data class SwordShieldAdventureStepBlocks(
     val friendshipWalkSteps: ByteArray
 )
 internal data class SwordShieldHallOfFameTimeBlock(val version: SwordShieldVersion, val value: ByteArray)
+internal data class SwordShieldPlayTimeBlock(val version: SwordShieldVersion, val value: ByteArray)
 internal data class SwordShieldPokedexViewStateBlocks(
     val version: SwordShieldVersion,
     val currentDex: ByteArray,
@@ -403,6 +404,15 @@ object SwordShieldSaveValidation {
             block(eggStepsKey, 2),
             block(friendshipStepsKey, 1)
         )
+    }
+
+    /** Reads the documented four-byte Sword/Shield playtime counter after the complete container gate passes. */
+    internal fun readPlayTimeBlock(source: ByteArray): SwordShieldPlayTimeBlock {
+        val key = 0x8CBBFD90L
+        val (checked, captured) = captureObjects(source, setOf(key), scalarLayouts = mapOf(key to (4 to 4)))
+        val value = captured.getValue(key)
+        require(value.size == 4) { "The native Sword/Shield playtime record is missing or has the wrong native type." }
+        return SwordShieldPlayTimeBlock(checked.version, value)
     }
 
     /** Reads PKHeX's documented Hall of Fame Unix timestamp after the complete container gate passes. */
