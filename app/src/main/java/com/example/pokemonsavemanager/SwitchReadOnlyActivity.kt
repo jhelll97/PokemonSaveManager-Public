@@ -589,6 +589,21 @@ class SwitchReadOnlyActivity : Activity() {
                 if (session === bound && !dashboardBusy && source != null) startActivity(
                     Intent(this@SwitchReadOnlyActivity, SwitchLetsGoPlayerAccessoriesActivity::class.java)
                         .setData(source).putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.switch.accessory.target", LetsGoAccessoryTarget.PLAYER.name)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
+        })
+        val starterAccessories = bound.letsGoStarterAccessories
+        if (starterAccessories != null && selectedSourceUri != null) dashboardRoot.addView(Button(this).apply {
+            text = if (starterAccessories.isAllUnlocked) "Partner Accessories • All unlocked" else "Partner Accessories • Unlock to new copy"
+            isAllCaps = false; isEnabled = !busy && !starterAccessories.isAllUnlocked
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && !dashboardBusy && source != null) startActivity(
+                    Intent(this@SwitchReadOnlyActivity, SwitchLetsGoPlayerAccessoriesActivity::class.java)
+                        .setData(source).putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.switch.accessory.target", LetsGoAccessoryTarget.STARTER.name)
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 )
             }

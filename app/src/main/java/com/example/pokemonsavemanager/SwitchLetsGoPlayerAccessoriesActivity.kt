@@ -12,12 +12,13 @@ import android.widget.ScrollView
 import android.widget.TextView
 import java.util.concurrent.Executors
 
-/** Unlocks only the native player accessory catalogue in a verified new Let's Go save copy. */
+/** Unlocks one selected native accessory catalogue in a verified new Let's Go save copy. */
 class SwitchLetsGoPlayerAccessoriesActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
     private val createCopyRequest = 2120
     private var sourceUri: Uri? = null
     private var expectedHash: String? = null
+    private var target: LetsGoAccessoryTarget = LetsGoAccessoryTarget.PLAYER
     private var opened: ByteArray? = null
     private var read: LetsGoPlayerAccessoryRead? = null
     private var pendingPlan: LetsGoPlayerAccessoryCopyPlan? = null
@@ -31,6 +32,9 @@ class SwitchLetsGoPlayerAccessoriesActivity : Activity() {
         super.onCreate(savedInstanceState)
         sourceUri = intent?.data
         expectedHash = intent?.getStringExtra("pse.switch.sha256")
+        target = intent?.getStringExtra("pse.switch.accessory.target")?.let { name ->
+            LetsGoAccessoryTarget.values().firstOrNull { it.name == name }
+        } ?: LetsGoAccessoryTarget.PLAYER
         if (sourceUri == null || expectedHash.isNullOrBlank()) { finish(); return }
 
         val root = LinearLayout(this).apply {
@@ -38,9 +42,10 @@ class SwitchLetsGoPlayerAccessoriesActivity : Activity() {
             val pad = (20 * resources.displayMetrics.density).toInt()
             setPadding(pad, pad * 2, pad, pad)
         }
-        root.addView(TextView(this).apply { text = "Let's Go • Player Accessories"; textSize = 24f })
+        root.addView(TextView(this).apply { text = "Let's Go • ${target.displayName} Accessories"; textSize = 24f })
         root.addView(TextView(this).apply {
-            text = "Unlock the native player accessory catalogue in a verified new copy. Starter accessories and every unrelated save field stay unchanged."
+            val other = if (target == LetsGoAccessoryTarget.PLAYER) "Partner Pokémon" else "player"
+            text = "Unlock the native ${target.displayName.lowercase()} accessory catalogue in a verified new copy. $other accessories and every unrelated save field stay unchanged."
             textSize = 16f
         })
         status = TextView(this).apply { text = "Validating the selected source…"; textSize = 16f; setTextIsSelectable(true) }
@@ -62,7 +67,7 @@ class SwitchLetsGoPlayerAccessoriesActivity : Activity() {
                 require(LetsGoPlayerAccessoryEditing.sha256(bytes) == expectedHash) {
                     "The source changed. Reopen it from PSE."
                 }
-                Triple(bytes, LetsGoPlayerAccessoryEditing.read(bytes), LetsGoSaveValidation.inspect(bytes))
+                Triple(bytes, LetsGoPlayerAccessoryEditing.read(bytes, target), LetsGoSaveValidation.inspect(bytes))
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
@@ -70,7 +75,7 @@ class SwitchLetsGoPlayerAccessoriesActivity : Activity() {
                     val verified = validation as LetsGoValidation.Verified
                     opened = bytes; read = accessoryRead
                     status.text = "${verified.version.displayName} • All ${verified.checkedBlocks} native block CRCs passed\n" +
-                        "Player accessory template: ${accessoryRead.matchingTemplateBytes}/${accessoryRead.totalTemplateBytes} bytes match\n" +
+                        "${target.displayName} accessory template: ${accessoryRead.matchingTemplateBytes}/${accessoryRead.totalTemplateBytes} bytes match\n" +
                         "State: ${if (accessoryRead.isAllUnlocked) "All accessories already unlocked" else "Unlock available"}\n" +
                         "Block SHA-256: ${accessoryRead.blockSha256}"
                 }.onFailure { status.text = it.message ?: "The save could not be opened safely." }
@@ -109,18 +114,18 @@ class SwitchLetsGoPlayerAccessoriesActivity : Activity() {
         if (busy || pendingPlan != null) return
         val bytes = opened ?: return
         val hash = expectedHash ?: return
-        val plan = try { LetsGoPlayerAccessoryEditing.stage(bytes, hash) }
+        val plan = try { LetsGoPlayerAccessoryEditing.stage(bytes, hash, target) }
         catch (failure: Exception) {
-            status.text = failure.message ?: "The player accessory unlock is unavailable."
+            status.text = failure.message ?: "The ${target.displayName.lowercase()} accessory unlock is unavailable."
             return
         }
         setBusy(true)
         var dispatched = false
-        AlertDialog.Builder(this).setTitle("Unlock all player accessories in a new copy?")
-            .setMessage("Native player accessory template: ${plan.before.matchingTemplateBytes}/${plan.before.totalTemplateBytes} → ${plan.after.matchingTemplateBytes}/${plan.after.totalTemplateBytes} matching bytes\n" +
+        AlertDialog.Builder(this).setTitle("Unlock all ${target.displayName.lowercase()} accessories in a new copy?")
+            .setMessage("Native ${target.displayName.lowercase()} accessory template: ${plan.before.matchingTemplateBytes}/${plan.before.totalTemplateBytes} → ${plan.after.matchingTemplateBytes}/${plan.after.totalTemplateBytes} matching bytes\n" +
                 "Bytes changed inside block: ${plan.changedByteCount}\n\n" +
-                "Allowed byte scope: player Fashion block 16 at 0x4DE00–0x4DE97 plus its two-byte CRC at 0xB869A. " +
-                "Starter Fashion block 17 remains unchanged. PSE will verify a recovery backup and reopen the persisted copy. Choose a NEW empty document.")
+                "Allowed byte scope: Fashion block ${target.blockId} at 0x${target.blockOffset.toString(16).uppercase()}–0x${(target.blockOffset + target.blockLength - 1).toString(16).uppercase()} plus its two-byte CRC at 0x${target.crcOffset.toString(16).uppercase()}. " +
+                "The other Fashion block remains unchanged. PSE will verify a recovery backup and reopen the persisted copy. Choose a NEW empty document.")
             .setNegativeButton("Cancel", null).setOnDismissListener { if (!dispatched) setBusy(false) }
             .setPositiveButton("Choose new copy") { _, _ ->
                 if (!dispatched && !isFinishing && !isDestroyed) {
