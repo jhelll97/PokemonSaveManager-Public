@@ -8,7 +8,9 @@ data class LetsGoTrainerRead(
     val version: LetsGoVersion, val name: String, val gender: Int,
     val languageId: Int, val languageName: String,
     val id32: Long, val tid16: Int, val sid16: Int,
-    val rivalName: String, val money: Long, val starterChoiceId: Int, val starterGenderId: Int
+    val rivalName: String, val money: Long,
+    val trainerClassIndex: Int, val overworldGenderId: Int,
+    val starterChoiceId: Int, val starterGenderId: Int
 ) {
     val displayTrainerId: String get() = (id32 % 1000000L).toString().padStart(6, '0')
 }
@@ -31,6 +33,7 @@ object LetsGoTrainerReadOnly {
         return LetsGoTrainerRead(checked.version, name(source, STATUS + 0x38, "trainer"), gender,
             language, languageName, u32(source, STATUS), u16(source, STATUS), u16(source, STATUS + 2),
             name(source, MISC + 0x200, "rival"), u32(source, MISC + 4),
+            byte(source, STATUS + 0x76), byte(source, STATUS + 0x108),
             byte(source, STATUS + 0xB8), byte(source, STATUS + 0xB9))
     }
 

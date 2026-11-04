@@ -3336,9 +3336,12 @@ class SwitchReadOnlyActivity : Activity() {
             append("Displayed trainer ID: ${trainer.displayTrainerId}\n")
             append("Raw ID32: ${trainer.id32}\nTID16: ${trainer.tid16}\nSID16: ${trainer.sid16}\n\n")
             append("Rival: ${trainer.rivalName.ifBlank { "Not set" }}\nSaved money: ${trainer.money}\n")
+            append("Native trainer-class index: ${trainer.trainerClassIndex}\n")
+            append("Overworld model gender ID: ${trainer.overworldGenderId}\n")
             append("Saved partner choice: $starter\nSaved partner gender: $starterGender\n\n")
             append("Partner choice is saved trainer metadata, separate from the party/partner Pokémon record. ")
             append("Money is the raw saved unsigned value; currency limits and story consistency are not evaluated.\n\n")
+            append("Trainer-class and model values remain numeric because no complete native class-name catalogue is present.\n\n")
             append("All 21 native block CRCs passed before reading. No editing or save replacement is available.")
         }
         val scroll = ScrollView(this).apply {
