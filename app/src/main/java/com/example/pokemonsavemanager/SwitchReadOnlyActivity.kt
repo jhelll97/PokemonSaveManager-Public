@@ -2760,7 +2760,17 @@ class SwitchReadOnlyActivity : Activity() {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
             }) }).setPositiveButton("Back to GO Park ${entry.area}") { _, _ ->
                 if (session === bound && !dashboardBusy) showLetsGoGoParkArea(bound, entry.area)
-            }.setNegativeButton("Close", null).show()
+            }.setNeutralButton("Clear slot • New copy") { _, _ -> launchLetsGoGoParkEditor(bound, entry) }
+            .setNegativeButton("Close", null).show()
+    }
+
+    private fun launchLetsGoGoParkEditor(bound: SwitchReadSession, entry: LetsGoGoParkEntry) {
+        if (session !== bound || dashboardBusy) return
+        val source = selectedSourceUri ?: return
+        startActivity(Intent(this, SwitchLetsGoGoParkActivity::class.java).setData(source)
+            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+            .putExtra("pse.go_park.index", entry.index)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }
 
     private fun goParkNumber(value: Float): String =
