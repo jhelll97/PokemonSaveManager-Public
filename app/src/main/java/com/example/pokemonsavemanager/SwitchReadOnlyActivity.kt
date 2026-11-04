@@ -482,6 +482,8 @@ class SwitchReadOnlyActivity : Activity() {
             android.view.View.VISIBLE else android.view.View.GONE
         inventoryButton.isEnabled = !busy && session?.supports(SwitchReadCapability.INVENTORY) == true
         pokedexButton.isEnabled = !busy && session?.supports(SwitchReadCapability.POKEDEX) == true
+        trainerButton.text = if (session?.profile?.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE)
+            "◎  Trainer Data" else "◎  Trainer Data • Read-only"
         trainerButton.isEnabled = !busy && session?.supports(SwitchReadCapability.TRAINER_PROFILE) == true
         rideButton.isEnabled = !busy && session?.scarletVioletStorage != null
         rideButton.visibility = if (session?.profile?.family == SwitchGameFamily.SCARLET_VIOLET)
@@ -507,14 +509,18 @@ class SwitchReadOnlyActivity : Activity() {
             setColor(fill); cornerRadius = dp(16).toFloat(); setStroke(dp(1), Color.rgb(25, 145, 220))
         }
         val accent = Color.rgb(70, 190, 255)
+        val letsGoTrainerEditing = bound.profile.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE &&
+            selectedSourceUri != null
         dashboardRoot.addView(label("PSE", 38f, accent))
-        dashboardRoot.addView(label("Pokémon Save Editor • Read-only", 15f))
+        dashboardRoot.addView(label(if (letsGoTrainerEditing) "Pokémon Save Editor" else "Pokémon Save Editor • Read-only", 15f))
         dashboardRoot.addView(label("CURRENT SAVE", 13f, accent))
-        dashboardRoot.addView(label("${bound.displayName}\nGeneration ${bound.profile.family.generation} • Nintendo Switch\nNative integrity verified • Read-only", 18f).apply {
+        dashboardRoot.addView(label("${bound.displayName}\nGeneration ${bound.profile.family.generation} • Nintendo Switch\nNative integrity verified" +
+            if (letsGoTrainerEditing) " • Trainer Name editing available" else " • Read-only", 18f).apply {
             setPadding(dp(18), dp(16), dp(18), dp(16)); background = cardBackground(Color.rgb(12, 35, 51))
         }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(18) })
         dashboardRoot.addView(label(status.text.toString(), 14f))
-        dashboardRoot.addView(label(if (busy) "Reading selected source…" else "EDITOR • READ-ONLY", 13f, accent))
+        dashboardRoot.addView(label(if (busy) "Reading selected source…" else if (letsGoTrainerEditing)
+            "EDITOR • TRAINER DATA" else "EDITOR • READ-ONLY", 13f, accent))
         val targets = mapOf("trainer" to trainerButton, "storage" to storageButton,
             "inventory" to inventoryButton, "pokedex" to pokedexButton)
         val entries = SwitchReadDashboard.entries(bound)
@@ -524,7 +530,12 @@ class SwitchReadOnlyActivity : Activity() {
             for (entry in pair) {
                 val target = targets.getValue(entry.section)
                 row.addView(Button(this).apply {
-                    text = entry.label + if (entry.enabled) "\nRead-only" else "\nUnavailable for this save"
+                    val trainerEditing = entry.section == "trainer" && letsGoTrainerEditing
+                    text = entry.label + when {
+                        !entry.enabled -> "\nUnavailable for this save"
+                        trainerEditing -> "\nEdit Trainer Name"
+                        else -> "\nRead-only"
+                    }
                     textSize = 16f; isAllCaps = false; minHeight = dp(100); setTextColor(Color.WHITE)
                     background = cardBackground(Color.rgb(12, 35, 51))
                     isEnabled = !busy && entry.enabled && target.isEnabled; alpha = if (isEnabled) 1f else 0.5f
@@ -3839,7 +3850,7 @@ class SwitchReadOnlyActivity : Activity() {
         val starterGender = listOf("Male", "Female", "Genderless").getOrNull(trainer.starterGenderId)
             ?: "Unknown (${trainer.starterGenderId})"
         val detail = buildString {
-            append("${trainer.version.displayName} • Trainer Data • Read-only\n\n")
+            append("${trainer.version.displayName} • Trainer Data\n\n")
             append("Trainer: ${trainer.name.ifBlank { "Not set" }}\nGender: $gender\n")
             append("Language: ${trainer.languageName} (ID ${trainer.languageId})\n")
             append("Displayed trainer ID: ${trainer.displayTrainerId}\n")
@@ -3851,15 +3862,28 @@ class SwitchReadOnlyActivity : Activity() {
             append("Partner choice is saved trainer metadata, separate from the party/partner Pokémon record. ")
             append("Money is the raw saved unsigned value; currency limits and story consistency are not evaluated.\n\n")
             append("Trainer-class and model values remain numeric because no complete native class-name catalogue is present.\n\n")
-            append("All 21 native block CRCs passed before reading. No editing or save replacement is available.")
+            append("All 21 native block CRCs passed before reading. Trainer Name can be edited through a reviewed new-copy flow; the other displayed fields remain read-only.")
         }
-        val scroll = ScrollView(this).apply {
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
+            val source = selectedSourceUri
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Trainer Data"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchLetsGoTrainerActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
         }
         AlertDialog.Builder(this).setTitle("${bound.displayName} • Trainer Data")
-            .setView(scroll).setPositiveButton("Close", null)
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null)
             .setNeutralButton("Recorded playtime") { _, _ -> if (session === bound && !dashboardBusy) showLetsGoPlayTime(bound) }
             .setNegativeButton("Game options") { _, _ -> if (session === bound && !dashboardBusy) showLetsGoGameOptions(bound) }.show()
     }

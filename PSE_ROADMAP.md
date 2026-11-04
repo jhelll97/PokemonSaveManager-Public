@@ -22,6 +22,8 @@ The observed Gen 1 home editor order is:
 6. Pokédex
 7. Events
 
+The 4 November 2026 APK review reopened Phase 2 because a reader or read-only card is not editing parity. Trainer Data is again the active shared step. Its Gen 1 field order begins with Trainer Name, followed by Trainer ID, native currency/progression fields, and recorded play time where each title has a native equivalent. The Trainer Name action is now implemented first for Let's Go Pikachu/Eevee with the Gen 1 label and review flow: it changes only the native 26-byte UTF-16 trainer-name field and block 2 CRC in a verified new copy, retains a recovery backup, reopens the persisted copy, and removes a failed copy when possible. The same Trainer Name action remains active for Sword/Shield, BDSP, Legends: Arceus, Scarlet/Violet, and Legends: Z-A before work advances to the next Trainer Data field.
+
 The validated shared parity step is **Trainer Data**. Every supported Switch family exposes it first with the Gen 1 label and control treatment, backed by that title's validated native trainer reader.
 
 The validated shared parity steps are **Trainer Data** and **Pokémon Boxes**. The Boxes card opens the same Party / PC Boxes choice for every supported Switch family, then dispatches to that title's validated native party and storage reader.
