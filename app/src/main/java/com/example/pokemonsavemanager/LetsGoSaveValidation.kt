@@ -16,10 +16,10 @@ object LetsGoSaveValidation {
     const val FILE_SIZE = 0x100000
     private const val FOOTER = 0xB8600
     private const val MAGIC_OFFSET = FOOTER + 0x10
-    private const val DESCRIPTORS = FOOTER + 0x14
+    internal const val DESCRIPTORS = FOOTER + 0x14
     private const val STATUS_GAME = 0x1004
-    private data class Block(val offset: Int, val length: Int)
-    private val blocks = listOf(
+    internal data class Block(val offset: Int, val length: Int)
+    internal val blocks = listOf(
         Block(0x00000, 0x00D90), Block(0x00E00, 0x00200),
         Block(0x01000, 0x00168), Block(0x01200, 0x01800),
         Block(0x02A00, 0x020E8), Block(0x04C00, 0x00930),

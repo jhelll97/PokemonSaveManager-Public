@@ -588,6 +588,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Save Secure Values • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoSecureValues(bound) }
         })
+        if (bound.letsGoBlockDirectory != null) dashboardRoot.addView(Button(this).apply {
+            text = "Native Block Directory • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoBlockDirectory(bound) }
+        })
         if (bound.letsGoMysteryGiftHistory != null) dashboardRoot.addView(Button(this).apply {
             text = "Mystery Gift History • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoMysteryGiftHistory(bound) }
@@ -2936,6 +2940,33 @@ class SwitchReadOnlyActivity : Activity() {
             append("No secure-value change, synchronization, normalization, export, replacement or save writing.")
         }
         AlertDialog.Builder(this).setTitle("Save Secure Values • Read-only")
+            .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
+            }) }).setPositiveButton("Close", null).show()
+    }
+
+    private fun showLetsGoBlockDirectory(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.letsGoBlockDirectory ?: return
+        fun hex(value: Int, width: Int = 5): String = value.toString(16).uppercase().padStart(width, '0')
+        val detail = buildString {
+            append("${read.version.displayName} • Native Block Directory • Read-only\n\n")
+            append("Native blocks: ${read.entries.size}\n")
+            append("Descriptor identities and lengths: ${if (read.allDescriptorsMatch) "PASS" else "FAIL"}\n")
+            append("Stored versus calculated CRC-16/ARC: ${if (read.allCrcsMatch) "PASS" else "FAIL"}\n")
+            for (entry in read.entries) {
+                append("\nBlock ${entry.id.toString().padStart(2, '0')}\n")
+                append("Data: 0x${hex(entry.offset)}–0x${hex(entry.endOffset)} • ${entry.length} bytes\n")
+                append("Descriptor: ID ${entry.descriptorId} • ${entry.descriptorLength} bytes")
+                append(" • ${if (entry.descriptorMatches) "PASS" else "FAIL"}\n")
+                append("CRC: stored 0x${hex(entry.storedCrc, 4)} • calculated 0x${hex(entry.calculatedCrc, 4)}")
+                append(" • ${if (entry.crcMatches) "PASS" else "FAIL"}\n")
+            }
+            append("\nThe directory is shown with native numeric block IDs; undocumented blocks are not assigned guessed names. ")
+            append("The complete one-mebibyte save and all 21 descriptors passed validation before display. ")
+            append("No checksum repair, block change, export, replacement or save writing.")
+        }
+        AlertDialog.Builder(this).setTitle("Native Block Directory • Read-only")
             .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
             }) }).setPositiveButton("Close", null).show()

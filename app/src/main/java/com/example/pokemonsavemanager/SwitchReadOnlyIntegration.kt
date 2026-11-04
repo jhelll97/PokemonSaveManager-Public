@@ -82,6 +82,7 @@ class SwitchReadSnapshot private constructor(
     internal fun readLetsGoPlayerLocation(): LetsGoPlayerLocationRead = LetsGoPlayerLocationReadOnly.read(sourceBytes)
     internal fun readLetsGoAdventureBegin(): LetsGoAdventureBeginRead = LetsGoAdventureBeginReadOnly.read(sourceBytes)
     internal fun readLetsGoSecureValues(): LetsGoSecureValueRead = LetsGoSecureValueReadOnly.read(sourceBytes)
+    internal fun readLetsGoBlockDirectory(): LetsGoBlockDirectoryRead = LetsGoBlockDirectoryReadOnly.read(sourceBytes)
     internal fun readLetsGoMysteryGiftHistory(): LetsGoMysteryGiftHistoryRead =
         LetsGoMysteryGiftHistoryReadOnly.read(sourceBytes)
     internal fun readLetsGoPlayerAccessories(): LetsGoPlayerAccessoryRead = LetsGoPlayerAccessoryEditing.read(sourceBytes)
@@ -564,6 +565,10 @@ class SwitchReadSession(val snapshot: SwitchReadSnapshot) {
         runCatching { snapshot.readLetsGoSecureValues() } else null
     val letsGoSecureValues: LetsGoSecureValueRead? get() = letsGoSecureValuesAttempt?.getOrNull()
     val letsGoSecureValuesUnavailableReason: String? get() = letsGoSecureValuesAttempt?.exceptionOrNull()?.message
+    private val letsGoBlockDirectoryAttempt = if (validation is LetsGoValidation.Verified)
+        runCatching { snapshot.readLetsGoBlockDirectory() } else null
+    val letsGoBlockDirectory: LetsGoBlockDirectoryRead? get() = letsGoBlockDirectoryAttempt?.getOrNull()
+    val letsGoBlockDirectoryUnavailableReason: String? get() = letsGoBlockDirectoryAttempt?.exceptionOrNull()?.message
     private val letsGoMysteryGiftHistoryAttempt = if (validation is LetsGoValidation.Verified)
         runCatching { snapshot.readLetsGoMysteryGiftHistory() } else null
     val letsGoMysteryGiftHistory: LetsGoMysteryGiftHistoryRead? get() = letsGoMysteryGiftHistoryAttempt?.getOrNull()
