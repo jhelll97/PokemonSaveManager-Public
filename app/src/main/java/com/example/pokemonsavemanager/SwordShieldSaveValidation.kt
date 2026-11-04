@@ -114,7 +114,7 @@ object SwordShieldSaveValidation {
         val (checked, captured) = captureObjects(
             source,
             setOf(namesKey, currentBoxKey),
-            scalarLayouts = mapOf(currentBoxKey to (14 to 4)),
+            scalarLayouts = mapOf(currentBoxKey to (8 to 1)),
             objectLayouts = mapOf(namesKey to 0x440)
         )
         return SwordShieldBoxLayoutBlocks(

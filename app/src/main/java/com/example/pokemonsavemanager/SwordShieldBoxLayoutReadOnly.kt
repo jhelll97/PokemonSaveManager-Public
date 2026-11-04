@@ -27,7 +27,7 @@ object SwordShieldBoxLayoutReadOnly {
         require(blocks.names.size == BOX_COUNT * NAME_SIZE) {
             "The native Sword/Shield box-name object is truncated."
         }
-        require(blocks.currentBox.size == 4) {
+        require(blocks.currentBox.size == 1) {
             "The native Sword/Shield current-box scalar is truncated."
         }
         val names = (0 until BOX_COUNT).map { index ->
@@ -42,7 +42,7 @@ object SwordShieldBoxLayoutReadOnly {
         }
         return SwordShieldBoxLayoutRead(
             blocks.version,
-            uint32(blocks.currentBox),
+            (blocks.currentBox[0].toInt() and 0xFF).toLong(),
             immutable(names)
         )
     }
@@ -68,12 +68,6 @@ object SwordShieldBoxLayoutReadOnly {
         }
         return chars.joinToString("")
     }
-
-    private fun uint32(bytes: ByteArray): Long =
-        (bytes[0].toLong() and 0xFF) or
-            ((bytes[1].toLong() and 0xFF) shl 8) or
-            ((bytes[2].toLong() and 0xFF) shl 16) or
-            ((bytes[3].toLong() and 0xFF) shl 24)
 
     private fun <T> immutable(values: List<T>): List<T> = Collections.unmodifiableList(values)
 }

@@ -2469,8 +2469,8 @@ class SwitchReadOnlyActivity : Activity() {
         val read = bound.swordShieldBoxLayout ?: return
         val detail = buildString {
             append("${read.version.displayName} • Box Layout • Read-only\n\n")
-            append("Current box raw UInt32: ${read.rawCurrentBox}\n")
-            append("Current box raw hex: ${read.rawCurrentBox.toString(16).uppercase().padStart(8, '0')}\n")
+            append("Current box raw byte: ${read.rawCurrentBox}\n")
+            append("Current box raw hex: ${read.rawCurrentBox.toString(16).uppercase().padStart(2, '0')}\n")
             append("Selected box: ${read.currentBoxIndex?.let { "Box ${it + 1}" } ?: "Outside the native 0–31 range"}\n\n")
             for (entry in read.names) {
                 append("Box ${entry.box}: ")
@@ -2479,7 +2479,7 @@ class SwitchReadOnlyActivity : Activity() {
                 append('\n')
                 if (entry.name == null) append("Raw 0x22 bytes: ${entry.rawBytes.joinToString(" ") { "%02X".format(it) }}\n")
             }
-            append("\nThe complete native container hash, 0x440-byte box-name object, and UInt32 current-box scalar passed before display. ")
+            append("\nThe complete native container hash, 0x440-byte box-name object, and one-byte current-box scalar passed before display. ")
             append("Each saved name is decoded only from its native 0x22-byte UTF-16 field. ")
             append("No rename, current-box change, repair, export, replacement, or save writing is available here.")
         }
