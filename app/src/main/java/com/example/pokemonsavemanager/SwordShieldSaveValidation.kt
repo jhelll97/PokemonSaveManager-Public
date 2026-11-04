@@ -29,7 +29,8 @@ internal data class SwordShieldDaycareBlock(val version: SwordShieldVersion, val
 internal data class SwordShieldBoxLayoutBlocks(
     val version: SwordShieldVersion,
     val names: ByteArray,
-    val currentBox: ByteArray
+    val currentBox: ByteArray,
+    val boxesUnlocked: ByteArray
 )
 internal data class SwordShieldRallyDiggingBlocks(
     val version: SwordShieldVersion,
@@ -164,20 +165,25 @@ object SwordShieldSaveValidation {
         return SwordShieldDaycareBlock(checked.version, captured.getValue(key))
     }
 
-    /** Reads PKHeX's documented 32 native box names and current-box scalar after the complete container gate passes. */
+    /** Reads PKHeX's documented 32 native box names and box-state scalars after the complete container gate passes. */
     internal fun readBoxLayoutBlocks(source: ByteArray): SwordShieldBoxLayoutBlocks {
         val namesKey = 0x19722C89L
         val currentBoxKey = 0x017C3CBBL
+        val boxesUnlockedKey = 0x71825204L
         val (checked, captured) = captureObjects(
             source,
-            setOf(namesKey, currentBoxKey),
-            scalarLayouts = mapOf(currentBoxKey to (8 to 1)),
+            setOf(namesKey, currentBoxKey, boxesUnlockedKey),
+            scalarLayouts = mapOf(
+                currentBoxKey to (8 to 1),
+                boxesUnlockedKey to (8 to 1)
+            ),
             objectLayouts = mapOf(namesKey to 0x440)
         )
         return SwordShieldBoxLayoutBlocks(
             checked.version,
             captured.getValue(namesKey),
-            captured.getValue(currentBoxKey)
+            captured.getValue(currentBoxKey),
+            captured.getValue(boxesUnlockedKey)
         )
     }
 

@@ -12,6 +12,7 @@ data class SwordShieldBoxNameRead(
 data class SwordShieldBoxLayoutRead(
     val version: SwordShieldVersion,
     val rawCurrentBox: Long,
+    val rawBoxesUnlocked: Long,
     val names: List<SwordShieldBoxNameRead>
 ) {
     val currentBoxIndex: Int? get() = if (rawCurrentBox in 0L..31L) rawCurrentBox.toInt() else null
@@ -30,6 +31,9 @@ object SwordShieldBoxLayoutReadOnly {
         require(blocks.currentBox.size == 1) {
             "The native Sword/Shield current-box scalar is truncated."
         }
+        require(blocks.boxesUnlocked.size == 1) {
+            "The native Sword/Shield unlocked-box scalar is truncated."
+        }
         val names = (0 until BOX_COUNT).map { index ->
             val raw = blocks.names.copyOfRange(index * NAME_SIZE, (index + 1) * NAME_SIZE)
             val decoded = runCatching { decodeName(raw) }
@@ -43,6 +47,7 @@ object SwordShieldBoxLayoutReadOnly {
         return SwordShieldBoxLayoutRead(
             blocks.version,
             (blocks.currentBox[0].toInt() and 0xFF).toLong(),
+            (blocks.boxesUnlocked[0].toInt() and 0xFF).toLong(),
             immutable(names)
         )
     }

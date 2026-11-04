@@ -2534,7 +2534,9 @@ class SwitchReadOnlyActivity : Activity() {
             append("${read.version.displayName} • Box Layout • Read-only\n\n")
             append("Current box raw byte: ${read.rawCurrentBox}\n")
             append("Current box raw hex: ${read.rawCurrentBox.toString(16).uppercase().padStart(2, '0')}\n")
-            append("Selected box: ${read.currentBoxIndex?.let { "Box ${it + 1}" } ?: "Outside the native 0–31 range"}\n\n")
+            append("Selected box: ${read.currentBoxIndex?.let { "Box ${it + 1}" } ?: "Outside the native 0–31 range"}\n")
+            append("Unlocked boxes raw byte: ${read.rawBoxesUnlocked}\n")
+            append("Unlocked boxes raw hex: ${read.rawBoxesUnlocked.toString(16).uppercase().padStart(2, '0')}\n\n")
             for (entry in read.names) {
                 append("Box ${entry.box}: ")
                 if (entry.name != null) append(entry.name.ifEmpty { "(empty saved name)" })
@@ -2542,9 +2544,10 @@ class SwitchReadOnlyActivity : Activity() {
                 append('\n')
                 if (entry.name == null) append("Raw 0x22 bytes: ${entry.rawBytes.joinToString(" ") { "%02X".format(it) }}\n")
             }
-            append("\nThe complete native container hash, 0x440-byte box-name object, and one-byte current-box scalar passed before display. ")
+            append("\nThe complete native container hash, 0x440-byte box-name object, one-byte current-box scalar, and one-byte unlocked-box scalar passed before display. ")
             append("Each saved name is decoded only from its native 0x22-byte UTF-16 field. ")
-            append("No rename, current-box change, repair, export, replacement, or save writing is available here.")
+            append("The unlocked-box count remains the exact saved byte without range inference. ")
+            append("No rename, current-box change, box unlock, repair, export, replacement, or save writing is available here.")
         }
         val scroll = ScrollView(this).apply {
             addView(TextView(this@SwitchReadOnlyActivity).apply {
