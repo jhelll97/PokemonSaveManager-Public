@@ -54,7 +54,7 @@ jobs:
           "$sdkmanager" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       # Keep compiler state out of lint's heap; each --no-daemon invocation exits.
-      # In-process compilation avoids retaining a separate 4-GiB Kotlin daemon.
+      # In-process compilation avoids retaining a separate Kotlin daemon.
       - name: Compile sources without APK packaging
         shell: bash
         run: |
@@ -63,7 +63,7 @@ jobs:
           for attempt in 1 2 3; do
             gradle :app:compileDebugSources --no-daemon --max-workers=1 \
               -Pkotlin.compiler.execution.strategy=in-process \
-              "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=512m -XX:+UseG1GC" \
+              "-Dorg.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=512m -XX:+UseG1GC" \
               2>&1 | tee "$log"
             status="${PIPESTATUS[0]}"
             if [ "$status" -eq 0 ]; then
