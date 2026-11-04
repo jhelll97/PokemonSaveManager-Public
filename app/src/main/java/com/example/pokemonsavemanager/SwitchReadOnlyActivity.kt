@@ -3696,7 +3696,7 @@ class SwitchReadOnlyActivity : Activity() {
         val labels = bag.pockets.map { "${it.pocket.displayName} • ${if (it.unlocked) "Unlocked" else "Locked"} • ${it.recordedSlots.size} recorded items" } +
             "Other saved records • ${bag.unlistedRecords.size} unlisted indices"
         val menu = labels + "Bag flags and metadata"
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Inventory • Read-only")
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Items")
             .setItems(menu.toTypedArray()) { _, index ->
                 if (session === bound) showLegendsZaInventoryPocket(bound, index, 0)
             }.setNegativeButton("Close", null).show()
@@ -3714,8 +3714,18 @@ class SwitchReadOnlyActivity : Activity() {
         val page = requestedPage.coerceIn(0, lastPage)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16) }
         root.addView(TextView(this).apply {
-            text = "${entries.size} recorded items in native item-ID order. Zero quantities, unknown flags and mismatched saved pockets remain visible. Select an item for saved details."
+            text = "${entries.size} recorded items in native item-ID order. Zero quantities, unknown flags and mismatched saved pockets remain visible. Normal catalogued records in unlocked pockets can be changed through an explicitly reviewed new copy; unusual records remain locked."
             textSize = 16f; setTextIsSelectable(true)
+        })
+        if (pocket != null && pocket.unlocked && LegendsZaInventoryReadOnly.allowedItemIds(pocket.pocket).any { id ->
+                val slot = bag.slot(id)
+                !slot.isRecorded && id !in setOf(2612, 2619) && (slot.referenceMaxCount ?: 0) > 0
+            }) root.addView(Button(this).apply {
+            text = "＋  Add item • Save new copy"
+            isAllCaps = false
+            setOnClickListener {
+                if (session === bound) launchLegendsZaItemEditor(bound, pocket.pocket, -1, true)
+            }
         })
         if (entries.isEmpty()) root.addView(TextView(this).apply { text = "No saved records in this section."; textSize = 16f })
         for (entry in entries.drop(page * 20).take(20)) root.addView(Button(this).apply {
@@ -3739,12 +3749,42 @@ class SwitchReadOnlyActivity : Activity() {
             "Saved signed quantity: ${entry.count}\nRaw quantity word: ${entry.rawCount}\nSaved pouch word: ${entry.rawPouch}\n" +
             "Matches catalogue pocket: ${entry.pouchMatchesCatalogue}\nNew: ${entry.isNew}\nFavorite: ${entry.isFavorite}\nValid pouch marker: ${entry.hasValidPouch}\nNew pickup notification: ${entry.isNewNotify}\nNew in shop: ${entry.isNewShop}\nHeld flag: ${entry.isHeld}\n" +
             "Raw flag word: ${entry.rawFlags}\nPadding word: ${entry.padding}\nReference maximum: ${entry.referenceMaxCount?.toString() ?: "Unknown"}\n\n" +
-            "The item ID is the saved array index. Catalogue pockets and maxima describe the format; they do not establish legality or ownership. Native zero/unacquired templates are hidden from lists. Held flags are saved metadata and do not prove a current Pokémon relationship. All 3,000 records remain in the read-only snapshot."
+            "The item ID is the saved array index. Catalogue pockets and maxima describe the format; they do not establish legality or ownership. Native zero/unacquired templates are hidden from lists. Held flags are saved metadata and do not prove a current Pokémon relationship. All 3,000 records remain in the snapshot. " +
+            if (entry.isEditable && entry.pocket?.let { p -> bound.legendsZaInventory?.pockets?.firstOrNull { it.pocket == p }?.unlocked } == true)
+                "Use Edit item to review a quantity change or removal saved to a new copy. Saved new, favorite, shop, and held flags remain unchanged for quantity edits."
+            else "This unusual, special-count, mismatched, or locked-pocket record remains locked."
         val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
             text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
         }) }
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • ${entry.itemName}")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        val builder = AlertDialog.Builder(this).setTitle("${bound.displayName} • ${entry.itemName}")
+            .setView(scroll).setNegativeButton("Close", null)
+        val selectedPocket = entry.pocket
+        if (selectedPocket != null && entry.isEditable &&
+            bound.legendsZaInventory?.pockets?.firstOrNull { it.pocket == selectedPocket }?.unlocked == true) {
+            builder.setPositiveButton("Edit item • New copy") { _, _ ->
+                if (session === bound) launchLegendsZaItemEditor(bound, selectedPocket, entry.itemId, false)
+            }
+        }
+        builder.show()
+    }
+
+    private fun launchLegendsZaItemEditor(
+        bound: SwitchReadSession,
+        pocket: LegendsZaInventoryPocket,
+        itemId: Int,
+        add: Boolean
+    ) {
+        val source = selectedSourceUri ?: return
+        if (session !== bound) return
+        startActivity(
+            Intent(this, SwitchLegendsZaItemActivity::class.java)
+                .setData(source)
+                .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                .putExtra("pse.switch.item.pocket", pocket.name)
+                .putExtra("pse.switch.item.id", itemId)
+                .putExtra("pse.switch.item.add", add)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        )
     }
 
     private fun showLegendsZaInventoryMetadata(bound: SwitchReadSession) {

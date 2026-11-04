@@ -16,6 +16,7 @@ data class LegendsZaInventorySlotRead(val itemId: Int, val count: Int, val rawCo
     val isNewNotify: Boolean get() = rawFlags and 4L != 0L
     val isNewShop: Boolean get() = rawFlags and 8L != 0L
     val isHeld: Boolean get() = rawFlags and 16L != 0L
+    val hasKnownFlags: Boolean get() = rawFlags and 0xFFFFFFE0L == 0L
     val hasValidPouch: Boolean get() = rawPouch != 0xFFFFFFFFL
     // Retain every nondefault saved record; native unacquired slots use FFFFFFFF/0/0D/0.
     val isRecorded: Boolean get() = !(rawCount == 0L && padding == 0L &&
@@ -29,6 +30,9 @@ data class LegendsZaInventorySlotRead(val itemId: Int, val count: Int, val rawCo
         pocket in setOf(LegendsZaInventoryPocket.KEY_ITEMS, LegendsZaInventoryPocket.MACHINES, LegendsZaInventoryPocket.MEGA_STONES) -> 1
         else -> 999
     }
+    val isEditable: Boolean get() = itemId !in setOf(2612, 2619) && pocket != null &&
+        hasValidPouch && pouchMatchesCatalogue && !isNewNotify && hasKnownFlags && padding == 0L &&
+        rawCount in 1L..(referenceMaxCount?.toLong() ?: 0L)
 }
 
 class LegendsZaInventoryPocketRead internal constructor(val pocket: LegendsZaInventoryPocket,
@@ -71,7 +75,10 @@ object LegendsZaInventoryReadOnly {
             immutable(LegendsZaInventoryPocket.values().map { p -> LegendsZaInventoryPocketRead(p,
                 flags and (1L shl p.nativeIndex) != 0L, immutable(slots.filter { it.pocket == p })) }))
     }
+    fun allowedItemIds(pocket: LegendsZaInventoryPocket): List<Int> =
+        catalogue.getValue(pocket).sorted()
     private fun u32(data: ByteArray, at: Int): Long =
         (0..3).fold(0L) { result, i -> result or ((data[at + i].toLong() and 255) shl (i * 8)) }
 }
 private fun <T> immutable(values: List<T>): List<T> = Collections.unmodifiableList(ArrayList(values))
+
