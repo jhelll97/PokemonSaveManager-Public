@@ -250,7 +250,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(nurseryButton)
         captureRecordsButton = Button(this).apply {
-            text = "Capture Records • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Capture Records"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showLetsGoCaptureRecords(it) } }
         }
         root.addView(captureRecordsButton)
@@ -558,7 +558,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound && !dashboardBusy && nurseryButton.isEnabled) nurseryButton.performClick() }
         })
         if (bound.letsGoCaptureRecords != null) dashboardRoot.addView(Button(this).apply {
-            text = "Capture Records • Read-only"; isAllCaps = false; isEnabled = !busy && captureRecordsButton.isEnabled
+            text = "Capture Records"; isAllCaps = false; isEnabled = !busy && captureRecordsButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && captureRecordsButton.isEnabled) captureRecordsButton.performClick() }
         })
         if (bound.letsGoGameOptions != null) dashboardRoot.addView(Button(this).apply {
@@ -2647,7 +2647,7 @@ class SwitchReadOnlyActivity : Activity() {
         val records = bound.letsGoCaptureRecords ?: return
         val nonzero = records.entries.filter { it.captured != 0L || it.transferred != 0L }
         val lines = buildString {
-            appendLine("Saved capture records • read-only")
+            appendLine("Saved capture records")
             appendLine("153 native species entries; raw block retained (" + records.rawBlockBytes.size + " bytes).")
             appendLine("Total caught: " + records.totalCaptured)
             appendLine("Total transferred to Professor Oak: " + records.totalTransferred)
@@ -2655,10 +2655,20 @@ class SwitchReadOnlyActivity : Activity() {
             if (nonzero.isEmpty()) appendLine("No non-zero species records are stored.")
             else nonzero.forEach { entry -> appendLine("Species " + entry.species + ": caught " + entry.captured + ", transferred " + entry.transferred) }
             appendLine()
-            append("No current-party, legality, encounter or unsupported-state inference is made.")
+            append("One per-species caught counter can be edited to a verified new copy. Native total and transfer counters remain unchanged. No current-party, legality, encounter or unsupported-state inference is made.")
         }
         AlertDialog.Builder(this).setTitle(bound.displayName + " • Capture Records")
-            .setMessage(lines).setPositiveButton("Close", null).show()
+            .setMessage(lines)
+            .setPositiveButton("Edit caught count") { _, _ -> launchLetsGoCaptureRecordEditor(bound) }
+            .setNegativeButton("Close", null).show()
+    }
+
+    private fun launchLetsGoCaptureRecordEditor(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val source = selectedSourceUri ?: return
+        startActivity(Intent(this, SwitchLetsGoCaptureRecordsActivity::class.java).setData(source)
+            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }
     private fun showLetsGoDayCare(bound: SwitchReadSession) {
         if (session !== bound || dashboardBusy) return

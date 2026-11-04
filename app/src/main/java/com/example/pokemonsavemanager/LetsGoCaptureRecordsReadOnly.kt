@@ -21,12 +21,12 @@ class LetsGoCaptureRecordsRead internal constructor(
     val entryCount: Int get() = entries.size
 }
 
-/** Native block 15: 0x4DC00, length 0x800; no writes or inferred legality/current-party state. */
+/** Native block 12: 0x46600, length 0x10A4; no inferred legality/current-party state. */
 object LetsGoCaptureRecordsReadOnly {
-    private const val BLOCK_OFFSET = 0x4DC00
-    private const val BLOCK_LENGTH = 0x800
+    internal const val BLOCK_OFFSET = 0x46600
+    internal const val BLOCK_LENGTH = 0x10A4
     private const val ENTRY_COUNT = 153
-    private const val CAPTURED_OFFSET = 0x2A8
+    internal const val CAPTURED_OFFSET = 0x2A8
     private const val TRANSFERRED_OFFSET = 0x50C
     private const val TOTAL_CAPTURED_OFFSET = 0x794
     private const val TOTAL_TRANSFERRED_OFFSET = 0x7A8
