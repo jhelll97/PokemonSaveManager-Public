@@ -596,6 +596,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Game Sync Identity • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoGameSyncIdentity(bound) }
         })
+        if (bound.letsGoEquippedAppearance != null) dashboardRoot.addView(Button(this).apply {
+            text = "Equipped Appearance • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoEquippedAppearance(bound) }
+        })
         if (bound.letsGoBlockDirectory != null) dashboardRoot.addView(Button(this).apply {
             text = "Native Block Directory • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoBlockDirectory(bound) }
@@ -3014,6 +3018,31 @@ class SwitchReadOnlyActivity : Activity() {
             append("All 21 native block CRCs passed before display. No network request, ID change, normalization, export, replacement or save writing.")
         }
         AlertDialog.Builder(this).setTitle("Game Sync Identity • Read-only")
+            .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
+            }) }).setPositiveButton("Close", null).show()
+    }
+
+    private fun showLetsGoEquippedAppearance(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.letsGoEquippedAppearance ?: return
+        fun StringBuilder.appendValues(title: String, values: List<LetsGoEquippedAppearanceValue>) {
+            append("$title\n")
+            values.forEach { entry ->
+                append("${entry.label}: ${entry.value}\n")
+                append("  Hex: 0x${entry.value.toString(16).uppercase().padStart(16, '0')} • MyStatus +0x${entry.offset.toString(16).uppercase()}\n")
+            }
+        }
+        val detail = buildString {
+            append("${read.version.displayName} • Equipped Appearance • Read-only\n\n")
+            appendValues("Partner", read.partner)
+            append("\n")
+            appendValues("Player", read.player)
+            append("\nThese are the exact native unsigned 64-bit equipped appearance identifiers documented in MyStatus. ")
+            append("No catalogue names, ownership, compatibility or visual result are inferred. ")
+            append("All 21 native block CRCs passed before display. No appearance changes, export, replacement or save writing.")
+        }
+        AlertDialog.Builder(this).setTitle("Equipped Appearance • Read-only")
             .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
             }) }).setPositiveButton("Close", null).show()
