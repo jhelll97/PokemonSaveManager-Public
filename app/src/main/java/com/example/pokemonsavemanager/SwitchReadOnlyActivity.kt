@@ -2704,6 +2704,10 @@ class SwitchReadOnlyActivity : Activity() {
                 "20 areas • 50 slots per area • Read-only"
             textSize = 16f; setPadding(0, 0, 0, 16)
         })
+        root.addView(Button(this).apply {
+            text = "Import native GP1 • Save new copy"; isAllCaps = false; isEnabled = selectedSourceUri != null
+            setOnClickListener { if (session === bound && !dashboardBusy) launchLetsGoGoParkImport(bound) }
+        })
         repeat(LetsGoGoParkReadOnly.AREA_COUNT) { index ->
             val area = index + 1
             val count = park.area(area).size
@@ -2732,6 +2736,14 @@ class SwitchReadOnlyActivity : Activity() {
             .setView(ScrollView(this).apply { addView(root) })
             .setPositiveButton("All areas") { _, _ -> if (session === bound && !dashboardBusy) showLetsGoGoParkAreas(bound) }
             .setNegativeButton("Close", null).show()
+    }
+
+    private fun launchLetsGoGoParkImport(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val source = selectedSourceUri ?: return
+        startActivity(Intent(this, SwitchLetsGoGoParkImportActivity::class.java).setData(source)
+            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }
 
     private fun showLetsGoGoParkEntry(bound: SwitchReadSession, entry: LetsGoGoParkEntry) {

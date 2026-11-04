@@ -15,6 +15,7 @@
         <activity android:name=".SwitchLetsGoCaptureRecordsActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoCaptureTotalActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoGoParkActivity" android:exported="false"/>
+        <activity android:name=".SwitchLetsGoGoParkImportActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldItemActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldEventActivity" android:exported="false"/>
