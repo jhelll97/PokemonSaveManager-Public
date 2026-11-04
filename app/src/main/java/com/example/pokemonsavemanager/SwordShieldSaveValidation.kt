@@ -25,6 +25,7 @@ internal data class SwordShieldBattleTowerBlocks(
     val singlesStreak: ByteArray,
     val doublesStreak: ByteArray
 )
+internal data class SwordShieldDaycareBlock(val version: SwordShieldVersion, val data: ByteArray)
 
 internal data class SwordShieldDexBlocks(val version: SwordShieldVersion, val galar: ByteArray,
     val armor: ByteArray?, val crown: ByteArray?)
@@ -81,6 +82,17 @@ object SwordShieldSaveValidation {
             block(singlesStreakKey, 2),
             block(doublesStreakKey, 2)
         )
+    }
+
+    /** Reads PKHeX's documented two-nursery object after the complete container gate passes. */
+    internal fun readDaycareBlock(source: ByteArray): SwordShieldDaycareBlock {
+        val key = 0x2D6FBA6AL
+        val (checked, captured) = captureObjects(
+            source,
+            setOf(key),
+            objectLayouts = mapOf(key to 0x570)
+        )
+        return SwordShieldDaycareBlock(checked.version, captured.getValue(key))
     }
 
     /** Optional region type/length rules affect dex extraction only, never existing readers. */
@@ -299,10 +311,11 @@ object SwordShieldSaveValidation {
     private fun captureObjects(
         source: ByteArray,
         keys: Set<Long>,
-        scalarLayouts: Map<Long, Pair<Int, Int>> = emptyMap()
+        scalarLayouts: Map<Long, Pair<Int, Int>> = emptyMap(),
+        objectLayouts: Map<Long, Int> = emptyMap()
     ): Pair<SwordShieldValidation.Verified, Map<Long, ByteArray>> {
         val captured = keys.associateWith { ByteArray(0) }.toMutableMap()
-        val checked = inspect(source, captured, scalarLayouts = scalarLayouts)
+        val checked = inspect(source, captured, scalarLayouts = scalarLayouts, objectLayouts = objectLayouts)
         require(checked is SwordShieldValidation.Verified) { "A validated native Sword/Shield save is required." }
         return checked to captured
     }
@@ -312,7 +325,8 @@ object SwordShieldSaveValidation {
         captured: MutableMap<Long, ByteArray>?,
         dexLayouts: Map<Long, Int> = emptyMap(),
         inventoryLayout: Boolean = false,
-        scalarLayouts: Map<Long, Pair<Int, Int>> = emptyMap()
+        scalarLayouts: Map<Long, Pair<Int, Int>> = emptyMap(),
+        objectLayouts: Map<Long, Int> = emptyMap()
     ): SwordShieldValidation {
         if (source.size !in knownSizes) return SwordShieldValidation.Unrecognized
         val end = source.size - 32
@@ -323,7 +337,7 @@ object SwordShieldSaveValidation {
         // Only the detached payload is decrypted. The caller's bytes are never changed.
         val payload = source.copyOfRange(0, end)
         for (index in payload.indices) payload[index] = (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
-        return try { inspectBlocks(payload, captured, dexLayouts, inventoryLayout, scalarLayouts) }
+        return try { inspectBlocks(payload, captured, dexLayouts, inventoryLayout, scalarLayouts, objectLayouts) }
         catch (e: IllegalArgumentException) { SwordShieldValidation.Invalid(e.message ?: "Malformed Sword/Shield blocks.") }
     }
 
@@ -332,7 +346,8 @@ object SwordShieldSaveValidation {
         captured: MutableMap<Long, ByteArray>?,
         dexLayouts: Map<Long, Int>,
         inventoryLayout: Boolean,
-        scalarLayouts: Map<Long, Pair<Int, Int>>
+        scalarLayouts: Map<Long, Pair<Int, Int>>,
+        objectLayouts: Map<Long, Int>
     ): SwordShieldValidation {
         val cursor = Cursor(bytes)
         val found = mutableSetOf<Long>()
@@ -369,6 +384,11 @@ object SwordShieldSaveValidation {
             scalarLayouts[key]?.let { (expectedType, expectedSize) ->
                 require(type == expectedType && length == expectedSize.toLong()) {
                     "A documented Sword/Shield scalar block has the wrong native type or size."
+                }
+            }
+            objectLayouts[key]?.let { expectedSize ->
+                require(type == 4 && length == expectedSize.toLong()) {
+                    "A documented Sword/Shield object block has the wrong native type or size."
                 }
             }
             val capture = captured?.containsKey(key) == true

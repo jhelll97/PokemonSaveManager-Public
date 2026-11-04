@@ -249,7 +249,13 @@ class SwitchReadOnlyActivity : Activity() {
         root.addView(undergroundButton)
         nurseryButton = Button(this).apply {
             text = "Nursery • Read-only"; isEnabled = false; visibility = android.view.View.GONE
-            setOnClickListener { session?.let { if (it.letsGoDayCare != null) showLetsGoDayCare(it) else showBdspNursery(it) } }
+            setOnClickListener { session?.let {
+                when {
+                    it.swordShieldDaycare != null -> showSwordShieldDaycare(it)
+                    it.letsGoDayCare != null -> showLetsGoDayCare(it)
+                    else -> showBdspNursery(it)
+                }
+            } }
         }
         root.addView(nurseryButton)
         captureRecordsButton = Button(this).apply {
@@ -461,8 +467,9 @@ class SwitchReadOnlyActivity : Activity() {
             session?.profile?.family == SwitchGameFamily.SWORD_SHIELD)
             android.view.View.VISIBLE else android.view.View.GONE
         nurseryButton.text = if (session?.profile?.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE) "Day Care • Read-only" else "Nursery • Read-only"
-        nurseryButton.isEnabled = !busy && (session?.bdspNursery != null || session?.letsGoDayCare != null)
-        nurseryButton.visibility = if (session?.profile?.family == SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL || session?.profile?.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE)
+        nurseryButton.isEnabled = !busy && (session?.bdspNursery != null || session?.letsGoDayCare != null || session?.swordShieldDaycare != null)
+        nurseryButton.visibility = if (session?.profile?.family == SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL ||
+            session?.profile?.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE || session?.profile?.family == SwitchGameFamily.SWORD_SHIELD)
             android.view.View.VISIBLE else android.view.View.GONE
         captureRecordsButton.isEnabled = !busy && session?.letsGoCaptureRecords != null
         captureRecordsButton.visibility = if (session?.profile?.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE)
@@ -574,6 +581,10 @@ class SwitchReadOnlyActivity : Activity() {
         if (bound.swordShieldBattleTower != null) dashboardRoot.addView(Button(this).apply {
             text = "Battle Tower Records • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldBattleTower(bound) }
+        })
+        if (bound.swordShieldDaycare != null) dashboardRoot.addView(Button(this).apply {
+            text = "Nursery Records • Read-only"; isAllCaps = false; isEnabled = !busy && nurseryButton.isEnabled
+            setOnClickListener { if (session === bound && !dashboardBusy && nurseryButton.isEnabled) nurseryButton.performClick() }
         })
         if (bound.letsGoCaptureRecords != null) dashboardRoot.addView(Button(this).apply {
             text = "Capture Records"; isAllCaps = false; isEnabled = !busy && captureRecordsButton.isEnabled
@@ -2392,6 +2403,56 @@ class SwitchReadOnlyActivity : Activity() {
             })
         }
         AlertDialog.Builder(this).setTitle("Battle Tower Records • Read-only")
+            .setView(scroll).setPositiveButton("Close", null).show()
+    }
+
+    private fun showSwordShieldDaycare(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.swordShieldDaycare ?: return
+        fun slotSummary(slot: SwordShieldDaycareSlotRead): String = buildString {
+            val occupancy = when (slot.rawOccupiedByte) {
+                0 -> "Empty flag"
+                1 -> "Occupied flag"
+                else -> "Unknown occupancy byte ${slot.rawOccupiedByte}"
+            }
+            append("Slot ${slot.slot}: $occupancy")
+            when (val record = slot.pokemon) {
+                SwordShieldDaycarePokemonRead.Empty -> append(" • Stored record is empty")
+                is SwordShieldDaycarePokemonRead.Invalid -> append(" • Stored PK8 unavailable: ${record.reason}")
+                is SwordShieldDaycarePokemonRead.Pokemon -> {
+                    val p = record.value
+                    val species = SwordShieldSpeciesNames.name(p.species)
+                    val nickname = p.nickname.takeIf { it.isNotBlank() && it != species }
+                    append(" • ${nickname?.let { "$it ($species)" } ?: species}")
+                    if (p.form != 0) append(" • Form ${p.form}")
+                    append(" • ${listOf("Male", "Female", "Genderless").getOrNull(p.gender) ?: "Gender ${p.gender}"}")
+                    if (p.shiny) append(" • Shiny")
+                    if (p.isEgg) append(" • Egg")
+                    if (!slot.isOccupied) append(" • Inactive stored record")
+                }
+            }
+        }
+        val detail = buildString {
+            append("${read.version.displayName} • Nursery Records • Read-only\n\n")
+            for (nursery in read.nurseries) {
+                append("Nursery ${nursery.nursery}\n")
+                nursery.slots.forEach { append(slotSummary(it)).append('\n') }
+                append("Metadata prefix word: ${nursery.unknownPrefixWord}\n")
+                append("Metadata UInt32 word: ${nursery.unknownValueWord}\n")
+                append("RNG seed: ${nursery.rngSeed}\n")
+                append("RNG seed hex: ${nursery.rngSeed.toString(16).uppercase().padStart(16, '0')}\n")
+                append("Opaque metadata tail: ${nursery.unknownTailBytes.joinToString(" ") { "%02X".format(it) }}\n\n")
+            }
+            append("The complete native container hash and the 0x570-byte Daycare object layout passed before display. ")
+            append("PK8 summaries require their stored-data checksums to pass. Occupancy bytes, the exposed RNG seed, and opaque metadata remain exact. ")
+            append("No breeding progress, compatibility, Egg readiness, fee, deposit, withdrawal, reset, repair, export, replacement, or save writing is inferred or provided.")
+        }
+        val scroll = ScrollView(this).apply {
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Nursery Records • Read-only")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 
