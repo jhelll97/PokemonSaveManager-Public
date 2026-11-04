@@ -580,6 +580,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Player Position • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoPlayerLocation(bound) }
         })
+        if (bound.letsGoAdventureBegin != null) dashboardRoot.addView(Button(this).apply {
+            text = "Adventure Start • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoAdventureBegin(bound) }
+        })
         val playerAccessories = bound.letsGoPlayerAccessories
         if (playerAccessories != null && selectedSourceUri != null) dashboardRoot.addView(Button(this).apply {
             text = if (playerAccessories.isAllUnlocked) "Player Accessories • All unlocked" else "Player Accessories • Unlock to new copy"
@@ -2876,6 +2880,25 @@ class SwitchReadOnlyActivity : Activity() {
             append("All 21 native block CRCs passed before reading. No teleport, coordinate change, normalization, export, replacement or save writing.")
         }
         AlertDialog.Builder(this).setTitle("Player Position • Read-only")
+            .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
+            }) }).setPositiveButton("Close", null).show()
+    }
+
+    private fun showLetsGoAdventureBegin(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.letsGoAdventureBegin ?: return
+        val detail = buildString {
+            append("${read.version.displayName} • Adventure Start • Read-only\n\n")
+            append("Seconds since 1970-01-01 00:00:00 UTC: ${read.secondsSinceEpoch}\n")
+            append("Unsigned hex: 0x${read.secondsSinceEpoch.toString(16).uppercase().padStart(16, '0')}\n")
+            append("Raw bytes: ${read.rawBytes.joinToString(" ") { "%02X".format(it) }}\n\n")
+            if (read.utcTimestamp != null) append("UTC timestamp: ${read.utcTimestamp}\n\n")
+            else append("UTC timestamp unavailable: ${read.unavailableReason}\n\n")
+            append("This is the native eight-byte unsigned epoch value from PlayerGeoLocation block 7. ")
+            append("All 21 native block CRCs passed before reading. No local-time conversion, date correction, export, replacement or save writing.")
+        }
+        AlertDialog.Builder(this).setTitle("Adventure Start • Read-only")
             .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
             }) }).setPositiveButton("Close", null).show()

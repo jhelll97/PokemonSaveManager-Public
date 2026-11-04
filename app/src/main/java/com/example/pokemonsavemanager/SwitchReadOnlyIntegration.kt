@@ -80,6 +80,7 @@ class SwitchReadSnapshot private constructor(
     internal fun readLetsGoCaptureRecords(): LetsGoCaptureRecordsRead = LetsGoCaptureRecordsReadOnly.read(sourceBytes)
     internal fun readLetsGoGoPark(): LetsGoGoParkRead = LetsGoGoParkReadOnly.read(sourceBytes)
     internal fun readLetsGoPlayerLocation(): LetsGoPlayerLocationRead = LetsGoPlayerLocationReadOnly.read(sourceBytes)
+    internal fun readLetsGoAdventureBegin(): LetsGoAdventureBeginRead = LetsGoAdventureBeginReadOnly.read(sourceBytes)
     internal fun readLetsGoPlayerAccessories(): LetsGoPlayerAccessoryRead = LetsGoPlayerAccessoryEditing.read(sourceBytes)
     internal fun readLetsGoStarterAccessories(): LetsGoPlayerAccessoryRead =
         LetsGoPlayerAccessoryEditing.read(sourceBytes, LetsGoAccessoryTarget.STARTER)
@@ -552,6 +553,10 @@ class SwitchReadSession(val snapshot: SwitchReadSnapshot) {
         runCatching { snapshot.readLetsGoPlayerLocation() } else null
     val letsGoPlayerLocation: LetsGoPlayerLocationRead? get() = letsGoPlayerLocationAttempt?.getOrNull()
     val letsGoPlayerLocationUnavailableReason: String? get() = letsGoPlayerLocationAttempt?.exceptionOrNull()?.message
+    private val letsGoAdventureBeginAttempt = if (validation is LetsGoValidation.Verified)
+        runCatching { snapshot.readLetsGoAdventureBegin() } else null
+    val letsGoAdventureBegin: LetsGoAdventureBeginRead? get() = letsGoAdventureBeginAttempt?.getOrNull()
+    val letsGoAdventureBeginUnavailableReason: String? get() = letsGoAdventureBeginAttempt?.exceptionOrNull()?.message
     private val letsGoPlayerAccessoriesAttempt = if (validation is LetsGoValidation.Verified)
         runCatching { snapshot.readLetsGoPlayerAccessories() } else null
     val letsGoPlayerAccessories: LetsGoPlayerAccessoryRead? get() = letsGoPlayerAccessoriesAttempt?.getOrNull()
