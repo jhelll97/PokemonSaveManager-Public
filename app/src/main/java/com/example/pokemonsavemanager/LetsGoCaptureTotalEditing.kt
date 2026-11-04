@@ -1,36 +1,57 @@
 package com.example.pokemonsavemanager
 
-/** Changes only the native all-species caught total and block 12's CRC in a reviewed new copy. */
+enum class LetsGoCaptureTotalField(val displayName: String, val offset: Int) {
+    CAPTURED("Total caught", LetsGoCaptureRecordsReadOnly.TOTAL_CAPTURED_OFFSET),
+    TRANSFERRED("Total transferred to Professor Oak", LetsGoCaptureRecordsReadOnly.TOTAL_TRANSFERRED_OFFSET)
+}
+
+/** Changes one native all-species total and block 12's CRC in a reviewed new copy. */
 object LetsGoCaptureTotalEditing {
     private const val BLOCK_ID = 12
     private const val DESCRIPTORS = 0xB8614
     private const val CRC_OFFSET = DESCRIPTORS + BLOCK_ID * 8 + 6
     const val MAX_TOTAL = 999_999_999L
 
-    fun stage(source: ByteArray, expectedSha256: String, totalCaptured: Long): LetsGoCaptureTotalCopyPlan {
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        field: LetsGoCaptureTotalField,
+        value: Long
+    ): LetsGoCaptureTotalCopyPlan {
         val original = source.copyOf()
         require(LetsGoCaptureRecordEditing.sha256(original) == expectedSha256) {
             "The source changed. Reopen it from PSE."
         }
-        require(totalCaptured in 0L..MAX_TOTAL) { "Total caught must be 0–999,999,999." }
+        require(value in 0L..MAX_TOTAL) { "${field.displayName} must be 0–999,999,999." }
         val before = LetsGoCaptureRecordsReadOnly.read(original)
-        require(totalCaptured != before.totalCaptured) { "Choose a different total caught value." }
+        val beforeValue = if (field == LetsGoCaptureTotalField.CAPTURED)
+            before.totalCaptured else before.totalTransferred
+        require(value != beforeValue) { "Choose a different ${field.displayName.lowercase()} value." }
 
         val edited = original.copyOf()
-        val valueOffset = LetsGoCaptureRecordsReadOnly.BLOCK_OFFSET +
-            LetsGoCaptureRecordsReadOnly.TOTAL_CAPTURED_OFFSET
-        writeU32(edited, valueOffset, totalCaptured)
+        val valueOffset = LetsGoCaptureRecordsReadOnly.BLOCK_OFFSET + field.offset
+        writeU32(edited, valueOffset, value)
         writeU16(edited, CRC_OFFSET, LetsGoSaveValidation.crc16(
             edited, LetsGoCaptureRecordsReadOnly.BLOCK_OFFSET, LetsGoCaptureRecordsReadOnly.BLOCK_LENGTH))
-        verify(original, edited, totalCaptured, valueOffset)
-        return LetsGoCaptureTotalCopyPlan(original, edited, before.totalCaptured, totalCaptured, valueOffset)
+        verify(original, edited, field, value, valueOffset)
+        return LetsGoCaptureTotalCopyPlan(original, edited, field, beforeValue, value, valueOffset)
     }
 
-    internal fun verify(original: ByteArray, edited: ByteArray, totalCaptured: Long, valueOffset: Int) {
+    internal fun verify(
+        original: ByteArray,
+        edited: ByteArray,
+        field: LetsGoCaptureTotalField,
+        value: Long,
+        valueOffset: Int
+    ) {
         val before = LetsGoCaptureRecordsReadOnly.read(original)
         val after = LetsGoCaptureRecordsReadOnly.read(edited)
-        require(after.totalCaptured == totalCaptured && before.totalTransferred == after.totalTransferred) {
-            "The staged total caught value did not reopen exactly."
+        val selectedAfter = if (field == LetsGoCaptureTotalField.CAPTURED)
+            after.totalCaptured else after.totalTransferred
+        val otherUnchanged = if (field == LetsGoCaptureTotalField.CAPTURED)
+            before.totalTransferred == after.totalTransferred else before.totalCaptured == after.totalCaptured
+        require(selectedAfter == value && otherUnchanged) {
+            "The staged ${field.displayName.lowercase()} value did not reopen exactly."
         }
         require(before.entries == after.entries) { "A per-species capture record changed." }
         require(original.indices.all { index ->
@@ -51,6 +72,7 @@ object LetsGoCaptureTotalEditing {
 class LetsGoCaptureTotalCopyPlan internal constructor(
     original: ByteArray,
     edited: ByteArray,
+    val field: LetsGoCaptureTotalField,
     val before: Long,
     val after: Long,
     val valueOffset: Int
@@ -82,12 +104,12 @@ class LetsGoCaptureTotalCopyPlan internal constructor(
         require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
         var started = false
         try {
-            LetsGoCaptureTotalEditing.verify(original, edited, after, valueOffset)
+            LetsGoCaptureTotalEditing.verify(original, edited, field, after, valueOffset)
             started = true
             writeDestination(edited.copyOf())
             val persisted = readDestination()
             require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed edit." }
-            LetsGoCaptureTotalEditing.verify(original, persisted, after, valueOffset)
+            LetsGoCaptureTotalEditing.verify(original, persisted, field, after, valueOffset)
             requireSource()
         } catch (failure: Exception) {
             val removed = started && runCatching { discardDestination() }.getOrDefault(false)

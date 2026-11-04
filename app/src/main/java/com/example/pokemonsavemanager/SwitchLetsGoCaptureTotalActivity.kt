@@ -11,6 +11,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.Spinner
 import android.widget.TextView
 import java.util.concurrent.Executors
 
@@ -25,6 +26,7 @@ class SwitchLetsGoCaptureTotalActivity : Activity() {
     private var verifiedCopy: Pair<Uri, String>? = null
     private var busy = false
     private lateinit var status: TextView
+    private lateinit var field: Spinner
     private lateinit var value: EditText
     private lateinit var review: Button
     private lateinit var inspectCopy: Button
@@ -40,15 +42,21 @@ class SwitchLetsGoCaptureTotalActivity : Activity() {
             val pad = (20 * resources.displayMetrics.density).toInt()
             setPadding(pad, pad * 2, pad, pad)
         }
-        root.addView(TextView(this).apply { text = "Let's Go • Total Caught"; textSize = 24f })
+        root.addView(TextView(this).apply { text = "Let's Go • Capture Totals"; textSize = 24f })
         root.addView(TextView(this).apply {
-            text = "Change the native all-species caught total. Per-species caught and transfer records, the transfer total, and every unrelated field stay unchanged. PSE writes only a verified new copy."
+            text = "Change one native all-species caught or Professor Oak transfer total. Per-species records, the unselected total, and every unrelated field stay unchanged. PSE writes only a verified new copy."
             textSize = 16f
         })
         status = TextView(this).apply { text = "Validating the selected source…"; textSize = 16f; setTextIsSelectable(true) }
         root.addView(status)
+        field = Spinner(this).apply {
+            adapter = android.widget.ArrayAdapter(this@SwitchLetsGoCaptureTotalActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                LetsGoCaptureTotalField.values().map { it.displayName })
+        }
+        root.addView(field)
         value = EditText(this).apply {
-            hint = "Total caught (0–999,999,999)"
+            hint = "New total (0–999,999,999)"
             inputType = InputType.TYPE_CLASS_NUMBER
         }
         root.addView(value)
@@ -86,6 +94,7 @@ class SwitchLetsGoCaptureTotalActivity : Activity() {
 
     private fun setBusy(value: Boolean) {
         busy = value
+        field.isEnabled = !value && opened != null
         this.value.isEnabled = !value && opened != null
         review.isEnabled = !value && opened != null
         inspectCopy.isEnabled = !value && verifiedCopy != null
@@ -114,20 +123,21 @@ class SwitchLetsGoCaptureTotalActivity : Activity() {
     private fun reviewChange() {
         if (busy || pendingPlan != null) return
         val bytes = opened ?: return
+        val selectedField = LetsGoCaptureTotalField.values().getOrNull(field.selectedItemPosition) ?: return
         val requested = value.text.toString().trim().toLongOrNull()
         val plan = try {
-            LetsGoCaptureTotalEditing.stage(bytes, expectedHash ?: return,
-                requested ?: throw IllegalArgumentException("Enter a total caught value."))
+            LetsGoCaptureTotalEditing.stage(bytes, expectedHash ?: return, selectedField,
+                requested ?: throw IllegalArgumentException("Enter a new all-species total."))
         } catch (failure: Exception) {
-            status.text = failure.message ?: "The requested total-caught edit is unavailable."
+            status.text = failure.message ?: "The requested capture-total edit is unavailable."
             return
         }
         setBusy(true)
         var dispatched = false
-        AlertDialog.Builder(this).setTitle("Save total caught to a new copy?")
-            .setMessage("Total caught: ${plan.before} → ${plan.after}\n\n" +
+        AlertDialog.Builder(this).setTitle("Save ${plan.field.displayName.lowercase()} to a new copy?")
+            .setMessage("${plan.field.displayName}: ${plan.before} → ${plan.after}\n\n" +
                 "Allowed byte scope: one native four-byte total at 0x${plan.valueOffset.toString(16).uppercase()} plus block 12's two-byte CRC. " +
-                "Per-species records and total transferred remain unchanged. PSE will verify a recovery backup and reopen the persisted copy. Choose a NEW empty document.")
+                "Per-species records and the unselected total remain unchanged. PSE will verify a recovery backup and reopen the persisted copy. Choose a NEW empty document.")
             .setNegativeButton("Cancel", null).setOnDismissListener { if (!dispatched) setBusy(false) }
             .setPositiveButton("Choose new copy") { _, _ ->
                 if (!dispatched && !isFinishing && !isDestroyed) {

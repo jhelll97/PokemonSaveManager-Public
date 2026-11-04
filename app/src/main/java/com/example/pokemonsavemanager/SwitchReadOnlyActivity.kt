@@ -2655,12 +2655,12 @@ class SwitchReadOnlyActivity : Activity() {
             if (nonzero.isEmpty()) appendLine("No non-zero species records are stored.")
             else nonzero.forEach { entry -> appendLine("Species " + entry.species + ": caught " + entry.captured + ", transferred " + entry.transferred) }
             appendLine()
-            append("One per-species caught or Professor Oak transfer counter, or the separate total caught value, can be edited to a verified new copy. Species edits preserve both totals; the total editor preserves every species record and total transferred. No current-party, legality, encounter or unsupported-state inference is made.")
+            append("One per-species caught or Professor Oak transfer counter, or one separate all-species total, can be edited to a verified new copy. Species edits preserve both totals; total edits preserve every species record and the unselected total. No current-party, legality, encounter or unsupported-state inference is made.")
         }
         AlertDialog.Builder(this).setTitle(bound.displayName + " • Capture Records")
             .setMessage(lines)
             .setPositiveButton("Edit species count") { _, _ -> launchLetsGoCaptureRecordEditor(bound) }
-            .setNeutralButton("Edit total caught") { _, _ -> launchLetsGoCaptureTotalEditor(bound) }
+            .setNeutralButton("Edit totals") { _, _ -> launchLetsGoCaptureTotalEditor(bound) }
             .setNegativeButton("Close", null).show()
     }
 
