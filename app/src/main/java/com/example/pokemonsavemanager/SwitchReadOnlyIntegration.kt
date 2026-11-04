@@ -152,6 +152,8 @@ class SwitchReadSnapshot private constructor(
         SwordShieldStarterChoiceReadOnly.read(sourceBytes)
     internal fun readSwordShieldLeagueCard(): SwordShieldLeagueCardRead =
         SwordShieldLeagueCardReadOnly.read(sourceBytes)
+    internal fun readSwordShieldIsleOfArmorProgress(): SwordShieldIsleOfArmorProgressRead =
+        SwordShieldIsleOfArmorProgressReadOnly.read(sourceBytes)
     internal fun readBdspMenuSelection(): BdspMenuSelectionRead = BdspMenuSelectionReadOnly.read(sourceBytes)
     internal fun readBdspRandomGroups(): BdspRandomGroupsRead = BdspRandomGroupsReadOnly.read(sourceBytes)
     internal fun readBdspUnionRoom(): BdspUnionRoomRead = BdspUnionRoomReadOnly.read(sourceBytes)
@@ -548,6 +550,12 @@ class SwitchReadSession(val snapshot: SwitchReadSnapshot) {
     val swordShieldLeagueCard: SwordShieldLeagueCardRead? get() = swordShieldLeagueCardAttempt?.getOrNull()
     val swordShieldLeagueCardUnavailableReason: String? get() =
         swordShieldLeagueCardAttempt?.exceptionOrNull()?.message
+    private val swordShieldIsleOfArmorProgressAttempt = if (swordShieldValidation is SwordShieldValidation.Verified)
+        runCatching { snapshot.readSwordShieldIsleOfArmorProgress() } else null
+    val swordShieldIsleOfArmorProgress: SwordShieldIsleOfArmorProgressRead? get() =
+        swordShieldIsleOfArmorProgressAttempt?.getOrNull()
+    val swordShieldIsleOfArmorProgressUnavailableReason: String? get() =
+        swordShieldIsleOfArmorProgressAttempt?.exceptionOrNull()?.message
     private val letsGoInventoryAttempt = if (validation is LetsGoValidation.Verified)
         runCatching { snapshot.readLetsGoInventory() } else null
     val letsGoInventory: LetsGoInventoryRead? get() = letsGoInventoryAttempt?.getOrNull()

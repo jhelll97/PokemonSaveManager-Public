@@ -602,6 +602,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "League Card • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldLeagueCard(bound) }
         })
+        if (bound.swordShieldIsleOfArmorProgress != null) dashboardRoot.addView(Button(this).apply {
+            text = "Isle of Armor Progress • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldIsleOfArmorProgress(bound) }
+        })
         if (bound.letsGoCaptureRecords != null) dashboardRoot.addView(Button(this).apply {
             text = "Capture Records"; isAllCaps = false; isEnabled = !busy && captureRecordsButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && captureRecordsButton.isEnabled) captureRecordsButton.performClick() }
@@ -2595,6 +2599,30 @@ class SwitchReadOnlyActivity : Activity() {
             })
         }
         AlertDialog.Builder(this).setTitle("League Card • Read-only")
+            .setView(scroll).setPositiveButton("Close", null).show()
+    }
+
+    private fun showSwordShieldIsleOfArmorProgress(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.swordShieldIsleOfArmorProgress ?: return
+        val detail = buildString {
+            append("${read.version.displayName} • Isle of Armor Progress • Read-only\n\n")
+            append("Alolan Diglett found: ${read.alolanDiglettFound}\n")
+            append("Master Dojo Watt donation stage: ${read.dojoDonationProgress}")
+            append(" • ${read.dojoDonationStatus}\n")
+            append("Master Dojo Watts donated: ${read.dojoDonationTotal}\n")
+            append("Cram-o-matic uses: ${read.cramOMaticUses}\n")
+            append("Restricted Sparring types cleared: ${read.restrictedSparringTypesCleared}\n\n")
+            append("The complete native container hash and all five exact UInt32 scalar layouts passed before display. ")
+            append("Only the documented 0–15 Master Dojo donation stage is interpreted; every native value remains exact. ")
+            append("No Diglett, donation, Cram-o-matic, sparring, reward, unlock, repair, export, or save-writing action is available here.")
+        }
+        val scroll = ScrollView(this).apply {
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Isle of Armor Progress • Read-only")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 

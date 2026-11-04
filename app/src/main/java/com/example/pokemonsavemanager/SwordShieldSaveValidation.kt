@@ -40,6 +40,14 @@ internal data class SwordShieldRallyDiggingBlocks(
 )
 internal data class SwordShieldStarterChoiceBlock(val version: SwordShieldVersion, val value: ByteArray)
 internal data class SwordShieldLeagueCardBlock(val version: SwordShieldVersion, val data: ByteArray)
+internal data class SwordShieldIsleOfArmorProgressBlocks(
+    val version: SwordShieldVersion,
+    val alolanDiglettFound: ByteArray,
+    val dojoDonationProgress: ByteArray,
+    val dojoDonationTotal: ByteArray,
+    val cramOMaticUses: ByteArray,
+    val restrictedSparringTypesCleared: ByteArray
+)
 
 internal data class SwordShieldDexBlocks(val version: SwordShieldVersion, val galar: ByteArray,
     val armor: ByteArray?, val crown: ByteArray?)
@@ -172,6 +180,32 @@ object SwordShieldSaveValidation {
             objectLayouts = mapOf(key to 0x1D0)
         )
         return SwordShieldLeagueCardBlock(checked.version, captured.getValue(key))
+    }
+
+    /** Reads PKHeX's documented Isle of Armor progress records after the complete container gate passes. */
+    internal fun readIsleOfArmorProgressBlocks(source: ByteArray): SwordShieldIsleOfArmorProgressBlocks {
+        val diglettKey = 0x4AEA5A7EL
+        val donationProgressKey = 0x0CBEB855L
+        val donationTotalKey = 0xC7161487L
+        val cramOMaticKey = 0xB9C0ECFCL
+        val sparringTypesKey = 0xBB1DE8EFL
+        val keys = setOf(diglettKey, donationProgressKey, donationTotalKey, cramOMaticKey, sparringTypesKey)
+        val (checked, captured) = captureObjects(
+            source,
+            keys,
+            scalarLayouts = keys.associateWith { 14 to 4 }
+        )
+        fun block(key: Long): ByteArray = captured.getValue(key).also {
+            require(it.size == 4) { "A documented Sword/Shield Isle of Armor record is missing or has the wrong native type." }
+        }
+        return SwordShieldIsleOfArmorProgressBlocks(
+            checked.version,
+            block(diglettKey),
+            block(donationProgressKey),
+            block(donationTotalKey),
+            block(cramOMaticKey),
+            block(sparringTypesKey)
+        )
     }
 
     /** Optional region type/length rules affect dex extraction only, never existing readers. */
