@@ -598,6 +598,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Starter Choice • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldStarterChoice(bound) }
         })
+        if (bound.swordShieldLeagueCard != null) dashboardRoot.addView(Button(this).apply {
+            text = "League Card • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldLeagueCard(bound) }
+        })
         if (bound.letsGoCaptureRecords != null) dashboardRoot.addView(Button(this).apply {
             text = "Capture Records"; isAllCaps = false; isEnabled = !busy && captureRecordsButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && captureRecordsButton.isEnabled) captureRecordsButton.performClick() }
@@ -2542,6 +2546,55 @@ class SwitchReadOnlyActivity : Activity() {
             })
         }
         AlertDialog.Builder(this).setTitle("Starter Choice • Read-only")
+            .setView(scroll).setPositiveButton("Close", null).show()
+    }
+
+    private fun showSwordShieldLeagueCard(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.swordShieldLeagueCard ?: return
+        val detail = buildString {
+            append("${read.version.displayName} • League Card • Read-only\n\n")
+            append("Card trainer: ${read.trainerName}\n")
+            append("Trainer ID32: ${read.trainerId} • 0x${read.trainerId.toString(16).uppercase().padStart(8, '0')}\n")
+            append("Language ID: ${read.languageId}\n")
+            append("Displayed game: ${read.displayedGameName ?: "Unknown (${read.displayedGame})"}\n")
+            append("Displayed starter: ${read.starterName ?: "Unknown (${read.starter})"}\n")
+            append("Card number bytes: ${read.cardNumberDisplay}\n")
+            append("Gender ID: ${read.gender}\n\n")
+            append("Pokédex owned: ${read.pokedexOwned}\n")
+            append("Shiny Pokémon found: ${read.shinyPokemonFound}\n")
+            append("Curry types owned: ${read.curryTypesOwned}\n")
+            append("Pokémon caught: ${read.caughtPokemon}\n")
+            append("Roto Rally score: ${read.rotoRallyScore}\n")
+            append("Galar Pokédex complete byte: ${read.galarDexComplete}\n")
+            append("Isle of Armor Pokédex complete byte: ${read.armorDexComplete}\n")
+            append("Crown Tundra Pokédex complete byte: ${read.crownDexComplete}\n\n")
+            append("Adventure-start fields: ${read.startedYear.toString().padStart(4, '0')}-${read.startedMonth.toString().padStart(2, '0')}-${read.startedDay.toString().padStart(2, '0')}\n")
+            append("Printed timestamp (Unix seconds): ${read.printedTimestamp}\n\n")
+            append("Displayed team\n")
+            read.team.forEach { pokemon ->
+                append("${pokemon.slot}. ")
+                if (pokemon.species == 0) append("Empty")
+                else {
+                    append("${SwordShieldSpeciesNames.name(pokemon.species)} (#${pokemon.species})")
+                    append(" • Form ${pokemon.form} • Gender ${pokemon.gender}")
+                    append(" • Shiny byte ${pokemon.shiny}")
+                    append(" • EC 0x${pokemon.encryptionConstant.toString(16).uppercase().padStart(8, '0')}")
+                    append(" • Form argument ${pokemon.formArgument}")
+                    append(" • Unknown 0x${pokemon.unknown.toString(16).uppercase().padStart(8, '0')}")
+                }
+                append('\n')
+            }
+            append("\nThe complete native container hash and exact 0x1D0-byte League Card object passed before display. ")
+            append("Raw completion bytes, identifiers, timestamps, and team fields remain exact; PSE does not infer legality or catalogue appearance names. ")
+            append("No card refresh, appearance edit, team replacement, export, repair, or save writing is available here.")
+        }
+        val scroll = ScrollView(this).apply {
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+        }
+        AlertDialog.Builder(this).setTitle("League Card • Read-only")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 
