@@ -3154,7 +3154,7 @@ class SwitchReadOnlyActivity : Activity() {
     private fun showScarletVioletDexRegions(bound: SwitchReadSession) {
         if (session !== bound) return
         val dex = bound.scarletVioletPokedex ?: return
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Pokédex • Read-only")
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Pokédex")
             .setItems(dex.regions.map { "${it.region.displayName} • ${it.seenCount}/${it.entries.size} seen • ${it.caughtCount} caught" }.toTypedArray()) { _, index ->
                 if (session === bound) showScarletVioletPokedex(bound, dex.regions[index].region, 0)
             }.setNegativeButton("Close", null).show()
@@ -3263,7 +3263,7 @@ class SwitchReadOnlyActivity : Activity() {
         val entry = bound.legendsZaPokedex?.section(section)?.entry(number) ?: return
         fun forms(word: Long): String = (0..31).filter { word and (1L shl it) != 0L }.joinToString().ifBlank { "None" }
         val detail = buildString {
-            append("Pokédex #${entry.number} • ${ScarletVioletSpeciesNames.name(entry.speciesId)} (National #${entry.speciesId})\n${section.displayName} • Read-only\n\n")
+            append("Pokédex #${entry.number} • ${ScarletVioletSpeciesNames.name(entry.speciesId)} (National #${entry.speciesId})\n${section.displayName}\n\n")
             append("Seen: ${entry.seen}\nCaught: ${entry.caught}\nShiny flags recorded: ${entry.shinyRecorded}\nAlpha seen: ${entry.alphaSeen} (raw ${entry.rawAlphaFlag})\nNew display: ${entry.newDisplay} (raw ${entry.rawNewFlag})\n\n")
             append("Caught form IDs: ${forms(entry.caughtForms)} (raw ${entry.caughtForms})\nSeen form IDs: ${forms(entry.seenForms)} (raw ${entry.seenForms})\nShiny form IDs: ${forms(entry.shinyForms)} (raw ${entry.shinyForms})\n")
             val genders = listOf("Male", "Female", "Genderless").filterIndexed { bit, _ -> entry.genderFlags and (1 shl bit) != 0 }
@@ -3272,13 +3272,27 @@ class SwitchReadOnlyActivity : Activity() {
             append("Registered languages: ${entry.languages.joinToString().ifBlank { "None" }} (raw ${entry.languageFlags})\n\n")
             append("Saved display: form ID ${entry.displayForm} • ${entry.displayGender} (raw gender ${entry.rawDisplayGender}) • shiny ${entry.displayShiny} (raw ${entry.rawDisplayShiny})\n\n")
             append("Caught, seen, shiny, Mega, Alpha and display flags remain independent. Mega bits depend on species/revision and are shown as native indices. ")
-            append("Unknown bits and contradictory values are preserved. Form IDs are not legality verdicts. No editing or save replacement.")
+            append("Unknown bits and contradictory values are preserved. Form IDs are not legality verdicts. PSE can add one reviewed native form registration to a new copy while preserving Mega, Alpha, display and unknown fields.")
         }
         val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
             text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
         }) }
         AlertDialog.Builder(this).setTitle("Z-A Pokédex • ${ScarletVioletSpeciesNames.name(entry.speciesId)}")
-            .setView(scroll).setPositiveButton("Close", null).show()
+            .setView(scroll).setNegativeButton("Close", null)
+            .setPositiveButton("Add registration • New copy") { _, _ ->
+                if (session === bound) launchLegendsZaPokedexEditor(bound, section, number)
+            }.show()
+    }
+
+    private fun launchLegendsZaPokedexEditor(bound: SwitchReadSession,
+        section: LegendsZaDexSection, number: Int) {
+        val source = selectedSourceUri ?: return
+        if (session !== bound) return
+        startActivity(Intent(this, SwitchLegendsZaPokedexActivity::class.java).setData(source)
+            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+            .putExtra("pse.switch.dex.section", section.name)
+            .putExtra("pse.switch.dex.number", number)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }
 
     private fun showLetsGoInventoryPockets(bound: SwitchReadSession) {

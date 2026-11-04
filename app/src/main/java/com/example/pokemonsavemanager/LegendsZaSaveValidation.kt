@@ -28,6 +28,8 @@ internal data class LegendsZaInventoryBlock(val version: LegendsZaVersion, val r
 
 internal data class LegendsZaInventoryWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 
+internal data class LegendsZaDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
+
 /** Independent read-only container gate; pinned format evidence is in SWITCH_READ_ONLY_FORMATS.md. */
 object LegendsZaSaveValidation {
     private val knownSizes = setOf(0x2F3284, 0x2F3289, 0x309FA6, 0x309FB3)
@@ -140,6 +142,68 @@ object LegendsZaSaveValidation {
         digest.digest().copyInto(edited, end)
         readInventoryBlock(edited)
         return LegendsZaInventoryWriteResult(edited, absoluteOffset)
+    }
+
+    /** Replaces one decoded native Pokédex record and rebuilds container integrity. */
+    internal fun writeDexRecord(
+        source: ByteArray,
+        relativeOffset: Int,
+        decodedRecord: ByteArray
+    ): LegendsZaDexWriteResult {
+        readDexBlock(source)
+        require(decodedRecord.size == 0x84) { "A native Legends: Z-A Pokédex record must be 0x84 bytes." }
+        require(relativeOffset >= 0 && relativeOffset + decodedRecord.size <= 0x27068 &&
+            relativeOffset % decodedRecord.size == 0) {
+            "The selected Legends: Z-A Pokédex record is outside its native block."
+        }
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var absoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = payload.size - cursor.remaining
+            if (key == 0x2D87BE5CL) {
+                require(type == 4 && length == 0x27068L) {
+                    "The Legends: Z-A Pokédex block has the wrong native type or size."
+                }
+                repeat(relativeOffset) { stream.next() }
+                repeat(decodedRecord.size) { byteIndex ->
+                    payload[blockStart + relativeOffset + byteIndex] =
+                        (decodedRecord[byteIndex].toInt() xor stream.next()).toByte()
+                }
+                absoluteOffset = blockStart + relativeOffset
+            }
+            cursor.skip(length.toInt())
+        }
+        require(absoluteOffset >= 0) { "The Legends: Z-A Pokédex block is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readDexBlock(edited)
+        return LegendsZaDexWriteResult(edited, absoluteOffset)
     }
 
     private fun inspect(source: ByteArray, captured: MutableMap<Long, ByteArray>?, uintKeys: Set<Long> = emptySet()): LegendsZaValidation {

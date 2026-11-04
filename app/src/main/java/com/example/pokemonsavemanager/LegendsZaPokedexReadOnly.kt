@@ -34,6 +34,8 @@ object LegendsZaPokedexReadOnly {
     private val languages = listOf("Japanese", "English", "French", "Italian", "German", "Spanish", "Korean",
         "Chinese (Simplified)", "Chinese (Traditional)", "Spanish (Latin America)")
     private val internalSpecies = (1..1025).associateBy { LegendsZaPokemonReadOnly.nationalSpecies(it) }
+    internal fun nativeSpeciesId(nationalSpecies: Int): Int = internalSpecies[nationalSpecies]
+        ?: throw IllegalArgumentException("The species is outside the native Legends: Z-A Pokédex table.")
     // Only present Z-A species <= its native DLC ceiling 1000; ignore inherited SV personal rows.
     // Form-aware native DexIndex order, verified 1..364. Lumiose ends at 232.
     private val speciesOrder = intArrayOf(
