@@ -26,6 +26,11 @@ internal data class SwordShieldBattleTowerBlocks(
     val doublesStreak: ByteArray
 )
 internal data class SwordShieldDaycareBlock(val version: SwordShieldVersion, val data: ByteArray)
+internal data class SwordShieldBoxLayoutBlocks(
+    val version: SwordShieldVersion,
+    val names: ByteArray,
+    val currentBox: ByteArray
+)
 
 internal data class SwordShieldDexBlocks(val version: SwordShieldVersion, val galar: ByteArray,
     val armor: ByteArray?, val crown: ByteArray?)
@@ -93,6 +98,23 @@ object SwordShieldSaveValidation {
             objectLayouts = mapOf(key to 0x570)
         )
         return SwordShieldDaycareBlock(checked.version, captured.getValue(key))
+    }
+
+    /** Reads PKHeX's documented 32 native box names and current-box scalar after the complete container gate passes. */
+    internal fun readBoxLayoutBlocks(source: ByteArray): SwordShieldBoxLayoutBlocks {
+        val namesKey = 0x19722C89L
+        val currentBoxKey = 0x017C3CBBL
+        val (checked, captured) = captureObjects(
+            source,
+            setOf(namesKey, currentBoxKey),
+            scalarLayouts = mapOf(currentBoxKey to (14 to 4)),
+            objectLayouts = mapOf(namesKey to 0x440)
+        )
+        return SwordShieldBoxLayoutBlocks(
+            checked.version,
+            captured.getValue(namesKey),
+            captured.getValue(currentBoxKey)
+        )
     }
 
     /** Optional region type/length rules affect dex extraction only, never existing readers. */
