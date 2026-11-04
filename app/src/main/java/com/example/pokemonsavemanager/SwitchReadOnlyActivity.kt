@@ -590,6 +590,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Box Layout • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldBoxLayout(bound) }
         })
+        if (bound.swordShieldRallyDigging != null) dashboardRoot.addView(Button(this).apply {
+            text = "Rally & Digging Records • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldRallyDigging(bound) }
+        })
         if (bound.letsGoCaptureRecords != null) dashboardRoot.addView(Button(this).apply {
             text = "Capture Records"; isAllCaps = false; isEnabled = !busy && captureRecordsButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && captureRecordsButton.isEnabled) captureRecordsButton.performClick() }
@@ -2485,6 +2489,31 @@ class SwitchReadOnlyActivity : Activity() {
             })
         }
         AlertDialog.Builder(this).setTitle("Box Layout • Read-only")
+            .setView(scroll).setPositiveButton("Close", null).show()
+    }
+
+    private fun showSwordShieldRallyDigging(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.swordShieldRallyDigging ?: return
+        val detail = buildString {
+            append("${read.version.displayName} • Rally & Digging Records • Read-only\n\n")
+            append("Roto Rally best score: ${read.rotoRallyScore}\n")
+            if (!read.rotoRallyWithinDocumentedRange) {
+                append("Saved Roto Rally score is above the documented 99,999 cap and remains exact.\n")
+            }
+            append("\nDigging Duo • Skill brother best streak: ${read.diggingDuoSkillStreak}\n")
+            append("Digging Duo • Stamina brother best streak: ${read.diggingDuoStaminaStreak}\n")
+            append("Digging Pa • Most Watts dug up: ${read.diggingPaWatts}\n\n")
+            append("The complete native container hash and all four UInt32 scalar layouts passed before display. ")
+            append("PSE does not infer undisclosed caps for the digging records. ")
+            append("No score reset, record edit, reward action, export, replacement, or save writing is available here.")
+        }
+        val scroll = ScrollView(this).apply {
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Rally & Digging Records • Read-only")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 

@@ -31,6 +31,13 @@ internal data class SwordShieldBoxLayoutBlocks(
     val names: ByteArray,
     val currentBox: ByteArray
 )
+internal data class SwordShieldRallyDiggingBlocks(
+    val version: SwordShieldVersion,
+    val rotoRallyScore: ByteArray,
+    val diggingDuoSkillStreak: ByteArray,
+    val diggingDuoStaminaStreak: ByteArray,
+    val diggingPaWatts: ByteArray
+)
 
 internal data class SwordShieldDexBlocks(val version: SwordShieldVersion, val galar: ByteArray,
     val armor: ByteArray?, val crown: ByteArray?)
@@ -114,6 +121,30 @@ object SwordShieldSaveValidation {
             checked.version,
             captured.getValue(namesKey),
             captured.getValue(currentBoxKey)
+        )
+    }
+
+    /** Reads PKHeX's documented Roto Rally and digging record scalars after the complete container gate passes. */
+    internal fun readRallyDiggingBlocks(source: ByteArray): SwordShieldRallyDiggingBlocks {
+        val rallyKey = 0x38548020L
+        val skillKey = 0xA0F49CFBL
+        val staminaKey = 0x066F38F5L
+        val diggingPaKey = 0x68BBA8B1L
+        val keys = setOf(rallyKey, skillKey, staminaKey, diggingPaKey)
+        val (checked, captured) = captureObjects(
+            source,
+            keys,
+            scalarLayouts = keys.associateWith { 14 to 4 }
+        )
+        fun block(key: Long): ByteArray = captured.getValue(key).also {
+            require(it.size == 4) { "A documented Sword/Shield rally or digging record is missing or has the wrong native type." }
+        }
+        return SwordShieldRallyDiggingBlocks(
+            checked.version,
+            block(rallyKey),
+            block(skillKey),
+            block(staminaKey),
+            block(diggingPaKey)
         )
     }
 
