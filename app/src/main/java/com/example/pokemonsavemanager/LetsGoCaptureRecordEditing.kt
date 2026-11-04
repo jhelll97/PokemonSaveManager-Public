@@ -4,11 +4,14 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.security.MessageDigest
 
-/** Changes one native per-species caught counter and block 12's CRC in a reviewed new copy. */
+enum class LetsGoCaptureRecordField(val displayName: String, val maximum: Long) {
+    CAPTURED("Caught", 9_999L), TRANSFERRED("Transferred to Professor Oak", 999_999_999L)
+}
+
+/** Changes one native per-species capture-record counter and block 12's CRC in a reviewed new copy. */
 object LetsGoCaptureRecordEditing {
     private const val BLOCK_ID = 12
     private const val DESCRIPTORS = 0xB8614
-    private const val MAX_CAPTURED = 9_999L
     private const val CRC_OFFSET = DESCRIPTORS + BLOCK_ID * 8 + 6
 
     fun readDocumentBytes(input: InputStream): ByteArray = input.use {
@@ -29,38 +32,59 @@ object LetsGoCaptureRecordEditing {
         output.toByteArray()
     }
 
-    fun stage(source: ByteArray, expectedSha256: String, speciesId: Int, captured: Long): LetsGoCaptureRecordCopyPlan {
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        speciesId: Int,
+        field: LetsGoCaptureRecordField,
+        value: Long
+    ): LetsGoCaptureRecordCopyPlan {
         val original = source.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
-        require(captured in 0L..MAX_CAPTURED) { "Caught count must be 0–9,999." }
+        require(value in 0L..field.maximum) { "${field.displayName} count must be 0–${field.maximum}." }
         val index = speciesIndex(speciesId)
         val beforeRecords = LetsGoCaptureRecordsReadOnly.read(original)
         val before = beforeRecords.entries[index]
-        require(captured != before.captured) { "Choose a different caught count." }
+        val beforeValue = if (field == LetsGoCaptureRecordField.CAPTURED) before.captured else before.transferred
+        require(value != beforeValue) { "Choose a different ${field.displayName.lowercase()} count." }
 
         val edited = original.copyOf()
-        val valueOffset = LetsGoCaptureRecordsReadOnly.BLOCK_OFFSET +
-            LetsGoCaptureRecordsReadOnly.CAPTURED_OFFSET + index * 4
-        writeU32(edited, valueOffset, captured)
+        val fieldOffset = if (field == LetsGoCaptureRecordField.CAPTURED)
+            LetsGoCaptureRecordsReadOnly.CAPTURED_OFFSET else LetsGoCaptureRecordsReadOnly.TRANSFERRED_OFFSET
+        val valueOffset = LetsGoCaptureRecordsReadOnly.BLOCK_OFFSET + fieldOffset + index * 4
+        writeU32(edited, valueOffset, value)
         writeU16(edited, CRC_OFFSET, LetsGoSaveValidation.crc16(
             edited, LetsGoCaptureRecordsReadOnly.BLOCK_OFFSET, LetsGoCaptureRecordsReadOnly.BLOCK_LENGTH))
-        verify(original, edited, speciesId, captured, valueOffset)
+        verify(original, edited, speciesId, field, value, valueOffset)
         val after = LetsGoCaptureRecordsReadOnly.read(edited).entries[index]
-        return LetsGoCaptureRecordCopyPlan(original, edited, speciesId, before, after, valueOffset)
+        return LetsGoCaptureRecordCopyPlan(original, edited, speciesId, field, before, after, valueOffset)
     }
 
-    internal fun verify(original: ByteArray, edited: ByteArray, speciesId: Int, captured: Long, valueOffset: Int) {
+    internal fun verify(
+        original: ByteArray,
+        edited: ByteArray,
+        speciesId: Int,
+        field: LetsGoCaptureRecordField,
+        value: Long,
+        valueOffset: Int
+    ) {
         val before = LetsGoCaptureRecordsReadOnly.read(original)
         val after = LetsGoCaptureRecordsReadOnly.read(edited)
         val index = speciesIndex(speciesId)
-        require(before.entries[index].species == speciesId && after.entries[index].captured == captured) {
-            "The staged caught count did not reopen exactly."
+        val afterValue = if (field == LetsGoCaptureRecordField.CAPTURED)
+            after.entries[index].captured else after.entries[index].transferred
+        require(before.entries[index].species == speciesId && afterValue == value) {
+            "The staged ${field.displayName.lowercase()} count did not reopen exactly."
         }
         require(before.entries.indices.all { entryIndex ->
             val left = before.entries[entryIndex]
             val right = after.entries[entryIndex]
-            left.species == right.species && left.transferred == right.transferred &&
-                (entryIndex == index || left.captured == right.captured)
+            left.species == right.species && when (field) {
+                LetsGoCaptureRecordField.CAPTURED ->
+                    left.transferred == right.transferred && (entryIndex == index || left.captured == right.captured)
+                LetsGoCaptureRecordField.TRANSFERRED ->
+                    left.captured == right.captured && (entryIndex == index || left.transferred == right.transferred)
+            }
         }) { "An unrelated species capture record changed." }
         require(before.totalCaptured == after.totalCaptured && before.totalTransferred == after.totalTransferred) {
             "A native total counter changed."
@@ -93,6 +117,7 @@ class LetsGoCaptureRecordCopyPlan internal constructor(
     original: ByteArray,
     edited: ByteArray,
     val speciesId: Int,
+    val field: LetsGoCaptureRecordField,
     val before: LetsGoCaptureRecordEntry,
     val after: LetsGoCaptureRecordEntry,
     val valueOffset: Int
@@ -124,12 +149,13 @@ class LetsGoCaptureRecordCopyPlan internal constructor(
         require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
         var started = false
         try {
-            LetsGoCaptureRecordEditing.verify(original, edited, speciesId, after.captured, valueOffset)
+            val value = if (field == LetsGoCaptureRecordField.CAPTURED) after.captured else after.transferred
+            LetsGoCaptureRecordEditing.verify(original, edited, speciesId, field, value, valueOffset)
             started = true
             writeDestination(edited.copyOf())
             val persisted = readDestination()
             require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed edit." }
-            LetsGoCaptureRecordEditing.verify(original, persisted, speciesId, after.captured, valueOffset)
+            LetsGoCaptureRecordEditing.verify(original, persisted, speciesId, field, value, valueOffset)
             requireSource()
         } catch (failure: Exception) {
             val removed = started && runCatching { discardDestination() }.getOrDefault(false)

@@ -27,7 +27,7 @@ object LetsGoCaptureRecordsReadOnly {
     internal const val BLOCK_LENGTH = 0x10A4
     private const val ENTRY_COUNT = 153
     internal const val CAPTURED_OFFSET = 0x2A8
-    private const val TRANSFERRED_OFFSET = 0x50C
+    internal const val TRANSFERRED_OFFSET = 0x50C
     private const val TOTAL_CAPTURED_OFFSET = 0x794
     private const val TOTAL_TRANSFERRED_OFFSET = 0x7A8
 

@@ -46,7 +46,7 @@ Keep title-specific parsing and save structures separate where native formats di
 
 Only after the full shared Gen 1 feature set is working in every applicable Switch title, add features unique to the game being worked on. Confirm each against that title’s native save data and provide usable UI in the matching PSE layout.
 
-Let's Go title-specific work has started with Capture Records. PSE reads the complete native block 12 record and can change one reviewed per-species caught counter from 0 to 9,999 in a new copy. The edit changes only that four-byte counter and block 12's CRC; all-species totals, transfer counters, other species, and all unrelated bytes remain unchanged. Source identity, verified recovery backup, persisted reopen validation, and failed-copy cleanup are required.
+Let's Go title-specific work has started with Capture Records. PSE reads the complete native block 12 record and can change one reviewed per-species caught counter from 0 to 9,999 or Professor Oak transfer counter from 0 to 999,999,999 in a new copy. Each edit changes only that four-byte counter and block 12's CRC; all-species totals, the other counter type, other species, and all unrelated bytes remain unchanged. Source identity, verified recovery backup, persisted reopen validation, and failed-copy cleanup are required.
 
 ### Out of scope
 

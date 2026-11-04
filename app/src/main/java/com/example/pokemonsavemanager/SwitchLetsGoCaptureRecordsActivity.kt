@@ -30,6 +30,7 @@ class SwitchLetsGoCaptureRecordsActivity : Activity() {
     private var busy = false
     private lateinit var status: TextView
     private lateinit var species: Spinner
+    private lateinit var field: Spinner
     private lateinit var count: EditText
     private lateinit var review: Button
     private lateinit var inspectCopy: Button
@@ -47,7 +48,7 @@ class SwitchLetsGoCaptureRecordsActivity : Activity() {
         }
         root.addView(TextView(this).apply { text = "Let's Go • Capture Records"; textSize = 24f })
         root.addView(TextView(this).apply {
-            text = "Change one native per-species caught counter. The all-species caught total, transfer records, and every other field stay unchanged. PSE writes only a verified new copy."
+            text = "Change one native per-species caught or Professor Oak transfer counter. The all-species totals and every other field stay unchanged. PSE writes only a verified new copy."
             textSize = 16f
         })
         status = TextView(this).apply { text = "Validating the selected source…"; textSize = 16f; setTextIsSelectable(true) }
@@ -58,8 +59,14 @@ class SwitchLetsGoCaptureRecordsActivity : Activity() {
                 speciesIds.map { "#$it ${LetsGoSpeciesNames.name(it)}" })
         }
         root.addView(species)
+        field = Spinner(this).apply {
+            adapter = ArrayAdapter(this@SwitchLetsGoCaptureRecordsActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                LetsGoCaptureRecordField.values().map { it.displayName })
+        }
+        root.addView(field)
         count = EditText(this).apply {
-            hint = "Caught count (0–9,999)"
+            hint = "New native count"
             inputType = InputType.TYPE_CLASS_NUMBER
         }
         root.addView(count)
@@ -100,6 +107,7 @@ class SwitchLetsGoCaptureRecordsActivity : Activity() {
         busy = value
         val ready = opened != null && records != null
         species.isEnabled = !value && ready
+        field.isEnabled = !value && ready
         count.isEnabled = !value && ready
         review.isEnabled = !value && ready
         inspectCopy.isEnabled = !value && verifiedCopy != null
@@ -130,22 +138,23 @@ class SwitchLetsGoCaptureRecordsActivity : Activity() {
         val bytes = opened ?: return
         val hash = expectedHash ?: return
         val selectedSpecies = speciesIds.getOrNull(species.selectedItemPosition) ?: return
+        val selectedField = LetsGoCaptureRecordField.values().getOrNull(field.selectedItemPosition) ?: return
         val requested = count.text.toString().trim().toLongOrNull()
         val plan = try {
-            LetsGoCaptureRecordEditing.stage(bytes, hash, selectedSpecies,
-                requested ?: throw IllegalArgumentException("Enter a caught count from 0 to 9,999."))
+            LetsGoCaptureRecordEditing.stage(bytes, hash, selectedSpecies, selectedField,
+                requested ?: throw IllegalArgumentException("Enter a new native count."))
         } catch (failure: Exception) {
-            status.text = failure.message ?: "The requested caught-count edit is unavailable."
+            status.text = failure.message ?: "The requested capture-record edit is unavailable."
             return
         }
         setBusy(true)
         var dispatched = false
-        AlertDialog.Builder(this).setTitle("Save caught count to a new copy?")
+        AlertDialog.Builder(this).setTitle("Save ${plan.field.displayName.lowercase()} count to a new copy?")
             .setMessage("#${plan.speciesId} ${LetsGoSpeciesNames.name(plan.speciesId)}\n" +
                 "Caught: ${plan.before.captured} → ${plan.after.captured}\n" +
                 "Transferred: ${plan.before.transferred} → ${plan.after.transferred}\n\n" +
                 "Allowed byte scope: one native four-byte counter at 0x${plan.valueOffset.toString(16).uppercase()} plus block 12's two-byte CRC. " +
-                "The native all-species totals remain unchanged. PSE will verify a recovery backup and reopen the persisted copy. Choose a NEW empty document.")
+                "Both native all-species totals remain unchanged. PSE will verify a recovery backup and reopen the persisted copy. Choose a NEW empty document.")
             .setNegativeButton("Cancel", null).setOnDismissListener { if (!dispatched) setBusy(false) }
             .setPositiveButton("Choose new copy") { _, _ ->
                 if (!dispatched && !isFinishing && !isDestroyed) {
