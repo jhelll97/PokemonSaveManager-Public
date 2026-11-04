@@ -485,7 +485,8 @@ class SwitchReadOnlyActivity : Activity() {
         trainerButton.text = if (session?.profile?.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE ||
             session?.profile?.family == SwitchGameFamily.SWORD_SHIELD ||
             session?.profile?.family == SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL ||
-            session?.profile?.family == SwitchGameFamily.LEGENDS_ARCEUS)
+            session?.profile?.family == SwitchGameFamily.LEGENDS_ARCEUS ||
+            session?.profile?.family == SwitchGameFamily.SCARLET_VIOLET)
             "◎  Trainer Data" else "◎  Trainer Data • Read-only"
         trainerButton.isEnabled = !busy && session?.supports(SwitchReadCapability.TRAINER_PROFILE) == true
         rideButton.isEnabled = !busy && session?.scarletVioletStorage != null
@@ -4030,7 +4031,7 @@ class SwitchReadOnlyActivity : Activity() {
         val trainer = bound.scarletVioletTrainer ?: return
         fun saved(value: Long?): String = value?.toString() ?: "Not present"
         val detail = buildString {
-            append("${trainer.version.displayName} • Trainer Data • Read-only\n\n")
+            append("${trainer.version.displayName} • Trainer Data\n\n")
             append("Trainer: ${trainer.name.ifBlank { "Not set" }}\nGender: ${if (trainer.gender == 0) "Male" else "Female"}\n")
             append("Language: ${trainer.languageName} (ID ${trainer.languageId})\n")
             append("Displayed trainer ID: ${trainer.displayTrainerId}\n")
@@ -4040,15 +4041,28 @@ class SwitchReadOnlyActivity : Activity() {
             append("Blueberry Points: ${saved(trainer.blueberryPoints)}\n\n")
             append("Currencies are raw saved unsigned values; game balance limits and story consistency are not evaluated. ")
             append("Absent counters stay marked Not present and do not establish DLC or progression status.\n\n")
-            append("Native container integrity passed before reading. No editing or save replacement is available.")
+            append("Native container integrity passed before reading. Trainer Name opens the reviewed native editor; the other displayed fields remain read-only.")
         }
-        val scroll = ScrollView(this).apply {
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
+            val source = selectedSourceUri
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Trainer Data"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchScarletVioletTrainerActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
         }
         AlertDialog.Builder(this).setTitle("${bound.displayName} • Trainer Data")
-            .setView(scroll).setPositiveButton("Close", null).show()
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
     private fun showLegendsZaTrainer(bound: SwitchReadSession) {
