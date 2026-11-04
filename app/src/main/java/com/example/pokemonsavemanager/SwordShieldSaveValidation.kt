@@ -15,6 +15,7 @@ sealed class SwordShieldValidation {
 internal data class SwordShieldPokemonBlocks(val version: SwordShieldVersion, val boxes: ByteArray, val party: ByteArray)
 internal data class SwordShieldInventoryBlock(val version: SwordShieldVersion, val items: ByteArray)
 internal data class SwordShieldInventoryWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
+internal data class SwordShieldDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldTrainerBlock(val version: SwordShieldVersion, val status: ByteArray)
 
 internal data class SwordShieldDexBlocks(val version: SwordShieldVersion, val galar: ByteArray,
@@ -116,6 +117,80 @@ object SwordShieldSaveValidation {
         digest.digest().copyInto(edited, end)
         readInventoryBlock(edited)
         return SwordShieldInventoryWriteResult(edited, absoluteOffset)
+    }
+
+
+    /** Replaces one decoded 0x30-byte regional Pokédex record, then rebuilds encryption and the SHA-256 footer. */
+    internal fun writeDexRecord(
+        source: ByteArray,
+        region: SwordShieldDexRegion,
+        number: Int,
+        decodedRecord: ByteArray
+    ): SwordShieldDexWriteResult {
+        val blocks = readDexBlocks(source)
+        require(number in 1..region.entryCount) { "The regional Pokédex number is outside the native table." }
+        require(decodedRecord.size == 0x30) { "A complete native Sword/Shield Pokédex record is required." }
+        when (region) {
+            SwordShieldDexRegion.GALAR -> require(blocks.galar.size == 0x4B00)
+            SwordShieldDexRegion.ARMOR -> require(blocks.armor?.size == 0x2790) { "The Isle of Armor Pokédex is not allocated in this save." }
+            SwordShieldDexRegion.CROWN -> require(blocks.crown?.size == 0x2760) { "The Crown Tundra Pokédex is not allocated in this save." }
+        }
+
+        val key = when (region) {
+            SwordShieldDexRegion.GALAR -> 0x4716C404L
+            SwordShieldDexRegion.ARMOR -> 0x3F936BA9L
+            SwordShieldDexRegion.CROWN -> 0x3C9366F0L
+        }
+        val expectedLength = region.entryCount * 0x30
+        val relativeOffset = (number - 1) * 0x30
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var absoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val blockKey = cursor.uint32()
+            val stream = KeyStream(blockKey)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            if (blockKey == key) {
+                require(type == 4 && length == expectedLength.toLong()) {
+                    "The selected regional Pokédex block has the wrong native type or size."
+                }
+                repeat(relativeOffset) { stream.next() }
+                repeat(decodedRecord.size) { byteIndex ->
+                    payload[blockStart + relativeOffset + byteIndex] =
+                        (decodedRecord[byteIndex].toInt() xor stream.next()).toByte()
+                }
+                absoluteOffset = blockStart + relativeOffset
+            }
+            cursor.skip(length.toInt())
+        }
+        require(absoluteOffset >= 0) { "The selected regional Pokédex block is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        SwordShieldPokedexReadOnly.read(edited)
+        return SwordShieldDexWriteResult(edited, absoluteOffset)
     }
 
     private fun captureObjects(source: ByteArray, keys: Set<Long>): Pair<SwordShieldValidation.Verified, Map<Long, ByteArray>> {
@@ -242,3 +317,4 @@ object SwordShieldSaveValidation {
     private fun decodeHex(hex: String): ByteArray =
         hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 }
+

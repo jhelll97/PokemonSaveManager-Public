@@ -2963,7 +2963,7 @@ class SwitchReadOnlyActivity : Activity() {
         val labels = SwordShieldDexRegion.values().map { region -> dex.region(region)?.let {
             "${region.displayName}: ${it.seenCount}/${region.entryCount} seen • ${it.caughtCount}/${region.entryCount} caught"
         } ?: "${region.displayName}: Not present in this save" }
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Pokédex • Read-only")
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Pokédex")
             .setItems(labels.toTypedArray()) { _, index ->
                 val region = SwordShieldDexRegion.values()[index]
                 if (session === bound && dex.region(region) != null) showSwordShieldPokedex(bound, region, 0)
@@ -2998,7 +2998,7 @@ class SwitchReadOnlyActivity : Activity() {
         val entry = bound.swordShieldPokedex?.region(region)?.entry(number) ?: return
         val variants = listOf("Male / genderless", "Female", "Shiny male / genderless", "Shiny female")
         val detail = buildString {
-            append("${region.displayName} #${entry.number} • ${SwordShieldSpeciesNames.name(entry.speciesId)} (National #${entry.speciesId})\nRead-only\n\n")
+            append("${region.displayName} #${entry.number} • ${SwordShieldSpeciesNames.name(entry.speciesId)} (National #${entry.speciesId})\n\n")
             append("Seen: ${entry.seen}\nCaught: ${entry.caught}\nCaught Gigantamax flag: ${entry.caughtGigantamax}\n")
             append("Secondary Gigantamax flag (raw +0x28 bit 0): ${entry.secondaryGigantamaxFlag}\n\n")
             for ((index, bits) in entry.seenBits.withIndex()) append("${variants[index]} seen bit indices: ${bits.joinToString().ifBlank { "None" }}\n")
@@ -3007,13 +3007,25 @@ class SwitchReadOnlyActivity : Activity() {
             append("Display Gigantamax: ${entry.displayGigantamax}\nDisplay shiny: ${entry.displayShiny}\nBattled count: ${entry.battledCount}\n\n")
             append("Raw flags (+0x20): ${entry.rawFlags}\nRaw extra (+0x28): ${entry.rawExtra1}\nRaw extra (+0x2C): ${entry.rawExtra2}\n\n")
             append("Seen bits are native indices, not named or legality-checked forms. Bit 63 is a special Gigantamax/Eternamax marker; Urshifu also uses bit 62 for its second Gigantamax form. ")
-            append("Alcremie indices encode cream/sweet combinations. Flags and contradictory states remain as saved; no repair or completion/reward inference. No editing or save replacement.")
+            append("Alcremie indices encode cream/sweet combinations. Flags and contradictory states remain as saved; no repair or completion/reward inference. A normal form index can be registered to a reviewed new copy; special indices 62 and 63 remain locked.")
         }
         val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
             text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
         }) }
         AlertDialog.Builder(this).setTitle("${region.displayName} • ${SwordShieldSpeciesNames.name(entry.speciesId)}")
-            .setView(scroll).setPositiveButton("Close", null).show()
+            .setView(scroll).setNegativeButton("Close", null)
+            .setPositiveButton("Add registration • New copy") { _, _ ->
+                if (session === bound) launchSwordShieldPokedexEditor(bound, region, number)
+            }.show()
+    }
+
+    private fun launchSwordShieldPokedexEditor(bound: SwitchReadSession, region: SwordShieldDexRegion, number: Int) {
+        val source = selectedSourceUri ?: return
+        if (session !== bound) return
+        startActivity(Intent(this, SwitchSwordShieldPokedexActivity::class.java).setData(source)
+            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+            .putExtra("pse.switch.dex.region", region.name).putExtra("pse.switch.dex.number", number)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }
 
     private fun showBdspPokedex(bound: SwitchReadSession, requestedPage: Int) {
