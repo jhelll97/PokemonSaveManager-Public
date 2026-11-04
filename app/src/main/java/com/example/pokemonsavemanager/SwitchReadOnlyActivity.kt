@@ -610,6 +610,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Crown Tundra Progress • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldCrownTundraProgress(bound) }
         })
+        if (bound.swordShieldStarTournament != null) dashboardRoot.addView(Button(this).apply {
+            text = "Galarian Star Tournament • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldStarTournament(bound) }
+        })
         if (bound.letsGoCaptureRecords != null) dashboardRoot.addView(Button(this).apply {
             text = "Capture Records"; isAllCaps = false; isEnabled = !busy && captureRecordsButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && captureRecordsButton.isEnabled) captureRecordsButton.performClick() }
@@ -2657,6 +2661,27 @@ class SwitchReadOnlyActivity : Activity() {
             })
         }
         AlertDialog.Builder(this).setTitle("Crown Tundra Progress • Read-only")
+            .setView(scroll).setPositiveButton("Close", null).show()
+    }
+
+    private fun showSwordShieldStarTournament(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.swordShieldStarTournament ?: return
+        val detail = buildString {
+            append("${read.version.displayName} • Galarian Star Tournament • Read-only\n\n")
+            append("Total victories: ${read.totalVictories}\n\n")
+            append("Victories by partner\n")
+            read.partners.forEach { append("${it.name}: ${it.victories}\n") }
+            append("\nThe complete native container hash and all 21 exact UInt32 scalar layouts passed before display. ")
+            append("PSE presents each native total exactly and does not infer partner availability, tournament unlocks, or reward eligibility. ")
+            append("No victory, partner, tournament, reward, unlock, reset, repair, export, or save-writing action is available here.")
+        }
+        val scroll = ScrollView(this).apply {
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Galarian Star Tournament • Read-only")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 

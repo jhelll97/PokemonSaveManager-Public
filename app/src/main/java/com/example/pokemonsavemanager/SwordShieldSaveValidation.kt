@@ -61,6 +61,11 @@ internal data class SwordShieldCrownTundraProgressBlocks(
     val disconnectStreak: ByteArray,
     val peoniaSpeciesHint: ByteArray
 )
+internal data class SwordShieldStarTournamentBlocks(
+    val version: SwordShieldVersion,
+    val totalVictories: ByteArray,
+    val partnerVictories: List<ByteArray>
+)
 
 internal data class SwordShieldDexBlocks(val version: SwordShieldVersion, val galar: ByteArray,
     val armor: ByteArray?, val crown: ByteArray?)
@@ -265,6 +270,47 @@ object SwordShieldSaveValidation {
             block(endlessStreakKey),
             block(disconnectStreakKey),
             block(peoniaSpeciesHintKey)
+        )
+    }
+
+    /** Reads PKHeX's documented Galarian Star Tournament victory records after the complete container gate passes. */
+    internal fun readStarTournamentBlocks(source: ByteArray): SwordShieldStarTournamentBlocks {
+        val totalKey = 0x9D6727F6L
+        val partnerKeys = listOf(
+            0x3934BEC0L,
+            0xE9131991L,
+            0x7742B542L,
+            0x9A535FA0L,
+            0xFEE68CE1L,
+            0x2D0520CDL,
+            0xFB5133BCL,
+            0x24B9E3CCL,
+            0xB19386DEL,
+            0x3576EE34L,
+            0xB95B1BB9L,
+            0x343E6FC1L,
+            0x6371183BL,
+            0xA2C094C7L,
+            0x9E32AE34L,
+            0x06C0FBC8L,
+            0xE3ED8F16L,
+            0xC0D49E2DL,
+            0xEB07C276L,
+            0xDBE374D7L
+        )
+        val keys = partnerKeys.toSet() + totalKey
+        val (checked, captured) = captureObjects(
+            source,
+            keys,
+            scalarLayouts = keys.associateWith { 14 to 4 }
+        )
+        fun block(key: Long): ByteArray = captured.getValue(key).also {
+            require(it.size == 4) { "A documented Sword/Shield Galarian Star Tournament record is missing or has the wrong native type." }
+        }
+        return SwordShieldStarTournamentBlocks(
+            checked.version,
+            block(totalKey),
+            partnerKeys.map(::block)
         )
     }
 
