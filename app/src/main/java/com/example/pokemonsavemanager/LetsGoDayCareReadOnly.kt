@@ -9,13 +9,14 @@ data class LetsGoDayCarePokemonRead(
 )
 
 class LetsGoDayCareRead internal constructor(
-    val version: LetsGoVersion, val rawBlockBytes: List<Int>, val rawHeaderBytes: List<Int>,
+    val version: LetsGoVersion, val isOccupied: Boolean, val rawOccupiedByte: Int, val stepCounter: Long,
+    val rawBlockBytes: List<Int>, val rawHeaderBytes: List<Int>,
     val rawStoredBytes: List<Int>, val pokemon: LetsGoDayCarePokemonRead?, val recordUnavailableReason: String?
 ) {
     val isZeroStoredRecord: Boolean get() = rawStoredBytes.all { it == 0 }
 }
 
-/** Block 13: opaque eight-byte prefix + one encrypted 232-byte stored PB7; no breeding-state inference. */
+/** Block 13: native occupied flag, step counter and one encrypted 232-byte stored PB7. */
 object LetsGoDayCareReadOnly {
     private val orders = listOf("0123", "0132", "0213", "0312", "0231", "0321",
         "1023", "1032", "2013", "3012", "2031", "3021", "1203", "1302",
@@ -28,12 +29,15 @@ object LetsGoDayCareReadOnly {
         fun frozen(from: Int, end: Int): List<Int> = Collections.unmodifiableList(
             (from until end).map { block[it].toInt() and 255 })
         val stored = block.copyOfRange(8, 240)
+        val rawOccupiedByte = block[0].toInt() and 255
+        val stepCounter = u32(block, 4)
         val zero = stored.all { it == 0.toByte() }
         var reason: String? = null
         val pokemon = if (zero) null else try { decodeStored(stored) } catch (e: IllegalArgumentException) {
             reason = e.message; null
         }
-        return LetsGoDayCareRead(checked.version, frozen(0, 240), frozen(0, 8), frozen(8, 240), pokemon, reason)
+        return LetsGoDayCareRead(checked.version, rawOccupiedByte != 0, rawOccupiedByte, stepCounter,
+            frozen(0, 240), frozen(0, 8), frozen(8, 240), pokemon, reason)
     }
 
     private fun decodeStored(record: ByteArray): LetsGoDayCarePokemonRead {

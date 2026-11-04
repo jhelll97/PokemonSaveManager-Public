@@ -2901,10 +2901,12 @@ class SwitchReadOnlyActivity : Activity() {
         val read = bound.letsGoDayCare ?: return
         val detail = buildString {
             append("${read.version.displayName} • Day Care • Read-only\n\n")
+            append("Native occupied flag: ${if (read.isOccupied) "Occupied" else "Empty"} (raw byte ${read.rawOccupiedByte})\n")
+            append("Native step counter: ${read.stepCounter}\n\n")
             val p = read.pokemon
             if (p != null) {
                 val gender = listOf("Male", "Female", "Genderless").getOrNull(p.gender) ?: "Unknown (${p.gender})"
-                append("Stored Pokémon: ${LetsGoSpeciesNames.name(p.species)} (#${p.species})\n")
+                append("${if (read.isOccupied) "Deposited Pokémon" else "Inactive stored record"}: ${LetsGoSpeciesNames.name(p.species)} (#${p.species})\n")
                 append("Form: ${p.form}\nGender: $gender\nSaved EXP: ${p.experience}\nNature ID: ${p.nature}\n")
                 append("TID16: ${p.tid}\nSID16: ${p.sid}\nPID: ${p.pid.toString(16).uppercase().padStart(8, '0')}\n")
                 append("Encryption constant: ${p.encryptionConstant.toString(16).uppercase().padStart(8, '0')}\n")
@@ -2912,8 +2914,9 @@ class SwitchReadOnlyActivity : Activity() {
             } else if (read.isZeroStoredRecord) append("Stored record is all zero bytes.\n")
             else append("Stored Pokémon summary unavailable: ${read.recordUnavailableReason}\n")
             append("\nThe saved record has no party-stat tail. Level and HP are not supplied by this view. ")
-            append("The eight prefix bytes have no established field meanings here. No occupied/deposited flag, breeding, Egg, fee, earned EXP or withdrawal eligibility is inferred.\n\n")
-            append("Opaque prefix (8 bytes):\n${read.rawHeaderBytes.joinToString(" ") { "%02X".format(it) }}\n\n")
+            append("The occupied flag and unsigned step counter are shown exactly as stored; prefix bytes 1–3 remain undocumented here. ")
+            append("No breeding, Egg, fee, earned EXP or withdrawal eligibility is inferred.\n\n")
+            append("Native header (8 bytes; occupancy at 0, step counter at 4–7):\n${read.rawHeaderBytes.joinToString(" ") { "%02X".format(it) }}\n\n")
             append("Original stored record (232 encrypted bytes):\n${read.rawStoredBytes.joinToString(" ") { "%02X".format(it) }}\n\n")
             append("All 21 native block CRCs passed. Raw data remains available even when the inner record is unreadable. No normalization, deposit, withdrawal, repair, export, replacement or save writing. Legality is not evaluated.")
         }
