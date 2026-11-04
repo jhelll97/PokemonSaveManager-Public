@@ -18,6 +18,7 @@
         <activity android:name=".SwitchLetsGoGoParkImportActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoPlayerAccessoriesActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoMasterTrainerTitleActivity" android:exported="false"/>
+        <activity android:name=".SwitchLetsGoEventWorkExportActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoMysteryGiftActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldItemActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokedexActivity" android:exported="false"/>

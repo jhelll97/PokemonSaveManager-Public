@@ -25,7 +25,8 @@ data class LetsGoEventWorkRead(
 
 /** Reads PKHeX's documented EventWork layout while retaining unknown values as numeric data. */
 object LetsGoEventWorkReadOnly {
-    private const val BLOCK_OFFSET = 0x01200
+    internal const val BLOCK_OFFSET = 0x01200
+    internal const val BLOCK_LENGTH = 0x01800
     private const val WORK_COUNT = 1000
     private const val FLAG_OFFSET = BLOCK_OFFSET + WORK_COUNT * 4
 
@@ -63,6 +64,14 @@ object LetsGoEventWorkReadOnly {
             LetsGoEventFlagCategory(range.name, range.count, setIds)
         }
         return LetsGoEventWorkRead(verified.version, work, flags)
+    }
+
+    /** Returns the exact native EventWork block after complete save validation. */
+    fun blockBytes(bytes: ByteArray): ByteArray {
+        require(LetsGoSaveValidation.inspect(bytes) is LetsGoValidation.Verified) {
+            "A checksum-valid native Let's Go save is required."
+        }
+        return bytes.copyOfRange(BLOCK_OFFSET, BLOCK_OFFSET + BLOCK_LENGTH)
     }
 
     private fun i32(bytes: ByteArray, offset: Int): Int =

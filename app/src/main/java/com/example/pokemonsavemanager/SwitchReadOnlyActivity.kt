@@ -3081,12 +3081,21 @@ class SwitchReadOnlyActivity : Activity() {
             }
             append("\nWork and flag IDs are local to their displayed native category. The 72 work entries outside PKHeX's named ranges remain Unclassified. ")
             append("No numeric value or flag is assigned a guessed story meaning. All 21 native block CRCs passed before reading. ")
-            append("No work change, flag change, export, replacement or save writing.")
+            append("No work change, flag change, replacement or save writing. Exact block export copies native bytes to a new document.")
         }
-        AlertDialog.Builder(this).setTitle("Event Work Inspector • Read-only")
+        val dialog = AlertDialog.Builder(this).setTitle("Event Work Inspector • Read-only")
             .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
-            }) }).setPositiveButton("Close", null).show()
+            }) }).setPositiveButton("Close", null)
+        if (selectedSourceUri != null) dialog.setNeutralButton("Export native block") { _, _ ->
+            val source = selectedSourceUri ?: return@setNeutralButton
+            if (session === bound && !dashboardBusy) startActivity(
+                Intent(this, SwitchLetsGoEventWorkExportActivity::class.java).setData(source)
+                    .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            )
+        }
+        dialog.show()
     }
 
     private fun showLetsGoMysteryGiftHistory(bound: SwitchReadSession) {
