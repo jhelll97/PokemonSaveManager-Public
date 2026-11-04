@@ -592,8 +592,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Native Block Directory • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoBlockDirectory(bound) }
         })
-        if (bound.letsGoMasterTrainerTitles != null) dashboardRoot.addView(Button(this).apply {
-            text = "Master Trainer Titles • Read-only"; isAllCaps = false; isEnabled = !busy
+        val masterTitles = bound.letsGoMasterTrainerTitles
+        if (masterTitles != null) dashboardRoot.addView(Button(this).apply {
+            text = if (masterTitles.unlockedCount == masterTitles.totalTitles) "Master Trainer Titles • All unlocked" else "Master Trainer Titles"
+            isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoMasterTrainerTitles(bound) }
         })
         if (bound.letsGoMysteryGiftHistory != null) dashboardRoot.addView(Button(this).apply {
@@ -3009,10 +3011,35 @@ class SwitchReadOnlyActivity : Activity() {
             append("These are the 156 native title flags in EventWork block 3. Numbered entries remain numeric rather than being guessed into species or display names. ")
             append("All 21 native block CRCs passed before reading. No title unlock, flag change, export, replacement or save writing.")
         }
-        AlertDialog.Builder(this).setTitle("Master Trainer Titles • Read-only")
+        val dialog = AlertDialog.Builder(this).setTitle("Master Trainer Titles")
             .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
-            }) }).setPositiveButton("Close", null).show()
+            }) }).setPositiveButton("Close", null)
+        if (read.unlockedCount < read.totalTitles && selectedSourceUri != null) {
+            dialog.setNeutralButton("Unlock one") { _, _ ->
+                if (session === bound && !dashboardBusy) showLetsGoMasterTrainerTitlePicker(bound, read)
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showLetsGoMasterTrainerTitlePicker(
+        bound: SwitchReadSession,
+        read: LetsGoMasterTrainerTitlesRead
+    ) {
+        if (session !== bound || dashboardBusy) return
+        val source = selectedSourceUri ?: return
+        val lockedIds = (0 until read.totalTitles).filterNot { read.isUnlocked(it) }
+        val labels = lockedIds.map { id -> "${LetsGoMasterTrainerTitlesReadOnly.titleLabel(id)} • ID $id" }
+        AlertDialog.Builder(this).setTitle("Choose one locked title")
+            .setItems(labels.toTypedArray()) { _, index ->
+                if (session === bound && !dashboardBusy) startActivity(
+                    Intent(this, SwitchLetsGoMasterTrainerTitleActivity::class.java).setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.lets_go.master_title.id", lockedIds[index])
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }.setNegativeButton("Cancel", null).show()
     }
 
     private fun showLetsGoMysteryGiftHistory(bound: SwitchReadSession) {
