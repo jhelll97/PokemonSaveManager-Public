@@ -580,6 +580,18 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Player Position • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoPlayerLocation(bound) }
         })
+        if (bound.letsGoPlayerAccessories != null && selectedSourceUri != null) dashboardRoot.addView(Button(this).apply {
+            text = if (bound.letsGoPlayerAccessories.isAllUnlocked) "Player Accessories • All unlocked" else "Player Accessories • Unlock to new copy"
+            isAllCaps = false; isEnabled = !busy && !bound.letsGoPlayerAccessories.isAllUnlocked
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && !dashboardBusy && source != null) startActivity(
+                    Intent(this@SwitchReadOnlyActivity, SwitchLetsGoPlayerAccessoriesActivity::class.java)
+                        .setData(source).putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
+        })
         if (bound.letsGoGameOptions != null) dashboardRoot.addView(Button(this).apply {
             text = "Game Options • Read-only"; isAllCaps = false; isEnabled = !busy && gameOptionsButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && gameOptionsButton.isEnabled) gameOptionsButton.performClick() }
