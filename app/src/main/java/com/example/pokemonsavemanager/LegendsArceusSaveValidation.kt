@@ -25,6 +25,7 @@ internal data class LegendsArceusInventoryBlocks(val regular: ByteArray, val key
 internal data class LegendsArceusInventoryWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class LegendsArceusDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class LegendsArceusPokemonWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
+internal data class LegendsArceusTrainerWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 
 /** Independent read-only container gate; pinned format evidence is in SWITCH_READ_ONLY_FORMATS.md. */
 object LegendsArceusSaveValidation {
@@ -86,6 +87,62 @@ object LegendsArceusSaveValidation {
         val upgrades = (0..3).fold(0L) { value, i -> value or ((raw[i].toLong() and 255) shl (i * 8)) }
         return LegendsArceusInventoryBlocks(captured.getValue(0x9FE2790AL), captured.getValue(0x59A4D0C3L),
             captured.getValue(0x8E434F0DL), captured.getValue(0xF5D9F4A5L), captured.getValue(0x00EF4BAEL), upgrades)
+    }
+
+    /** Replaces the decoded native trainer-name field and rebuilds native container integrity. */
+    internal fun writeTrainerName(source: ByteArray, encodedName: ByteArray): LegendsArceusTrainerWriteResult {
+        readTrainerBlocks(source)
+        require(encodedName.size == 26) { "A complete native Legends: Arceus trainer-name field is required." }
+        val relativeOffset = 0x20
+        val blockSize = requiredObjects.getValue(STATUS_KEY)
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var absoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            if (key == STATUS_KEY) {
+                require(type == 4 && length == blockSize.toLong()) {
+                    "The Legends: Arceus trainer status object has the wrong native type or size."
+                }
+                repeat(relativeOffset) { stream.next() }
+                repeat(encodedName.size) { byteIndex ->
+                    payload[blockStart + relativeOffset + byteIndex] =
+                        (encodedName[byteIndex].toInt() xor stream.next()).toByte()
+                }
+                absoluteOffset = blockStart + relativeOffset
+            }
+            cursor.skip(length.toInt())
+        }
+        require(absoluteOffset >= 0) { "The Legends: Arceus trainer status object is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readTrainerBlocks(edited)
+        return LegendsArceusTrainerWriteResult(edited, absoluteOffset)
     }
 
     /** Replaces one decoded four-byte inventory record and rebuilds native container integrity. */
