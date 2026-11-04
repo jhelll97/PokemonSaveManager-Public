@@ -66,6 +66,15 @@ internal data class SwordShieldStarTournamentBlocks(
     val totalVictories: ByteArray,
     val partnerVictories: List<ByteArray>
 )
+internal data class SwordShieldSwordsOfJusticeBlocks(
+    val version: SwordShieldVersion,
+    val questStatus: ByteArray,
+    val questProgress: ByteArray,
+    val cobalionProgress: ByteArray,
+    val terrakionProgress: ByteArray,
+    val virizionProgress: ByteArray,
+    val keldeoProgress: ByteArray
+)
 
 internal data class SwordShieldDexBlocks(val version: SwordShieldVersion, val galar: ByteArray,
     val armor: ByteArray?, val crown: ByteArray?)
@@ -311,6 +320,41 @@ object SwordShieldSaveValidation {
             checked.version,
             block(totalKey),
             partnerKeys.map(::block)
+        )
+    }
+
+    /** Reads PKHeX's documented Crown Tundra Swords of Justice quest records after the complete container gate passes. */
+    internal fun readSwordsOfJusticeBlocks(source: ByteArray): SwordShieldSwordsOfJusticeBlocks {
+        val questStatusKey = 0x4DBB9B79L
+        val questProgressKey = 0xCB135C68L
+        val cobalionProgressKey = 0xC35F6291L
+        val terrakionProgressKey = 0x03C69A96L
+        val virizionProgressKey = 0xB98F962BL
+        val keldeoProgressKey = 0x9A39C8FCL
+        val keys = setOf(
+            questStatusKey,
+            questProgressKey,
+            cobalionProgressKey,
+            terrakionProgressKey,
+            virizionProgressKey,
+            keldeoProgressKey
+        )
+        val (checked, captured) = captureObjects(
+            source,
+            keys,
+            scalarLayouts = keys.associateWith { 14 to 4 }
+        )
+        fun block(key: Long): ByteArray = captured.getValue(key).also {
+            require(it.size == 4) { "A documented Sword/Shield Swords of Justice quest record is missing or has the wrong native type." }
+        }
+        return SwordShieldSwordsOfJusticeBlocks(
+            checked.version,
+            block(questStatusKey),
+            block(questProgressKey),
+            block(cobalionProgressKey),
+            block(terrakionProgressKey),
+            block(virizionProgressKey),
+            block(keldeoProgressKey)
         )
     }
 

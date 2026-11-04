@@ -614,6 +614,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Galarian Star Tournament • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldStarTournament(bound) }
         })
+        if (bound.swordShieldSwordsOfJustice != null) dashboardRoot.addView(Button(this).apply {
+            text = "Swords of Justice Quest • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldSwordsOfJustice(bound) }
+        })
         if (bound.letsGoCaptureRecords != null) dashboardRoot.addView(Button(this).apply {
             text = "Capture Records"; isAllCaps = false; isEnabled = !busy && captureRecordsButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && captureRecordsButton.isEnabled) captureRecordsButton.performClick() }
@@ -2682,6 +2686,30 @@ class SwitchReadOnlyActivity : Activity() {
             })
         }
         AlertDialog.Builder(this).setTitle("Galarian Star Tournament • Read-only")
+            .setView(scroll).setPositiveButton("Close", null).show()
+    }
+
+    private fun showSwordShieldSwordsOfJustice(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.swordShieldSwordsOfJustice ?: return
+        val detail = buildString {
+            append("${read.version.displayName} • Swords of Justice Quest • Read-only\n\n")
+            append("Quest status: ${read.questStatus} • ${read.questStatusLabel}\n")
+            append("Overall progress: ${read.questProgress} • ${read.questProgressLabel}\n\n")
+            append("Cobalion: ${read.cobalionProgress} • ${read.swordsMemberLabel(read.cobalionProgress)}\n")
+            append("Terrakion: ${read.terrakionProgress} • ${read.swordsMemberLabel(read.terrakionProgress)}\n")
+            append("Virizion: ${read.virizionProgress} • ${read.swordsMemberLabel(read.virizionProgress)}\n")
+            append("Keldeo: ${read.keldeoProgress} • ${read.keldeoProgressLabel}\n\n")
+            append("The complete native container hash and all six exact UInt32 scalar layouts passed before display. ")
+            append("Only PKHeX's documented quest values are interpreted; every native value remains exact. ")
+            append("No footprint, location, encounter, capture, report, quest, reward, unlock, repair, export, or save-writing action is available here.")
+        }
+        val scroll = ScrollView(this).apply {
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Swords of Justice Quest • Read-only")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 
