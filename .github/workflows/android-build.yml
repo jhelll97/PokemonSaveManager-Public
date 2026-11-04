@@ -63,7 +63,7 @@ jobs:
           for attempt in 1 2 3; do
             gradle :app:compileDebugSources --no-daemon --max-workers=1 \
               -Pkotlin.compiler.execution.strategy=in-process \
-              "-Dorg.gradle.jvmargs=-Xmx13312m -XX:MaxMetaspaceSize=512m -XX:+UseG1GC" \
+              "-Dorg.gradle.jvmargs=-Xmx14336m -XX:MaxMetaspaceSize=512m -XX:+UseG1GC" \
               2>&1 | tee "$log"
             status="${PIPESTATUS[0]}"
             if [ "$status" -eq 0 ]; then
