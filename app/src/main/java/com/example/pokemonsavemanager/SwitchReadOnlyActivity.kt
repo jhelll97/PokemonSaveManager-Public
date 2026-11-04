@@ -545,9 +545,9 @@ class SwitchReadOnlyActivity : Activity() {
                 })
             }
         }
-        if (bound.profile.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE) dashboardRoot.addView(Button(this).apply {
+        if (bound.profile.family in setOf(SwitchGameFamily.LETS_GO_PIKACHU_EEVEE, SwitchGameFamily.SWORD_SHIELD)) dashboardRoot.addView(Button(this).apply {
             text = "🎁  Events"; isAllCaps = false; textSize = 17f; isEnabled = !busy && selectedSourceUri != null
-            setOnClickListener { if (session === bound && !dashboardBusy) launchLetsGoEvents(bound) }
+            setOnClickListener { if (session === bound && !dashboardBusy) launchSwitchEvents(bound) }
         })
         if (bound.letsGoDayCare != null) dashboardRoot.addView(Button(this).apply {
             text = "Day Care • Read-only"; isAllCaps = false; isEnabled = !busy && nurseryButton.isEnabled
@@ -1040,8 +1040,9 @@ class SwitchReadOnlyActivity : Activity() {
                     val section = initialSection
                     initialSection = null
                     val button = when (section) { "trainer" -> trainerButton; "party" -> partyButton; "storage" -> storageButton; "inventory" -> inventoryButton; "pokedex" -> pokedexButton; else -> null }
-                    if (section == "events" && result.profile.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE)
-                        launchLetsGoEvents(result)
+                    if (section == "events" && result.profile.family in setOf(
+                            SwitchGameFamily.LETS_GO_PIKACHU_EEVEE, SwitchGameFamily.SWORD_SHIELD))
+                        launchSwitchEvents(result)
                     else if (button?.isEnabled == true) button.performClick()
                     else if (button != null) {
                         status.text = "This read-only section is not available for the selected save. Other available sections remain accessible below."
@@ -1064,10 +1065,15 @@ class SwitchReadOnlyActivity : Activity() {
         }
     }
 
-    private fun launchLetsGoEvents(bound: SwitchReadSession) {
+    private fun launchSwitchEvents(bound: SwitchReadSession) {
         val source = selectedSourceUri ?: return
-        if (session !== bound || bound.profile.family != SwitchGameFamily.LETS_GO_PIKACHU_EEVEE) return
-        startActivity(Intent(this, SwitchLetsGoEventActivity::class.java).setData(source)
+        if (session !== bound) return
+        val activity = when (bound.profile.family) {
+            SwitchGameFamily.LETS_GO_PIKACHU_EEVEE -> SwitchLetsGoEventActivity::class.java
+            SwitchGameFamily.SWORD_SHIELD -> SwitchSwordShieldEventActivity::class.java
+            else -> return
+        }
+        startActivity(Intent(this, activity).setData(source)
             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }

@@ -14,6 +14,7 @@
         <activity android:name=".SwitchLetsGoEventActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldItemActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokedexActivity" android:exported="false"/>
+        <activity android:name=".SwitchSwordShieldEventActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspItemActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusItemActivity" android:exported="false"/>

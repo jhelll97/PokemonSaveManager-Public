@@ -16,6 +16,7 @@ internal data class SwordShieldPokemonBlocks(val version: SwordShieldVersion, va
 internal data class SwordShieldInventoryBlock(val version: SwordShieldVersion, val items: ByteArray)
 internal data class SwordShieldInventoryWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
+internal data class SwordShieldPokemonWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldTrainerBlock(val version: SwordShieldVersion, val status: ByteArray)
 
 internal data class SwordShieldDexBlocks(val version: SwordShieldVersion, val galar: ByteArray,
@@ -191,6 +192,71 @@ object SwordShieldSaveValidation {
         digest.digest().copyInto(edited, end)
         SwordShieldPokedexReadOnly.read(edited)
         return SwordShieldDexWriteResult(edited, absoluteOffset)
+    }
+
+    /** Replaces one decoded native PC-box PK8 slot, then rebuilds encryption and the SHA-256 footer. */
+    internal fun writeBoxRecord(
+        source: ByteArray,
+        box: Int,
+        position: Int,
+        record: ByteArray
+    ): SwordShieldPokemonWriteResult {
+        val blocks = readPokemonBlocks(source)
+        require(box in 1..32 && position in 1..30) { "The native Sword/Shield box slot is outside PC storage." }
+        require(record.size == SwordShieldPokemonReadOnly.RECORD_SIZE) { "A complete 344-byte native PK8 is required." }
+        require(SwordShieldPokemonReadOnly.read(record) is SwordShieldSlotRead.Pokemon) {
+            "The supplied native PK8 did not pass its stored-data checksum."
+        }
+        require(blocks.boxes.size == 0x50A00) { "The native Sword/Shield PC storage object has the wrong size." }
+        val relativeOffset = ((box - 1) * 30 + position - 1) * SwordShieldPokemonReadOnly.RECORD_SIZE
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var absoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            if (key == 0x0D66012CL) {
+                require(type == 4 && length == 0x50A00L) {
+                    "The native Sword/Shield PC storage object has the wrong type or size."
+                }
+                repeat(relativeOffset) { stream.next() }
+                repeat(record.size) { byteIndex ->
+                    payload[blockStart + relativeOffset + byteIndex] =
+                        (record[byteIndex].toInt() xor stream.next()).toByte()
+                }
+                absoluteOffset = blockStart + relativeOffset
+            }
+            cursor.skip(length.toInt())
+        }
+        require(absoluteOffset >= 0) { "The native Sword/Shield PC storage object is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        SwordShieldStorageReadOnly.read(edited)
+        return SwordShieldPokemonWriteResult(edited, absoluteOffset)
     }
 
     private fun captureObjects(source: ByteArray, keys: Set<Long>): Pair<SwordShieldValidation.Verified, Map<Long, ByteArray>> {
