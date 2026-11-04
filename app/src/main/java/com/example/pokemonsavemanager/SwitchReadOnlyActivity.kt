@@ -545,6 +545,10 @@ class SwitchReadOnlyActivity : Activity() {
                 })
             }
         }
+        if (bound.profile.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE) dashboardRoot.addView(Button(this).apply {
+            text = "🎁  Events"; isAllCaps = false; textSize = 17f; isEnabled = !busy && selectedSourceUri != null
+            setOnClickListener { if (session === bound && !dashboardBusy) launchLetsGoEvents(bound) }
+        })
         if (bound.letsGoDayCare != null) dashboardRoot.addView(Button(this).apply {
             text = "Day Care • Read-only"; isAllCaps = false; isEnabled = !busy && nurseryButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && nurseryButton.isEnabled) nurseryButton.performClick() }
@@ -1036,7 +1040,9 @@ class SwitchReadOnlyActivity : Activity() {
                     val section = initialSection
                     initialSection = null
                     val button = when (section) { "trainer" -> trainerButton; "party" -> partyButton; "storage" -> storageButton; "inventory" -> inventoryButton; "pokedex" -> pokedexButton; else -> null }
-                    if (button?.isEnabled == true) button.performClick()
+                    if (section == "events" && result.profile.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE)
+                        launchLetsGoEvents(result)
+                    else if (button?.isEnabled == true) button.performClick()
                     else if (button != null) {
                         status.text = "This read-only section is not available for the selected save. Other available sections remain accessible below."
                         refreshDashboard(false)
@@ -1056,6 +1062,14 @@ class SwitchReadOnlyActivity : Activity() {
             bound.swordShieldStorage != null -> showSwordShieldParty(bound)
             else -> showLetsGoParty(bound)
         }
+    }
+
+    private fun launchLetsGoEvents(bound: SwitchReadSession) {
+        val source = selectedSourceUri ?: return
+        if (session !== bound || bound.profile.family != SwitchGameFamily.LETS_GO_PIKACHU_EEVEE) return
+        startActivity(Intent(this, SwitchLetsGoEventActivity::class.java).setData(source)
+            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }
 
     private fun openSwitchStorage(bound: SwitchReadSession) {

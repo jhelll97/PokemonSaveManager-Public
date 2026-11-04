@@ -8,7 +8,7 @@ data class LetsGoPokemonRead(
     val cachedLevel: Int, val experience: Long, val nature: Int,
     val currentHp: Int, val maximumHp: Int, val originalTrainer: String,
     val tid: Int, val sid: Int, val pid: Long, val encryptionConstant: Long,
-    val shiny: Boolean, val isEgg: Boolean, val isPartnerForm: Boolean,
+    val shiny: Boolean, val isEgg: Boolean, val fatefulEncounter: Boolean, val isPartnerForm: Boolean,
     val moves: List<LetsGoMoveRead>, val ivs: List<Int>, val awakened: List<Int>
 )
 
@@ -56,7 +56,7 @@ object LetsGoPokemonReadOnly {
             species, text(plain, 0x40), form, ((plain[0x1D].toInt() and 255) ushr 1) and 3,
             plain[0xEC].toInt() and 255, u32(plain, 0x10), plain[0x1C].toInt() and 255,
             u16(plain, 0xF0), u16(plain, 0xF2), text(plain, 0xB0), tid, sid, pid, ec,
-            shinyXor < 16, iv32 and 0x40000000L != 0L,
+            shinyXor < 16, iv32 and 0x40000000L != 0L, plain[0x1D].toInt() and 1 != 0,
             (species == 25 && form == 8) || (species == 133 && form == 1),
             Collections.unmodifiableList((0..3).map { LetsGoMoveRead(u16(plain, 0x5A + it * 2), plain[0x62 + it].toInt() and 255) }),
             Collections.unmodifiableList((0..5).map { ((iv32 ushr (it * 5)) and 31).toInt() }),

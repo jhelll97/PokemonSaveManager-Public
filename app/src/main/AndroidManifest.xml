@@ -11,6 +11,7 @@
         <activity android:name=".SwitchBdspTextSpeedActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoItemActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoPokedexActivity" android:exported="false"/>
+        <activity android:name=".SwitchLetsGoEventActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldItemActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspItemActivity" android:exported="false"/>

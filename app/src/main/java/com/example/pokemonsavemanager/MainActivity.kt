@@ -274,7 +274,7 @@ class MainActivity : Activity() {
         val eventsRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         addDashboardCard(eventsRow, "🎁  Events", {
             val f=importedFile
-            if(activeSwitchSave != null){showDialog("Events • Read-only","Switch event injection is locked. Read-only event/progression views will follow the source integration.")}
+            if(activeSwitchSave != null){openActiveSwitchSection("events")}
             else if(f==null){showDialog("Events","Load a save before opening Events.")}
             else{
                 val data=runCatching{f.readBytes()}.getOrNull()
