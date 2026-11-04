@@ -409,9 +409,9 @@ object SwordShieldSaveValidation {
     /** Reads the documented four-byte Sword/Shield playtime counter after the complete container gate passes. */
     internal fun readPlayTimeBlock(source: ByteArray): SwordShieldPlayTimeBlock {
         val key = 0x8CBBFD90L
-        val (checked, captured) = captureObjects(source, setOf(key), scalarLayouts = mapOf(key to (4 to 4)))
+        val (checked, captured) = captureObjects(source, setOf(key), objectLayouts = mapOf(key to 8))
         val value = captured.getValue(key)
-        require(value.size == 4) { "The native Sword/Shield playtime record is missing or has the wrong native type." }
+        require(value.size == 8) { "The native Sword/Shield playtime block is missing or has the wrong native type." }
         return SwordShieldPlayTimeBlock(checked.version, value)
     }
 
