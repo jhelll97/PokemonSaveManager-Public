@@ -22,6 +22,12 @@ data class LetsGoBlockDirectoryRead(
     val allCrcsMatch: Boolean get() = entries.all { it.crcMatches }
 }
 
+data class LetsGoNativeBlockExport(
+    val version: LetsGoVersion,
+    val entry: LetsGoBlockDirectoryEntry,
+    val bytes: ByteArray
+)
+
 /** Exposes the native SAV_BEEF block directory only after the complete save passes validation. */
 object LetsGoBlockDirectoryReadOnly {
     fun read(bytes: ByteArray): LetsGoBlockDirectoryRead {
@@ -43,6 +49,18 @@ object LetsGoBlockDirectoryReadOnly {
             "The native Let's Go block directory changed after validation."
         }
         return LetsGoBlockDirectoryRead(verified.version, entries)
+    }
+
+    /** Returns one exact native block after validating the complete directory and every block CRC. */
+    fun export(bytes: ByteArray, blockId: Int): LetsGoNativeBlockExport {
+        val read = read(bytes)
+        val entry = read.entries.firstOrNull { it.id == blockId }
+            ?: throw IllegalArgumentException("The selected native block ID is unavailable.")
+        return LetsGoNativeBlockExport(
+            version = read.version,
+            entry = entry,
+            bytes = bytes.copyOfRange(entry.offset, entry.offset + entry.length)
+        )
     }
 
     private fun u16(bytes: ByteArray, offset: Int): Int =

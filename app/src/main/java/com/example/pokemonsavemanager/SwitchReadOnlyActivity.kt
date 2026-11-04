@@ -2974,12 +2974,38 @@ class SwitchReadOnlyActivity : Activity() {
             }
             append("\nThe directory is shown with native numeric block IDs; undocumented blocks are not assigned guessed names. ")
             append("The complete one-mebibyte save and all 21 descriptors passed validation before display. ")
-            append("No checksum repair, block change, export, replacement or save writing.")
+            append("No checksum repair, block change, replacement or save writing. Exact block export copies native bytes to a new document.")
         }
-        AlertDialog.Builder(this).setTitle("Native Block Directory • Read-only")
+        val dialog = AlertDialog.Builder(this).setTitle("Native Block Directory • Read-only")
             .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
-            }) }).setPositiveButton("Close", null).show()
+            }) }).setPositiveButton("Close", null)
+        if (selectedSourceUri != null) dialog.setNeutralButton("Export one block") { _, _ ->
+            if (session === bound && !dashboardBusy) showLetsGoNativeBlockExportPicker(bound, read)
+        }
+        dialog.show()
+    }
+
+    private fun showLetsGoNativeBlockExportPicker(
+        bound: SwitchReadSession,
+        read: LetsGoBlockDirectoryRead
+    ) {
+        if (session !== bound || dashboardBusy) return
+        val source = selectedSourceUri ?: return
+        fun hex(value: Int, width: Int = 5): String = value.toString(16).uppercase().padStart(width, '0')
+        val labels = read.entries.map { entry ->
+            "Block ${entry.id.toString().padStart(2, '0')} • 0x${hex(entry.offset)}–0x${hex(entry.endOffset)} • ${entry.length} bytes"
+        }
+        AlertDialog.Builder(this).setTitle("Export exact native block")
+            .setItems(labels.toTypedArray()) { _, index ->
+                val selected = read.entries[index]
+                if (session === bound && !dashboardBusy) startActivity(
+                    Intent(this, SwitchLetsGoNativeBlockExportActivity::class.java).setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.lets_go.block.id", selected.id)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }.setNegativeButton("Cancel", null).show()
     }
 
     private fun showLetsGoMasterTrainerTitles(bound: SwitchReadSession) {
