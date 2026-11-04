@@ -598,6 +598,10 @@ class SwitchReadOnlyActivity : Activity() {
             isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoMasterTrainerTitles(bound) }
         })
+        if (bound.letsGoEventWork != null) dashboardRoot.addView(Button(this).apply {
+            text = "Event Work Inspector • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoEventWork(bound) }
+        })
         if (bound.letsGoMysteryGiftHistory != null) dashboardRoot.addView(Button(this).apply {
             text = "Mystery Gift History • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoMysteryGiftHistory(bound) }
@@ -3040,6 +3044,49 @@ class SwitchReadOnlyActivity : Activity() {
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 )
             }.setNegativeButton("Cancel", null).show()
+    }
+
+    private fun showLetsGoEventWork(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.letsGoEventWork ?: return
+        fun ranges(ids: List<Int>): String {
+            if (ids.isEmpty()) return "None"
+            val output = mutableListOf<String>()
+            var start = ids.first()
+            var previous = start
+            for (value in ids.drop(1)) {
+                if (value == previous + 1) previous = value
+                else {
+                    output += if (start == previous) "$start" else "$start–$previous"
+                    start = value
+                    previous = value
+                }
+            }
+            output += if (start == previous) "$start" else "$start–$previous"
+            return output.joinToString(", ")
+        }
+        val detail = buildString {
+            append("${read.version.displayName} • Event Work Inspector • Read-only\n\n")
+            append("Nonzero work values: ${read.nonzeroWorkCount} of 1,000\n")
+            append("Set categorized flags: ${read.setFlagCount} of 4,096\n")
+            for (category in read.workCategories) {
+                append("\n${category.name} work • ${category.nonzeroValues.size} of ${category.total} nonzero\n")
+                append(if (category.nonzeroValues.isEmpty()) "None\n" else category.nonzeroValues.joinToString(", ") {
+                    "${it.id}=${it.value}"
+                } + "\n")
+            }
+            for (category in read.flagCategories) {
+                append("\n${category.name} flags • ${category.setIds.size} of ${category.total} set\n")
+                append("Set IDs: ${ranges(category.setIds)}\n")
+            }
+            append("\nWork and flag IDs are local to their displayed native category. The 72 work entries outside PKHeX's named ranges remain Unclassified. ")
+            append("No numeric value or flag is assigned a guessed story meaning. All 21 native block CRCs passed before reading. ")
+            append("No work change, flag change, export, replacement or save writing.")
+        }
+        AlertDialog.Builder(this).setTitle("Event Work Inspector • Read-only")
+            .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
+            }) }).setPositiveButton("Close", null).show()
     }
 
     private fun showLetsGoMysteryGiftHistory(bound: SwitchReadSession) {
