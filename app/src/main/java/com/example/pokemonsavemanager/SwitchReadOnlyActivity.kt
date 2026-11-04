@@ -576,6 +576,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "GO Park • Read-only"; isAllCaps = false; isEnabled = !busy && goParkButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && goParkButton.isEnabled) goParkButton.performClick() }
         })
+        if (bound.letsGoStorage != null) dashboardRoot.addView(Button(this).apply {
+            text = "Storage Pool Map • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoStoragePoolMap(bound) }
+        })
         if (bound.letsGoPlayerLocation != null) dashboardRoot.addView(Button(this).apply {
             text = "Player Position • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoPlayerLocation(bound) }
@@ -1252,6 +1256,44 @@ class SwitchReadOnlyActivity : Activity() {
             .setItems(labels.toTypedArray()) { _, position ->
                 if (session === bound) party[position].storage?.let { showLetsGoPokemon(bound, it) }
             }.setNegativeButton("Close", null).show()
+    }
+
+    private fun showLetsGoStoragePoolMap(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val storage = bound.letsGoStorage ?: return
+        fun pointer(slot: LetsGoStorageSlot?): String {
+            if (slot == null) return "1001 • Empty sentinel"
+            val target = when (val read = slot.read) {
+                LetsGoSlotRead.Empty -> "Empty record"
+                is LetsGoSlotRead.Invalid -> "Unreadable PB7 • ${read.reason}"
+                is LetsGoSlotRead.Pokemon -> {
+                    val pokemon = read.value
+                    val species = LetsGoSpeciesNames.name(pokemon.species)
+                    val nickname = pokemon.nickname.takeIf { it.isNotBlank() && it != species }
+                    (nickname?.let { "$it ($species)" } ?: species) +
+                        " • #${pokemon.species} • Form ${pokemon.form}"
+                }
+            }
+            return "${slot.index} • Stored record #${slot.index + 1} • $target"
+        }
+        val detail = buildString {
+            append("${bound.displayName} • Storage Pool Map • Read-only\n\n")
+            append("Native stored-list count: ${storage.count} of 1,000\n")
+            append("Next stored-list index: ${storage.count}\n")
+            for (party in storage.party()) {
+                append("Party ${party.position} pointer: ${pointer(party.storage)}\n")
+            }
+            val partner = storage.partnerIndex?.let { storage.slot(it) }
+            append("Partner pointer: ${pointer(partner)}\n\n")
+            append("Pointers are the native zero-based PokeListHeader values; 1001 is the native empty sentinel. ")
+            append("Every nonempty pointer was required to target the current compressed stored list, and party pointers were required to be distinct. ")
+            append("All 21 native block CRCs passed. Pointed PB7 records are shown as checksum-valid details or explicit parser failures without compacting the list. ")
+            append("No pointer change, party reorder, partner reassignment, compression, export, replacement or save writing.")
+        }
+        AlertDialog.Builder(this).setTitle("Storage Pool Map • Read-only")
+            .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
+            }) }).setPositiveButton("Close", null).show()
     }
 
     private fun showLetsGoStorage(bound: SwitchReadSession, page: Int) {
