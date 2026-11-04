@@ -23,6 +23,7 @@ internal data class LegendsArceusInventoryBlocks(val regular: ByteArray, val key
     val stored: ByteArray, val recipes: ByteArray, val favorites: ByteArray, val satchelUpgrades: Long)
 
 internal data class LegendsArceusInventoryWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
+internal data class LegendsArceusDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 
 /** Independent read-only container gate; pinned format evidence is in SWITCH_READ_ONLY_FORMATS.md. */
 object LegendsArceusSaveValidation {
@@ -151,6 +152,66 @@ object LegendsArceusSaveValidation {
         digest.digest().copyInto(edited, end)
         readInventoryBlocks(edited)
         return LegendsArceusInventoryWriteResult(edited, absoluteOffset)
+    }
+
+    /** Replaces one native obtained-count word in the validated Hisui research object. */
+    internal fun writeDexObtainedCount(source: ByteArray, speciesId: Int, count: Int): LegendsArceusDexWriteResult {
+        readDexBlock(source)
+        require(speciesId in 1..905) { "The selected species is outside the supported Legends: Arceus table." }
+        require(count in 1..0xFFFF) { "The native obtained count is outside its unsigned word range." }
+        val keyValue = 0x02168706L
+        val relativeOffset = 0x70 + speciesId * 0x58 + 0xA
+        val blockSize = requiredObjects.getValue(keyValue)
+        require(relativeOffset in 0..blockSize - 2) { "The native research record is outside the Pokédex block." }
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var absoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            if (key == keyValue) {
+                require(type == 4 && length == blockSize.toLong()) {
+                    "The Legends: Arceus Pokédex block has the wrong native type or size."
+                }
+                repeat(relativeOffset) { stream.next() }
+                val decoded = byteArrayOf(count.toByte(), (count ushr 8).toByte())
+                repeat(decoded.size) { byteIndex ->
+                    payload[blockStart + relativeOffset + byteIndex] =
+                        (decoded[byteIndex].toInt() xor stream.next()).toByte()
+                }
+                absoluteOffset = blockStart + relativeOffset
+            }
+            cursor.skip(length.toInt())
+        }
+        require(absoluteOffset >= 0) { "The Legends: Arceus Pokédex block is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readDexBlock(edited)
+        return LegendsArceusDexWriteResult(edited, absoluteOffset)
     }
 
     private fun inspect(source: ByteArray, captured: MutableMap<Long, ByteArray>?, uintKeys: Set<Long> = emptySet(),
