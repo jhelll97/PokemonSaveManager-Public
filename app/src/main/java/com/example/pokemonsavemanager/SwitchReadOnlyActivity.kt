@@ -576,6 +576,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "GO Park • Read-only"; isAllCaps = false; isEnabled = !busy && goParkButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && goParkButton.isEnabled) goParkButton.performClick() }
         })
+        if (bound.letsGoPlayerLocation != null) dashboardRoot.addView(Button(this).apply {
+            text = "Player Position • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoPlayerLocation(bound) }
+        })
         if (bound.letsGoGameOptions != null) dashboardRoot.addView(Button(this).apply {
             text = "Game Options • Read-only"; isAllCaps = false; isEnabled = !busy && gameOptionsButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && gameOptionsButton.isEnabled) gameOptionsButton.performClick() }
@@ -2810,6 +2814,40 @@ class SwitchReadOnlyActivity : Activity() {
             append("All 21 native block CRCs passed. Raw data remains available even when the inner record is unreadable. No normalization, deposit, withdrawal, repair, export, replacement or save writing. Legality is not evaluated.")
         }
         AlertDialog.Builder(this).setTitle("Day Care • Read-only")
+            .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
+            }) }).setPositiveButton("Close", null).show()
+    }
+
+    private fun showLetsGoPlayerLocation(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.letsGoPlayerLocation ?: return
+        fun raw(bits: Long): String = bits.toString(16).uppercase().padStart(8, '0')
+        fun transform(label: String, value: Float, bits: Long): String =
+            "$label: ${if (value.isFinite()) value.toString() else "Non-finite"} • Raw 0x${raw(bits)}"
+        val detail = buildString {
+            append("${read.version.displayName} • Player Position • Read-only\n\n")
+            append("Native map identifier: ${read.mapId}\n")
+            append("Map identifier hex: ${read.mapId.toString(16).uppercase().padStart(16, '0')}\n")
+            append("Map bytes: ${read.mapBytes.joinToString(" ") { "%02X".format(it) }}\n\n")
+            append("Position\n")
+            append(transform("X", read.x, read.positionBits[0])).append('\n')
+            append(transform("Y", read.y, read.positionBits[2])).append('\n')
+            append(transform("Z", read.z, read.positionBits[1])).append("\n\n")
+            append("Scale\n")
+            append(transform("X", read.scaleX, read.scaleBits[0])).append('\n')
+            append(transform("Y", read.scaleY, read.scaleBits[2])).append('\n')
+            append(transform("Z", read.scaleZ, read.scaleBits[1])).append("\n\n")
+            append("Rotation quaternion\n")
+            append(transform("X", read.rotationX, read.rotationBits[0])).append('\n')
+            append(transform("Y", read.rotationY, read.rotationBits[2])).append('\n')
+            append(transform("Z", read.rotationZ, read.rotationBits[1])).append('\n')
+            append(transform("W", read.rotationW, read.rotationBits[3])).append("\n\n")
+            if (!read.allTransformsFinite) append("One or more saved transform values are non-finite; their raw bits are retained without interpretation.\n\n")
+            append("The map identifier is shown exactly as saved and is not guessed into a location name. ")
+            append("All 21 native block CRCs passed before reading. No teleport, coordinate change, normalization, export, replacement or save writing.")
+        }
+        AlertDialog.Builder(this).setTitle("Player Position • Read-only")
             .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
             }) }).setPositiveButton("Close", null).show()
