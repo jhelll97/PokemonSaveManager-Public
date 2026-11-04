@@ -92,7 +92,7 @@ class SwitchBdspPokedexActivity : Activity() {
     private fun inspectVerifiedCopy() {
         if (busy) return; val (uri, hash) = verifiedCopy ?: return
         startActivity(Intent(this, SwitchReadOnlyActivity::class.java).setData(uri)
-            .putExtra("pse.switch.family", SwitchGameFamily.BDSP.name).putExtra("pse.switch.sha256", hash)
+            .putExtra("pse.switch.family", SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL.name).putExtra("pse.switch.sha256", hash)
             .putExtra("pse.switch.section", "pokedex").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }
     private fun reviewChange() {
@@ -131,8 +131,8 @@ class SwitchBdspPokedexActivity : Activity() {
             val result = runCatching { plan.saveNewCopy(
                 readSource = { readSource() },
                 retainBackup = { original ->
-                    val backup = SwitchSafeBackupStore.createVerified(this, SwitchGameFamily.BDSP, original); backupName = backup.file.name
-                    SwitchSafeBackupStore.readVerified(this, SwitchGameFamily.BDSP, backup.file, backup.sha256)
+                    val backup = SwitchSafeBackupStore.createVerified(this, SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL, original); backupName = backup.file.name
+                    SwitchSafeBackupStore.readVerified(this, SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL, backup.file, backup.sha256)
                 },
                 readDestination = { readDocument(uri) },
                 writeDestination = { edited ->
