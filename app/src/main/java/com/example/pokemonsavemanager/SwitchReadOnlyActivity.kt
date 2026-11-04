@@ -60,6 +60,7 @@ class SwitchReadOnlyActivity : Activity() {
     private lateinit var battleTowerButton: Button
     private lateinit var nurseryButton: Button
     private lateinit var captureRecordsButton: Button
+    private lateinit var goParkButton: Button
     private lateinit var undergroundButton: Button
     private lateinit var inventoryButton: Button
     private lateinit var pokedexButton: Button
@@ -180,6 +181,8 @@ class SwitchReadOnlyActivity : Activity() {
                 nurseryButton.visibility = android.view.View.GONE
                 captureRecordsButton.isEnabled = false
                 captureRecordsButton.visibility = android.view.View.GONE
+                goParkButton.isEnabled = false
+                goParkButton.visibility = android.view.View.GONE
                 undergroundButton.isEnabled = false
                 undergroundButton.visibility = android.view.View.GONE
                 rideButton.isEnabled = false
@@ -254,6 +257,11 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { session?.let { showLetsGoCaptureRecords(it) } }
         }
         root.addView(captureRecordsButton)
+        goParkButton = Button(this).apply {
+            text = "GO Park • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            setOnClickListener { session?.let { showLetsGoGoParkAreas(it) } }
+        }
+        root.addView(goParkButton)
         battleTowerButton = Button(this).apply {
             text = "Battle Tower • Read-only"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspBattleTower(it) } }
@@ -456,6 +464,9 @@ class SwitchReadOnlyActivity : Activity() {
         captureRecordsButton.isEnabled = !busy && session?.letsGoCaptureRecords != null
         captureRecordsButton.visibility = if (session?.profile?.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE)
             android.view.View.VISIBLE else android.view.View.GONE
+        goParkButton.isEnabled = !busy && session?.letsGoGoPark != null
+        goParkButton.visibility = if (session?.profile?.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE)
+            android.view.View.VISIBLE else android.view.View.GONE
         undergroundButton.isEnabled = !busy && session?.bdspUnderground != null
         undergroundButton.visibility = if (session?.profile?.family == SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL)
             android.view.View.VISIBLE else android.view.View.GONE
@@ -560,6 +571,10 @@ class SwitchReadOnlyActivity : Activity() {
         if (bound.letsGoCaptureRecords != null) dashboardRoot.addView(Button(this).apply {
             text = "Capture Records"; isAllCaps = false; isEnabled = !busy && captureRecordsButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && captureRecordsButton.isEnabled) captureRecordsButton.performClick() }
+        })
+        if (bound.letsGoGoPark != null) dashboardRoot.addView(Button(this).apply {
+            text = "GO Park • Read-only"; isAllCaps = false; isEnabled = !busy && goParkButton.isEnabled
+            setOnClickListener { if (session === bound && !dashboardBusy && goParkButton.isEnabled) goParkButton.performClick() }
         })
         if (bound.letsGoGameOptions != null) dashboardRoot.addView(Button(this).apply {
             text = "Game Options • Read-only"; isAllCaps = false; isEnabled = !busy && gameOptionsButton.isEnabled
@@ -2679,6 +2694,78 @@ class SwitchReadOnlyActivity : Activity() {
             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }
+
+    private fun showLetsGoGoParkAreas(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val park = bound.letsGoGoPark ?: return
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16) }
+        root.addView(TextView(this).apply {
+            text = "${park.version.displayName} • ${park.occupiedCount}/1,000 occupied native GP1 slots\n" +
+                "20 areas • 50 slots per area • Read-only"
+            textSize = 16f; setPadding(0, 0, 0, 16)
+        })
+        repeat(LetsGoGoParkReadOnly.AREA_COUNT) { index ->
+            val area = index + 1
+            val count = park.area(area).size
+            root.addView(Button(this).apply {
+                text = "GO Park $area • $count/50 occupied"; isAllCaps = false; isEnabled = count > 0
+                setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoGoParkArea(bound, area) }
+            })
+        }
+        AlertDialog.Builder(this).setTitle("GO Park • Read-only")
+            .setView(ScrollView(this).apply { addView(root) }).setNegativeButton("Close", null).show()
+    }
+
+    private fun showLetsGoGoParkArea(bound: SwitchReadSession, area: Int) {
+        if (session !== bound || dashboardBusy) return
+        val entries = bound.letsGoGoPark?.area(area) ?: return
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16) }
+        for (entry in entries) root.addView(Button(this).apply {
+            val shiny = if (entry.shiny) " ★" else ""
+            val form = if (entry.form == 0) "" else " • Form ${entry.form}"
+            text = "Slot ${entry.slot} • #${entry.species} ${entry.displayName}$shiny$form\n" +
+                "Level ${goParkNumber(entry.level)} • CP ${entry.cp}"
+            isAllCaps = false
+            setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoGoParkEntry(bound, entry) }
+        })
+        AlertDialog.Builder(this).setTitle("GO Park $area • ${entries.size}/50 occupied")
+            .setView(ScrollView(this).apply { addView(root) })
+            .setPositiveButton("All areas") { _, _ -> if (session === bound && !dashboardBusy) showLetsGoGoParkAreas(bound) }
+            .setNegativeButton("Close", null).show()
+    }
+
+    private fun showLetsGoGoParkEntry(bound: SwitchReadSession, entry: LetsGoGoParkEntry) {
+        if (session !== bound || dashboardBusy) return
+        val gender = listOf("Male", "Female", "Genderless").getOrNull(entry.gender) ?: "Unknown (${entry.gender})"
+        val date = if (entry.year in 2000..9999 && entry.month in 1..12 && entry.day in 1..31)
+            "%04d-%02d-%02d".format(entry.year, entry.month, entry.day) else "Raw ${entry.capturedDate}"
+        val detail = buildString {
+            appendLine("GO Park ${entry.area} • Slot ${entry.slot} • Native index ${entry.index}")
+            appendLine("Species: #${entry.species} ${LetsGoSpeciesNames.name(entry.species)}")
+            appendLine("Nickname: ${entry.nickname.ifBlank { "None saved" }}")
+            appendLine("Form: ${entry.form} • Gender: $gender • Shiny: ${if (entry.shiny) "Yes" else "No"}")
+            appendLine("Level: ${goParkNumber(entry.level)} • CP: ${entry.cp} • Stored HP: ${entry.storedHp}")
+            appendLine("GO IVs: HP ${entry.ivHp} / Attack ${entry.ivAttack} / Defense ${entry.ivDefense}")
+            appendLine("Height: ${goParkNumber(entry.height)} m • Weight: ${goParkNumber(entry.weight)} kg")
+            appendLine("Captured date: $date")
+            appendLine("GO move IDs: ${entry.fastMoveId}, ${entry.chargedMoveId}")
+            appendLine("Trainer: ${entry.username.ifBlank { "Not saved" }}")
+            if (entry.secondUsername.isNotBlank()) appendLine("Secondary trainer string: ${entry.secondUsername}")
+            appendLine("City: ${entry.city.ifBlank { "Not saved" }}")
+            appendLine()
+            append("All 21 native block CRCs passed before this record was read. This view does not infer encounter legality, convert the GP1 record, move it into storage, export it, delete it, or write the save.")
+        }
+        AlertDialog.Builder(this).setTitle(entry.displayName + " • GO Park")
+            .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
+            }) }).setPositiveButton("Back to GO Park ${entry.area}") { _, _ ->
+                if (session === bound && !dashboardBusy) showLetsGoGoParkArea(bound, entry.area)
+            }.setNegativeButton("Close", null).show()
+    }
+
+    private fun goParkNumber(value: Float): String =
+        if (!value.isFinite()) value.toString() else "%.2f".format(value)
+
     private fun showLetsGoDayCare(bound: SwitchReadSession) {
         if (session !== bound || dashboardBusy) return
         val read = bound.letsGoDayCare ?: return
