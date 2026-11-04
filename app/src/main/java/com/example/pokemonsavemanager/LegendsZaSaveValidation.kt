@@ -29,6 +29,7 @@ internal data class LegendsZaInventoryBlock(val version: LegendsZaVersion, val r
 internal data class LegendsZaInventoryWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 
 internal data class LegendsZaDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
+internal data class LegendsZaPokemonWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 
 /** Independent read-only container gate; pinned format evidence is in SWITCH_READ_ONLY_FORMATS.md. */
 object LegendsZaSaveValidation {
@@ -204,6 +205,77 @@ object LegendsZaSaveValidation {
         digest.digest().copyInto(edited, end)
         readDexBlock(edited)
         return LegendsZaDexWriteResult(edited, absoluteOffset)
+    }
+
+    /** Replaces one decoded native PC-box PA9 body, preserving its slot footer and rebuilding integrity. */
+    internal fun writeBoxRecord(
+        source: ByteArray,
+        box: Int,
+        position: Int,
+        record: ByteArray
+    ): LegendsZaPokemonWriteResult {
+        val blocks = readPokemonBlocks(source)
+        require(box in 1..32 && position in 1..30) {
+            "The native Legends: Z-A box slot is outside PC storage."
+        }
+        require(record.size == LegendsZaPokemonReadOnly.RECORD_SIZE) {
+            "A complete 344-byte native PA9 is required."
+        }
+        require(LegendsZaPokemonReadOnly.read(record) is LegendsZaSlotRead.Pokemon) {
+            "The supplied native PA9 did not pass its stored-data checksum."
+        }
+        require(blocks.boxes.size == requiredObjects.getValue(0x0D66012CL)) {
+            "The native Legends: Z-A PC storage object has the wrong size."
+        }
+        val relativeOffset = ((box - 1) * 30 + position - 1) * LegendsZaStorageReadOnly.BOX_STRIDE
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var absoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = payload.size - cursor.remaining
+            if (key == 0x0D66012CL) {
+                require(type == 4 && length == 0x5FA00L) {
+                    "The native Legends: Z-A PC storage object has the wrong type or size."
+                }
+                repeat(relativeOffset) { stream.next() }
+                repeat(record.size) { byteIndex ->
+                    payload[blockStart + relativeOffset + byteIndex] =
+                        (record[byteIndex].toInt() xor stream.next()).toByte()
+                }
+                absoluteOffset = blockStart + relativeOffset
+            }
+            cursor.skip(length.toInt())
+        }
+        require(absoluteOffset >= 0) { "The native Legends: Z-A PC storage object is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        LegendsZaStorageReadOnly.read(edited)
+        return LegendsZaPokemonWriteResult(edited, absoluteOffset)
     }
 
     private fun inspect(source: ByteArray, captured: MutableMap<Long, ByteArray>?, uintKeys: Set<Long> = emptySet()): LegendsZaValidation {

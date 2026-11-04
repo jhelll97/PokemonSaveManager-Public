@@ -26,5 +26,6 @@
         <activity android:name=".SwitchScarletVioletEventActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaItemActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaPokedexActivity" android:exported="false"/>
+        <activity android:name=".SwitchLegendsZaEventActivity" android:exported="false"/>
     </application>
 </manifest>

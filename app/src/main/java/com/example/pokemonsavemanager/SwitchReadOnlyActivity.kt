@@ -548,7 +548,8 @@ class SwitchReadOnlyActivity : Activity() {
         if (bound.profile.family in setOf(SwitchGameFamily.LETS_GO_PIKACHU_EEVEE, SwitchGameFamily.SWORD_SHIELD,
                 SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL,
                 SwitchGameFamily.LEGENDS_ARCEUS,
-                SwitchGameFamily.SCARLET_VIOLET)) dashboardRoot.addView(Button(this).apply {
+                SwitchGameFamily.SCARLET_VIOLET,
+                SwitchGameFamily.LEGENDS_ZA)) dashboardRoot.addView(Button(this).apply {
             text = "🎁  Events"; isAllCaps = false; textSize = 17f; isEnabled = !busy && selectedSourceUri != null
             setOnClickListener { if (session === bound && !dashboardBusy) launchSwitchEvents(bound) }
         })
@@ -1047,7 +1048,8 @@ class SwitchReadOnlyActivity : Activity() {
                             SwitchGameFamily.LETS_GO_PIKACHU_EEVEE, SwitchGameFamily.SWORD_SHIELD,
                             SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL,
                             SwitchGameFamily.LEGENDS_ARCEUS,
-                            SwitchGameFamily.SCARLET_VIOLET))
+                            SwitchGameFamily.SCARLET_VIOLET,
+                            SwitchGameFamily.LEGENDS_ZA))
                         launchSwitchEvents(result)
                     else if (button?.isEnabled == true) button.performClick()
                     else if (button != null) {
@@ -1080,6 +1082,7 @@ class SwitchReadOnlyActivity : Activity() {
             SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL -> SwitchBdspEventActivity::class.java
             SwitchGameFamily.LEGENDS_ARCEUS -> SwitchLegendsArceusEventActivity::class.java
             SwitchGameFamily.SCARLET_VIOLET -> SwitchScarletVioletEventActivity::class.java
+            SwitchGameFamily.LEGENDS_ZA -> SwitchLegendsZaEventActivity::class.java
             else -> return
         }
         startActivity(Intent(this, activity).setData(source)
