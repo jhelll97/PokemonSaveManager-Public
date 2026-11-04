@@ -584,6 +584,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Adventure Start • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoAdventureBegin(bound) }
         })
+        if (bound.letsGoSecureValues != null) dashboardRoot.addView(Button(this).apply {
+            text = "Save Secure Values • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoSecureValues(bound) }
+        })
         if (bound.letsGoMysteryGiftHistory != null) dashboardRoot.addView(Button(this).apply {
             text = "Mystery Gift History • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoMysteryGiftHistory(bound) }
@@ -2903,6 +2907,35 @@ class SwitchReadOnlyActivity : Activity() {
             append("All 21 native block CRCs passed before reading. No local-time conversion, date correction, export, replacement or save writing.")
         }
         AlertDialog.Builder(this).setTitle("Adventure Start • Read-only")
+            .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
+            }) }).setPositiveButton("Close", null).show()
+    }
+
+    private fun showLetsGoSecureValues(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.letsGoSecureValues ?: return
+        val relation = when {
+            read.current > read.previous -> "Current is numerically greater than previous"
+            read.current < read.previous -> "Current is numerically less than previous"
+            else -> "Current and previous values are equal"
+        }
+        val detail = buildString {
+            append("${read.version.displayName} • Save Secure Values • Read-only\n\n")
+            append("Current secure value\n")
+            append("Unsigned: ${read.current}\n")
+            append("Hex: 0x${read.current.toString(16).uppercase().padStart(16, '0')}\n")
+            append("Bytes: ${read.currentBytes.joinToString(" ") { "%02X".format(it) }}\n\n")
+            append("Previous secure value\n")
+            append("Unsigned: ${read.previous}\n")
+            append("Hex: 0x${read.previous.toString(16).uppercase().padStart(16, '0')}\n")
+            append("Bytes: ${read.previousBytes.joinToString(" ") { "%02X".format(it) }}\n\n")
+            append("Comparison: $relation.\n\n")
+            append("These are the two native unsigned 64-bit SAV_BEEF footer values. ")
+            append("Their clock, unit and calendar meaning are not inferred. All 21 native block CRCs passed before display. ")
+            append("No secure-value change, synchronization, normalization, export, replacement or save writing.")
+        }
+        AlertDialog.Builder(this).setTitle("Save Secure Values • Read-only")
             .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
             }) }).setPositiveButton("Close", null).show()
