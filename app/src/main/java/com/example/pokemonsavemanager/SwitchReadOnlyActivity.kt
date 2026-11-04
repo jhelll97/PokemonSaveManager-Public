@@ -594,6 +594,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Rally & Digging Records • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldRallyDigging(bound) }
         })
+        if (bound.swordShieldStarterChoice != null) dashboardRoot.addView(Button(this).apply {
+            text = "Starter Choice • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldStarterChoice(bound) }
+        })
         if (bound.letsGoCaptureRecords != null) dashboardRoot.addView(Button(this).apply {
             text = "Capture Records"; isAllCaps = false; isEnabled = !busy && captureRecordsButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && captureRecordsButton.isEnabled) captureRecordsButton.performClick() }
@@ -2514,6 +2518,30 @@ class SwitchReadOnlyActivity : Activity() {
             })
         }
         AlertDialog.Builder(this).setTitle("Rally & Digging Records • Read-only")
+            .setView(scroll).setPositiveButton("Close", null).show()
+    }
+
+    private fun showSwordShieldStarterChoice(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.swordShieldStarterChoice ?: return
+        val detail = buildString {
+            append("${read.version.displayName} • Starter Choice • Read-only\n\n")
+            append("Saved starter: ${read.starterName ?: "Unknown native value"}\n")
+            append("Raw UInt32: ${read.rawValue}\n")
+            append("Raw hex: ${read.rawValue.toString(16).uppercase().padStart(8, '0')}\n\n")
+            if (read.starterName == null) {
+                append("The saved value is outside the documented 0–2 mapping and remains exact. ")
+            }
+            append("Documented mapping: 0 Grookey, 1 Scorbunny, 2 Sobble. ")
+            append("The complete native container hash and exact four-byte scalar layout passed before display. ")
+            append("No starter replacement, gift replay, party change, export, repair, or save writing is available here.")
+        }
+        val scroll = ScrollView(this).apply {
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Starter Choice • Read-only")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 

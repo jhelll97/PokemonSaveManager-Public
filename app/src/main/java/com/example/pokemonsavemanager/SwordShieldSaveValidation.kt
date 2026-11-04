@@ -38,6 +38,7 @@ internal data class SwordShieldRallyDiggingBlocks(
     val diggingDuoStaminaStreak: ByteArray,
     val diggingPaWatts: ByteArray
 )
+internal data class SwordShieldStarterChoiceBlock(val version: SwordShieldVersion, val value: ByteArray)
 
 internal data class SwordShieldDexBlocks(val version: SwordShieldVersion, val galar: ByteArray,
     val armor: ByteArray?, val crown: ByteArray?)
@@ -146,6 +147,19 @@ object SwordShieldSaveValidation {
             block(staminaKey),
             block(diggingPaKey)
         )
+    }
+
+    /** Reads PKHeX's documented starter-choice record after the complete container gate passes. */
+    internal fun readStarterChoiceBlock(source: ByteArray): SwordShieldStarterChoiceBlock {
+        val key = 0x3677602DL
+        val (checked, captured) = captureObjects(
+            source,
+            setOf(key),
+            scalarLayouts = mapOf(key to (14 to 4))
+        )
+        val value = captured.getValue(key)
+        require(value.size == 4) { "The native Sword/Shield starter-choice record is missing or has the wrong native type." }
+        return SwordShieldStarterChoiceBlock(checked.version, value)
     }
 
     /** Optional region type/length rules affect dex extraction only, never existing readers. */
