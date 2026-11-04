@@ -3058,7 +3058,7 @@ class SwitchReadOnlyActivity : Activity() {
         val variants = listOf("Male", "Female", "Shiny male", "Shiny female")
         fun flag(value: BdspDexFlag): String = "${value.value} (raw ${value.rawValue})"
         val detail = buildString {
-            append("#${entry.speciesId} ${SwordShieldSpeciesNames.name(entry.speciesId)} • Pokédex • Read-only\n\n")
+            append("#${entry.speciesId} ${SwordShieldSpeciesNames.name(entry.speciesId)} • Pokédex\n\n")
             append("Saved state: ${entry.state.displayName} (${entry.state.ordinal})\nHeard of: ${entry.heard}\nSeen: ${entry.seen}\nCaught: ${entry.caught}\n\n")
             for (index in variants.indices) append("${variants[index]} registration: ${flag(entry.genderFlags[index])}\n")
             append("\nRegistered languages: ${entry.languages.joinToString().ifBlank { "None recorded" }}\nRaw language flags: ${entry.rawLanguageFlags}\n\n")
@@ -3070,13 +3070,25 @@ class SwitchReadOnlyActivity : Activity() {
                 append("ECs are raw unsigned saved values, including zero; they do not establish registration.\n")
             }
             append("\nNative booleans are true only when the full four-byte saved value equals 1. Unknown raw words are preserved. ")
-            append("Gender/form/language flags remain independent of saved state; contradictions are not repaired. Form IDs are native indices, not legality verdicts. No editing or save replacement.")
+            append("Gender/form/language flags remain independent of saved state; contradictions are not repaired. Form IDs are native indices, not legality verdicts. A normal gender/shiny registration can be saved to a reviewed new copy; unknown raw registration words remain locked.")
         }
         val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
             text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
         }) }
         AlertDialog.Builder(this).setTitle("${bound.displayName} • ${SwordShieldSpeciesNames.name(species)}")
-            .setView(scroll).setPositiveButton("Close", null).show()
+            .setView(scroll).setNegativeButton("Close", null)
+            .setPositiveButton("Add registration • New copy") { _, _ ->
+                if (session === bound) launchBdspPokedexEditor(bound, species)
+            }.show()
+    }
+
+    private fun launchBdspPokedexEditor(bound: SwitchReadSession, species: Int) {
+        val source = selectedSourceUri ?: return
+        if (session !== bound) return
+        startActivity(Intent(this, SwitchBdspPokedexActivity::class.java).setData(source)
+            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+            .putExtra("pse.switch.dex.species", species)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }
 
     private fun showLegendsArceusPokedex(bound: SwitchReadSession, requestedPage: Int) {
