@@ -18,6 +18,13 @@ internal data class SwordShieldInventoryWriteResult(val bytes: ByteArray, val ab
 internal data class SwordShieldDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldPokemonWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldTrainerBlock(val version: SwordShieldVersion, val status: ByteArray)
+internal data class SwordShieldBattleTowerBlocks(
+    val version: SwordShieldVersion,
+    val singlesVictories: ByteArray,
+    val doublesVictories: ByteArray,
+    val singlesStreak: ByteArray,
+    val doublesStreak: ByteArray
+)
 
 internal data class SwordShieldDexBlocks(val version: SwordShieldVersion, val galar: ByteArray,
     val armor: ByteArray?, val crown: ByteArray?)
@@ -44,6 +51,36 @@ object SwordShieldSaveValidation {
     internal fun readTrainerBlock(source: ByteArray): SwordShieldTrainerBlock {
         val (checked, captured) = captureObjects(source, setOf(STATUS_KEY))
         return SwordShieldTrainerBlock(checked.version, captured.getValue(STATUS_KEY))
+    }
+
+    /** Reads the four documented native Battle Tower counters after the complete container gate passes. */
+    internal fun readBattleTowerBlocks(source: ByteArray): SwordShieldBattleTowerBlocks {
+        val singlesVictoriesKey = 0x436CAF2BL
+        val doublesVictoriesKey = 0x0D477836L
+        val singlesStreakKey = 0x6226F5ADL
+        val doublesStreakKey = 0x5F74FCEEL
+        val (checked, captured) = captureObjects(
+            source,
+            setOf(singlesVictoriesKey, doublesVictoriesKey, singlesStreakKey, doublesStreakKey),
+            mapOf(
+                singlesVictoriesKey to (14 to 4),
+                doublesVictoriesKey to (14 to 4),
+                singlesStreakKey to (13 to 2),
+                doublesStreakKey to (13 to 2)
+            )
+        )
+        fun block(key: Long, expectedSize: Int): ByteArray = captured.getValue(key).also {
+            require(it.size == expectedSize) {
+                "A documented Sword/Shield Battle Tower block is missing or has the wrong native type."
+            }
+        }
+        return SwordShieldBattleTowerBlocks(
+            checked.version,
+            block(singlesVictoriesKey, 4),
+            block(doublesVictoriesKey, 4),
+            block(singlesStreakKey, 2),
+            block(doublesStreakKey, 2)
+        )
     }
 
     /** Optional region type/length rules affect dex extraction only, never existing readers. */
@@ -259,14 +296,24 @@ object SwordShieldSaveValidation {
         return SwordShieldPokemonWriteResult(edited, absoluteOffset)
     }
 
-    private fun captureObjects(source: ByteArray, keys: Set<Long>): Pair<SwordShieldValidation.Verified, Map<Long, ByteArray>> {
+    private fun captureObjects(
+        source: ByteArray,
+        keys: Set<Long>,
+        scalarLayouts: Map<Long, Pair<Int, Int>> = emptyMap()
+    ): Pair<SwordShieldValidation.Verified, Map<Long, ByteArray>> {
         val captured = keys.associateWith { ByteArray(0) }.toMutableMap()
-        val checked = inspect(source, captured)
+        val checked = inspect(source, captured, scalarLayouts = scalarLayouts)
         require(checked is SwordShieldValidation.Verified) { "A validated native Sword/Shield save is required." }
         return checked to captured
     }
 
-    private fun inspect(source: ByteArray, captured: MutableMap<Long, ByteArray>?, dexLayouts: Map<Long, Int> = emptyMap(), inventoryLayout: Boolean = false): SwordShieldValidation {
+    private fun inspect(
+        source: ByteArray,
+        captured: MutableMap<Long, ByteArray>?,
+        dexLayouts: Map<Long, Int> = emptyMap(),
+        inventoryLayout: Boolean = false,
+        scalarLayouts: Map<Long, Pair<Int, Int>> = emptyMap()
+    ): SwordShieldValidation {
         if (source.size !in knownSizes) return SwordShieldValidation.Unrecognized
         val end = source.size - 32
         val digest = MessageDigest.getInstance("SHA-256")
@@ -276,11 +323,17 @@ object SwordShieldSaveValidation {
         // Only the detached payload is decrypted. The caller's bytes are never changed.
         val payload = source.copyOfRange(0, end)
         for (index in payload.indices) payload[index] = (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
-        return try { inspectBlocks(payload, captured, dexLayouts, inventoryLayout) }
+        return try { inspectBlocks(payload, captured, dexLayouts, inventoryLayout, scalarLayouts) }
         catch (e: IllegalArgumentException) { SwordShieldValidation.Invalid(e.message ?: "Malformed Sword/Shield blocks.") }
     }
 
-    private fun inspectBlocks(bytes: ByteArray, captured: MutableMap<Long, ByteArray>?, dexLayouts: Map<Long, Int>, inventoryLayout: Boolean): SwordShieldValidation {
+    private fun inspectBlocks(
+        bytes: ByteArray,
+        captured: MutableMap<Long, ByteArray>?,
+        dexLayouts: Map<Long, Int>,
+        inventoryLayout: Boolean,
+        scalarLayouts: Map<Long, Pair<Int, Int>>
+    ): SwordShieldValidation {
         val cursor = Cursor(bytes)
         val found = mutableSetOf<Long>()
         var previous = -1L
@@ -313,6 +366,11 @@ object SwordShieldSaveValidation {
             dexLayouts[key]?.let { size -> require(type == 4 && length == size.toLong()) { "An optional Sword/Shield Pokédex block has the wrong native type or size." } }
             if (inventoryLayout && key == 0x1177C2C4L)
                 require(type == 4 && length == 0x12F8L) { "The Sword/Shield inventory block has the wrong native type or size." }
+            scalarLayouts[key]?.let { (expectedType, expectedSize) ->
+                require(type == expectedType && length == expectedSize.toLong()) {
+                    "A documented Sword/Shield scalar block has the wrong native type or size."
+                }
+            }
             val capture = captured?.containsKey(key) == true
             if (key == STATUS_KEY || capture) {
                 // Consume the same stream used by the unaligned type/length prefix.

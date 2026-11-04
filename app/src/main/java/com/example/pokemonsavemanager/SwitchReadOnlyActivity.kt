@@ -264,7 +264,9 @@ class SwitchReadOnlyActivity : Activity() {
         root.addView(goParkButton)
         battleTowerButton = Button(this).apply {
             text = "Battle Tower • Read-only"; isEnabled = false; visibility = android.view.View.GONE
-            setOnClickListener { session?.let { showBdspBattleTower(it) } }
+            setOnClickListener { session?.let {
+                if (it.swordShieldBattleTower != null) showSwordShieldBattleTower(it) else showBdspBattleTower(it)
+            } }
         }
         root.addView(battleTowerButton)
         poffinsButton = Button(this).apply {
@@ -454,8 +456,9 @@ class SwitchReadOnlyActivity : Activity() {
         poffinsButton.isEnabled = !busy && session?.bdspPoffins != null
         poffinsButton.visibility = if (session?.profile?.family == SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL)
             android.view.View.VISIBLE else android.view.View.GONE
-        battleTowerButton.isEnabled = !busy && session?.bdspBattleTower != null
-        battleTowerButton.visibility = if (session?.profile?.family == SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL)
+        battleTowerButton.isEnabled = !busy && (session?.bdspBattleTower != null || session?.swordShieldBattleTower != null)
+        battleTowerButton.visibility = if (session?.profile?.family == SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL ||
+            session?.profile?.family == SwitchGameFamily.SWORD_SHIELD)
             android.view.View.VISIBLE else android.view.View.GONE
         nurseryButton.text = if (session?.profile?.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE) "Day Care • Read-only" else "Nursery • Read-only"
         nurseryButton.isEnabled = !busy && (session?.bdspNursery != null || session?.letsGoDayCare != null)
@@ -567,6 +570,10 @@ class SwitchReadOnlyActivity : Activity() {
         if (bound.letsGoDayCare != null) dashboardRoot.addView(Button(this).apply {
             text = "Day Care • Read-only"; isAllCaps = false; isEnabled = !busy && nurseryButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && nurseryButton.isEnabled) nurseryButton.performClick() }
+        })
+        if (bound.swordShieldBattleTower != null) dashboardRoot.addView(Button(this).apply {
+            text = "Battle Tower Records • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldBattleTower(bound) }
         })
         if (bound.letsGoCaptureRecords != null) dashboardRoot.addView(Button(this).apply {
             text = "Capture Records"; isAllCaps = false; isEnabled = !busy && captureRecordsButton.isEnabled
@@ -2360,6 +2367,31 @@ class SwitchReadOnlyActivity : Activity() {
             })
         }
         AlertDialog.Builder(this).setTitle("Trainer Data • Read-only")
+            .setView(scroll).setPositiveButton("Close", null).show()
+    }
+
+    private fun showSwordShieldBattleTower(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.swordShieldBattleTower ?: return
+        val detail = buildString {
+            append("${read.version.displayName} • Battle Tower Records • Read-only\n\n")
+            append("Singles victories: ${read.singlesVictories}\n")
+            append("Current singles streak: ${read.singlesStreak}\n\n")
+            append("Doubles victories: ${read.doublesVictories}\n")
+            append("Current doubles streak: ${read.doublesStreak}\n\n")
+            append("Documented native caps: 9,999,999 victories and 300 for a current streak. ")
+            if (!read.victoriesWithinDocumentedRange || !read.streaksWithinDocumentedRange) {
+                append("At least one saved value is outside its documented cap; PSE displays it exactly without normalizing it. ")
+            }
+            append("The complete native container hash passed before display. ")
+            append("No record reset, edit, export, replacement, or save writing is available here.")
+        }
+        val scroll = ScrollView(this).apply {
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Battle Tower Records • Read-only")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 
