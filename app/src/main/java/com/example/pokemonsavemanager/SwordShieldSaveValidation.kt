@@ -82,6 +82,7 @@ internal data class SwordShieldAdventureStepBlocks(
     val eggHatchCycleSteps: ByteArray,
     val friendshipWalkSteps: ByteArray
 )
+internal data class SwordShieldHallOfFameTimeBlock(val version: SwordShieldVersion, val value: ByteArray)
 
 internal data class SwordShieldDexBlocks(val version: SwordShieldVersion, val galar: ByteArray,
     val armor: ByteArray?, val crown: ByteArray?)
@@ -391,6 +392,19 @@ object SwordShieldSaveValidation {
             block(eggStepsKey, 2),
             block(friendshipStepsKey, 1)
         )
+    }
+
+    /** Reads PKHeX's documented Hall of Fame Unix timestamp after the complete container gate passes. */
+    internal fun readHallOfFameTimeBlock(source: ByteArray): SwordShieldHallOfFameTimeBlock {
+        val key = 0xE2F6E456L
+        val (checked, captured) = captureObjects(
+            source,
+            setOf(key),
+            scalarLayouts = mapOf(key to (15 to 8))
+        )
+        val value = captured.getValue(key)
+        require(value.size == 8) { "The native Sword/Shield Hall of Fame timestamp is missing or has the wrong native type." }
+        return SwordShieldHallOfFameTimeBlock(checked.version, value)
     }
 
     /** Optional region type/length rules affect dex extraction only, never existing readers. */

@@ -622,6 +622,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Adventure Step Counters • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldAdventureSteps(bound) }
         })
+        if (bound.swordShieldHallOfFameTime != null) dashboardRoot.addView(Button(this).apply {
+            text = "Hall of Fame Time • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldHallOfFameTime(bound) }
+        })
         if (bound.letsGoCaptureRecords != null) dashboardRoot.addView(Button(this).apply {
             text = "Capture Records"; isAllCaps = false; isEnabled = !busy && captureRecordsButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && captureRecordsButton.isEnabled) captureRecordsButton.performClick() }
@@ -2737,6 +2741,27 @@ class SwitchReadOnlyActivity : Activity() {
             })
         }
         AlertDialog.Builder(this).setTitle("Adventure Step Counters • Read-only")
+            .setView(scroll).setPositiveButton("Close", null).show()
+    }
+
+    private fun showSwordShieldHallOfFameTime(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.swordShieldHallOfFameTime ?: return
+        val detail = buildString {
+            append("${read.version.displayName} • Hall of Fame Time • Read-only\n\n")
+            append("Unix timestamp seconds: ${read.epochSeconds}\n")
+            append("Raw Int64 bits: 0x${read.rawHex}\n")
+            append("UTC date and time: ${read.utcTimestamp ?: "Outside java.time.Instant's supported range"}\n\n")
+            append("The complete native container hash and exact eight-byte scalar layout passed before display. ")
+            append("PKHeX documents this signed Int64 as the UTC Unix timestamp for entering the Hall of Fame; the saved value and raw bits remain exact. ")
+            append("No timestamp, Hall of Fame, reset, repair, export, or save-writing action is available here.")
+        }
+        val scroll = ScrollView(this).apply {
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Hall of Fame Time • Read-only")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 
