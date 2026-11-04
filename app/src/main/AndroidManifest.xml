@@ -23,6 +23,7 @@
         <activity android:name=".SwitchLegendsArceusEventActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletItemActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokedexActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletEventActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaItemActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaPokedexActivity" android:exported="false"/>
     </application>
