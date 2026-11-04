@@ -2953,12 +2953,37 @@ class SwitchReadOnlyActivity : Activity() {
             }
             if (read.records.isEmpty()) append("\nNo nonzero WR7 summary records are stored.\n")
             append("\nThe ten native WR7 records are receipt summaries, not reconstructable WB7 distribution files. ")
-            append("All 21 native block CRCs passed before reading. No gift injection, flag change, export, reconstruction, replacement or save writing.")
+            append("All 21 native block CRCs passed before reading. No gift injection, flag change, reconstruction, replacement or save writing.")
         }
-        AlertDialog.Builder(this).setTitle("Mystery Gift History • Read-only")
+        val dialog = AlertDialog.Builder(this).setTitle("Mystery Gift History • Read-only")
             .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
-            }) }).setPositiveButton("Close", null).show()
+            }) }).setPositiveButton("Close", null)
+        if (read.records.isNotEmpty()) dialog.setNeutralButton("Export one WR7") { _, _ ->
+            if (session === bound && !dashboardBusy) showLetsGoMysteryGiftExportPicker(bound, read)
+        }
+        dialog.show()
+    }
+
+    private fun showLetsGoMysteryGiftExportPicker(
+        bound: SwitchReadSession,
+        read: LetsGoMysteryGiftHistoryRead
+    ) {
+        if (session !== bound || dashboardBusy) return
+        val source = selectedSourceUri ?: return
+        val labels = read.records.map { record ->
+            "Slot ${record.slot} • Card #${record.cardId} • ${record.giftTypeName}"
+        }
+        AlertDialog.Builder(this).setTitle("Export native WR7 summary")
+            .setItems(labels.toTypedArray()) { _, index ->
+                val selected = read.records[index]
+                if (session === bound && !dashboardBusy) startActivity(
+                    Intent(this, SwitchLetsGoMysteryGiftActivity::class.java).setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.lets_go.wr7.slot", selected.slot - 1)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }.setNegativeButton("Cancel", null).show()
     }
 
     private fun showLetsGoGameOptions(bound: SwitchReadSession) {

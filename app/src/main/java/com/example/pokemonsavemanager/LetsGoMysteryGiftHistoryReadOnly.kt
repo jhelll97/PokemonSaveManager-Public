@@ -43,6 +43,17 @@ object LetsGoMysteryGiftHistoryReadOnly {
     private const val FLAG_OFFSET = BLOCK_OFFSET + RECORD_SIZE * RECORD_COUNT
     private const val FLAG_COUNT = 0x1080
 
+    fun recordBytes(source: ByteArray, slot: Int): ByteArray {
+        require(LetsGoSaveValidation.inspect(source) is LetsGoValidation.Verified) {
+            "A fully validated native Let's Go save is required."
+        }
+        require(slot in 0 until RECORD_COUNT) { "Mystery Gift history slot is out of range." }
+        val offset = BLOCK_OFFSET + slot * RECORD_SIZE
+        val record = source.copyOfRange(offset, offset + RECORD_SIZE)
+        require(record.any { it.toInt() != 0 }) { "That Mystery Gift history slot is empty." }
+        return record
+    }
+
     fun read(source: ByteArray): LetsGoMysteryGiftHistoryRead {
         val checked = LetsGoSaveValidation.inspect(source)
         require(checked is LetsGoValidation.Verified) { "A fully validated native Let's Go save is required." }
