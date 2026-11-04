@@ -618,6 +618,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Swords of Justice Quest • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldSwordsOfJustice(bound) }
         })
+        if (bound.swordShieldAdventureSteps != null) dashboardRoot.addView(Button(this).apply {
+            text = "Adventure Step Counters • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldAdventureSteps(bound) }
+        })
         if (bound.letsGoCaptureRecords != null) dashboardRoot.addView(Button(this).apply {
             text = "Capture Records"; isAllCaps = false; isEnabled = !busy && captureRecordsButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && captureRecordsButton.isEnabled) captureRecordsButton.performClick() }
@@ -2710,6 +2714,29 @@ class SwitchReadOnlyActivity : Activity() {
             })
         }
         AlertDialog.Builder(this).setTitle("Swords of Justice Quest • Read-only")
+            .setView(scroll).setPositiveButton("Close", null).show()
+    }
+
+    private fun showSwordShieldAdventureSteps(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.swordShieldAdventureSteps ?: return
+        val detail = buildString {
+            append("${read.version.displayName} • Adventure Step Counters • Read-only\n\n")
+            append("Bike boost charge steps: ${read.bikeBoostChargeSteps}\n")
+            append("Bike boost charge limit: ${read.bikeBoostChargeLimit}\n")
+            append("Bike boost status: ${read.bikeBoostStatus}\n\n")
+            append("Egg hatch cycle steps: ${read.eggHatchCycleSteps} • ${read.cycleStatus(read.eggHatchCycleSteps)}\n")
+            append("Friendship walk steps: ${read.friendshipWalkSteps} • ${read.cycleStatus(read.friendshipWalkSteps)}\n\n")
+            append("The complete native container hash and exact UInt32, UInt16, and UInt8 scalar layouts passed before display. ")
+            append("Only the documented charge equality and 0–127 step ranges are interpreted; every native value remains exact. ")
+            append("No charge, upgrade, hatch, friendship, reset, repair, export, or save-writing action is available here.")
+        }
+        val scroll = ScrollView(this).apply {
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Adventure Step Counters • Read-only")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 

@@ -75,6 +75,13 @@ internal data class SwordShieldSwordsOfJusticeBlocks(
     val virizionProgress: ByteArray,
     val keldeoProgress: ByteArray
 )
+internal data class SwordShieldAdventureStepBlocks(
+    val version: SwordShieldVersion,
+    val bikeBoostChargeSteps: ByteArray,
+    val bikeBoostChargeLimit: ByteArray,
+    val eggHatchCycleSteps: ByteArray,
+    val friendshipWalkSteps: ByteArray
+)
 
 internal data class SwordShieldDexBlocks(val version: SwordShieldVersion, val galar: ByteArray,
     val armor: ByteArray?, val crown: ByteArray?)
@@ -355,6 +362,34 @@ object SwordShieldSaveValidation {
             block(terrakionProgressKey),
             block(virizionProgressKey),
             block(keldeoProgressKey)
+        )
+    }
+
+    /** Reads PKHeX's documented bike, Egg-cycle, and friendship step records after the complete container gate passes. */
+    internal fun readAdventureStepBlocks(source: ByteArray): SwordShieldAdventureStepBlocks {
+        val bikeStepsKey = 0x57F29628L
+        val bikeLimitKey = 0xF64719D9L
+        val eggStepsKey = 0x6C99F9A0L
+        val friendshipStepsKey = 0xE2798DDEL
+        val (checked, captured) = captureObjects(
+            source,
+            setOf(bikeStepsKey, bikeLimitKey, eggStepsKey, friendshipStepsKey),
+            scalarLayouts = mapOf(
+                bikeStepsKey to (14 to 4),
+                bikeLimitKey to (14 to 4),
+                eggStepsKey to (13 to 2),
+                friendshipStepsKey to (8 to 1)
+            )
+        )
+        fun block(key: Long, expectedSize: Int): ByteArray = captured.getValue(key).also {
+            require(it.size == expectedSize) { "A documented Sword/Shield adventure step record is missing or has the wrong native type." }
+        }
+        return SwordShieldAdventureStepBlocks(
+            checked.version,
+            block(bikeStepsKey, 4),
+            block(bikeLimitKey, 4),
+            block(eggStepsKey, 2),
+            block(friendshipStepsKey, 1)
         )
     }
 
