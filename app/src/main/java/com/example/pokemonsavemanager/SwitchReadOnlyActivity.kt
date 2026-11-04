@@ -112,7 +112,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { pickSource() }
         }
         root.addView(openButton)
-        status = label("Let’s Go Pikachu/Eevee, Sword/Shield and BDSP: native detection, party, storage and Pokémon details are available after validation. Let’s Go, Sword/Shield and BDSP also have Trainer Data. Sword/Shield has regional Pokédex browsing with saved form and Gigantamax flags. BDSP has 493-species Pokédex records with gender/shiny, form, language and Spinda data. Let’s Go has a read-only Pokédex with saved flags, languages and size records. Legends: Arceus also supports a Trainer Data, party, 32 pastures and Pokémon details with Alpha, Noble and saved Ganbaru values. Scarlet/Violet also supports a Trainer Data, party, 32 boxes, ride Pokémon and details including saved Tera values. Legends: Z-A also supports a Trainer Data, party, 32 boxes and Pokémon details including Alpha, scale and obedience.")
+        status = label("Let’s Go Pikachu/Eevee, Sword/Shield and BDSP: native detection, party, storage and Pokémon details are available after validation. Let’s Go, Sword/Shield and BDSP also have Trainer Data. Sword/Shield has regional Pokédex browsing with saved form and Gigantamax flags. BDSP has 493-species Pokédex records with gender/shiny, form, language and Spinda data. Let’s Go has Pokédex browsing plus reviewed seen/caught registration to a verified new copy. Legends: Arceus also supports a Trainer Data, party, 32 pastures and Pokémon details with Alpha, Noble and saved Ganbaru values. Scarlet/Violet also supports a Trainer Data, party, 32 boxes, ride Pokémon and details including saved Tera values. Legends: Z-A also supports a Trainer Data, party, 32 boxes and Pokémon details including Alpha, scale and obedience.")
         root.addView(status)
         preview = label("No Switch file open. File inspection is available for all six game families. Save contents remain unvalidated.")
             .apply { setTextIsSelectable(true) }
@@ -221,7 +221,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(rideButton)
         pokedexButton = Button(this).apply {
-            text = "Pokédex • Read-only"; isEnabled = false
+            text = "Pokédex"; isEnabled = false
             setOnClickListener { session?.let {
                 when {
                     it.legendsZaPokedex != null -> showLegendsZaDexSections(it)
@@ -2922,7 +2922,7 @@ class SwitchReadOnlyActivity : Activity() {
         val variants = listOf("Male / genderless", "Female", "Shiny male / genderless", "Shiny female")
         fun flags(values: List<Boolean>): String = variants.mapIndexed { i, label -> "$label: ${values[i]}" }.joinToString("\n")
         val detail = buildString {
-            append("#${entry.speciesId} ${LetsGoSpeciesNames.name(entry.speciesId)} • Pokédex • Read-only\n\n")
+            append("#${entry.speciesId} ${LetsGoSpeciesNames.name(entry.speciesId)} • Pokédex\n\n")
             append("Caught: ${entry.caught}\nSeen: ${entry.seen}\n\nBase-species seen flags\n${flags(entry.seenVariants)}\n\n")
             append("Base-species displayed flags\n${flags(entry.displayedVariants)}\n\n")
             append("Registered languages: ${entry.languages.joinToString().ifBlank { "None recorded" }}\n\n")
@@ -2933,13 +2933,28 @@ class SwitchReadOnlyActivity : Activity() {
                 append("\n")
             }
             append("Flags and size records are shown as saved; contradictory flags are not repaired. Size scalars are not absolute measurements. ")
-            append("Alternate-form seen/display flags, story progress and rewards are outside this view. No editing or save replacement is available.")
+            append("Alternate-form seen/display flags, story progress and rewards are outside this view. New native seen or caught registration can be saved to a reviewed new copy; existing registrations are preserved.")
         }
         val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
             text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
         }) }
         AlertDialog.Builder(this).setTitle("${bound.displayName} • ${LetsGoSpeciesNames.name(species)}")
-            .setView(scroll).setPositiveButton("Close", null).show()
+            .setView(scroll).setNegativeButton("Close", null)
+            .setPositiveButton("Add registration • New copy") { _, _ ->
+                if (session === bound) launchLetsGoPokedexEditor(bound, species)
+            }.show()
+    }
+
+    private fun launchLetsGoPokedexEditor(bound: SwitchReadSession, species: Int) {
+        val source = selectedSourceUri ?: return
+        if (session !== bound) return
+        startActivity(
+            Intent(this, SwitchLetsGoPokedexActivity::class.java)
+                .setData(source)
+                .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                .putExtra("pse.switch.dex.species", species)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        )
     }
 
     private fun showSwordShieldDexRegions(bound: SwitchReadSession) {
