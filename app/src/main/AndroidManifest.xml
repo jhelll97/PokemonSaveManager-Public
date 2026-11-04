@@ -23,6 +23,7 @@
         <activity android:name=".SwitchLetsGoEventWorkExportActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoMysteryGiftActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldItemActivity" android:exported="false"/>
+        <activity android:name=".SwitchSwordShieldTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldEventActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspItemActivity" android:exported="false"/>

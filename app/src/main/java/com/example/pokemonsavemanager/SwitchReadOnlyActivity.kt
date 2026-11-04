@@ -482,7 +482,8 @@ class SwitchReadOnlyActivity : Activity() {
             android.view.View.VISIBLE else android.view.View.GONE
         inventoryButton.isEnabled = !busy && session?.supports(SwitchReadCapability.INVENTORY) == true
         pokedexButton.isEnabled = !busy && session?.supports(SwitchReadCapability.POKEDEX) == true
-        trainerButton.text = if (session?.profile?.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE)
+        trainerButton.text = if (session?.profile?.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE ||
+            session?.profile?.family == SwitchGameFamily.SWORD_SHIELD)
             "◎  Trainer Data" else "◎  Trainer Data • Read-only"
         trainerButton.isEnabled = !busy && session?.supports(SwitchReadCapability.TRAINER_PROFILE) == true
         rideButton.isEnabled = !busy && session?.scarletVioletStorage != null
@@ -509,17 +510,17 @@ class SwitchReadOnlyActivity : Activity() {
             setColor(fill); cornerRadius = dp(16).toFloat(); setStroke(dp(1), Color.rgb(25, 145, 220))
         }
         val accent = Color.rgb(70, 190, 255)
-        val letsGoTrainerEditing = bound.profile.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE &&
-            selectedSourceUri != null
+        val trainerNameEditing = (bound.profile.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE ||
+            bound.profile.family == SwitchGameFamily.SWORD_SHIELD) && selectedSourceUri != null
         dashboardRoot.addView(label("PSE", 38f, accent))
-        dashboardRoot.addView(label(if (letsGoTrainerEditing) "Pokémon Save Editor" else "Pokémon Save Editor • Read-only", 15f))
+        dashboardRoot.addView(label(if (trainerNameEditing) "Pokémon Save Editor" else "Pokémon Save Editor • Read-only", 15f))
         dashboardRoot.addView(label("CURRENT SAVE", 13f, accent))
         dashboardRoot.addView(label("${bound.displayName}\nGeneration ${bound.profile.family.generation} • Nintendo Switch\nNative integrity verified" +
-            if (letsGoTrainerEditing) " • Trainer Name editing available" else " • Read-only", 18f).apply {
+            if (trainerNameEditing) " • Trainer Name editing available" else " • Read-only", 18f).apply {
             setPadding(dp(18), dp(16), dp(18), dp(16)); background = cardBackground(Color.rgb(12, 35, 51))
         }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(18) })
         dashboardRoot.addView(label(status.text.toString(), 14f))
-        dashboardRoot.addView(label(if (busy) "Reading selected source…" else if (letsGoTrainerEditing)
+        dashboardRoot.addView(label(if (busy) "Reading selected source…" else if (trainerNameEditing)
             "EDITOR • TRAINER DATA" else "EDITOR • READ-ONLY", 13f, accent))
         val targets = mapOf("trainer" to trainerButton, "storage" to storageButton,
             "inventory" to inventoryButton, "pokedex" to pokedexButton)
@@ -530,7 +531,7 @@ class SwitchReadOnlyActivity : Activity() {
             for (entry in pair) {
                 val target = targets.getValue(entry.section)
                 row.addView(Button(this).apply {
-                    val trainerEditing = entry.section == "trainer" && letsGoTrainerEditing
+                    val trainerEditing = entry.section == "trainer" && trainerNameEditing
                     text = entry.label + when {
                         !entry.enabled -> "\nUnavailable for this save"
                         trainerEditing -> "\nEdit Trainer Name"
@@ -2432,16 +2433,30 @@ class SwitchReadOnlyActivity : Activity() {
             append("Trainer ID (six digits): ${trainer.displayTrainerId}\n")
             append("Stored ID32: ${trainer.id32}\nTID16: ${trainer.tid16}\nSID16: ${trainer.sid16}\n")
             append("Watts: ${trainer.watts}\n\n")
-            append("Native status fields • Read-only. Trainer gender and language are the saved game fields. ")
+            append("Trainer Name opens the reviewed native editor; the other status fields remain read-only. ")
+            append("Trainer gender and language are the saved game fields. ")
             append("Money, play time, badges, League Card and appearance details are not read in this view.")
         }
-        val scroll = ScrollView(this).apply {
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
+            val source = selectedSourceUri
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Trainer Data"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchSwordShieldTrainerActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
         }
-        AlertDialog.Builder(this).setTitle("Trainer Data • Read-only")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Trainer Data")
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
     private fun showSwordShieldPlayTime(bound: SwitchReadSession) {

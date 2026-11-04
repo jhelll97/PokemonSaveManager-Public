@@ -15,6 +15,7 @@ sealed class SwordShieldValidation {
 internal data class SwordShieldPokemonBlocks(val version: SwordShieldVersion, val boxes: ByteArray, val party: ByteArray)
 internal data class SwordShieldInventoryBlock(val version: SwordShieldVersion, val items: ByteArray)
 internal data class SwordShieldInventoryWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
+internal data class SwordShieldTrainerWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldPokemonWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldTrainerBlock(val version: SwordShieldVersion, val status: ByteArray)
@@ -569,6 +570,59 @@ object SwordShieldSaveValidation {
         digest.digest().copyInto(edited, end)
         readInventoryBlock(edited)
         return SwordShieldInventoryWriteResult(edited, absoluteOffset)
+    }
+
+    /** Replaces the decoded 26-byte trainer-name field, then rebuilds encryption and the SHA-256 footer. */
+    internal fun writeTrainerName(source: ByteArray, encodedName: ByteArray): SwordShieldTrainerWriteResult {
+        readTrainerBlock(source)
+        require(encodedName.size == 26) { "The native Sword/Shield trainer-name field must be exactly 26 bytes." }
+        val relativeOffset = 0xB0
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var absoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            if (key == STATUS_KEY) {
+                require(type == 4 && length == 0x110L) { "The Sword/Shield status block has the wrong native type or size." }
+                repeat(relativeOffset) { stream.next() }
+                encodedName.forEachIndexed { byteIndex, value ->
+                    payload[blockStart + relativeOffset + byteIndex] =
+                        ((value.toInt() and 255) xor stream.next()).toByte()
+                }
+                absoluteOffset = blockStart + relativeOffset
+            }
+            cursor.skip(length.toInt())
+        }
+        require(absoluteOffset >= 0) { "The native Sword/Shield status object is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readTrainerBlock(edited)
+        return SwordShieldTrainerWriteResult(edited, absoluteOffset)
     }
 
 
