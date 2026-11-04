@@ -630,6 +630,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Pokédex View State • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldPokedexViewState(bound) }
         })
+        if (bound.swordShieldRestrictedSparring != null) dashboardRoot.addView(Button(this).apply {
+            text = "Restricted Sparring Streaks • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldRestrictedSparring(bound) }
+        })
         if (bound.letsGoCaptureRecords != null) dashboardRoot.addView(Button(this).apply {
             text = "Capture Records"; isAllCaps = false; isEnabled = !busy && captureRecordsButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && captureRecordsButton.isEnabled) captureRecordsButton.performClick() }
@@ -2788,6 +2792,25 @@ class SwitchReadOnlyActivity : Activity() {
             })
         }
         AlertDialog.Builder(this).setTitle("Pokédex View State • Read-only")
+            .setView(scroll).setPositiveButton("Close", null).show()
+    }
+
+    private fun showSwordShieldRestrictedSparring(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.swordShieldRestrictedSparring ?: return
+        val detail = buildString {
+            append("${read.version.displayName} • Restricted Sparring Streaks • Read-only\n\n")
+            read.types.forEach { append("${it.typeName}: ${it.bestStreak}\n") }
+            append("\nThe complete native container hash and all 18 exact UInt32 scalar layouts passed before display. ")
+            append("PSE presents each saved best streak exactly and does not infer type availability, stored teams, completion, or reward eligibility. ")
+            append("No streak, team, sparring, reward, unlock, reset, repair, export, or save-writing action is available here.")
+        }
+        val scroll = ScrollView(this).apply {
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Restricted Sparring Streaks • Read-only")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 

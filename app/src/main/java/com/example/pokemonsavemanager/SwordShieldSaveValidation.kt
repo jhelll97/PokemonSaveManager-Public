@@ -90,6 +90,10 @@ internal data class SwordShieldPokedexViewStateBlocks(
     val armorEntry: ByteArray,
     val crownEntry: ByteArray
 )
+internal data class SwordShieldRestrictedSparringBlocks(
+    val version: SwordShieldVersion,
+    val streaks: List<ByteArray>
+)
 
 internal data class SwordShieldDexBlocks(val version: SwordShieldVersion, val galar: ByteArray,
     val armor: ByteArray?, val crown: ByteArray?)
@@ -439,6 +443,41 @@ object SwordShieldSaveValidation {
             block(galarEntryKey, 2),
             block(armorEntryKey, 2),
             block(crownEntryKey, 2)
+        )
+    }
+
+    /** Reads PKHeX's documented 18 type-specific Restricted Sparring best streaks after the complete container gate passes. */
+    internal fun readRestrictedSparringBlocks(source: ByteArray): SwordShieldRestrictedSparringBlocks {
+        val keys = listOf(
+            0xDB5E16CBL,
+            0xD25E08A0L,
+            0xD55BCEC2L,
+            0xD35BCB9CL,
+            0xD65BD055L,
+            0xD15BC876L,
+            0xDA5E1538L,
+            0xDC5E185EL,
+            0xDF5E1D17L,
+            0xDD5E19F1L,
+            0xD45BCD2FL,
+            0xE15E203DL,
+            0xDE5E1B84L,
+            0xE05E1EAAL,
+            0xD25BCA09L,
+            0xCF5BC550L,
+            0xD35E0A33L,
+            0xD05BC6E3L
+        )
+        val (checked, captured) = captureObjects(
+            source,
+            keys.toSet(),
+            scalarLayouts = keys.associateWith { 14 to 4 }
+        )
+        return SwordShieldRestrictedSparringBlocks(
+            checked.version,
+            keys.map { key -> captured.getValue(key).also {
+                require(it.size == 4) { "A documented Sword/Shield Restricted Sparring streak is missing or has the wrong native type." }
+            } }
         )
     }
 
