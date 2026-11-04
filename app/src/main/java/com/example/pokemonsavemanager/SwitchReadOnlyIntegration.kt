@@ -83,6 +83,8 @@ class SwitchReadSnapshot private constructor(
     internal fun readLetsGoAdventureBegin(): LetsGoAdventureBeginRead = LetsGoAdventureBeginReadOnly.read(sourceBytes)
     internal fun readLetsGoSecureValues(): LetsGoSecureValueRead = LetsGoSecureValueReadOnly.read(sourceBytes)
     internal fun readLetsGoBlockDirectory(): LetsGoBlockDirectoryRead = LetsGoBlockDirectoryReadOnly.read(sourceBytes)
+    internal fun readLetsGoMasterTrainerTitles(): LetsGoMasterTrainerTitlesRead =
+        LetsGoMasterTrainerTitlesReadOnly.read(sourceBytes)
     internal fun readLetsGoMysteryGiftHistory(): LetsGoMysteryGiftHistoryRead =
         LetsGoMysteryGiftHistoryReadOnly.read(sourceBytes)
     internal fun readLetsGoPlayerAccessories(): LetsGoPlayerAccessoryRead = LetsGoPlayerAccessoryEditing.read(sourceBytes)
@@ -569,6 +571,12 @@ class SwitchReadSession(val snapshot: SwitchReadSnapshot) {
         runCatching { snapshot.readLetsGoBlockDirectory() } else null
     val letsGoBlockDirectory: LetsGoBlockDirectoryRead? get() = letsGoBlockDirectoryAttempt?.getOrNull()
     val letsGoBlockDirectoryUnavailableReason: String? get() = letsGoBlockDirectoryAttempt?.exceptionOrNull()?.message
+    private val letsGoMasterTrainerTitlesAttempt = if (validation is LetsGoValidation.Verified)
+        runCatching { snapshot.readLetsGoMasterTrainerTitles() } else null
+    val letsGoMasterTrainerTitles: LetsGoMasterTrainerTitlesRead? get() =
+        letsGoMasterTrainerTitlesAttempt?.getOrNull()
+    val letsGoMasterTrainerTitlesUnavailableReason: String? get() =
+        letsGoMasterTrainerTitlesAttempt?.exceptionOrNull()?.message
     private val letsGoMysteryGiftHistoryAttempt = if (validation is LetsGoValidation.Verified)
         runCatching { snapshot.readLetsGoMysteryGiftHistory() } else null
     val letsGoMysteryGiftHistory: LetsGoMysteryGiftHistoryRead? get() = letsGoMysteryGiftHistoryAttempt?.getOrNull()

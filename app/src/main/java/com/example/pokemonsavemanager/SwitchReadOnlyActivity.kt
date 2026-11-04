@@ -592,6 +592,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Native Block Directory • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoBlockDirectory(bound) }
         })
+        if (bound.letsGoMasterTrainerTitles != null) dashboardRoot.addView(Button(this).apply {
+            text = "Master Trainer Titles • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoMasterTrainerTitles(bound) }
+        })
         if (bound.letsGoMysteryGiftHistory != null) dashboardRoot.addView(Button(this).apply {
             text = "Mystery Gift History • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoMysteryGiftHistory(bound) }
@@ -2967,6 +2971,45 @@ class SwitchReadOnlyActivity : Activity() {
             append("No checksum repair, block change, export, replacement or save writing.")
         }
         AlertDialog.Builder(this).setTitle("Native Block Directory • Read-only")
+            .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
+            }) }).setPositiveButton("Close", null).show()
+    }
+
+    private fun showLetsGoMasterTrainerTitles(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.letsGoMasterTrainerTitles ?: return
+        fun ranges(ids: List<Int>): String {
+            if (ids.isEmpty()) return "None"
+            val output = mutableListOf<String>()
+            var start = ids.first()
+            var previous = start
+            for (value in ids.drop(1)) {
+                if (value == previous + 1) previous = value
+                else {
+                    output += if (start == previous) "$start" else "$start–$previous"
+                    start = value
+                    previous = value
+                }
+            }
+            output += if (start == previous) "$start" else "$start–$previous"
+            return output.joinToString(", ")
+        }
+        val numberedUnlocked = read.unlockedTitleIds.filter { it in 1..153 }
+        val numberedLocked = (1..153).filterNot { read.isUnlocked(it) }
+        val detail = buildString {
+            append("${read.version.displayName} • Master Trainer Titles • Read-only\n\n")
+            append("Unlocked: ${read.unlockedCount} of ${read.totalTitles}\n\n")
+            append("Trainer title (ID 0): ${if (read.isUnlocked(0)) "Unlocked" else "Locked"}\n")
+            append("Numbered titles 1–153: ${numberedUnlocked.size} unlocked\n")
+            append("Unlocked numbered IDs: ${ranges(numberedUnlocked)}\n")
+            append("Locked numbered IDs: ${ranges(numberedLocked)}\n")
+            append("Grand title (ID 154): ${if (read.isUnlocked(154)) "Unlocked" else "Locked"}\n")
+            append("Battle title (ID 155): ${if (read.isUnlocked(155)) "Unlocked" else "Locked"}\n\n")
+            append("These are the 156 native title flags in EventWork block 3. Numbered entries remain numeric rather than being guessed into species or display names. ")
+            append("All 21 native block CRCs passed before reading. No title unlock, flag change, export, replacement or save writing.")
+        }
+        AlertDialog.Builder(this).setTitle("Master Trainer Titles • Read-only")
             .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
             }) }).setPositiveButton("Close", null).show()
