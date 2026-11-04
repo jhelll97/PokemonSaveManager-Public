@@ -606,6 +606,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Isle of Armor Progress • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldIsleOfArmorProgress(bound) }
         })
+        if (bound.swordShieldCrownTundraProgress != null) dashboardRoot.addView(Button(this).apply {
+            text = "Crown Tundra Progress • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldCrownTundraProgress(bound) }
+        })
         if (bound.letsGoCaptureRecords != null) dashboardRoot.addView(Button(this).apply {
             text = "Capture Records"; isAllCaps = false; isEnabled = !busy && captureRecordsButton.isEnabled
             setOnClickListener { if (session === bound && !dashboardBusy && captureRecordsButton.isEnabled) captureRecordsButton.performClick() }
@@ -2623,6 +2627,36 @@ class SwitchReadOnlyActivity : Activity() {
             })
         }
         AlertDialog.Builder(this).setTitle("Isle of Armor Progress • Read-only")
+            .setView(scroll).setPositiveButton("Close", null).show()
+    }
+
+    private fun showSwordShieldCrownTundraProgress(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.swordShieldCrownTundraProgress ?: return
+        fun species(value: Long): String = if (value in 1L..898L)
+            "$value • ${SwordShieldSpeciesNames.name(value.toInt())}" else value.toString()
+        val detail = buildString {
+            append("${read.version.displayName} • Crown Tundra Progress • Read-only\n\n")
+            append("Split-Decision Ruins pattern: ${read.regiPattern} • ${read.regiPatternStatus}\n\n")
+            append("Swords of Justice footprints\n")
+            append("Cobalion: ${read.cobalionFootprints} • ${read.footprintStatus(read.cobalionFootprints)}\n")
+            append("Terrakion: ${read.terrakionFootprints} • ${read.footprintStatus(read.terrakionFootprints)}\n")
+            append("Virizion: ${read.virizionFootprints} • ${read.footprintStatus(read.virizionFootprints)}\n\n")
+            append("Max Lair noted species\n")
+            read.notedSpecies.forEachIndexed { index, value -> append("Slot ${index + 1}: ${species(value)}\n") }
+            append("Endless Dynamax Adventure best streak: ${read.endlessStreak}\n")
+            append("Dynamax Adventure disconnect streak: ${read.disconnectStreak} • ${read.disconnectStatus}\n")
+            append("Peonia species hint: ${species(read.peoniaSpeciesHint)}\n\n")
+            append("The complete native container hash and all ten exact UInt32 scalar layouts passed before display. ")
+            append("Only PKHeX's documented Regi pattern, footprint ranges, and disconnect fee threshold are interpreted; every native value remains exact. ")
+            append("No pattern, footprint, Max Lair, encounter, fee, reward, unlock, repair, export, or save-writing action is available here.")
+        }
+        val scroll = ScrollView(this).apply {
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Crown Tundra Progress • Read-only")
             .setView(scroll).setPositiveButton("Close", null).show()
     }
 

@@ -48,6 +48,19 @@ internal data class SwordShieldIsleOfArmorProgressBlocks(
     val cramOMaticUses: ByteArray,
     val restrictedSparringTypesCleared: ByteArray
 )
+internal data class SwordShieldCrownTundraProgressBlocks(
+    val version: SwordShieldVersion,
+    val regiPattern: ByteArray,
+    val cobalionFootprints: ByteArray,
+    val terrakionFootprints: ByteArray,
+    val virizionFootprints: ByteArray,
+    val notedSpecies1: ByteArray,
+    val notedSpecies2: ByteArray,
+    val notedSpecies3: ByteArray,
+    val endlessStreak: ByteArray,
+    val disconnectStreak: ByteArray,
+    val peoniaSpeciesHint: ByteArray
+)
 
 internal data class SwordShieldDexBlocks(val version: SwordShieldVersion, val galar: ByteArray,
     val armor: ByteArray?, val crown: ByteArray?)
@@ -205,6 +218,53 @@ object SwordShieldSaveValidation {
             block(donationTotalKey),
             block(cramOMaticKey),
             block(sparringTypesKey)
+        )
+    }
+
+    /** Reads PKHeX's documented Crown Tundra progress records after the complete container gate passes. */
+    internal fun readCrownTundraProgressBlocks(source: ByteArray): SwordShieldCrownTundraProgressBlocks {
+        val regiPatternKey = 0xCF90B39AL
+        val cobalionFootprintsKey = 0x4D50B655L
+        val terrakionFootprintsKey = 0x771E4C88L
+        val virizionFootprintsKey = 0xAD67A297L
+        val notedSpecies1Key = 0x6F669A35L
+        val notedSpecies2Key = 0x6F66951CL
+        val notedSpecies3Key = 0x6F6696CFL
+        val endlessStreakKey = 0x7F4B4B10L
+        val disconnectStreakKey = 0x8EAEB8FFL
+        val peoniaSpeciesHintKey = 0xF26B9151L
+        val keys = setOf(
+            regiPatternKey,
+            cobalionFootprintsKey,
+            terrakionFootprintsKey,
+            virizionFootprintsKey,
+            notedSpecies1Key,
+            notedSpecies2Key,
+            notedSpecies3Key,
+            endlessStreakKey,
+            disconnectStreakKey,
+            peoniaSpeciesHintKey
+        )
+        val (checked, captured) = captureObjects(
+            source,
+            keys,
+            scalarLayouts = keys.associateWith { 14 to 4 }
+        )
+        fun block(key: Long): ByteArray = captured.getValue(key).also {
+            require(it.size == 4) { "A documented Sword/Shield Crown Tundra record is missing or has the wrong native type." }
+        }
+        return SwordShieldCrownTundraProgressBlocks(
+            checked.version,
+            block(regiPatternKey),
+            block(cobalionFootprintsKey),
+            block(terrakionFootprintsKey),
+            block(virizionFootprintsKey),
+            block(notedSpecies1Key),
+            block(notedSpecies2Key),
+            block(notedSpecies3Key),
+            block(endlessStreakKey),
+            block(disconnectStreakKey),
+            block(peoniaSpeciesHintKey)
         )
     }
 
