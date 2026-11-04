@@ -588,6 +588,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Save Secure Values • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoSecureValues(bound) }
         })
+        if (bound.letsGoGameSyncIdentity != null) dashboardRoot.addView(Button(this).apply {
+            text = "Game Sync Identity • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoGameSyncIdentity(bound) }
+        })
         if (bound.letsGoBlockDirectory != null) dashboardRoot.addView(Button(this).apply {
             text = "Native Block Directory • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoBlockDirectory(bound) }
@@ -2950,6 +2954,24 @@ class SwitchReadOnlyActivity : Activity() {
             append("No secure-value change, synchronization, normalization, export, replacement or save writing.")
         }
         AlertDialog.Builder(this).setTitle("Save Secure Values • Read-only")
+            .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
+            }) }).setPositiveButton("Close", null).show()
+    }
+
+    private fun showLetsGoGameSyncIdentity(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.letsGoGameSyncIdentity ?: return
+        val detail = buildString {
+            append("${read.version.displayName} • Game Sync Identity • Read-only\n\n")
+            append("State: ${if (read.isUnset) "Unset (all zero bytes)" else "Stored"}\n")
+            append("Hex: ${read.hex}\n")
+            append("Bytes: ${read.idBytes.joinToString(" ") { it.toString(16).uppercase().padStart(2, '0') }}\n\n")
+            append("This is PKHeX's documented eight-byte native MyStatus Game Sync ID. ")
+            append("The saved value does not establish that an account, server or online service is currently available. ")
+            append("All 21 native block CRCs passed before display. No network request, ID change, normalization, export, replacement or save writing.")
+        }
+        AlertDialog.Builder(this).setTitle("Game Sync Identity • Read-only")
             .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
             }) }).setPositiveButton("Close", null).show()
