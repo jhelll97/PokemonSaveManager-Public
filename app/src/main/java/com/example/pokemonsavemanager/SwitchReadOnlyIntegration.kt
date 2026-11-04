@@ -81,6 +81,8 @@ class SwitchReadSnapshot private constructor(
     internal fun readLetsGoGoPark(): LetsGoGoParkRead = LetsGoGoParkReadOnly.read(sourceBytes)
     internal fun readLetsGoPlayerLocation(): LetsGoPlayerLocationRead = LetsGoPlayerLocationReadOnly.read(sourceBytes)
     internal fun readLetsGoAdventureBegin(): LetsGoAdventureBeginRead = LetsGoAdventureBeginReadOnly.read(sourceBytes)
+    internal fun readLetsGoMysteryGiftHistory(): LetsGoMysteryGiftHistoryRead =
+        LetsGoMysteryGiftHistoryReadOnly.read(sourceBytes)
     internal fun readLetsGoPlayerAccessories(): LetsGoPlayerAccessoryRead = LetsGoPlayerAccessoryEditing.read(sourceBytes)
     internal fun readLetsGoStarterAccessories(): LetsGoPlayerAccessoryRead =
         LetsGoPlayerAccessoryEditing.read(sourceBytes, LetsGoAccessoryTarget.STARTER)
@@ -557,6 +559,11 @@ class SwitchReadSession(val snapshot: SwitchReadSnapshot) {
         runCatching { snapshot.readLetsGoAdventureBegin() } else null
     val letsGoAdventureBegin: LetsGoAdventureBeginRead? get() = letsGoAdventureBeginAttempt?.getOrNull()
     val letsGoAdventureBeginUnavailableReason: String? get() = letsGoAdventureBeginAttempt?.exceptionOrNull()?.message
+    private val letsGoMysteryGiftHistoryAttempt = if (validation is LetsGoValidation.Verified)
+        runCatching { snapshot.readLetsGoMysteryGiftHistory() } else null
+    val letsGoMysteryGiftHistory: LetsGoMysteryGiftHistoryRead? get() = letsGoMysteryGiftHistoryAttempt?.getOrNull()
+    val letsGoMysteryGiftHistoryUnavailableReason: String? get() =
+        letsGoMysteryGiftHistoryAttempt?.exceptionOrNull()?.message
     private val letsGoPlayerAccessoriesAttempt = if (validation is LetsGoValidation.Verified)
         runCatching { snapshot.readLetsGoPlayerAccessories() } else null
     val letsGoPlayerAccessories: LetsGoPlayerAccessoryRead? get() = letsGoPlayerAccessoriesAttempt?.getOrNull()

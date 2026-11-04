@@ -584,6 +584,10 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Adventure Start • Read-only"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoAdventureBegin(bound) }
         })
+        if (bound.letsGoMysteryGiftHistory != null) dashboardRoot.addView(Button(this).apply {
+            text = "Mystery Gift History • Read-only"; isAllCaps = false; isEnabled = !busy
+            setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoMysteryGiftHistory(bound) }
+        })
         val playerAccessories = bound.letsGoPlayerAccessories
         if (playerAccessories != null && selectedSourceUri != null) dashboardRoot.addView(Button(this).apply {
             text = if (playerAccessories.isAllUnlocked) "Player Accessories • All unlocked" else "Player Accessories • Unlock to new copy"
@@ -2899,6 +2903,59 @@ class SwitchReadOnlyActivity : Activity() {
             append("All 21 native block CRCs passed before reading. No local-time conversion, date correction, export, replacement or save writing.")
         }
         AlertDialog.Builder(this).setTitle("Adventure Start • Read-only")
+            .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
+            }) }).setPositiveButton("Close", null).show()
+    }
+
+    private fun showLetsGoMysteryGiftHistory(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val read = bound.letsGoMysteryGiftHistory ?: return
+        fun ranges(ids: List<Int>): String {
+            if (ids.isEmpty()) return "None"
+            val output = mutableListOf<String>()
+            var start = ids.first()
+            var previous = start
+            for (value in ids.drop(1)) {
+                if (value == previous + 1) previous = value
+                else {
+                    output += if (start == previous) "$start" else "$start–$previous"
+                    start = value; previous = value
+                }
+            }
+            output += if (start == previous) "$start" else "$start–$previous"
+            return output.joinToString(", ")
+        }
+        val detail = buildString {
+            append("${read.version.displayName} • Mystery Gift History • Read-only\n\n")
+            append("Stored WR7 summaries: ${read.records.size} of 10\n")
+            append("Received-card flags set: ${read.receivedCardIds.size} of 4,224\n")
+            append("Received card IDs: ${ranges(read.receivedCardIds)}\n")
+            for (record in read.records) {
+                append("\nSlot ${record.slot} • Card #${record.cardId} • ${record.giftTypeName}\n")
+                append("Recorded epoch seconds: ${record.epochSeconds}\n")
+                append("Recorded UTC: ${record.utcTimestamp ?: "Outside supported Instant range"}\n")
+                append("Card type: ${record.cardType} • Saved item count: ${record.itemCount}")
+                append(" • Received language ID: ${record.receivedLanguageId}\n")
+                if (record.giftTypeId == 1) {
+                    append("Pokémon: ${LetsGoSpeciesNames.name(record.species)} (#${record.species})\n")
+                    append("Saved detail byte at 0x10E: ${record.detailByte}\n")
+                    append("Original Trainer: ${record.originalTrainerName ?: "Unreadable saved text"}\n")
+                } else if (record.giftTypeId == 2) {
+                    append("Items: ")
+                    append(if (record.items.isEmpty()) "No nonzero item entries" else record.items.joinToString { item ->
+                        "${LetsGoItemNames.name(item.itemId)} (#${item.itemId}) ×${item.quantity}"
+                    })
+                    append('\n')
+                } else {
+                    append("Saved species ID: ${record.species} • Detail byte: ${record.detailByte}\n")
+                }
+            }
+            if (read.records.isEmpty()) append("\nNo nonzero WR7 summary records are stored.\n")
+            append("\nThe ten native WR7 records are receipt summaries, not reconstructable WB7 distribution files. ")
+            append("All 21 native block CRCs passed before reading. No gift injection, flag change, export, reconstruction, replacement or save writing.")
+        }
+        AlertDialog.Builder(this).setTitle("Mystery Gift History • Read-only")
             .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
             }) }).setPositiveButton("Close", null).show()
