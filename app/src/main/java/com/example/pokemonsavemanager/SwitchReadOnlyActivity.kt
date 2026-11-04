@@ -545,7 +545,8 @@ class SwitchReadOnlyActivity : Activity() {
                 })
             }
         }
-        if (bound.profile.family in setOf(SwitchGameFamily.LETS_GO_PIKACHU_EEVEE, SwitchGameFamily.SWORD_SHIELD)) dashboardRoot.addView(Button(this).apply {
+        if (bound.profile.family in setOf(SwitchGameFamily.LETS_GO_PIKACHU_EEVEE, SwitchGameFamily.SWORD_SHIELD,
+                SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL)) dashboardRoot.addView(Button(this).apply {
             text = "🎁  Events"; isAllCaps = false; textSize = 17f; isEnabled = !busy && selectedSourceUri != null
             setOnClickListener { if (session === bound && !dashboardBusy) launchSwitchEvents(bound) }
         })
@@ -1041,7 +1042,8 @@ class SwitchReadOnlyActivity : Activity() {
                     initialSection = null
                     val button = when (section) { "trainer" -> trainerButton; "party" -> partyButton; "storage" -> storageButton; "inventory" -> inventoryButton; "pokedex" -> pokedexButton; else -> null }
                     if (section == "events" && result.profile.family in setOf(
-                            SwitchGameFamily.LETS_GO_PIKACHU_EEVEE, SwitchGameFamily.SWORD_SHIELD))
+                            SwitchGameFamily.LETS_GO_PIKACHU_EEVEE, SwitchGameFamily.SWORD_SHIELD,
+                            SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL))
                         launchSwitchEvents(result)
                     else if (button?.isEnabled == true) button.performClick()
                     else if (button != null) {
@@ -1071,6 +1073,7 @@ class SwitchReadOnlyActivity : Activity() {
         val activity = when (bound.profile.family) {
             SwitchGameFamily.LETS_GO_PIKACHU_EEVEE -> SwitchLetsGoEventActivity::class.java
             SwitchGameFamily.SWORD_SHIELD -> SwitchSwordShieldEventActivity::class.java
+            SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL -> SwitchBdspEventActivity::class.java
             else -> return
         }
         startActivity(Intent(this, activity).setData(source)
