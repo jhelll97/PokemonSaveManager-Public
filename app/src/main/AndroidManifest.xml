@@ -13,6 +13,7 @@
         <activity android:name=".SwitchLetsGoPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoEventActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoCaptureRecordsActivity" android:exported="false"/>
+        <activity android:name=".SwitchLetsGoCaptureTotalActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldItemActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldEventActivity" android:exported="false"/>

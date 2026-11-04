@@ -28,7 +28,7 @@ object LetsGoCaptureRecordsReadOnly {
     private const val ENTRY_COUNT = 153
     internal const val CAPTURED_OFFSET = 0x2A8
     internal const val TRANSFERRED_OFFSET = 0x50C
-    private const val TOTAL_CAPTURED_OFFSET = 0x794
+    internal const val TOTAL_CAPTURED_OFFSET = 0x794
     private const val TOTAL_TRANSFERRED_OFFSET = 0x7A8
 
     fun read(source: ByteArray): LetsGoCaptureRecordsRead {

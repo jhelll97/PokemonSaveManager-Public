@@ -2655,11 +2655,12 @@ class SwitchReadOnlyActivity : Activity() {
             if (nonzero.isEmpty()) appendLine("No non-zero species records are stored.")
             else nonzero.forEach { entry -> appendLine("Species " + entry.species + ": caught " + entry.captured + ", transferred " + entry.transferred) }
             appendLine()
-            append("One per-species caught or Professor Oak transfer counter can be edited to a verified new copy. Native all-species totals remain unchanged. No current-party, legality, encounter or unsupported-state inference is made.")
+            append("One per-species caught or Professor Oak transfer counter, or the separate total caught value, can be edited to a verified new copy. Species edits preserve both totals; the total editor preserves every species record and total transferred. No current-party, legality, encounter or unsupported-state inference is made.")
         }
         AlertDialog.Builder(this).setTitle(bound.displayName + " • Capture Records")
             .setMessage(lines)
             .setPositiveButton("Edit species count") { _, _ -> launchLetsGoCaptureRecordEditor(bound) }
+            .setNeutralButton("Edit total caught") { _, _ -> launchLetsGoCaptureTotalEditor(bound) }
             .setNegativeButton("Close", null).show()
     }
 
@@ -2667,6 +2668,14 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound || dashboardBusy) return
         val source = selectedSourceUri ?: return
         startActivity(Intent(this, SwitchLetsGoCaptureRecordsActivity::class.java).setData(source)
+            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+    }
+
+    private fun launchLetsGoCaptureTotalEditor(bound: SwitchReadSession) {
+        if (session !== bound || dashboardBusy) return
+        val source = selectedSourceUri ?: return
+        startActivity(Intent(this, SwitchLetsGoCaptureTotalActivity::class.java).setData(source)
             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }
