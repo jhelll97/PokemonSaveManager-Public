@@ -11,7 +11,8 @@ data class LegendsArceusPokemonRead(
     val shiny: Boolean, val isEgg: Boolean, val fatefulEncounter: Boolean,
     val isAlpha: Boolean, val isNoble: Boolean,
     val ball: Int, val originalTrainerFriendship: Int, val handlingTrainerFriendship: Int,
-    val currentHandler: Int, val moves: List<LegendsArceusMoveRead>, val ivs: List<Int>,
+    val currentHandler: Int, val hyperTrainingFlags: Int,
+    val moves: List<LegendsArceusMoveRead>, val ivs: List<Int>,
     val ganbaruValues: List<Int>, val relearnMoves: List<Int>, val cachedStats: List<Int>?
 )
 
@@ -62,6 +63,7 @@ object LegendsArceusPokemonReadOnly {
             shiny, iv32 and 0x40000000L != 0L, byte(plain, 0x22) and 1 != 0,
             byte(plain, 0x16) and 32 != 0, byte(plain, 0x16) and 64 != 0,
             byte(plain, 0x137), byte(plain, 0x12A), byte(plain, 0xD8), byte(plain, 0xD4),
+            byte(plain, 0x13E),
             immutable((0..3).map { LegendsArceusMoveRead(u16(plain, 0x54 + it * 2), byte(plain, 0x5C + it)) }),
             immutable((0..5).map { ((iv32 ushr (it * 5)) and 31).toInt() }),
             immutable((0..5).map { byte(plain, 0xA4 + it) }),
