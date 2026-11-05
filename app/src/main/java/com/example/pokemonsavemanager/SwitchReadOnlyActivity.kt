@@ -404,7 +404,7 @@ class SwitchReadOnlyActivity : Activity() {
             session?.supports(SwitchReadCapability.PASTURES) == true)
         storageButton.text = if (session?.profile?.family in setOf(
                 SwitchGameFamily.LETS_GO_PIKACHU_EEVEE, SwitchGameFamily.SWORD_SHIELD,
-                SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL))
+                SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL, SwitchGameFamily.LEGENDS_ARCEUS))
             "◉  Pokémon Boxes • Nickname edit" else "◉  Pokémon Boxes • Read-only"
         menuSelectionButton.isEnabled = !busy && session?.bdspMenuSelection != null
         menuSelectionButton.visibility = if (session?.profile?.family == SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL) android.view.View.VISIBLE else android.view.View.GONE
@@ -1182,7 +1182,7 @@ class SwitchReadOnlyActivity : Activity() {
                                 "(${it.unreadableBoxSlots} unreadable)\nParty, 32 boxes and ride Pokémon: read-only access available"
                         } ?: result.legendsArceusStorage?.let {
                             "Party: ${it.partyCount}/6\nOccupied pasture slots: ${it.occupiedPastureSlots}/960 " +
-                                "(${it.unreadablePastureSlots} unreadable)\nParty and 32 pastures: read-only access available"
+                                "(${it.unreadablePastureSlots} unreadable)\nParty and 32 pastures browsing available • Native nickname editing available"
                         } ?: "Party and storage: unavailable" +
                             (result.storageUnavailableReason?.let { "\n$it" } ?: "")) +
                         "\n\nTrainer profile: " + (if (result.swordShieldTrainer != null || result.letsGoTrainer != null || result.bdspTrainer != null || result.legendsArceusTrainer != null || result.scarletVioletTrainer != null || result.legendsZaTrainer != null) "read-only access available"
@@ -2973,7 +2973,7 @@ class SwitchReadOnlyActivity : Activity() {
         val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val scroll = ScrollView(this).apply { addView(list) }
         list.addView(TextView(this).apply {
-            text = "32 native pastures • 30 slots each • Read-only\n" +
+            text = "32 native pastures • 30 slots each • Native nickname editing available\n" +
                 "${storage.occupiedPastureSlots}/960 occupied slots (${storage.unreadablePastureSlots} unreadable). " +
                 "Custom pasture names and unlock state are not read in this view."
             setPadding(16, 16, 16, 16)
@@ -3028,21 +3028,47 @@ class SwitchReadOnlyActivity : Activity() {
             append("Saved Ganbaru values (same order): ${p.ganbaruValues.joinToString(" / ")}\n")
             append("These are raw saved training increments; derived effort levels and recalculated stats are not evaluated.\n\n")
             append("PA8 stored-data checksum passed. Cached party stats are outside that checksum and may be stale. ")
-            append("Read-only access; legality and game-presence checks are not evaluated.")
+            append("Native nickname editing is available for party and pasture records; legality and game-presence checks are not evaluated.")
         }
-        val scroll = ScrollView(this).apply {
-            addView(TextView(this@SwitchReadOnlyActivity).apply {
-                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
-            })
+        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        content.addView(TextView(this).apply {
+            text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+        })
+        val pastureMatch = Regex("^Pasture ([0-9]+) • Slot ([0-9]+)$").matchEntire(location)
+        val partyMatch = Regex("^Party ([0-9]+)$").matchEntire(location)
+        val nativeTarget = when {
+            pastureMatch != null -> Triple(LegendsArceusPokemonArea.PASTURE,
+                pastureMatch.groupValues[1].toInt(), pastureMatch.groupValues[2].toInt())
+            partyMatch != null -> Triple(LegendsArceusPokemonArea.PARTY, 0, partyMatch.groupValues[1].toInt())
+            else -> null
         }
-        val canAddToBank = Regex("^(Pasture [0-9]+ • Slot [0-9]+|Party [0-9]+)$").matches(location)
-        val dialog = AlertDialog.Builder(this).setTitle("$location • Read-only")
+        if (nativeTarget != null) content.addView(Button(this).apply {
+            text = "Edit Pokémon"
+            isAllCaps = false
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && source != null) startActivity(
+                    Intent(this@SwitchReadOnlyActivity, SwitchLegendsArceusPokemonNicknameActivity::class.java)
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                        .putExtra("pse.switch.pokemon.pasture", nativeTarget.second)
+                        .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
+        })
+        val bank = Button(this).apply {
+            text = "Add to PSE Bank"
+            isAllCaps = false
+        }
+        if (nativeTarget != null) content.addView(bank)
+        val scroll = ScrollView(this).apply { addView(content) }
+        val dialog = AlertDialog.Builder(this).setTitle("$location • Legends: Arceus")
             .setView(scroll).setNegativeButton("Close", null).create()
-        if (canAddToBank) {
-            dialog.setButton(AlertDialog.BUTTON_POSITIVE, "Add to PSE Bank",
-                null as android.content.DialogInterface.OnClickListener?)
+        if (nativeTarget != null) {
             dialog.setOnShowListener {
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                bank.setOnClickListener {
                     if (session !== bound) { dialog.dismiss(); return@setOnClickListener }
                     try {
                         val raw = legendsArceusRecordBytes(bound, location)

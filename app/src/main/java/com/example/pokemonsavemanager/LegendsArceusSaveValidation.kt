@@ -428,6 +428,76 @@ object LegendsArceusSaveValidation {
         return LegendsArceusPokemonWriteResult(edited, absoluteOffset)
     }
 
+    /** Replaces one decoded native party PA8 slot, then rebuilds encryption and the SHA-256 footer. */
+    internal fun writePartyRecord(
+        source: ByteArray,
+        position: Int,
+        record: ByteArray
+    ): LegendsArceusPokemonWriteResult {
+        val blocks = readPokemonBlocks(source)
+        require(position in 1..6) { "The native Legends: Arceus party slot is outside the six-slot party." }
+        require(record.size == LegendsArceusPokemonReadOnly.PARTY_SIZE) {
+            "A complete 376-byte native party PA8 is required."
+        }
+        require(LegendsArceusPokemonReadOnly.read(record) is LegendsArceusSlotRead.Pokemon) {
+            "The supplied native party PA8 did not pass its stored-data checksum."
+        }
+        require(blocks.party.size == requiredObjects.getValue(0x2985FE5DL)) {
+            "The native Legends: Arceus party object has the wrong size."
+        }
+        val partyCount = blocks.party[6 * LegendsArceusPokemonReadOnly.PARTY_SIZE].toInt() and 255
+        require(position <= partyCount) { "The selected native party slot is not occupied." }
+        val relativeOffset = (position - 1) * LegendsArceusPokemonReadOnly.PARTY_SIZE
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var absoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            if (key == 0x2985FE5DL) {
+                require(type == 4 && length == 0x8D4L) {
+                    "The native Legends: Arceus party object has the wrong type or size."
+                }
+                repeat(relativeOffset) { stream.next() }
+                repeat(record.size) { byteIndex ->
+                    payload[blockStart + relativeOffset + byteIndex] =
+                        (record[byteIndex].toInt() xor stream.next()).toByte()
+                }
+                absoluteOffset = blockStart + relativeOffset
+            }
+            cursor.skip(length.toInt())
+        }
+        require(absoluteOffset >= 0) { "The native Legends: Arceus party object is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        LegendsArceusStorageReadOnly.read(edited)
+        return LegendsArceusPokemonWriteResult(edited, absoluteOffset)
+    }
+
     private fun inspect(source: ByteArray, captured: MutableMap<Long, ByteArray>?, uintKeys: Set<Long> = emptySet(),
         objectSizes: Map<Long, Int> = emptyMap(), byteDataSizes: Map<Long, Int> = emptyMap()): LegendsArceusValidation {
         if (source.size !in knownSizes) return LegendsArceusValidation.Unrecognized
