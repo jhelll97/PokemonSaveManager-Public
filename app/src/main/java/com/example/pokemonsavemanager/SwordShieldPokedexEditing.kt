@@ -109,7 +109,7 @@ object SwordShieldPokedexEditing {
             require(after.caught && languages[languageIndex!!] in after.languages) {
                 "The staged caught registration did not reopen exactly."
             }
-            require(after.languages.toSet() == before.languages.toSet() + languages[languageIndex]) {
+            require(after.languages.toSet() == before.languages.toSet() + languages[languageIndex!!]) {
                 "An unrelated caught-language registration changed."
             }
         } else require(before.caught == after.caught && before.languages == after.languages) {

@@ -481,7 +481,7 @@ class MainActivity : Activity() {
                 restored&&selected.all{runCatching{it.bankFile.readBytes().contentEquals(it.bankBytes)}.getOrDefault(false)}
             }
             val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false))
-            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed."else if(bankRestored&&destinationRestored)"The exact Gen 2 destination and every selected Bank record were restored or kept and verified."else "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank records until a verified backup and Bank contents have been reviewed."
+            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 2 destination and every selected Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank records until a verified backup and Bank contents have been reviewed."
             showDialog("Move selected failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         selectedBankFiles.clear();bankMultiSelectMode=false;Toast.makeText(this,"${selected.size} Gen 2 Pokémon moved to Box $targetBox and verified",Toast.LENGTH_LONG).show();showBank()
@@ -1330,7 +1330,7 @@ class MainActivity : Activity() {
                 bankRestored=complete&&recoveryBanks.size==chosen.size
             }
             val restored=writeStarted&&bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)&&verifyGen2SaveIntegrity(fresh).first}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the destination save or removed from Bank."else if(restored)"The exact previous destination and every original Bank record were kept or restored and verified."else "Automatic batch recovery could not be verified. Stop editing; keep the working save and remaining Bank records, and restore the kept recovery backup only after reviewing Bank recovery."
+            val recovery=if(!writeStarted)"Nothing was written to the destination save or removed from Bank." else  if(restored)"The exact previous destination and every original Bank record were kept or restored and verified." else  "Automatic batch recovery could not be verified. Stop editing; keep the working save and remaining Bank records, and restore the kept recovery backup only after reviewing Bank recovery."
             showDialog("Gen 1 → Gen 2 multi-transfer failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""))
             return
         }
@@ -1487,7 +1487,7 @@ class MainActivity : Activity() {
                 require(bound()&&verifyGen2SaveIntegrity(persisted).first&&file.readBytes().contentEquals(work)){"The persisted Gen 2 source identity or complete save verification failed."}
             }catch(e:Exception){
                 val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-                val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The complete fresh working save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+                val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The complete fresh working save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
                 showDialog("Gen 2 TM/HM edit failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
             }
             Toast.makeText(this,"Gen 2 TMs / HMs updated and verified",Toast.LENGTH_LONG).show();showGen2InventoryEditor()
@@ -1565,7 +1565,7 @@ class MainActivity : Activity() {
                 require(bound()&&verifyGen2SaveIntegrity(persisted).first&&file.readBytes().contentEquals(work)){"The persisted Gen 2 source identity or complete save verification failed."}
             }catch(e:Exception){
                 val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-                val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The complete fresh working save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+                val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The complete fresh working save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
                 showDialog("Gen 2 PC item edit failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
             }
             Toast.makeText(this,"Gen 2 PC Items updated and verified",Toast.LENGTH_LONG).show();showGen2InventoryEditor()
@@ -1642,7 +1642,7 @@ class MainActivity : Activity() {
                 require(bound()&&verifyGen2SaveIntegrity(persisted).first&&file.readBytes().contentEquals(work)){"The persisted Gen 2 source identity or complete save verification failed."}
             }catch(e:Exception){
                 val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-                val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The complete fresh working save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+                val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The complete fresh working save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
                 showDialog("Gen 2 Key Item edit failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
             }
             Toast.makeText(this,"Gen 2 Key Items updated and verified",Toast.LENGTH_LONG).show();showGen2InventoryEditor()
@@ -1757,7 +1757,7 @@ class MainActivity : Activity() {
         if(recorded.isEmpty())addMutedLine(root,"None of the seven saved Apricorn hand-in flags is set. This alone does not prove Kurt is idle.")
         else for((apricorn,ball)in recorded)addDetailLine(root,"Recorded hand-in","${gen2ItemName(apricorn)} → ${gen2ItemName(ball)}")
         if(recorded.size>1)addMutedLine(root,"Several hand-in flags are set. PSE will not infer a single active job.")
-        addDetailLine(root,"Saved making-Balls flag",if(work.making)"Set"else"Clear")
+        addDetailLine(root,"Saved making-Balls flag",if(work.making)"Set" else "Clear")
         addDetailLine(root,"Saved Apricorn quantity (Crystal)",work.quantity?.toString()?:"Not stored in Gold / Silver")
         addMutedLine(root,"Counts include all carried Item Pocket stacks, not PC storage or Apricorns already given to Kurt. The hand-in flags, saved making flag and Crystal quantity byte are read only. Remaining time and live job readiness are not calculated. Stored quantity can remain after collection and does not prove an active batch. Craft with Kurt in-game; no items, save bytes or timers are changed here.")
         addButton(root,"←  Items"){showGen2InventoryEditor()}
@@ -1813,7 +1813,7 @@ class MainActivity : Activity() {
             require(bound()&&persisted.contentEquals(work)&&verifyGen2SaveIntegrity(persisted).first&&detectGen2Profile(persisted)?.key=="GS"&&!gen2KurtSavedWork(persisted,profile).making&&gen2KurtHandInRecipes(persisted,profile)==listOf(expectedRecipe)){"The complete persisted batch finish did not verify."}
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(opened);require(file.readBytes().contentEquals(opened)&&verifyGen2SaveIntegrity(opened).first)}.isSuccess
-            val recovery=if(!writeStarted)"Nothing was written to the working save."else if(restored)"The exact previous working save was restored and verified."else "Automatic rollback could not be verified. Stop editing and restore the kept recovery backup."
+            val recovery=if(!writeStarted)"Nothing was written to the working save." else  if(restored)"The exact previous working save was restored and verified." else  "Automatic rollback could not be verified. Stop editing and restore the kept recovery backup."
             showDialog("Kurt batch edit failed",(e.message?:"Could not safely finish the saved batch")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"Saved Kurt making flag cleared and verified; collect in-game",Toast.LENGTH_LONG).show()
@@ -1874,7 +1874,7 @@ class MainActivity : Activity() {
             require(bound()&&persisted.contentEquals(work)&&verifyGen2SaveIntegrity(persisted).first&&detectGen2Profile(persisted)?.key=="C"&&gen2KurtSavedWork(persisted,profile)==Gen2KurtSavedWork(false,expected.quantity)&&gen2KurtHandInRecipes(persisted,profile)==listOf(expected.recipe)){"The complete persisted Crystal batch finish did not verify."}
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(opened);require(file.readBytes().contentEquals(opened)&&verifyGen2SaveIntegrity(opened).first)}.isSuccess
-            val recovery=if(!writeStarted)"Nothing was written to the working save."else if(restored)"The exact previous working save was restored and verified."else "Automatic rollback could not be verified. Stop editing and restore the kept recovery backup."
+            val recovery=if(!writeStarted)"Nothing was written to the working save." else  if(restored)"The exact previous working save was restored and verified." else  "Automatic rollback could not be verified. Stop editing and restore the kept recovery backup."
             showDialog("Crystal Kurt edit failed",(e.message?:"Could not safely finish the saved batch")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"Saved Crystal making flag cleared and verified; collect in-game",Toast.LENGTH_LONG).show()
@@ -1920,7 +1920,7 @@ class MainActivity : Activity() {
                 require(bound()&&verifyGen2SaveIntegrity(persisted).first&&file.readBytes().contentEquals(work)){"The persisted Gen 2 source identity or complete save verification failed."}
             }catch(e:Exception){
                 val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-                val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The complete fresh working save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+                val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The complete fresh working save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
                 showDialog("Gen 2 Ball edit failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
             }
             Toast.makeText(this,"Gen 2 Ball Pocket updated and verified",Toast.LENGTH_LONG).show();showGen2InventoryEditor()
@@ -1997,7 +1997,7 @@ class MainActivity : Activity() {
                 require(bound()&&verifyGen2SaveIntegrity(persisted).first&&file.readBytes().contentEquals(work)){"The persisted Gen 2 source identity or complete save verification failed."}
             }catch(e:Exception){
                 val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-                val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The complete fresh working save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+                val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The complete fresh working save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
                 showDialog("Gen 2 item edit failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
             }
             Toast.makeText(this,"Gen 2 Item Pocket updated and verified",Toast.LENGTH_LONG).show();redraw()
@@ -4941,7 +4941,7 @@ class MainActivity : Activity() {
                 require(recovered.contentEquals(original)){"The emulator rollback did not persist byte-for-byte."}
                 require(verifyGen2SaveIntegrity(recovered).first){"The emulator rollback failed Gen 2 integrity validation."}
             }.isSuccess
-            val recovery=if(!writeStarted)"Nothing was written to the emulator source."else if(restored)"The exact pre-write emulator save was restored and verified."else "PSE could not verify emulator rollback. Keep the safety backup, stop the emulator and do not use the target until it has been recovered from a verified backup."
+            val recovery=if(!writeStarted)"Nothing was written to the emulator source." else  if(restored)"The exact pre-write emulator save was restored and verified." else  "PSE could not verify emulator rollback. Keep the safety backup, stop the emulator and do not use the target until it has been recovered from a verified backup."
             showDialog("Could not replace Gen 2 save",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nSafety backup kept: "+it.name}?:""));return
         }
         updateSourceBaseline(sha256(openedEdited),expectedGame,openedEdited.size.toLong())
@@ -4998,7 +4998,7 @@ class MainActivity : Activity() {
             require(persisted.contentEquals(pending.bytes)&&verifyGen2SaveIntegrity(persisted).first&&detectGen2Profile(persisted)?.key==pending.profileKey){"The exported Gen 2 save did not persist exactly with valid integrity."}
             require(bound()&&pending.file.readBytes().contentEquals(pending.bytes)){"The active Gen 2 save changed while export was being verified."}
         }catch(e:Exception){
-            val result=if(!writeStarted)"Nothing was written."else "The new export may be incomplete or unverified. Do not use it; choose a new file for another export."
+            val result=if(!writeStarted)"Nothing was written." else  "The new export may be incomplete or unverified. Do not use it; choose a new file for another export."
             showDialog("Export failed",(e.message?:"Could not verify the exported Gen 2 save")+"\n\n"+result+"\n\nPSE did not write to the working copy or emulator source.");return
         }
         Toast.makeText(this,"Gen 2 save exported and verified",Toast.LENGTH_LONG).show()
@@ -5399,7 +5399,7 @@ class MainActivity : Activity() {
                 val recovered=contentResolver.openInputStream(source).use{requireNotNull(it).readBytes()}
                 require(recovered.contentEquals(openedSource)&&verifyGen2SaveIntegrity(recovered).first)
             }.isSuccess
-            val recovery=if(!sourceWriteStarted&&!workingWriteStarted)"Nothing was written to the emulator or working save."else if(sourceRecovered&&workingRecovered)"The exact previous emulator and working-save bytes were restored and verified."else "PSE could not verify complete rollback. Keep the safety backups, stop the emulator and do not use either target until recovered."
+            val recovery=if(!sourceWriteStarted&&!workingWriteStarted)"Nothing was written to the emulator or working save." else  if(sourceRecovered&&workingRecovered)"The exact previous emulator and working-save bytes were restored and verified." else  "PSE could not verify complete rollback. Keep the safety backups, stop the emulator and do not use either target until recovered."
             showDialog("Restore failed",(e.message?:"Could not safely restore the Gen 2 backup")+"\n\n"+recovery+"\n\nSafety backups kept: "+listOfNotNull(sourceSafety?.name,workingSafety?.name).joinToString(", "));return
         }
         updateSourceBaseline(sha256(openedBackup),restoredGame,openedBackup.size.toLong())
@@ -5505,7 +5505,7 @@ class MainActivity : Activity() {
                     val deleted=doc.delete()
                     require(deleted&&!doc.exists()){"PSE could not verify that the selected backup was removed."}
                 }catch(e:Exception){
-                    val outcome=if(!deleteStarted)"Nothing was deleted."else "The deletion result could not be verified. Refresh Safe Backups before taking further action."
+                    val outcome=if(!deleteStarted)"Nothing was deleted." else  "The deletion result could not be verified. Refresh Safe Backups before taking further action."
                     showDialog("Delete not completed",(e.message?:"Could not verify backup deletion")+"\n\n"+outcome+"\n\nPSE did not write to the emulator, working save or any other backup.");return@setPositiveButton
                 }
                 Toast.makeText(this,"Selected Gen 2 backup deletion verified",Toast.LENGTH_SHORT).show()
@@ -6166,7 +6166,7 @@ class MainActivity : Activity() {
         }catch(e:Exception){
             val rollback=original
             val restored=if(writeStarted&&rollback!=null)runCatching{file.writeBytes(rollback);require(file.readBytes().contentEquals(rollback)&&verifyGen2SaveIntegrity(rollback).first)}.isSuccess else false
-            val recovery=if(!writeStarted)"Nothing was written to the working save."else if(restored)"The complete fresh working save was restored and verified; no partial breeding or Egg update was kept."else "Restoration failed. Automatic restore could not be verified. Restore the retained recovery backup before continuing."
+            val recovery=if(!writeStarted)"Nothing was written to the working save." else  if(restored)"The complete fresh working save was restored and verified; no partial breeding or Egg update was kept." else  "Restoration failed. Automatic restore could not be verified. Restore the retained recovery backup before continuing."
             showDialog("Day Care deposit failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"Second parent deposited; breeding initialised",Toast.LENGTH_LONG).show();showGen2DayCare()
@@ -6215,7 +6215,7 @@ class MainActivity : Activity() {
             require(bound()&&verifyGen2SaveIntegrity(persisted).first&&file.readBytes().contentEquals(work)){"The persisted non-breeding deposit failed full integrity or final source verification."}
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)&&verifyGen2SaveIntegrity(fresh).first}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The complete fresh working save was restored and verified."else "Automatic restore could not be verified. Restore the retained recovery backup before continuing."
+            val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The complete fresh working save was restored and verified." else  "Automatic restore could not be verified. Restore the retained recovery backup before continuing."
             showDialog("Gen 2 Day Care deposit failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"Verified non-breeding Day Care pair deposited",Toast.LENGTH_LONG).show();showGen2DayCare()
@@ -6333,7 +6333,7 @@ class MainActivity : Activity() {
             require(bound()&&verifyGen2SaveIntegrity(persisted).first&&file.readBytes().contentEquals(work)){"The persisted initial deposit failed full integrity or final source verification."}
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)&&verifyGen2SaveIntegrity(fresh).first}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The complete fresh working save was restored and verified."else "Automatic restore could not be verified. Restore the retained recovery backup before continuing."
+            val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The complete fresh working save was restored and verified." else  "Automatic restore could not be verified. Restore the retained recovery backup before continuing."
             showDialog("Gen 2 Day Care deposit failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""))
             return
         }
@@ -6388,7 +6388,7 @@ class MainActivity : Activity() {
             require(bound()&&verifyGen2SaveIntegrity(persisted).first&&file.readBytes().contentEquals(work)){"The persisted withdrawal failed full integrity or final source verification."}
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)&&verifyGen2SaveIntegrity(fresh).first}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The complete fresh working save was restored and verified."else "Automatic restore could not be verified. Restore the retained recovery backup before continuing."
+            val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The complete fresh working save was restored and verified." else  "Automatic restore could not be verified. Restore the retained recovery backup before continuing."
             showDialog("Gen 2 Day Care withdrawal failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"Day Care parent withdrawn and verified",Toast.LENGTH_LONG).show();showGen2DayCare()
@@ -6638,7 +6638,7 @@ class MainActivity : Activity() {
             require(bound()&&verifyGen2SaveIntegrity(persisted).first&&file.readBytes().contentEquals(work)){"The persisted source identity or complete Crystal save verification failed."}
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(fresh);require(file.readBytes().contentEquals(fresh)&&verifyGen2SaveIntegrity(fresh).first)}.isSuccess
-            val recovery=if(!writeStarted)"Nothing was written to the working save."else if(restored)"The exact fresh working save was restored and verified."else "Automatic restore could not be verified. Stop editing and restore the retained recovery backup."
+            val recovery=if(!writeStarted)"Nothing was written to the working save." else  if(restored)"The exact fresh working save was restored and verified." else  "Automatic restore could not be verified. Stop editing and restore the retained recovery backup."
             showDialog("GS Ball update failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"Crystal GS Ball event state enabled and verified",Toast.LENGTH_LONG).show()
@@ -6738,7 +6738,7 @@ class MainActivity : Activity() {
             require(bound()&&verifyGen2SaveIntegrity(persisted).first&&file.readBytes().contentEquals(work)){"The persisted save failed full integrity or final source verification."}
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(fresh);require(file.readBytes().contentEquals(fresh)&&verifyGen2SaveIntegrity(fresh).first)}.isSuccess
-            val recovery=if(!writeStarted)"Nothing was written to the working save."else if(restored)"The exact fresh working save was restored and verified; no partial Pokémon or Pokédex update was kept."else "Automatic restore could not be verified. Restore the retained recovery backup before continuing."
+            val recovery=if(!writeStarted)"Nothing was written to the working save." else  if(restored)"The exact fresh working save was restored and verified; no partial Pokémon or Pokédex update was kept." else  "Automatic restore could not be verified. Restore the retained recovery backup before continuing."
             showDialog("Celebi injection failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"Crystal Celebi injected and verified in PC Box $box",Toast.LENGTH_LONG).show()
@@ -6835,7 +6835,7 @@ class MainActivity : Activity() {
             require(bound()&&verifyGen2SaveIntegrity(persisted).first&&file.readBytes().contentEquals(work)){"The persisted event failed full integrity or final source verification."}
         }catch(e:Exception){
             val restored=if(writeStarted)runCatching{file.writeBytes(fresh);require(file.readBytes().contentEquals(fresh)&&verifyGen2SaveIntegrity(fresh).first)}.isSuccess else false
-            val recovery=if(!writeStarted)"Nothing was written to the working save."else if(restored)"The exact fresh working save was restored and verified; no partial event or Pokédex update was kept."else "Automatic restore could not be verified. Restore the retained recovery backup before continuing."
+            val recovery=if(!writeStarted)"Nothing was written to the working save." else  if(restored)"The exact fresh working save was restored and verified; no partial event or Pokédex update was kept." else  "Automatic restore could not be verified. Restore the retained recovery backup before continuing."
             showDialog("Gen 2 event injection failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"${event.label} injected and verified in PC Box $box",Toast.LENGTH_LONG).show()
@@ -7332,7 +7332,7 @@ class MainActivity : Activity() {
                 require(bound()&&verifyGen2SaveIntegrity(persisted).first&&file.readBytes().contentEquals(work)){"The persisted Gen 2 source identity or complete save verification failed."}
             }catch(e:Exception){
                 val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-                val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The complete fresh working save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+                val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The complete fresh working save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
                 showDialog("Gen 2 trainer edit failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return@addButton
             }
             Toast.makeText(this,"Gen 2 trainer data updated and verified",Toast.LENGTH_LONG).show();showGen2TrainerEditor()
@@ -7388,7 +7388,7 @@ class MainActivity : Activity() {
             require(bound()&&persisted.contentEquals(work)&&gen2ClockResetRequested(persisted,profile)){"The complete persisted clock reset request did not verify."}
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(opened);require(file.readBytes().contentEquals(opened)&&verifyGen2SaveIntegrity(opened).first)}.isSuccess
-            val recovery=if(!writeStarted)"Nothing was written to the working save."else if(restored)"The exact previous working save was restored and verified."else "Automatic rollback could not be verified. Stop editing and restore the kept recovery backup."
+            val recovery=if(!writeStarted)"Nothing was written to the working save." else  if(restored)"The exact previous working save was restored and verified." else  "Automatic rollback could not be verified. Stop editing and restore the kept recovery backup."
             showDialog("Clock reset request failed",(e.message?:"Could not safely request the clock reset")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         showDialog("Clock reset requested","The saved request flag was set and verified. No day/time was chosen and no emulator RTC bytes were changed. After Save & Replace, cold-start the game and choose Continue to set the clock in-game.")
@@ -7450,7 +7450,7 @@ class MainActivity : Activity() {
                 require(bound()&&verifyGen2SaveIntegrity(persisted).first&&file.readBytes().contentEquals(work)){"The persisted Gen 2 source identity or complete save verification failed."}
             }catch(e:Exception){
                 val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-                val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The complete fresh working save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+                val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The complete fresh working save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
                 showDialog("Gen 2 play-time edit failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return@addButton
             }
             Toast.makeText(this,"Gen 2 play time updated and verified",Toast.LENGTH_LONG).show();showGen2PlayTimeEditor()
@@ -7510,7 +7510,7 @@ class MainActivity : Activity() {
                 require(bound()&&verifyGen2SaveIntegrity(persisted).first&&file.readBytes().contentEquals(work)){"The persisted Gen 2 source identity or complete save verification failed."}
             }catch(e:Exception){
                 val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-                val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The complete fresh working save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+                val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The complete fresh working save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
                 showDialog("Gen 2 badge edit failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return@addButton
             }
             Toast.makeText(this,"Gen 2 badges updated and verified",Toast.LENGTH_LONG).show();showGen2BadgeEditor()
@@ -7568,7 +7568,7 @@ class MainActivity : Activity() {
                 require(bound()&&verifyGen2SaveIntegrity(persisted).first&&file.readBytes().contentEquals(work)){"The persisted Gen 2 source identity or complete save verification failed."}
             }catch(e:Exception){
                 val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-                val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The complete fresh working save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+                val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The complete fresh working save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
                 showDialog("Gen 2 currency edit failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return@addButton
             }
             Toast.makeText(this,"Gen 2 currency updated and verified",Toast.LENGTH_LONG).show();showGen2CurrencyEditor()
@@ -7642,7 +7642,7 @@ class MainActivity : Activity() {
                 require(bound()&&verifyGen2SaveIntegrity(persisted).first&&file.readBytes().contentEquals(work)){"The persisted Gen 2 source identity or complete save verification failed."}
             }catch(e:Exception){
                 val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-                val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The complete fresh working save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+                val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The complete fresh working save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
                 showDialog("Gen 2 Pokédex edit failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return@addButton
             }
             Toast.makeText(this,"Gen 2 Pokédex updated and verified",Toast.LENGTH_LONG).show();showGen2PokedexEditor()
@@ -8763,7 +8763,7 @@ class MainActivity : Activity() {
             .setTitle(file.name)
             .setMessage(
                 "${if (protected) "⭐ Protected ORIGINAL\n" else if (kept) "📌 Kept backup\n" else "↻ Rolling backup\n"}" +
-                "Size: ${formatBytes(file.length())}"+if(gen2Pins)"\n\nKeep actions change only the pin. They do not mirror files or run cleanup; use Delete backup for explicit deletion."else""
+                "Size: ${formatBytes(file.length())}"+if(gen2Pins)"\n\nKeep actions change only the pin. They do not mirror files or run cleanup; use Delete backup for explicit deletion." else ""
             )
             .setItems(actions.toTypedArray()) { _, which ->
                 if(gen2Pins&&actions[which] in setOf("Keep this backup","Remove Keep pin")){
@@ -8812,10 +8812,10 @@ class MainActivity : Activity() {
                 require(prefs.edit().putStringSet("kept",names).commit())
                 require(prefs.getStringSet("kept",emptySet())?.contains(file.name)==true)
             }.isSuccess
-            val outcome=if(!commitStarted)"No Keep-pin change was made."else if(retained)"The selected backup's Keep pin was restored and verified."else"The Keep-pin result could not be verified. Refresh Backups before cleanup or deletion."
+            val outcome=if(!commitStarted)"No Keep-pin change was made." else  if(retained)"The selected backup's Keep pin was restored and verified." else "The Keep-pin result could not be verified. Refresh Backups before cleanup or deletion."
             showDialog("Keep-pin change not completed",(e.message?:"Could not verify backup retention")+"\n\n"+outcome+"\n\nNo save or backup file was written, mirrored or deleted.");return
         }
-        Toast.makeText(this,if(keep)"Keep pin saved and verified; files unchanged"else"Keep pin removed and verified; no files deleted",Toast.LENGTH_LONG).show()
+        Toast.makeText(this,if(keep)"Keep pin saved and verified; files unchanged" else "Keep pin removed and verified; no files deleted",Toast.LENGTH_LONG).show()
         showBackups()
     }
 
@@ -8940,7 +8940,7 @@ class MainActivity : Activity() {
             openedRoot=root
         )
         AlertDialog.Builder(this).setTitle("Delete this Gen 2 backup?")
-            .setMessage("Delete "+file.name+" from PSE"+if(mirror!=null)" and its verified identical Safe Files copy? Other backups, the emulator and working save will not be changed."else" only? No matching Safe Files copy was found. Other backups, the emulator and working save will not be changed.")
+            .setMessage("Delete "+file.name+" from PSE"+if(mirror!=null)" and its verified identical Safe Files copy? Other backups, the emulator and working save will not be changed." else " only? No matching Safe Files copy was found. Other backups, the emulator and working save will not be changed.")
             .setNegativeButton("Cancel",null)
             .setPositiveButton("Delete"){_,_->deleteGen2InternalBackupConfirmed(context)}
             .show()
@@ -8995,7 +8995,7 @@ class MainActivity : Activity() {
             val deleted=file.delete()
             require(deleted&&!file.exists()){"PSE could not verify removal of the internal backup."}
         }catch(e:Exception){
-            val outcome=if(!mirrorAttempted&&!internalAttempted)"Nothing was deleted."else if(mirrorRemoved&&!internalAttempted)"The identical Safe Files copy was removed and verified; PSE did not delete the internal backup."else"The deletion was not fully verified and may be partial. Refresh Backups and Safe Files before taking further action."
+            val outcome=if(!mirrorAttempted&&!internalAttempted)"Nothing was deleted." else  if(mirrorRemoved&&!internalAttempted)"The identical Safe Files copy was removed and verified; PSE did not delete the internal backup." else "The deletion was not fully verified and may be partial. Refresh Backups and Safe Files before taking further action."
             showDialog("Delete not completed",(e.message?:"Could not verify backup deletion")+"\n\n"+outcome+"\n\nKeep-pin metadata was not changed. PSE did not write to the emulator, working save or other backups.")
             return
         }
@@ -24488,7 +24488,7 @@ class MainActivity : Activity() {
                 require(bankFile.readBytes().contentEquals(expected)){"The original Bank payload could not be kept or restored exactly."}
             }.isSuccess
             val restored=writeStarted&&bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)&&verifyGen2SaveIntegrity(fresh).first}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the destination save or removed from Bank."else if(restored)"The exact previous destination and original Bank record were kept or restored and verified."else "Automatic recovery could not be verified. Stop editing; keep the working save and remaining Bank records, and restore the kept recovery backup only after reviewing Bank recovery."
+            val recovery=if(!writeStarted)"Nothing was written to the destination save or removed from Bank." else  if(restored)"The exact previous destination and original Bank record were kept or restored and verified." else  "Automatic recovery could not be verified. Stop editing; keep the working save and remaining Bank records, and restore the kept recovery backup only after reviewing Bank recovery."
             showDialog("Gen 1 → Gen 2 transfer failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""))
             return
         }
@@ -26214,7 +26214,7 @@ class MainActivity : Activity() {
             evolved=verified;evolvedName=targetName
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)&&verifyGen2SaveIntegrity(fresh).first}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The complete fresh working save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+            val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The complete fresh working save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
             showDialog("Gen 2 evolution failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         val result=evolved?:return
@@ -26382,7 +26382,7 @@ class MainActivity : Activity() {
 
     private fun chooseGen2ReorderSource(file:File,opened:ByteArray,openedSource:Uri?,openedLabel:String?,box:Int?) {
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedSource&&currentSourceLabel==openedLabel
-        val location=if(box==null)"Party"else"Box $box"
+        val location=if(box==null)"Party" else "Box $box"
         val profile=detectGen2Profile(opened)
         val choices=runCatching{
             require(profile!=null&&bound()&&verifyGen2SaveIntegrity(opened).first)
@@ -26394,7 +26394,7 @@ class MainActivity : Activity() {
         }.getOrElse{showDialog("Reorder Gen 2 Pokémon","The location, verified save or source identity changed, or there are fewer than two records. Reopen My Pokémon. Nothing was changed.");return}
         val labels=choices.map{"Slot ${it.slot+1} • ${gen2ListName(it)} • ${gen2ListStatus(it)}"}.toTypedArray()
         var consumed=false
-        AlertDialog.Builder(this).setTitle(if(box==null)"Choose Party Pokémon to reorder"else"Choose Box $box Pokémon to reorder")
+        AlertDialog.Builder(this).setTitle(if(box==null)"Choose Party Pokémon to reorder" else "Choose Box $box Pokémon to reorder")
             .setItems(labels){_,which->
                 if(consumed){showDialog("Reorder Gen 2 Pokémon","This source choice was already handled. Reopen Reorder.");return@setItems}
                 consumed=true
@@ -26443,13 +26443,13 @@ class MainActivity : Activity() {
 
     private fun gen2BoxLabel(box:Int,key:String):String {
         val name=normaliseGen2BoxCustomName(getSharedPreferences("pse_box_names",MODE_PRIVATE).getString(key,"").orEmpty())
-        return if(name.isBlank())"Box $box"else"Box $box • $name"
+        return if(name.isBlank())"Box $box" else "Box $box • $name"
     }
 
     private fun gen2BoxDestinationLabel(box:Int,empty:Int,file:File,profile:Gen2Profile,source:Uri?,opened:ByteArray):String {
         require(box in 1..14&&empty in 0..20){"Invalid Gen 2 destination box or reported free-slot count."}
         val label=gen2BoxLabel(box,gen2BoxNameKey(box,file,profile,source))
-        return "$label • ${gen2NativeBoxNameLabel(opened,profile,box)} • $empty empty slot"+if(empty==1)""else"s"
+        return "$label • ${gen2NativeBoxNameLabel(opened,profile,box)} • $empty empty slot"+if(empty==1)"" else "s"
     }
 
     private fun editGen2BoxName(box:Int,file:File,opened:ByteArray,openedSource:Uri?,openedLabel:String?) {
@@ -26478,7 +26478,7 @@ class MainActivity : Activity() {
                 require(edit.commit()){"The box label could not be saved."}
                 require(prefs.getString(key,null)==name.takeUnless{it.isBlank()}&&bound()&&file.readBytes().contentEquals(opened)){"The saved box label or active save could not be rechecked."}
             }catch(e:Exception){
-                showDialog("Box label not completed",(e.message?:"Could not verify this label")+"\n\n"+if(commitStarted)"The label result is unverified. Reopen PC Boxes to check it. No game-save or backup bytes were written."else"No label was saved. No game-save or backup bytes were written.");return
+                showDialog("Box label not completed",(e.message?:"Could not verify this label")+"\n\n"+if(commitStarted)"The label result is unverified. Reopen PC Boxes to check it. No game-save or backup bytes were written." else "No label was saved. No game-save or backup bytes were written.");return
             }
             Toast.makeText(this,"Gen 2 PSE box label saved and verified",Toast.LENGTH_SHORT).show()
             showGen2PokemonViewer("boxes",box)
@@ -26572,7 +26572,7 @@ class MainActivity : Activity() {
             require(bound()&&persisted.contentEquals(work)&&gen2NativeBoxName(persisted,profile,box)==name&&persisted.copyOfRange(offset,offset+9).contentEquals(encoded)){"The complete persisted in-game name did not verify."}
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(opened);require(file.readBytes().contentEquals(opened)&&verifyGen2SaveIntegrity(opened).first)}.isSuccess
-            val recovery=if(!writeStarted)"Nothing was written to the working save."else if(restored)"The exact previous working save was restored and verified."else "Automatic rollback could not be verified. Stop editing and restore the kept recovery backup."
+            val recovery=if(!writeStarted)"Nothing was written to the working save." else  if(restored)"The exact previous working save was restored and verified." else  "Automatic rollback could not be verified. Stop editing and restore the kept recovery backup."
             showDialog("In-game Box rename failed",(e.message?:"Could not safely rename the box")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"In-game Gen 2 Box name saved and verified",Toast.LENGTH_LONG).show()
@@ -26705,7 +26705,7 @@ class MainActivity : Activity() {
             verifiedEgg=verified
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The complete fresh working save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+            val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The complete fresh working save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
             showDialog("Gen 2 Egg edit failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         val verified=requireNotNull(verifiedEgg)
@@ -26936,7 +26936,7 @@ class MainActivity : Activity() {
             verifiedEdit=verified
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The complete fresh working save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+            val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The complete fresh working save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
             showDialog("Gen 2 edit failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         val verified=requireNotNull(verifiedEdit)
@@ -27019,7 +27019,7 @@ class MainActivity : Activity() {
                 require(bound()&&writtenProfile.key==profile.key&&verifyGen2SaveIntegrity(written).first&&file.readBytes().contentEquals(work)){"The persisted Gen 2 batch level edit or confirmed identity did not verify."}
             }catch(e:Exception){
                 val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-                val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The complete fresh working save was restored and no partial batch edit was kept."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+                val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The complete fresh working save was restored and no partial batch edit was kept." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
                 showDialog("Set selected Gen 2 level failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return@loadGen2PartyTransferMeta
             }
             gen2PartyMultiSelectMode=false;selectedGen2PartySlots.clear();gen2BoxMultiSelectMode=false;selectedGen2BoxSlots.clear();Toast.makeText(this,"${chosen.size} Gen 2 Pokémon set to Lv.$level and verified",Toast.LENGTH_LONG).show();if(location.startsWith("Party"))showGen2PokemonViewer("party")else showGen2PokemonViewer("boxes",Regex("Box (\\d+)").find(location)?.groupValues?.getOrNull(1)?.toIntOrNull()?:1)
@@ -27103,7 +27103,7 @@ class MainActivity : Activity() {
             require(bound()&&writtenProfile.key==profile.key&&verifyGen2SaveIntegrity(written).first&&file.readBytes().contentEquals(work)){"The persisted Gen 2 source identity or complete save verification failed."}
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The exact Gen 2 save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+            val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The exact Gen 2 save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
             showDialog("Move selected Gen 2 Pokémon to Party failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         gen2BoxMultiSelectMode=false;selectedGen2BoxSlots.clear();Toast.makeText(this,"${chosen.size} Gen 2 Pokémon moved to Party and verified",Toast.LENGTH_LONG).show();showGen2PokemonViewer("party")
@@ -27151,7 +27151,7 @@ class MainActivity : Activity() {
             require(bound()&&writtenProfile.key==profile.key&&verifyGen2SaveIntegrity(written).first&&file.readBytes().contentEquals(work)){"The persisted Gen 2 source identity or complete save verification failed."}
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The exact Gen 2 save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+            val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The exact Gen 2 save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
             showDialog("Move selected Gen 2 party Pokémon failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         gen2PartyMultiSelectMode=false;selectedGen2PartySlots.clear();Toast.makeText(this,"${chosen.size} Gen 2 party Pokémon moved to Box $targetBox and verified",Toast.LENGTH_LONG).show();showGen2PokemonViewer("boxes",targetBox)
@@ -27198,7 +27198,7 @@ class MainActivity : Activity() {
             require(bound()&&writtenProfile.key==profile.key&&verifyGen2SaveIntegrity(written).first&&file.readBytes().contentEquals(work)){"The persisted Gen 2 source identity or complete save verification failed."}
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The exact Gen 2 save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+            val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The exact Gen 2 save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
             showDialog("Move selected Gen 2 Pokémon failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         gen2BoxMultiSelectMode=false;selectedGen2BoxSlots.clear();Toast.makeText(this,"${chosen.size} Gen 2 Pokémon moved to Box $targetBox and verified",Toast.LENGTH_LONG).show();showGen2PokemonViewer("boxes",targetBox)
@@ -27245,7 +27245,7 @@ class MainActivity : Activity() {
             require(bound()&&writtenProfile.key==profile.key&&verifyGen2SaveIntegrity(written).first&&file.readBytes().contentEquals(work)){"The persisted Gen 2 source identity or complete save verification failed."}
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The exact Gen 2 save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+            val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The exact Gen 2 save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
             showDialog("Reorder Gen 2 Pokémon failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"Gen 2 Pokémon reordered and verified",Toast.LENGTH_LONG).show();if(location.startsWith("Party"))showGen2PokemonViewer("party")else showGen2PokemonViewer("boxes",Regex("Box (\\d+)").find(location)?.groupValues?.getOrNull(1)?.toIntOrNull()?:1)
@@ -27301,7 +27301,7 @@ class MainActivity : Activity() {
             require(bound()&&writtenProfile.key==profile.key&&verifyGen2SaveIntegrity(written).first&&file.readBytes().contentEquals(work)){"The persisted Gen 2 source identity or complete save verification failed."}
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The exact Gen 2 save was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+            val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The exact Gen 2 save was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
             showDialog("Duplicate selected Gen 2 Pokémon failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         gen2PartyMultiSelectMode=false;selectedGen2PartySlots.clear();gen2BoxMultiSelectMode=false;selectedGen2BoxSlots.clear();Toast.makeText(this,"${chosen.size} Gen 2 Pokémon duplicated to Box $targetBox and verified",Toast.LENGTH_LONG).show();showGen2PokemonViewer("boxes",targetBox)
@@ -27356,7 +27356,7 @@ class MainActivity : Activity() {
             require(bound()&&writtenProfile.key==profile.key&&verifyGen2SaveIntegrity(written).first&&file.readBytes().contentEquals(work)){"The persisted Gen 2 deletion or confirmed identity did not verify."}
         }catch(e:Exception){
             val restored=writeStarted&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the save."else if(restored)"The exact Gen 2 source was restored."else "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
+            val recovery=if(!writeStarted)"Nothing was written to the save." else  if(restored)"The exact Gen 2 source was restored." else  "Automatic restore could not be verified. Stop editing this save and restore a verified backup."
             showDialog("Delete selected Gen 2 Pokémon failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         gen2PartyMultiSelectMode=false;selectedGen2PartySlots.clear();gen2BoxMultiSelectMode=false;selectedGen2BoxSlots.clear();Toast.makeText(this,"${chosen.size} Gen 2 Pokémon deleted and verified",Toast.LENGTH_LONG).show();if(location.startsWith("Party"))showGen2PokemonViewer("party")else showGen2PokemonViewer("boxes",Regex("Box (\\d+)").find(location)?.groupValues?.getOrNull(1)?.toIntOrNull()?:1)
@@ -27431,7 +27431,7 @@ class MainActivity : Activity() {
                 }
                 cleared
             }
-            val recovery=if(!sourceWriteStarted&&bankCleared)"Nothing was written to the save and no staged Bank record was kept."else if(sourceRestored&&bankCleared)"The exact fresh Gen 2 source was restored and every staged Bank file was removed."else "Automatic recovery could not be verified. Stop editing this save and keep any remaining Bank records until a verified backup and Bank contents have been reviewed."
+            val recovery=if(!sourceWriteStarted&&bankCleared)"Nothing was written to the save and no staged Bank record was kept." else  if(sourceRestored&&bankCleared)"The exact fresh Gen 2 source was restored and every staged Bank file was removed." else  "Automatic recovery could not be verified. Stop editing this save and keep any remaining Bank records until a verified backup and Bank contents have been reviewed."
             showDialog("Move selected to PSE Bank failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         gen2PartyMultiSelectMode=false;selectedGen2PartySlots.clear();Toast.makeText(this,"${chosen.size} Gen 2 party Pokémon moved to PSE Bank and verified",Toast.LENGTH_LONG).show();showBank()
@@ -27505,7 +27505,7 @@ class MainActivity : Activity() {
                 }
                 cleared
             }
-            val recovery=if(!sourceWriteStarted&&bankCleared)"Nothing was written to the save and no staged Bank record was kept."else if(sourceRestored&&bankCleared)"The exact fresh Gen 2 source was restored and every staged Bank file was removed."else "Automatic recovery could not be verified. Stop editing this save and keep any remaining Bank records until a verified backup and Bank contents have been reviewed."
+            val recovery=if(!sourceWriteStarted&&bankCleared)"Nothing was written to the save and no staged Bank record was kept." else  if(sourceRestored&&bankCleared)"The exact fresh Gen 2 source was restored and every staged Bank file was removed." else  "Automatic recovery could not be verified. Stop editing this save and keep any remaining Bank records until a verified backup and Bank contents have been reviewed."
             showDialog("Move selected to PSE Bank failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         gen2BoxMultiSelectMode=false;selectedGen2BoxSlots.clear();Toast.makeText(this,"${chosen.size} Gen 2 Pokémon moved to PSE Bank and verified",Toast.LENGTH_LONG).show();showBank()
@@ -27796,7 +27796,7 @@ class MainActivity : Activity() {
                 }
                 require(!owned.exists()){"The reserved restore path still exists."}
             }.isSuccess
-            val suffix=if(sourceVerified&&targetRemoved)" The original quarantined record was kept or restored byte-for-byte and rollback was verified."else " Recovery could not be fully verified. Stop and review the remaining quarantine and Bank copies; partial Bank copies may block deposits. No existing source or changed Bank record was overwritten or removed."
+            val suffix=if(sourceVerified&&targetRemoved)" The original quarantined record was kept or restored byte-for-byte and rollback was verified." else  " Recovery could not be fully verified. Stop and review the remaining quarantine and Bank copies; partial Bank copies may block deposits. No existing source or changed Bank record was overwritten or removed."
             showDialog("Gen 2 Bank recovery",(failure.message?:"The quarantined record could not be restored.")+suffix);return
         }
         selectedBankFiles.clear();Toast.makeText(this,"Restored ${target?.name?:source.name} to the active Gen 2 Bank and verified",Toast.LENGTH_LONG).show();showBank()
@@ -27878,7 +27878,7 @@ class MainActivity : Activity() {
                 if(stagedBank.exists()){require(stagedBank.readBytes().contentEquals(expectedPayload)){"The reserved Bank record changed; it was not removed."};require(stagedBank.delete()){"The reserved Bank record could not be removed."}}
                 require(!stagedBank.exists()){"The reserved Bank record still exists."}
             }.isSuccess
-            val recovery=if(!sourceWriteStarted&&bankCleared)"Nothing was written to the save and no staged Bank record was kept."else if(sourceRestored&&bankCleared)"The exact fresh Gen 2 save was restored and no staged Bank record was kept."else "Automatic recovery could not be verified. Stop editing this save and keep any remaining Bank record until a verified backup and Bank contents have been reviewed."
+            val recovery=if(!sourceWriteStarted&&bankCleared)"Nothing was written to the save and no staged Bank record was kept." else  if(sourceRestored&&bankCleared)"The exact fresh Gen 2 save was restored and no staged Bank record was kept." else  "Automatic recovery could not be verified. Stop editing this save and keep any remaining Bank record until a verified backup and Bank contents have been reviewed."
             showDialog("PSE Bank move failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"Moved to PSE Bank and verified",Toast.LENGTH_LONG).show();showBank()
@@ -27975,7 +27975,7 @@ class MainActivity : Activity() {
                 }
                 require(gen2BankDeleteMatches(file,expected,snapshot)){"The original Bank record could not be verified; no existing record was overwritten."}
             }.isSuccess
-            val recovery=if(!deleteAttempted)"No Bank record was removed by PSE."else if(restored)"The original Gen 2 Bank record was kept or restored and verified."else "Recovery could not be verified. Stop editing and review the remaining Bank entry; no existing Bank record was overwritten."
+            val recovery=if(!deleteAttempted)"No Bank record was removed by PSE." else  if(restored)"The original Gen 2 Bank record was kept or restored and verified." else  "Recovery could not be verified. Stop editing and review the remaining Bank entry; no existing Bank record was overwritten."
             showDialog("Delete Bank entry failed",(e.message?:"Unknown error")+"\n\n"+recovery);return
         }
         selectedBankFiles.remove(file.absolutePath)
@@ -28127,7 +28127,7 @@ class MainActivity : Activity() {
                 require(bankFile.readBytes().contentEquals(expectedBank)){"The original Gen 2 Bank record could not be verified; no existing record was overwritten."}
             }.isSuccess
             val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)&&runCatching{file.readBytes().contentEquals(fresh)&&verifyGen1SaveIntegrity(fresh).first}.getOrDefault(false))
-            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed."else if(bankRestored&&destinationRestored)"The exact Gen 1 destination and Gen 2 Bank record were restored or kept and verified."else "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
+            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 1 destination and Gen 2 Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
             showDialog("Gen 2 → Gen 1 transfer failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"Transferred Gen 2 → Gen 1 to Box $targetBox and verified",Toast.LENGTH_LONG).show();showBank()
@@ -28246,7 +28246,7 @@ class MainActivity : Activity() {
                 restored&&prepared.all{runCatching{it.bankFile.readBytes().contentEquals(it.bankBytes)}.getOrDefault(false)}
             }
             val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)&&runCatching{file.readBytes().contentEquals(fresh)&&verifyGen1SaveIntegrity(fresh).first}.getOrDefault(false))
-            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed."else if(bankRestored&&destinationRestored)"The exact Gen 1 destination and every selected Gen 2 Bank record were restored or kept and verified."else "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank records until a verified backup and Bank contents have been reviewed."
+            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 1 destination and every selected Gen 2 Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank records until a verified backup and Bank contents have been reviewed."
             showDialog("Gen 2 → Gen 1 multi-transfer failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         selectedBankFiles.clear();bankMultiSelectMode=false;Toast.makeText(this,"Transferred ${prepared.size} Gen 2 Pokémon → Gen 1 Box $targetBox and verified",Toast.LENGTH_LONG).show();showBank()
@@ -29092,7 +29092,7 @@ class MainActivity : Activity() {
                 require(bankFile.readBytes().contentEquals(expectedBank)){"The original Gen 2 Bank record could not be verified; no existing record was overwritten."}
             }.isSuccess
             val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)&&runCatching{file.readBytes().contentEquals(fresh)&&gen3SaveValid(fresh)}.getOrDefault(false))
-            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed."else if(bankRestored&&destinationRestored)"The exact Gen 3 destination and Gen 2 Bank record were restored or kept and verified."else "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
+            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 3 destination and Gen 2 Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
             showDialog("Gen 2 → Gen 3 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"Transferred Gen 2 → Gen 3 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show();showBank()
@@ -29226,7 +29226,7 @@ class MainActivity : Activity() {
                 restored&&prepared.all{runCatching{it.bankFile.readBytes().contentEquals(it.bankBytes)}.getOrDefault(false)}
             }
             val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)&&runCatching{file.readBytes().contentEquals(fresh)&&gen3SaveValid(fresh)}.getOrDefault(false))
-            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed."else if(bankRestored&&destinationRestored)"The exact Gen 3 destination and every selected Gen 2 Bank record were restored or kept and verified."else "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank records until a verified backup and Bank contents have been reviewed."
+            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 3 destination and every selected Gen 2 Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank records until a verified backup and Bank contents have been reviewed."
             showDialog("Gen 2 → Gen 3 multi-transfer failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         selectedBankFiles.clear();bankMultiSelectMode=false;Toast.makeText(this,"Transferred ${prepared.size} Gen 2 Pokémon → Gen 3 Box ${targetBox+1} and verified",Toast.LENGTH_LONG).show();showBank()
@@ -29405,7 +29405,7 @@ class MainActivity : Activity() {
                 require(bankFile.readBytes().contentEquals(expectedBank)){"The original Gen 2 Bank record could not be verified; no existing record was overwritten."}
             }.isSuccess
             val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)&&runCatching{file.readBytes().contentEquals(fresh)&&validGen2ToGen4Destination(fresh)}.getOrDefault(false))
-            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed."else if(bankRestored&&destinationRestored)"The exact Gen 4 destination and Gen 2 Bank record were restored or kept and verified."else "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
+            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 4 destination and Gen 2 Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
             showDialog("Gen 2 → Gen 4 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"Transferred Gen 2 → Gen 4 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show();showBank()
@@ -29540,7 +29540,7 @@ class MainActivity : Activity() {
                 restored&&prepared.all{runCatching{it.bankFile.readBytes().contentEquals(it.bankBytes)}.getOrDefault(false)}
             }
             val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)&&runCatching{file.readBytes().contentEquals(fresh)&&validGen2ToGen4Destination(fresh)}.getOrDefault(false))
-            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed."else if(bankRestored&&destinationRestored)"The exact Gen 4 destination and every selected Gen 2 Bank record were restored or kept and verified."else "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank records until a verified backup and Bank contents have been reviewed."
+            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 4 destination and every selected Gen 2 Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank records until a verified backup and Bank contents have been reviewed."
             showDialog("Gen 2 → Gen 4 multi-transfer failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         selectedBankFiles.clear();bankMultiSelectMode=false;Toast.makeText(this,"Transferred ${prepared.size} Gen 2 Pokémon → Gen 4 Box ${targetBox+1} and verified",Toast.LENGTH_LONG).show();showBank()
@@ -29716,7 +29716,7 @@ private data class Gen2ToGen5LegalisePlan(
                 require(bankFile.readBytes().contentEquals(expectedBank)){"The original Gen 2 Bank record could not be verified; no existing record was overwritten."}
             }.isSuccess
             val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(original)}.isSuccess&&runCatching{file.readBytes().contentEquals(original)}.getOrDefault(false)&&runCatching{file.readBytes().contentEquals(original)&&validGen2ToGen5Destination(original)}.getOrDefault(false))
-            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed."else if(bankRestored&&destinationRestored)"The exact Gen 5 destination and Gen 2 Bank record were restored or kept and verified."else "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
+            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 5 destination and Gen 2 Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
             showDialog("Gen 2 → Gen 5 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"Transferred Gen 2 → Gen 5 to Box "+(target/30+1)+" • Slot "+(target%30+1)+" and verified",Toast.LENGTH_LONG).show();showBank()
@@ -29891,7 +29891,7 @@ private data class Gen2ToGen5LegalisePlan(
                 restored&&prepared.all{runCatching{it.bankFile.readBytes().contentEquals(it.bankBytes)}.getOrDefault(false)}
             }
             val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)&&runCatching{file.readBytes().contentEquals(fresh)&&validGen2ToGen5Destination(fresh)}.getOrDefault(false))
-            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed."else if(bankRestored&&destinationRestored)"The exact Gen 5 destination and every selected Gen 2 Bank record were restored or kept and verified."else "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank records until a verified backup and Bank contents have been reviewed."
+            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 5 destination and every selected Gen 2 Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank records until a verified backup and Bank contents have been reviewed."
             showDialog("Gen 2 → Gen 5 multi-transfer failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         selectedBankFiles.clear();bankMultiSelectMode=false
@@ -30004,7 +30004,7 @@ private data class Gen2ToGen5LegalisePlan(
         if(importedFile?.absolutePath!=openedFile.absolutePath)return showDialog("Gen 2 → Gen 6","The active save changed after destination selection. Reopen PSE Bank. Nothing was changed.")
         var gridConsumed=false
         val file=openedFile;val data=runCatching{file.readBytes()}.getOrNull()?:return;if(!data.contentEquals(preparedDestination))return showDialog("Gen 2 → Gen 6","The destination changed. Nothing was written.");val(boxOffset,slotCount,maxSpecies)=boxStorageInfo(data)?:return;if(boxIndex !in 0 until slotCount/30)return;val wrapper=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(12),dp(8),dp(12),dp(8))};addMutedLine(wrapper,"Tap an empty Gen 6 slot. Occupied slots are disabled.");val grid=GridLayout(this).apply{columnCount=6;rowCount=5;alignmentMode=GridLayout.ALIGN_BOUNDS;useDefaultMargins=false};val cellWidth=((resources.displayMetrics.widthPixels-dp(90))/6).coerceAtLeast(dp(42))
-        for(slot in 0 until 30){val global=boxIndex*30+slot;val occupied=parsePk6(data,boxOffset+global*PK6_STORED_SIZE,PK6_STORED_SIZE,false,maxSpecies)!=null;val cell=TextView(this).apply{text=if(occupied)"●\n${slot+1}"else"○\n${slot+1}";gravity=Gravity.CENTER;textSize=13f;setTextColor(if(occupied)Color.rgb(105,105,105)else TEXT);setBackgroundColor(if(occupied)Color.rgb(35,35,35)else Color.rgb(55,55,55));isEnabled=!occupied;if(!occupied)setOnClickListener{if(gridConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 6","The destination identity or original snapshots changed, or this selection was already submitted. Reopen PSE Bank. Nothing was changed.");return@setOnClickListener};gridConsumed=true;transferGen2BankToGen6(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk6,converted,global,file,binding)}};grid.addView(cell,GridLayout.LayoutParams().apply{width=cellWidth;height=dp(58);setMargins(dp(2),dp(2),dp(2),dp(2))})}
+        for(slot in 0 until 30){val global=boxIndex*30+slot;val occupied=parsePk6(data,boxOffset+global*PK6_STORED_SIZE,PK6_STORED_SIZE,false,maxSpecies)!=null;val cell=TextView(this).apply{text=if(occupied)"●\n${slot+1}" else "○\n${slot+1}";gravity=Gravity.CENTER;textSize=13f;setTextColor(if(occupied)Color.rgb(105,105,105)else TEXT);setBackgroundColor(if(occupied)Color.rgb(35,35,35)else Color.rgb(55,55,55));isEnabled=!occupied;if(!occupied)setOnClickListener{if(gridConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 6","The destination identity or original snapshots changed, or this selection was already submitted. Reopen PSE Bank. Nothing was changed.");return@setOnClickListener};gridConsumed=true;transferGen2BankToGen6(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk6,converted,global,file,binding)}};grid.addView(cell,GridLayout.LayoutParams().apply{width=cellWidth;height=dp(58);setMargins(dp(2),dp(2),dp(2),dp(2))})}
         wrapper.addView(grid);AlertDialog.Builder(this).setTitle("Box ${boxIndex+1} • choose Gen 6 slot").setView(wrapper).setNegativeButton("Back"){_,_->if(gridConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 6","The destination identity or original snapshots changed, or this selection was already submitted. Reopen PSE Bank. Nothing was changed.");return@setNegativeButton};gridConsumed=true;showGen2ToGen6BoxPicker(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk6,converted,file,binding)}.setNeutralButton("Cancel",null).show()
     }
 
@@ -30039,7 +30039,7 @@ private data class Gen2ToGen5LegalisePlan(
                 require(bankFile.readBytes().contentEquals(expectedBank)){"The original Gen 2 Bank record could not be verified; no existing record was overwritten."}
             }.isSuccess
             val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)&&runCatching{file.readBytes().contentEquals(fresh)&&validGen2ToGen6Destination(fresh)}.getOrDefault(false))
-            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed."else if(bankRestored&&destinationRestored)"The exact Gen 6 destination and Gen 2 Bank record were restored or kept and verified."else "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
+            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 6 destination and Gen 2 Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
             showDialog("Gen 2 → Gen 6 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"Transferred Gen 2 → Gen 6 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show();showBank()
@@ -30183,7 +30183,7 @@ private data class Gen2ToGen5LegalisePlan(
                 restored&&prepared.all{runCatching{it.bankFile.readBytes().contentEquals(it.bankBytes)}.getOrDefault(false)}
             }
             val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)&&runCatching{file.readBytes().contentEquals(fresh)&&validGen2ToGen6Destination(fresh)}.getOrDefault(false))
-            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed."else if(bankRestored&&destinationRestored)"The exact Gen 6 destination and every selected Gen 2 Bank record were restored or kept and verified."else "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank records until a verified backup and Bank contents have been reviewed."
+            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 6 destination and every selected Gen 2 Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank records until a verified backup and Bank contents have been reviewed."
             showDialog("Gen 2 → Gen 6 multi-transfer failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         selectedBankFiles.clear();bankMultiSelectMode=false;Toast.makeText(this,"Transferred ${prepared.size} Gen 2 Pokémon → Gen 6 Box ${targetBox+1} and verified",Toast.LENGTH_LONG).show();showBank()
@@ -30306,7 +30306,7 @@ private data class Gen2ToGen5LegalisePlan(
         var gridConsumed=false
         if(importedFile?.absolutePath!=openedFile.absolutePath)return showDialog("Gen 2 → Gen 7","The active save changed after destination selection. Reopen PSE Bank. Nothing was changed.")
         val file=openedFile;val data=runCatching{file.readBytes()}.getOrNull()?:return;if(!data.contentEquals(preparedDestination))return showDialog("Gen 2 → Gen 7","The destination changed. Nothing was written.");val(boxOffset,slotCount,maxSpecies)=boxStorageInfo(data)?:return;if(boxIndex !in 0 until slotCount/30)return;val wrapper=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(12),dp(8),dp(12),dp(8))};addMutedLine(wrapper,"Tap an empty Gen 7 slot. Occupied slots are disabled.");val grid=GridLayout(this).apply{columnCount=6;rowCount=5;alignmentMode=GridLayout.ALIGN_BOUNDS;useDefaultMargins=false};val cellWidth=((resources.displayMetrics.widthPixels-dp(90))/6).coerceAtLeast(dp(42))
-        for(slot in 0 until 30){val global=boxIndex*30+slot;val occupied=parsePk6(data,boxOffset+global*PK6_STORED_SIZE,PK6_STORED_SIZE,false,maxSpecies)!=null;val cell=TextView(this).apply{text=if(occupied)"●\n${slot+1}"else"○\n${slot+1}";gravity=Gravity.CENTER;textSize=13f;setTextColor(if(occupied)Color.rgb(105,105,105)else TEXT);setBackgroundColor(if(occupied)Color.rgb(35,35,35)else Color.rgb(55,55,55));isEnabled=!occupied;if(!occupied)setOnClickListener{if(gridConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 7","The original destination or Bank snapshots changed, or this slot choice was already used. Reopen PSE Bank.");return@setOnClickListener};gridConsumed=true;transferGen2BankToGen7(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,global,file,binding)}};grid.addView(cell,GridLayout.LayoutParams().apply{width=cellWidth;height=dp(58);setMargins(dp(2),dp(2),dp(2),dp(2))})}
+        for(slot in 0 until 30){val global=boxIndex*30+slot;val occupied=parsePk6(data,boxOffset+global*PK6_STORED_SIZE,PK6_STORED_SIZE,false,maxSpecies)!=null;val cell=TextView(this).apply{text=if(occupied)"●\n${slot+1}" else "○\n${slot+1}";gravity=Gravity.CENTER;textSize=13f;setTextColor(if(occupied)Color.rgb(105,105,105)else TEXT);setBackgroundColor(if(occupied)Color.rgb(35,35,35)else Color.rgb(55,55,55));isEnabled=!occupied;if(!occupied)setOnClickListener{if(gridConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 7","The original destination or Bank snapshots changed, or this slot choice was already used. Reopen PSE Bank.");return@setOnClickListener};gridConsumed=true;transferGen2BankToGen7(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,global,file,binding)}};grid.addView(cell,GridLayout.LayoutParams().apply{width=cellWidth;height=dp(58);setMargins(dp(2),dp(2),dp(2),dp(2))})}
         wrapper.addView(grid);AlertDialog.Builder(this).setTitle("Box ${boxIndex+1} • choose Gen 7 slot").setView(wrapper).setNegativeButton("Back"){_,_->if(gridConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 7","The original destination or Bank snapshots changed, or this slot choice was already used. Reopen PSE Bank.");return@setNegativeButton};gridConsumed=true;showGen2ToGen7BoxPicker(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,file,binding)}.setNeutralButton("Cancel",null).show()
     }
 
@@ -30344,7 +30344,7 @@ private data class Gen2ToGen5LegalisePlan(
                 require(bankFile.readBytes().contentEquals(expectedBank)){"The original Gen 2 Bank record could not be verified; no existing record was overwritten."}
             }.isSuccess
             val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)&&runCatching{file.readBytes().contentEquals(fresh)&&validGen2ToGen7Destination(fresh)}.getOrDefault(false))
-            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed."else if(bankRestored&&destinationRestored)"The exact Gen 7 destination and Gen 2 Bank record were restored or kept and verified."else "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
+            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 7 destination and Gen 2 Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
             showDialog("Gen 2 → Gen 7 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"Transferred Gen 2 → Gen 7 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show();showBank()
@@ -30488,7 +30488,7 @@ private data class Gen2ToGen5LegalisePlan(
                 restored&&prepared.all{runCatching{it.bankFile.readBytes().contentEquals(it.bankBytes)}.getOrDefault(false)}
             }
             val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)&&runCatching{file.readBytes().contentEquals(fresh)&&validGen2ToGen7Destination(fresh)}.getOrDefault(false))
-            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed."else if(bankRestored&&destinationRestored)"The exact Gen 7 destination and every selected Gen 2 Bank record were restored or kept and verified."else "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank records until a verified backup and Bank contents have been reviewed."
+            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 7 destination and every selected Gen 2 Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank records until a verified backup and Bank contents have been reviewed."
             showDialog("Gen 2 → Gen 7 multi-transfer failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         selectedBankFiles.clear();bankMultiSelectMode=false;Toast.makeText(this,"Transferred ${prepared.size} Gen 2 Pokémon → Gen 7 Box ${targetBox+1} and verified",Toast.LENGTH_LONG).show();showBank()
@@ -30541,7 +30541,7 @@ private data class Gen2ToGen5LegalisePlan(
                     require(bankFile.readBytes().contentEquals(openedBank)){"The original Bank record could not be verified; no existing record was overwritten."}
                 }.isSuccess
                 val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false))
-                val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed."else if(bankRestored&&destinationRestored)"The exact Gen 2 destination and Bank record were restored or kept and verified."else "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
+                val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 2 destination and Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
                 showDialog("Withdraw failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return@setItems
             }
             Toast.makeText(this,"Withdrawn to Box $box and verified",Toast.LENGTH_LONG).show();showBank()

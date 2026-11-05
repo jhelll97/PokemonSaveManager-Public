@@ -100,7 +100,7 @@ object BdspPokedexEditing {
             require(after.caught && languages[languageIndex!!] in after.languages) {
                 "The staged caught registration did not reopen exactly."
             }
-            require(after.rawLanguageFlags == (before.rawLanguageFlags or (1L shl languageIndex))) {
+            require(after.rawLanguageFlags == (before.rawLanguageFlags or (1L shl languageIndex!!))) {
                 "An unrelated language flag changed."
             }
         } else {
