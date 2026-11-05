@@ -28,6 +28,7 @@
         <activity android:name=".SwitchSwordShieldItemActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokemonNicknameActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokemonSpeciesActivity" android:exported="false"/>
+        <activity android:name=".SwitchSwordShieldPokemonLevelActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldEventActivity" android:exported="false"/>

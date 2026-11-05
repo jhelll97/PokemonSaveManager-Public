@@ -29,9 +29,12 @@ class SwitchSwordShieldPokemonSpeciesActivity : Activity() {
     private var pendingPlan: SwordShieldSpeciesCopyPlan? = null
     private var verifiedCopy: Pair<Uri, String>? = null
     private var busy = false
+    private var speciesEditable = false
+    private var levelEditable = false
     private lateinit var status: TextView
     private lateinit var species: Spinner
     private lateinit var review: Button
+    private lateinit var level: Button
     private lateinit var inspectCopy: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -77,6 +80,12 @@ class SwitchSwordShieldPokemonSpeciesActivity : Activity() {
             text = "Review species change"; isEnabled = false; setOnClickListener { reviewSpecies() }
         }
         root.addView(review)
+        level = Button(this).apply {
+            text = "Next field: Level"
+            isEnabled = false
+            setOnClickListener { openLevel() }
+        }
+        root.addView(level)
         inspectCopy = Button(this).apply {
             text = "Inspect verified copy"; visibility = android.view.View.GONE
             setOnClickListener { inspectVerifiedCopy() }
@@ -101,19 +110,14 @@ class SwitchSwordShieldPokemonSpeciesActivity : Activity() {
                     storage.box(box - 1)[position - 1].read else storage.party()[position - 1].read
                 val pokemon = (read as? SwordShieldSlotRead.Pokemon)?.value
                     ?: error("The selected native PK8 is not checksum-valid.")
-                require(!pokemon.isEgg) { "Egg species editing is not supported for Sword/Shield." }
-                require(pokemon.form == 0) {
-                    "This alternate-form PK8 remains protected so its species and form cannot become mismatched."
-                }
-                require(!pokemon.canGigantamax) {
-                    "This Gigantamax-factor PK8 remains protected so its species and native factor cannot become mismatched."
-                }
                 Triple(bytes, validation.version.displayName, pokemon)
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 result.onSuccess { (bytes, displayName, pokemon) ->
                     opened = bytes; current = pokemon
+                    speciesEditable = !pokemon.isEgg && pokemon.form == 0 && !pokemon.canGigantamax
+                    levelEditable = !pokemon.isEgg
                     if (pokemon.species !in speciesIds) {
                         speciesIds = listOf(pokemon.species) + speciesIds
                         updateSpeciesChoices()
@@ -122,6 +126,11 @@ class SwitchSwordShieldPokemonSpeciesActivity : Activity() {
                     status.text = "$displayName • Native integrity verified\n" +
                         "$location • ${pokemon.nickname.ifBlank { SwordShieldSpeciesNames.name(pokemon.species) }}\n" +
                         "Current species: #${pokemon.species} ${SwordShieldSpeciesNames.name(pokemon.species)} • Form ${pokemon.form}\n" +
+                        when {
+                            pokemon.isEgg -> "Egg species and Level editing remain protected.\n"
+                            !speciesEditable -> "Species remains protected for this form or Gigantamax factor; continue to Level.\n"
+                            else -> "Species editing available; continue to Level when ready.\n"
+                        } +
                         "Source SHA-256: ${SwordShieldPokemonSpeciesEditing.sha256(bytes)}"
                 }.onFailure { status.text = it.message ?: "The selected Pokémon could not be opened safely." }
                 setBusy(false)
@@ -137,9 +146,23 @@ class SwitchSwordShieldPokemonSpeciesActivity : Activity() {
     private fun setBusy(value: Boolean) {
         busy = value
         val ready = opened != null && current != null
-        species.isEnabled = !value && ready
-        review.isEnabled = !value && ready
+        species.isEnabled = !value && ready && speciesEditable
+        review.isEnabled = !value && ready && speciesEditable
+        level.isEnabled = !value && ready && levelEditable
         inspectCopy.isEnabled = !value && verifiedCopy != null
+    }
+
+    private fun openLevel() {
+        if (busy || !levelEditable) return
+        val uri = sourceUri ?: return
+        val hash = expectedHash ?: return
+        val selectedArea = area ?: return
+        startActivity(Intent(this, SwitchSwordShieldPokemonLevelActivity::class.java).setData(uri)
+            .putExtra("pse.switch.sha256", hash)
+            .putExtra("pse.switch.pokemon.area", selectedArea.name)
+            .putExtra("pse.switch.pokemon.box", box)
+            .putExtra("pse.switch.pokemon.position", position)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }
 
     private fun readSource(): ByteArray {

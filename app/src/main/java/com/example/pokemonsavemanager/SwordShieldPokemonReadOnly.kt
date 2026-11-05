@@ -10,7 +10,7 @@ data class SwordShieldPokemonRead(
     val tid: Int, val sid: Int, val pid: Long, val encryptionConstant: Long,
     val shiny: Boolean, val isEgg: Boolean, val fatefulEncounter: Boolean,
     val heldItem: Int, val ability: Int,
-    val dynamaxLevel: Int, val canGigantamax: Boolean,
+    val dynamaxLevel: Int, val canGigantamax: Boolean, val hyperTrainingFlags: Int,
     val moves: List<SwordShieldMoveRead>, val ivs: List<Int>, val evs: List<Int>,
     val relearnMoves: List<Int>, val cachedStats: List<Int>
 )
@@ -60,7 +60,7 @@ object SwordShieldPokemonReadOnly {
             u16(plain, 0x8A), u16(plain, 0x14A), text(plain, 0xF8), tid, sid, pid, ec,
             shiny, iv32 and 0x40000000L != 0L, byte(plain, 0x22) and 1 != 0,
             u16(plain, 0x0A), u16(plain, 0x14),
-            byte(plain, 0x90), byte(plain, 0x16) and 16 != 0,
+            byte(plain, 0x90), byte(plain, 0x16) and 16 != 0, byte(plain, 0x126),
             immutable((0..3).map { SwordShieldMoveRead(u16(plain, 0x72 + it * 2), byte(plain, 0x7A + it), byte(plain, 0x7E + it)) }),
             immutable((0..5).map { ((iv32 ushr (it * 5)) and 31).toInt() }),
             immutable((0..5).map { byte(plain, 0x26 + it) }),
