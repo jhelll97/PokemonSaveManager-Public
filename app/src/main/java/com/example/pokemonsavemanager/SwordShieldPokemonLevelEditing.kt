@@ -31,6 +31,13 @@ object SwordShieldPokemonLevelEditing {
 
     fun sha256(bytes: ByteArray): String = SwordShieldPokemonNicknameEditing.sha256(bytes)
 
+    internal fun maximumExperience(pokemon: SwordShieldPokemonRead): Long {
+        require(pokemon.statNature in 0..24) {
+            "The PK8 stat nature is invalid, so derived stats cannot be rebuilt safely."
+        }
+        return minimumExperience(100, resolvePersonal(pokemon).growth)
+    }
+
     fun stage(
         source: ByteArray,
         expectedSha256: String,
@@ -67,6 +74,51 @@ object SwordShieldPokemonLevelEditing {
         verify(original, written.bytes, area, box, position, written.absoluteOffset, after)
         return SwordShieldLevelCopyPlan(
             original, written.bytes, area, box, position, written.absoluteOffset, before, after
+        )
+    }
+
+    internal fun stageExperience(
+        source: ByteArray,
+        expectedSha256: String,
+        area: SwordShieldPokemonArea,
+        box: Int,
+        position: Int,
+        requestedExperience: Long
+    ): SwordShieldExperienceCopyPlan {
+        val original = source.copyOf()
+        require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        val blocks = SwordShieldSaveValidation.readPokemonBlocks(original)
+        val target = targetRecord(blocks, area, box, position)
+        val before = (SwordShieldPokemonReadOnly.read(target) as? SwordShieldSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The selected native PK8 is not checksum-valid.")
+        require(!before.isEgg) { "Egg experience editing is not supported for Sword/Shield." }
+        require(requestedExperience != before.experience) { "Enter different experience before review." }
+        require(before.statNature in 0..24) {
+            "The PK8 stat nature is invalid, so derived stats cannot be rebuilt safely."
+        }
+        val personal = resolvePersonal(before)
+        val maximumExperience = minimumExperience(100, personal.growth)
+        require(requestedExperience in 0L..maximumExperience) {
+            "Experience must be between 0 and $maximumExperience for this Pokémon's native growth group."
+        }
+        require(before.experience in 0L..maximumExperience && before.cachedLevel in 1..100 &&
+            levelForExperience(before.experience, personal.growth) == before.cachedLevel) {
+            "The saved Level and EXP do not agree with this Pokémon's verified growth group."
+        }
+        require(matchesCachedValues(before,
+            calculate(before, personal, before.cachedLevel, before.experience))) {
+            "The saved Level-dependent values do not match this PK8's verified species/form profile."
+        }
+        val requestedLevel = levelForExperience(requestedExperience, personal.growth)
+        val after = calculate(before, personal, requestedLevel, requestedExperience)
+        val afterRecord = editRecord(target, after)
+        val written = if (area == SwordShieldPokemonArea.BOX) {
+            SwordShieldSaveValidation.writeBoxRecord(original, box, position, afterRecord)
+        } else SwordShieldSaveValidation.writePartyRecord(original, position, afterRecord)
+        verify(original, written.bytes, area, box, position, written.absoluteOffset, after)
+        return SwordShieldExperienceCopyPlan(
+            original, written.bytes, area, box, position, written.absoluteOffset, before, after,
+            maximumExperience
         )
     }
 
@@ -156,10 +208,16 @@ object SwordShieldPokemonLevelEditing {
             pokemon.cachedStats == listOf(values.attack, values.defense, values.speed,
                 values.specialAttack, values.specialDefense)
 
+    private fun matchesCachedValues(
+        pokemon: SwordShieldPokemonRead,
+        values: SwordShieldLevelValues
+    ): Boolean = matchesCachedStats(pokemon, values) && pokemon.currentHp == values.currentHp
+
     private fun calculate(
         before: SwordShieldPokemonRead,
         personal: SwordShieldPersonalData,
-        level: Int
+        level: Int,
+        experience: Long = minimumExperience(level, personal.growth)
     ): SwordShieldLevelValues {
         val effectiveIv = IntArray(6) { index ->
             val hyperBit = intArrayOf(0, 1, 2, 5, 3, 4)[index]
@@ -191,7 +249,7 @@ object SwordShieldPokemonLevelEditing {
             else -> min(before.currentHp, maximumHp)
         }
         return SwordShieldLevelValues(
-            level, minimumExperience(level, personal.growth), currentHp, maximumHp,
+            level, experience, currentHp, maximumHp,
             attack, defense, speed, specialAttack, specialDefense
         )
     }
@@ -323,6 +381,93 @@ object SwordShieldPokemonLevelEditing {
     private fun writeU32(bytes: ByteArray, offset: Int, value: Long) {
         writeU16(bytes, offset, value.toInt())
         writeU16(bytes, offset + 2, (value ushr 16).toInt())
+    }
+}
+
+/** Gen 1-ordered Experience action backed by the verified PK8 level-dependent write scope. */
+object SwordShieldPokemonExperienceEditing {
+    fun readDocumentBytes(input: java.io.InputStream): ByteArray =
+        SwordShieldPokemonLevelEditing.readDocumentBytes(input)
+
+    fun sha256(bytes: ByteArray): String = SwordShieldPokemonLevelEditing.sha256(bytes)
+
+    fun maximumExperience(pokemon: SwordShieldPokemonRead): Long =
+        SwordShieldPokemonLevelEditing.maximumExperience(pokemon)
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        area: SwordShieldPokemonArea,
+        box: Int,
+        position: Int,
+        requestedExperience: Long
+    ): SwordShieldExperienceCopyPlan = SwordShieldPokemonLevelEditing.stageExperience(
+        source, expectedSha256, area, box, position, requestedExperience
+    )
+}
+
+class SwordShieldExperienceCopyPlan internal constructor(
+    original: ByteArray,
+    edited: ByteArray,
+    val area: SwordShieldPokemonArea,
+    val box: Int,
+    val position: Int,
+    val absoluteOffset: Int,
+    val before: SwordShieldPokemonRead,
+    val after: SwordShieldLevelValues,
+    val maximumExperience: Long
+) {
+    private val original = original.copyOf()
+    private val edited = edited.copyOf()
+    val sourceSha256 = SwordShieldPokemonExperienceEditing.sha256(this.original)
+    val editedSha256 = SwordShieldPokemonExperienceEditing.sha256(this.edited)
+    private var consumed = false
+    val location: String
+        get() = if (area == SwordShieldPokemonArea.BOX) "Box $box • Slot $position" else "Party $position"
+
+    @Synchronized
+    fun saveNewCopy(
+        readSource: () -> ByteArray,
+        retainBackup: (ByteArray) -> ByteArray,
+        readDestination: () -> ByteArray,
+        writeDestination: (ByteArray) -> Unit,
+        discardDestination: () -> Boolean
+    ) {
+        check(!consumed) { "This Experience review was already used. Reopen Pokémon Boxes." }
+        consumed = true
+        fun requireSource() = require(readSource().contentEquals(original)) {
+            "The selected source changed. Reopen it from PSE."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "Choose a new empty document; existing files cannot be replaced." }
+        val backup = retainBackup(original.copyOf())
+        require(backup.contentEquals(original)) { "The recovery backup did not verify. Nothing was written." }
+        requireSource()
+        require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
+        var started = false
+        try {
+            SwordShieldPokemonLevelEditing.verify(
+                original, edited, area, box, position, absoluteOffset, after
+            )
+            started = true
+            writeDestination(edited.copyOf())
+            val persisted = readDestination()
+            require(persisted.contentEquals(edited)) {
+                "The saved copy differs from the reviewed Experience edit."
+            }
+            SwordShieldPokemonLevelEditing.verify(
+                original, persisted, area, box, position, absoluteOffset, after
+            )
+            requireSource()
+        } catch (failure: Exception) {
+            val removed = started && runCatching { discardDestination() }.getOrDefault(false)
+            throw IllegalStateException(
+                (failure.message ?: "Experience copy verification failed.") +
+                    if (removed) " The failed new copy was removed; the recovery backup is retained."
+                    else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
+                failure
+            )
+        }
     }
 }
 
