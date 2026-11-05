@@ -28,13 +28,15 @@ internal data class LegendsArceusPokemonWriteResult(val bytes: ByteArray, val ab
 internal data class LegendsArceusTrainerWriteResult(
     val bytes: ByteArray,
     val nameOffset: Int,
-    val trainerIdOffset: Int
+    val trainerIdOffset: Int,
+    val moneyOffset: Int
 )
 
 /** Independent read-only container gate; pinned format evidence is in SWITCH_READ_ONLY_FORMATS.md. */
 object LegendsArceusSaveValidation {
     private val knownSizes = setOf(0x136DDE, 0x13AD06)
     private const val STATUS_KEY = 0xF25C070EL
+    private const val MONEY_KEY = 0x3279D927L
     private val requiredObjects = mapOf(0x47E1CEABL to 0x54600,
         0x2985FE5DL to 0x8D4, 0x02168706L to 0x1E460, STATUS_KEY to 0x80)
     private val intro = decodeHex("9ec99cd70ed33c44fb9303dceb39b42a1947e9634ba2334416bf82a2ba6355b63d9df24b5f7b6ab2621dc21b68e5c8b53a059000e8a8103de2ecf00cb2ed4f6d")
@@ -97,15 +99,22 @@ object LegendsArceusSaveValidation {
     internal fun writeTrainerFields(
         source: ByteArray,
         encodedName: ByteArray?,
-        trainerId: Int?
+        trainerId: Int?,
+        money: Long?
     ): LegendsArceusTrainerWriteResult {
-        readTrainerBlocks(source)
-        require(encodedName != null || trainerId != null) { "Select at least one Trainer Data field to change." }
+        val blocks = readTrainerBlocks(source)
+        require(encodedName != null || trainerId != null || money != null) {
+            "Select at least one Trainer Data field to change."
+        }
         if (encodedName != null) require(encodedName.size == 26) {
             "A complete native Legends: Arceus trainer-name field is required."
         }
         if (trainerId != null) require(trainerId in 0..65535) {
             "Trainer ID must be between 0 and 65535."
+        }
+        if (money != null) {
+            require(blocks.money != null) { "This save does not contain the native money counter." }
+            require(money in 0L..9_999_999L) { "Money must be between 0 and 9,999,999." }
         }
         val nameRelativeOffset = 0x20
         val trainerIdRelativeOffset = 0x10
@@ -118,6 +127,7 @@ object LegendsArceusSaveValidation {
         val cursor = Cursor(payload)
         var nameOffset = -1
         var trainerIdOffset = -1
+        var moneyOffset = -1
         while (cursor.remaining > 0) {
             val key = cursor.uint32()
             val stream = KeyStream(key)
@@ -154,12 +164,24 @@ object LegendsArceusSaveValidation {
                 }
                 nameOffset = blockStart + nameRelativeOffset
                 trainerIdOffset = blockStart + trainerIdRelativeOffset
+            } else if (key == MONEY_KEY) {
+                require(type == 10 && length == 4L) {
+                    "The Legends: Arceus money counter has the wrong native type or size."
+                }
+                if (money != null) {
+                    repeat(4) { byteIndex ->
+                        val decoded = ((money ushr (byteIndex * 8)).toInt() and 255)
+                        payload[blockStart + byteIndex] = (decoded xor stream.next()).toByte()
+                    }
+                    moneyOffset = blockStart
+                }
             }
             cursor.skip(length.toInt())
         }
         require(nameOffset >= 0 && trainerIdOffset >= 0) {
             "The Legends: Arceus trainer status object is missing."
         }
+        require(money == null || moneyOffset >= 0) { "The Legends: Arceus money counter is missing." }
 
         val edited = source.copyOf()
         for (index in payload.indices) edited[index] =
@@ -170,7 +192,7 @@ object LegendsArceusSaveValidation {
         digest.update(outro)
         digest.digest().copyInto(edited, end)
         readTrainerBlocks(edited)
-        return LegendsArceusTrainerWriteResult(edited, nameOffset, trainerIdOffset)
+        return LegendsArceusTrainerWriteResult(edited, nameOffset, trainerIdOffset, moneyOffset)
     }
 
     /** Replaces one decoded four-byte inventory record and rebuilds native container integrity. */

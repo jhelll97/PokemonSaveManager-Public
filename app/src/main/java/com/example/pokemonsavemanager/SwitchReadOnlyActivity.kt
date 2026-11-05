@@ -4006,7 +4006,7 @@ class SwitchReadOnlyActivity : Activity() {
             append("Total Merit Points earned: ${saved(trainer.meritTotal)}\n")
             append("Galaxy Expedition Team rank: ${saved(trainer.expeditionRank)}\nSatchel upgrades: ${saved(trainer.satchelUpgrades)}\n\n")
             append("Absent counters stay marked Not present. Merit totals, research progress and story consistency are not evaluated.\n\n")
-            append("Native container integrity passed before reading. Trainer Name opens the reviewed native editor; the other displayed fields remain read-only.")
+            append("Native container integrity passed before reading. Trainer Name, Trainer ID and Money open in the reviewed native editor when their native fields are present; the other displayed fields remain read-only.")
         }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
