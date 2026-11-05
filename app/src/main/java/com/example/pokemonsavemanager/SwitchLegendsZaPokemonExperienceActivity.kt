@@ -38,6 +38,7 @@ class SwitchLegendsZaPokemonExperienceActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var experience: EditText
     private lateinit var review: Button
+    private lateinit var originalTrainer: Button
     private lateinit var inspectCopy: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,6 +92,25 @@ class SwitchLegendsZaPokemonExperienceActivity : Activity() {
             setOnClickListener { reviewExperience() }
         }
         root.addView(review)
+        originalTrainer = Button(this).apply {
+            text = "Next field: Original Trainer name"
+            isEnabled = false
+            setOnClickListener {
+                val uri = sourceUri ?: return@setOnClickListener
+                val hash = expectedHash ?: return@setOnClickListener
+                val selectedArea = area ?: return@setOnClickListener
+                startActivity(Intent(
+                    this@SwitchLegendsZaPokemonExperienceActivity,
+                    SwitchLegendsZaPokemonOriginalTrainerActivity::class.java
+                ).setData(uri)
+                    .putExtra("pse.switch.sha256", hash)
+                    .putExtra("pse.switch.pokemon.area", selectedArea.name)
+                    .putExtra("pse.switch.pokemon.box", box)
+                    .putExtra("pse.switch.pokemon.position", position)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            }
+        }
+        root.addView(originalTrainer)
         inspectCopy = Button(this).apply {
             text = "Inspect verified copy"
             visibility = android.view.View.GONE
@@ -151,6 +171,7 @@ class SwitchLegendsZaPokemonExperienceActivity : Activity() {
         val ready = opened != null && current != null
         experience.isEnabled = !value && ready
         review.isEnabled = !value && ready
+        originalTrainer.isEnabled = !value && ready
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
 
