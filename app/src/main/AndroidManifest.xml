@@ -12,6 +12,7 @@
         <activity android:name=".SwitchLetsGoItemActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoPokemonNicknameActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoPokemonSpeciesActivity" android:exported="false"/>
+        <activity android:name=".SwitchLetsGoPokemonLevelActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoEventActivity" android:exported="false"/>

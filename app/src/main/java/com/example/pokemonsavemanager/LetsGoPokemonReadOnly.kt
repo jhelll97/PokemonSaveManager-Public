@@ -6,7 +6,10 @@ data class LetsGoMoveRead(val id: Int, val pp: Int)
 data class LetsGoPokemonRead(
     val species: Int, val nickname: String, val form: Int, val gender: Int,
     val cachedLevel: Int, val experience: Long, val nature: Int,
-    val currentHp: Int, val maximumHp: Int, val originalTrainer: String,
+    val currentHp: Int, val maximumHp: Int, val attack: Int, val defense: Int,
+    val speed: Int, val specialAttack: Int, val specialDefense: Int, val combatPower: Int,
+    val currentFriendship: Int, val currentHandler: Int, val hyperTrainingFlags: Int,
+    val originalTrainer: String,
     val tid: Int, val sid: Int, val pid: Long, val encryptionConstant: Long,
     val shiny: Boolean, val isEgg: Boolean, val fatefulEncounter: Boolean, val isPartnerForm: Boolean,
     val moves: List<LetsGoMoveRead>, val ivs: List<Int>, val awakened: List<Int>
@@ -51,11 +54,15 @@ object LetsGoPokemonReadOnly {
         val pid = u32(plain, 0x18)
         val tid = u16(plain, 0x0C)
         val sid = u16(plain, 0x0E)
+        val currentHandler = plain[0x93].toInt() and 255
+        val currentFriendship = plain[if (currentHandler == 0) 0xCA else 0xA2].toInt() and 255
         val shinyXor = tid xor sid xor (pid ushr 16).toInt() xor (pid.toInt() and 0xFFFF)
         return LetsGoSlotRead.Pokemon(LetsGoPokemonRead(
             species, text(plain, 0x40), form, ((plain[0x1D].toInt() and 255) ushr 1) and 3,
             plain[0xEC].toInt() and 255, u32(plain, 0x10), plain[0x1C].toInt() and 255,
-            u16(plain, 0xF0), u16(plain, 0xF2), text(plain, 0xB0), tid, sid, pid, ec,
+            u16(plain, 0xF0), u16(plain, 0xF2), u16(plain, 0xF4), u16(plain, 0xF6),
+            u16(plain, 0xF8), u16(plain, 0xFA), u16(plain, 0xFC), u16(plain, 0xFE),
+            currentFriendship, currentHandler, plain[0xDE].toInt() and 255, text(plain, 0xB0), tid, sid, pid, ec,
             shinyXor < 16, iv32 and 0x40000000L != 0L, plain[0x1D].toInt() and 1 != 0,
             (species == 25 && form == 8) || (species == 133 && form == 1),
             Collections.unmodifiableList((0..3).map { LetsGoMoveRead(u16(plain, 0x5A + it * 2), plain[0x62 + it].toInt() and 255) }),

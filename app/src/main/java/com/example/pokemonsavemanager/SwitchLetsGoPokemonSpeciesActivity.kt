@@ -16,6 +16,14 @@ import java.util.concurrent.Executors
 
 /** Gen 1-shaped Pokémon editor for one native Let's Go PB7 species field. */
 class SwitchLetsGoPokemonSpeciesActivity : Activity() {
+    private data class OpenedPokemon(
+        val bytes: ByteArray,
+        val displayName: String,
+        val pokemon: LetsGoPokemonRead,
+        val speciesEditable: Boolean,
+        val levelEditable: Boolean
+    )
+
     private val worker = Executors.newSingleThreadExecutor()
     private val createCopyRequest = 2131
     private val speciesIds = LetsGoPokemonSpeciesEditing.supportedSpecies
@@ -24,12 +32,15 @@ class SwitchLetsGoPokemonSpeciesActivity : Activity() {
     private var storageIndex = -1
     private var opened: ByteArray? = null
     private var current: LetsGoPokemonRead? = null
+    private var speciesEditable = false
+    private var levelEditable = false
     private var pendingPlan: LetsGoSpeciesCopyPlan? = null
     private var verifiedCopy: Pair<Uri, String>? = null
     private var busy = false
     private lateinit var status: TextView
     private lateinit var species: Spinner
     private lateinit var review: Button
+    private lateinit var level: Button
     private lateinit var inspectCopy: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -71,6 +82,21 @@ class SwitchLetsGoPokemonSpeciesActivity : Activity() {
             text = "Review species change"; isEnabled = false; setOnClickListener { reviewSpecies() }
         }
         root.addView(review)
+        level = Button(this).apply {
+            text = "Next field: Level"
+            isEnabled = false
+            setOnClickListener {
+                val uri = sourceUri ?: return@setOnClickListener
+                val hash = expectedHash ?: return@setOnClickListener
+                startActivity(Intent(this@SwitchLetsGoPokemonSpeciesActivity,
+                    SwitchLetsGoPokemonLevelActivity::class.java)
+                    .setData(uri)
+                    .putExtra("pse.switch.sha256", hash)
+                    .putExtra("pse.switch.pokemon.index", storageIndex)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            }
+        }
+        root.addView(level)
         inspectCopy = Button(this).apply {
             text = "Inspect verified copy"; visibility = android.view.View.GONE
             setOnClickListener { inspectVerifiedCopy() }
@@ -89,23 +115,29 @@ class SwitchLetsGoPokemonSpeciesActivity : Activity() {
                 val slot = LetsGoStorageReadOnly.read(bytes).slot(storageIndex)
                 val pokemon = (slot.read as? LetsGoSlotRead.Pokemon)?.value
                     ?: error("The selected native PB7 is not checksum-valid.")
-                require(!slot.partner && !pokemon.isPartnerForm) {
-                    "The partner Pokémon's species is tied to its native starter form and remains protected."
-                }
-                require(!pokemon.isEgg) { "Egg species editing is not supported for Let's Go." }
-                require(pokemon.form == 0) {
-                    "This alternate-form PB7 remains protected so its species and form cannot become mismatched."
-                }
-                Triple(bytes, validation.version.displayName, pokemon)
+                OpenedPokemon(
+                    bytes,
+                    validation.version.displayName,
+                    pokemon,
+                    !slot.partner && !pokemon.isPartnerForm && !pokemon.isEgg && pokemon.form == 0,
+                    !pokemon.isEgg && LetsGoPersonalCatalogue.resolve(pokemon.species, pokemon.form) != null
+                )
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
-                result.onSuccess { (bytes, displayName, pokemon) ->
-                    opened = bytes; current = pokemon
+                result.onSuccess { openedPokemon ->
+                    val bytes = openedPokemon.bytes
+                    val pokemon = openedPokemon.pokemon
+                    opened = bytes
+                    current = pokemon
+                    speciesEditable = openedPokemon.speciesEditable
+                    levelEditable = openedPokemon.levelEditable
                     species.setSelection(speciesIds.indexOf(pokemon.species).coerceAtLeast(0))
-                    status.text = "$displayName • Native integrity verified\n" +
+                    status.text = "${openedPokemon.displayName} • Native integrity verified\n" +
                         "Storage #${storageIndex + 1} • ${pokemon.nickname.ifBlank { LetsGoSpeciesNames.name(pokemon.species) }}\n" +
                         "Current species: #${pokemon.species} ${LetsGoSpeciesNames.name(pokemon.species)} • Form ${pokemon.form}\n" +
+                        (if (speciesEditable) "Species editing available.\n"
+                        else "Species remains protected for this Egg, form, or partner identity; continue to Level when available.\n") +
                         "Source SHA-256: ${LetsGoPokemonSpeciesEditing.sha256(bytes)}"
                 }.onFailure { status.text = it.message ?: "The selected Pokémon could not be opened safely." }
                 setBusy(false)
@@ -116,8 +148,9 @@ class SwitchLetsGoPokemonSpeciesActivity : Activity() {
     private fun setBusy(value: Boolean) {
         busy = value
         val ready = opened != null && current != null
-        species.isEnabled = !value && ready
-        review.isEnabled = !value && ready
+        species.isEnabled = !value && ready && speciesEditable
+        review.isEnabled = !value && ready && speciesEditable
+        level.isEnabled = !value && ready && levelEditable
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
 

@@ -1,0 +1,349 @@
+package com.example.pokemonsavemanager
+
+import kotlin.math.min
+
+data class LetsGoLevelValues(
+    val level: Int,
+    val experience: Long,
+    val currentHp: Int,
+    val maximumHp: Int,
+    val attack: Int,
+    val defense: Int,
+    val speed: Int,
+    val specialAttack: Int,
+    val specialDefense: Int,
+    val combatPower: Int
+)
+
+/** Rebuilds one PB7's native level-dependent values in a reviewed new Let's Go save copy. */
+object LetsGoPokemonLevelEditing {
+    private const val STORAGE_RECORDS = 0x5C00
+    private const val STORAGE_RECORDS_LENGTH = 0x3F7A0
+    private const val FOOTER = 0xB8600
+    private const val DESCRIPTORS = FOOTER + 0x14
+    private const val RECORD_BLOCK = 9
+    private const val EXPERIENCE = 0x10
+    private const val LEVEL = 0xEC
+    private const val PARTY_VALUES = 0xF0
+    private const val PARTY_VALUES_END = 0x100
+    private val orders = listOf("0123", "0132", "0213", "0312", "0231", "0321",
+        "1023", "1032", "2013", "3012", "2031", "3021", "1203", "1302",
+        "2103", "3102", "2301", "3201", "1230", "1320", "2130", "3120", "2310", "3210")
+
+    fun readDocumentBytes(input: java.io.InputStream): ByteArray =
+        LetsGoPokemonNicknameEditing.readDocumentBytes(input)
+
+    fun readSaveBytes(input: java.io.InputStream): ByteArray =
+        LetsGoPokemonNicknameEditing.readSaveBytes(input)
+
+    fun sha256(bytes: ByteArray): String = LetsGoPokemonNicknameEditing.sha256(bytes)
+
+    fun stage(source: ByteArray, expectedSha256: String, storageIndex: Int, requestedLevel: Int): LetsGoLevelCopyPlan {
+        val original = source.copyOf()
+        require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        require(LetsGoSaveValidation.inspect(original) is LetsGoValidation.Verified) {
+            "A validated native Let's Go save is required."
+        }
+        require(requestedLevel in 1..100) { "Level must be 1–100." }
+        val storage = LetsGoStorageReadOnly.read(original)
+        require(storageIndex in 0 until storage.count) { "The selected native Pokémon record no longer exists." }
+        val before = (storage.slot(storageIndex).read as? LetsGoSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The selected native PB7 is not checksum-valid.")
+        require(!before.isEgg) { "Egg level editing is not supported for Let's Go." }
+        require(requestedLevel != before.cachedLevel) { "Enter a different level before review." }
+        val personal = LetsGoPersonalCatalogue.resolve(before.species, before.form)
+            ?: throw IllegalArgumentException(
+                "This PB7 form has no verified native Let's Go stat entry, so Level remains protected."
+            )
+        require(before.nature in 0..24 && before.currentHandler in 0..1) {
+            "The PB7 nature or current-handler identity is invalid, so derived stats cannot be rebuilt safely."
+        }
+        require(before.cachedLevel in 1..100 &&
+            levelForExperience(before.experience, personal.growth) == before.cachedLevel) {
+            "The saved Level and EXP do not agree with this Pokémon's verified growth group."
+        }
+        val after = calculate(before, personal, requestedLevel)
+
+        val recordOffset = STORAGE_RECORDS + storageIndex * LetsGoPokemonReadOnly.RECORD_SIZE
+        val beforeRecord = original.copyOfRange(recordOffset, recordOffset + LetsGoPokemonReadOnly.RECORD_SIZE)
+        val afterRecord = editRecord(beforeRecord, after)
+        val edited = original.copyOf()
+        afterRecord.copyInto(edited, recordOffset)
+        writeU16(edited, descriptorCrcOffset(RECORD_BLOCK),
+            LetsGoSaveValidation.crc16(edited, STORAGE_RECORDS, STORAGE_RECORDS_LENGTH))
+        verify(original, edited, storageIndex, after)
+        return LetsGoLevelCopyPlan(original, edited, storageIndex, recordOffset, before, after)
+    }
+
+    internal fun verify(original: ByteArray, edited: ByteArray, storageIndex: Int, expected: LetsGoLevelValues) {
+        val beforeValidation = LetsGoSaveValidation.inspect(original)
+        val afterValidation = LetsGoSaveValidation.inspect(edited)
+        require(beforeValidation is LetsGoValidation.Verified && afterValidation is LetsGoValidation.Verified &&
+            beforeValidation.version == afterValidation.version && original.size == edited.size) {
+            "The edited copy changed native title identity, size, or block integrity."
+        }
+        val beforeStorage = LetsGoStorageReadOnly.read(original)
+        val afterStorage = LetsGoStorageReadOnly.read(edited)
+        require(beforeStorage.count == afterStorage.count && storageIndex in 0 until beforeStorage.count) {
+            "The native stored-list identity changed."
+        }
+        val recordOffset = STORAGE_RECORDS + storageIndex * LetsGoPokemonReadOnly.RECORD_SIZE
+        require((0 until beforeStorage.count).all { index ->
+            index == storageIndex || run {
+                val offset = STORAGE_RECORDS + index * LetsGoPokemonReadOnly.RECORD_SIZE
+                original.copyOfRange(offset, offset + LetsGoPokemonReadOnly.RECORD_SIZE)
+                    .contentEquals(edited.copyOfRange(offset, offset + LetsGoPokemonReadOnly.RECORD_SIZE))
+            }
+        }) { "Another native Pokémon record changed." }
+
+        val beforeSlot = beforeStorage.slot(storageIndex)
+        val afterSlot = afterStorage.slot(storageIndex)
+        require(beforeSlot.partyPositions == afterSlot.partyPositions && beforeSlot.partner == afterSlot.partner) {
+            "The selected Pokémon's party or partner identity changed."
+        }
+        val before = (beforeSlot.read as? LetsGoSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The original PB7 no longer reopens as a Pokémon.")
+        val after = (afterSlot.read as? LetsGoSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The edited PB7 did not reopen as a Pokémon.")
+        require(after.cachedLevel == expected.level && after.experience == expected.experience &&
+            after.currentHp == expected.currentHp && after.maximumHp == expected.maximumHp &&
+            after.attack == expected.attack && after.defense == expected.defense &&
+            after.speed == expected.speed && after.specialAttack == expected.specialAttack &&
+            after.specialDefense == expected.specialDefense && after.combatPower == expected.combatPower &&
+            after.copy(
+                cachedLevel = before.cachedLevel,
+                experience = before.experience,
+                currentHp = before.currentHp,
+                maximumHp = before.maximumHp,
+                attack = before.attack,
+                defense = before.defense,
+                speed = before.speed,
+                specialAttack = before.specialAttack,
+                specialDefense = before.specialDefense,
+                combatPower = before.combatPower
+            ) == before) {
+            "The persisted PB7 changed outside its reviewed level-dependent values."
+        }
+
+        val beforePlain = decryptAndUnshuffle(
+            original.copyOfRange(recordOffset, recordOffset + LetsGoPokemonReadOnly.RECORD_SIZE))
+        val afterPlain = decryptAndUnshuffle(
+            edited.copyOfRange(recordOffset, recordOffset + LetsGoPokemonReadOnly.RECORD_SIZE))
+        require(beforePlain.indices.all { offset ->
+            offset in 6..7 || offset in EXPERIENCE..EXPERIENCE + 3 || offset == LEVEL ||
+                offset in PARTY_VALUES until PARTY_VALUES_END || beforePlain[offset] == afterPlain[offset]
+        }) { "The PB7 edit exceeded EXP, Level, cached battle values, CP, and checksum." }
+
+        val crcOffset = descriptorCrcOffset(RECORD_BLOCK)
+        require(original.indices.all { offset ->
+            offset in recordOffset until recordOffset + LetsGoPokemonReadOnly.RECORD_SIZE ||
+                offset in crcOffset until crcOffset + 2 || original[offset] == edited[offset]
+        }) { "An unrelated Let's Go save byte changed." }
+    }
+
+    private fun calculate(before: LetsGoPokemonRead, personal: LetsGoPersonalData, level: Int): LetsGoLevelValues {
+        val effectiveIv = IntArray(6) { index ->
+            val hyperBit = intArrayOf(0, 1, 2, 5, 3, 4)[index]
+            if (before.hyperTrainingFlags and (1 shl hyperBit) != 0) 31 else before.ivs[index]
+        }
+        val base = intArrayOf(personal.hp, personal.attack, personal.defense, personal.speed,
+            personal.specialAttack, personal.specialDefense)
+        val scalar = (((before.currentFriendship / 255.0f / 10.0f) + 1.0f) * 100.0f).toInt()
+        fun raw(index: Int): Int = (effectiveIv[index] + 2 * base[index]) * level / 100
+        fun nature(index: Int, value: Int): Int {
+            if (before.nature !in 0..24) return value
+            val up = before.nature / 5
+            val down = before.nature % 5
+            if (up == down) return value
+            return when (index) {
+                up -> value * 110 / 100
+                down -> value * 90 / 100
+                else -> value
+            }
+        }
+        val maximumHp = before.awakened[0] + raw(0) + 10 + level
+        fun battle(index: Int, natureIndex: Int): Int =
+            before.awakened[index] + scalar * nature(natureIndex, raw(index) + 5) / 100
+        val attack = battle(1, 0)
+        val defense = battle(2, 1)
+        val speed = battle(3, 4)
+        val specialAttack = battle(4, 2)
+        val specialDefense = battle(5, 3)
+        val baseCpSum = raw(0) + 10 + level +
+            nature(0, raw(1) + 5) * scalar / 100 +
+            nature(1, raw(2) + 5) * scalar / 100 +
+            nature(4, raw(3) + 5) * scalar / 100 +
+            nature(2, raw(4) + 5) * scalar / 100 +
+            nature(3, raw(5) + 5) * scalar / 100
+        val baseCp = (baseCpSum * 6f * level / 100f).toInt()
+        val awakeCp = (before.awakened.sum() * (level * 4f / 100f + 2f)).toInt()
+        val combatPower = min(10000, baseCp + awakeCp)
+        val currentHp = when {
+            before.currentHp == 0 -> 0
+            before.maximumHp > 0 && before.currentHp >= before.maximumHp -> maximumHp
+            else -> min(before.currentHp, maximumHp)
+        }
+        return LetsGoLevelValues(
+            level, minimumExperience(level, personal.growth), currentHp, maximumHp,
+            attack, defense, speed, specialAttack, specialDefense, combatPower
+        )
+    }
+
+    private fun minimumExperience(level: Int, growth: Int): Long {
+        if (level <= 1) return 0
+        val n = level.toLong()
+        val cube = n * n * n
+        return when (growth) {
+            0 -> cube
+            1 -> when {
+                level <= 50 -> cube * (100 - n) / 50
+                level <= 68 -> cube * (150 - n) / 100
+                level <= 98 -> {
+                    val remainder = n % 3
+                    cube * (1274 + remainder * remainder - 9 * remainder - 20 * (n / 3)) / 1000
+                }
+                else -> cube * (160 - n) / 100
+            }
+            2 -> when {
+                level <= 15 -> cube * (24 + (n + 1) / 3) / 50
+                level <= 35 -> cube * (14 + n) / 50
+                else -> cube * (32 + n / 2) / 50
+            }
+            3 -> maxOf(0L, 6 * cube / 5 - 15 * n * n + 100 * n - 140)
+            4 -> 4 * cube / 5
+            5 -> 5 * cube / 4
+            else -> error("Unsupported native Let's Go growth group.")
+        }
+    }
+
+    private fun levelForExperience(experience: Long, growth: Int): Int {
+        var level = 1
+        for (candidate in 2..100) {
+            if (experience < minimumExperience(candidate, growth)) break
+            level = candidate
+        }
+        return level
+    }
+
+    private fun editRecord(record: ByteArray, values: LetsGoLevelValues): ByteArray {
+        val plain = decryptAndUnshuffle(record)
+        writeU32(plain, EXPERIENCE, values.experience)
+        plain[LEVEL] = values.level.toByte()
+        writeU16(plain, 0xF0, values.currentHp)
+        writeU16(plain, 0xF2, values.maximumHp)
+        writeU16(plain, 0xF4, values.attack)
+        writeU16(plain, 0xF6, values.defense)
+        writeU16(plain, 0xF8, values.speed)
+        writeU16(plain, 0xFA, values.specialAttack)
+        writeU16(plain, 0xFC, values.specialDefense)
+        writeU16(plain, 0xFE, values.combatPower)
+        var checksum = 0
+        for (offset in 8 until 0xE8 step 2) checksum += u16(plain, offset)
+        writeU16(plain, 6, checksum and 0xFFFF)
+        return shuffleAndEncrypt(plain)
+    }
+
+    private fun decryptAndUnshuffle(record: ByteArray): ByteArray {
+        require(record.size == LetsGoPokemonReadOnly.RECORD_SIZE) { "Expected one complete native PB7 record." }
+        val ec = u32(record, 0)
+        val decrypted = record.copyOf()
+        xorWords(decrypted, 8, 0xE8, ec)
+        xorWords(decrypted, 0xE8, LetsGoPokemonReadOnly.RECORD_SIZE, ec)
+        val order = orders[((ec ushr 13).toInt() and 31) % 24]
+        val plain = decrypted.copyOf()
+        for (block in 0..3) {
+            val from = 8 + (order[block] - '0') * 56
+            decrypted.copyInto(plain, 8 + block * 56, from, from + 56)
+        }
+        return plain
+    }
+
+    private fun shuffleAndEncrypt(plain: ByteArray): ByteArray {
+        val ec = u32(plain, 0)
+        val order = orders[((ec ushr 13).toInt() and 31) % 24]
+        val shuffled = plain.copyOf()
+        for (block in 0..3) {
+            val destination = 8 + (order[block] - '0') * 56
+            plain.copyInto(shuffled, destination, 8 + block * 56, 8 + (block + 1) * 56)
+        }
+        xorWords(shuffled, 8, 0xE8, ec)
+        xorWords(shuffled, 0xE8, LetsGoPokemonReadOnly.RECORD_SIZE, ec)
+        return shuffled
+    }
+
+    private fun xorWords(bytes: ByteArray, from: Int, endExclusive: Int, seed: Long) {
+        var state = seed
+        for (offset in from until endExclusive step 2) {
+            state = (state * 0x41C64E6DL + 0x6073L) and 0xFFFFFFFFL
+            writeU16(bytes, offset, u16(bytes, offset) xor (state ushr 16).toInt())
+        }
+    }
+
+    private fun descriptorCrcOffset(block: Int): Int = DESCRIPTORS + block * 8 + 6
+    private fun u16(bytes: ByteArray, offset: Int): Int =
+        (bytes[offset].toInt() and 255) or ((bytes[offset + 1].toInt() and 255) shl 8)
+    private fun u32(bytes: ByteArray, offset: Int): Long =
+        u16(bytes, offset).toLong() or (u16(bytes, offset + 2).toLong() shl 16)
+    private fun writeU16(bytes: ByteArray, offset: Int, value: Int) {
+        bytes[offset] = value.toByte()
+        bytes[offset + 1] = (value ushr 8).toByte()
+    }
+    private fun writeU32(bytes: ByteArray, offset: Int, value: Long) {
+        writeU16(bytes, offset, value.toInt())
+        writeU16(bytes, offset + 2, (value ushr 16).toInt())
+    }
+}
+
+class LetsGoLevelCopyPlan internal constructor(
+    original: ByteArray,
+    edited: ByteArray,
+    val storageIndex: Int,
+    val recordOffset: Int,
+    val before: LetsGoPokemonRead,
+    val after: LetsGoLevelValues
+) {
+    private val original = original.copyOf()
+    private val edited = edited.copyOf()
+    val sourceSha256: String = LetsGoPokemonLevelEditing.sha256(this.original)
+    val editedSha256: String = LetsGoPokemonLevelEditing.sha256(this.edited)
+    private var consumed = false
+
+    @Synchronized
+    fun saveNewCopy(
+        readSource: () -> ByteArray,
+        retainBackup: (ByteArray) -> ByteArray,
+        readDestination: () -> ByteArray,
+        writeDestination: (ByteArray) -> Unit,
+        discardDestination: () -> Boolean
+    ) {
+        check(!consumed) { "This Level review was already used. Reopen Pokémon Boxes." }
+        consumed = true
+        fun requireSource() = require(readSource().contentEquals(original)) {
+            "The selected source changed. Reopen it from PSE."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "Choose a new empty document; existing files cannot be replaced." }
+        val backup = retainBackup(original.copyOf())
+        require(backup.contentEquals(original)) { "The recovery backup did not verify. Nothing was written." }
+        requireSource()
+        require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
+        var started = false
+        try {
+            LetsGoPokemonLevelEditing.verify(original, edited, storageIndex, after)
+            started = true
+            writeDestination(edited.copyOf())
+            val persisted = readDestination()
+            require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed Level edit." }
+            LetsGoPokemonLevelEditing.verify(original, persisted, storageIndex, after)
+            requireSource()
+        } catch (failure: Exception) {
+            val removed = started && runCatching { discardDestination() }.getOrDefault(false)
+            throw IllegalStateException(
+                (failure.message ?: "Level copy verification failed.") +
+                    if (removed) " The failed new copy was removed; the recovery backup is retained."
+                    else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
+                failure
+            )
+        }
+    }
+}
