@@ -11,6 +11,7 @@ object SwordShieldTrainerEditing {
     private const val MAX_FILE_SIZE = 0x1876B1
     private const val NAME_SIZE = 26
     private const val TRAINER_ID_SIZE = 2
+    private const val MONEY_SIZE = 4
 
     fun readDocumentBytes(input: InputStream): ByteArray = input.use {
         val output = ByteArrayOutputStream()
@@ -33,28 +34,36 @@ object SwordShieldTrainerEditing {
         source: ByteArray,
         expectedSha256: String,
         requestedName: String,
-        requestedTrainerId: Int
+        requestedTrainerId: Int,
+        requestedMoney: Long
     ): SwordShieldTrainerCopyPlan {
         val original = source.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
         val before = SwordShieldTrainerReadOnly.read(original)
         val name = if (requestedName == before.name) before.name else requestedName.trim()
         require(requestedTrainerId in 0..65535) { "Trainer ID must be between 0 and 65535." }
+        require(requestedMoney in 0L..9_999_999L) { "Money must be between 0 and 9,999,999." }
         val nameChanged = name != before.name
         val trainerIdChanged = requestedTrainerId != before.tid16
-        require(nameChanged || trainerIdChanged) { "Change the Trainer Name or Trainer ID before reviewing." }
+        val moneyChanged = requestedMoney != before.money
+        require(nameChanged || trainerIdChanged || moneyChanged) {
+            "Change the Trainer Name, Trainer ID, or Money before reviewing."
+        }
         val written = SwordShieldSaveValidation.writeTrainerFields(
             original,
             if (nameChanged) encodeName(name) else null,
-            if (trainerIdChanged) requestedTrainerId else null
+            if (trainerIdChanged) requestedTrainerId else null,
+            if (moneyChanged) requestedMoney else null
         )
         verify(
-            original, written.bytes, name, requestedTrainerId, written.nameOffset,
-            written.trainerIdOffset, nameChanged, trainerIdChanged
+            original, written.bytes, name, requestedTrainerId, requestedMoney,
+            written.nameOffset, written.trainerIdOffset, written.moneyOffset,
+            nameChanged, trainerIdChanged, moneyChanged
         )
         return SwordShieldTrainerCopyPlan(
             original, written.bytes, before.name, name, before.tid16, requestedTrainerId,
-            written.nameOffset, written.trainerIdOffset, nameChanged, trainerIdChanged
+            before.money, requestedMoney, written.nameOffset, written.trainerIdOffset,
+            written.moneyOffset, nameChanged, trainerIdChanged, moneyChanged
         )
     }
 
@@ -63,10 +72,13 @@ object SwordShieldTrainerEditing {
         edited: ByteArray,
         expectedName: String,
         expectedTrainerId: Int,
+        expectedMoney: Long,
         nameOffset: Int,
         trainerIdOffset: Int,
+        moneyOffset: Int,
         nameChanged: Boolean,
-        trainerIdChanged: Boolean
+        trainerIdChanged: Boolean,
+        moneyChanged: Boolean
     ) {
         val before = SwordShieldTrainerReadOnly.read(original)
         val after = SwordShieldTrainerReadOnly.read(edited)
@@ -76,7 +88,11 @@ object SwordShieldTrainerEditing {
         val expectedId32 = (before.id32 and 0xFFFF0000L) or expectedTrainerId.toLong()
         require(
             after.name == expectedName && after.tid16 == expectedTrainerId &&
-                before.copy(name = expectedName, id32 = expectedId32, tid16 = expectedTrainerId) == after
+                after.money == expectedMoney &&
+                before.copy(
+                    name = expectedName, id32 = expectedId32, tid16 = expectedTrainerId,
+                    money = expectedMoney
+                ) == after
         ) {
             "The Trainer Data edit did not reopen exactly."
         }
@@ -84,6 +100,7 @@ object SwordShieldTrainerEditing {
         require(original.indices.all { index ->
             (nameChanged && index in nameOffset until nameOffset + NAME_SIZE) ||
                 (trainerIdChanged && index in trainerIdOffset until trainerIdOffset + TRAINER_ID_SIZE) ||
+                (moneyChanged && index in moneyOffset until moneyOffset + MONEY_SIZE) ||
                 index in hashOffset until original.size ||
                 original[index] == edited[index]
         }) { "The Trainer Data edit changed unrelated encrypted container data." }
@@ -118,10 +135,14 @@ class SwordShieldTrainerCopyPlan internal constructor(
     val afterName: String,
     val beforeTrainerId: Int,
     val afterTrainerId: Int,
+    val beforeMoney: Long,
+    val afterMoney: Long,
     val nameOffset: Int,
     val trainerIdOffset: Int,
+    val moneyOffset: Int,
     val nameChanged: Boolean,
-    val trainerIdChanged: Boolean
+    val trainerIdChanged: Boolean,
+    val moneyChanged: Boolean
 ) {
     private val original = original.copyOf()
     private val edited = edited.copyOf()
@@ -151,16 +172,16 @@ class SwordShieldTrainerCopyPlan internal constructor(
         var started = false
         try {
             SwordShieldTrainerEditing.verify(
-                original, edited, afterName, afterTrainerId, nameOffset, trainerIdOffset,
-                nameChanged, trainerIdChanged
+                original, edited, afterName, afterTrainerId, afterMoney, nameOffset,
+                trainerIdOffset, moneyOffset, nameChanged, trainerIdChanged, moneyChanged
             )
             started = true
             writeDestination(edited.copyOf())
             val persisted = readDestination()
             require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed edit." }
             SwordShieldTrainerEditing.verify(
-                original, persisted, afterName, afterTrainerId, nameOffset, trainerIdOffset,
-                nameChanged, trainerIdChanged
+                original, persisted, afterName, afterTrainerId, afterMoney, nameOffset,
+                trainerIdOffset, moneyOffset, nameChanged, trainerIdChanged, moneyChanged
             )
             requireSource()
         } catch (failure: Exception) {

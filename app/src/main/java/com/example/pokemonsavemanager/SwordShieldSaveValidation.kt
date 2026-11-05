@@ -18,11 +18,16 @@ internal data class SwordShieldInventoryWriteResult(val bytes: ByteArray, val ab
 internal data class SwordShieldTrainerWriteResult(
     val bytes: ByteArray,
     val nameOffset: Int,
-    val trainerIdOffset: Int
+    val trainerIdOffset: Int,
+    val moneyOffset: Int
 )
 internal data class SwordShieldDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldPokemonWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
-internal data class SwordShieldTrainerBlock(val version: SwordShieldVersion, val status: ByteArray)
+internal data class SwordShieldTrainerBlock(
+    val version: SwordShieldVersion,
+    val status: ByteArray,
+    val money: Long
+)
 internal data class SwordShieldBattleTowerBlocks(
     val version: SwordShieldVersion,
     val singlesVictories: ByteArray,
@@ -110,6 +115,7 @@ object SwordShieldSaveValidation {
     private val knownSizes = setOf(0x1716B3, 0x17195E, 0x180B19, 0x180AD0,
         0x1876B1, 0x187693, 0x187668, 0x18764A)
     private const val STATUS_KEY = 0xF25C070EL
+    private const val MONEY_KEY = 0x1B882B09L
     private val requiredObjects = mapOf(0x0D66012CL to 0x50A00,
         0x2985FE5DL to 0x814, 0x4716C404L to 0x4B00, STATUS_KEY to 0x110)
     private val intro = decodeHex("9ec99cd70ed33c44fb9303dceb39b42a1947e9634ba2334416bf82a2ba6355b63d9df24b5f7b6ab2621dc21b68e5c8b53a059000e8a8103de2ecf00cb2ed4f6d")
@@ -125,8 +131,16 @@ object SwordShieldSaveValidation {
     }
 
     internal fun readTrainerBlock(source: ByteArray): SwordShieldTrainerBlock {
-        val (checked, captured) = captureObjects(source, setOf(STATUS_KEY))
-        return SwordShieldTrainerBlock(checked.version, captured.getValue(STATUS_KEY))
+        val (checked, captured) = captureObjects(
+            source,
+            setOf(STATUS_KEY, MONEY_KEY),
+            objectLayouts = mapOf(MONEY_KEY to 0x21C)
+        )
+        val misc = captured.getValue(MONEY_KEY)
+        val money = (0..3).fold(0L) { value, index ->
+            value or ((misc[4 + index].toLong() and 255) shl (index * 8))
+        }
+        return SwordShieldTrainerBlock(checked.version, captured.getValue(STATUS_KEY), money)
     }
 
     /** Reads the four documented native Battle Tower counters after the complete container gate passes. */
@@ -580,18 +594,25 @@ object SwordShieldSaveValidation {
     internal fun writeTrainerFields(
         source: ByteArray,
         encodedName: ByteArray?,
-        trainerId: Int?
+        trainerId: Int?,
+        money: Long?
     ): SwordShieldTrainerWriteResult {
         readTrainerBlock(source)
-        require(encodedName != null || trainerId != null) { "Select at least one Trainer Data field to change." }
+        require(encodedName != null || trainerId != null || money != null) {
+            "Select at least one Trainer Data field to change."
+        }
         if (encodedName != null) require(encodedName.size == 26) {
             "The native Sword/Shield trainer-name field must be exactly 26 bytes."
         }
         if (trainerId != null) require(trainerId in 0..65535) {
             "Trainer ID must be between 0 and 65535."
         }
+        if (money != null) require(money in 0L..9_999_999L) {
+            "Money must be between 0 and 9,999,999."
+        }
         val nameRelativeOffset = 0xB0
         val trainerIdRelativeOffset = 0xA0
+        val moneyRelativeOffset = 4
         val end = source.size - 32
         val payload = source.copyOfRange(0, end)
         for (index in payload.indices) payload[index] =
@@ -600,6 +621,7 @@ object SwordShieldSaveValidation {
         val cursor = Cursor(payload)
         var nameOffset = -1
         var trainerIdOffset = -1
+        var moneyOffset = -1
         while (cursor.remaining > 0) {
             val key = cursor.uint32()
             val stream = KeyStream(key)
@@ -635,9 +657,31 @@ object SwordShieldSaveValidation {
                 nameOffset = blockStart + nameRelativeOffset
                 trainerIdOffset = blockStart + trainerIdRelativeOffset
             }
+            if (key == MONEY_KEY) {
+                require(type == 4 && length == 0x21CL) {
+                    "The Sword/Shield money block has the wrong native type or size."
+                }
+                if (money != null) {
+                    val decoded = ByteArray(length.toInt()) { byteIndex ->
+                        (payload[blockStart + byteIndex].toInt() xor stream.next()).toByte()
+                    }
+                    repeat(4) { byteIndex ->
+                        decoded[moneyRelativeOffset + byteIndex] = (money ushr (byteIndex * 8)).toByte()
+                    }
+                    val replay = KeyStream(key)
+                    replay.next()
+                    replay.next32()
+                    decoded.forEachIndexed { byteIndex, value ->
+                        payload[blockStart + byteIndex] = ((value.toInt() and 255) xor replay.next()).toByte()
+                    }
+                }
+                moneyOffset = blockStart + moneyRelativeOffset
+            }
             cursor.skip(length.toInt())
         }
-        require(nameOffset >= 0 && trainerIdOffset >= 0) { "The native Sword/Shield status object is missing." }
+        require(nameOffset >= 0 && trainerIdOffset >= 0 && moneyOffset >= 0) {
+            "A required Sword/Shield Trainer Data object is missing."
+        }
 
         val edited = source.copyOf()
         for (index in payload.indices) edited[index] =
@@ -648,7 +692,7 @@ object SwordShieldSaveValidation {
         digest.update(outro)
         digest.digest().copyInto(edited, end)
         readTrainerBlock(edited)
-        return SwordShieldTrainerWriteResult(edited, nameOffset, trainerIdOffset)
+        return SwordShieldTrainerWriteResult(edited, nameOffset, trainerIdOffset, moneyOffset)
     }
 
 

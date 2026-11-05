@@ -513,21 +513,21 @@ class SwitchReadOnlyActivity : Activity() {
             setColor(fill); cornerRadius = dp(16).toFloat(); setStroke(dp(1), Color.rgb(25, 145, 220))
         }
         val accent = Color.rgb(70, 190, 255)
-        val trainerNameEditing = (bound.profile.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE ||
+        val trainerDataEditing = (bound.profile.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE ||
             bound.profile.family == SwitchGameFamily.SWORD_SHIELD ||
             bound.profile.family == SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL ||
             bound.profile.family == SwitchGameFamily.LEGENDS_ARCEUS ||
             bound.profile.family == SwitchGameFamily.SCARLET_VIOLET ||
             bound.profile.family == SwitchGameFamily.LEGENDS_ZA) && selectedSourceUri != null
         dashboardRoot.addView(label("PSE", 38f, accent))
-        dashboardRoot.addView(label(if (trainerNameEditing) "Pokémon Save Editor" else "Pokémon Save Editor • Read-only", 15f))
+        dashboardRoot.addView(label(if (trainerDataEditing) "Pokémon Save Editor" else "Pokémon Save Editor • Read-only", 15f))
         dashboardRoot.addView(label("CURRENT SAVE", 13f, accent))
         dashboardRoot.addView(label("${bound.displayName}\nGeneration ${bound.profile.family.generation} • Nintendo Switch\nNative integrity verified" +
-            if (trainerNameEditing) " • Trainer Name editing available" else " • Read-only", 18f).apply {
+            if (trainerDataEditing) " • Trainer Data editing available" else " • Read-only", 18f).apply {
             setPadding(dp(18), dp(16), dp(18), dp(16)); background = cardBackground(Color.rgb(12, 35, 51))
         }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(18) })
         dashboardRoot.addView(label(status.text.toString(), 14f))
-        dashboardRoot.addView(label(if (busy) "Reading selected source…" else if (trainerNameEditing)
+        dashboardRoot.addView(label(if (busy) "Reading selected source…" else if (trainerDataEditing)
             "EDITOR • TRAINER DATA" else "EDITOR • READ-ONLY", 13f, accent))
         val targets = mapOf("trainer" to trainerButton, "storage" to storageButton,
             "inventory" to inventoryButton, "pokedex" to pokedexButton)
@@ -538,10 +538,10 @@ class SwitchReadOnlyActivity : Activity() {
             for (entry in pair) {
                 val target = targets.getValue(entry.section)
                 row.addView(Button(this).apply {
-                    val trainerEditing = entry.section == "trainer" && trainerNameEditing
+                    val trainerEditing = entry.section == "trainer" && trainerDataEditing
                     text = entry.label + when {
                         !entry.enabled -> "\nUnavailable for this save"
-                        trainerEditing -> "\nEdit Trainer Name"
+                        trainerEditing -> "\nEdit Trainer Data"
                         else -> "\nRead-only"
                     }
                     textSize = 16f; isAllCaps = false; minHeight = dp(100); setTextColor(Color.WHITE)
@@ -2439,10 +2439,11 @@ class SwitchReadOnlyActivity : Activity() {
             append("Jersey number: ${trainer.jerseyNumber.ifEmpty { "Not set" }}\n")
             append("Trainer ID (six digits): ${trainer.displayTrainerId}\n")
             append("Stored ID32: ${trainer.id32}\nTID16: ${trainer.tid16}\nSID16: ${trainer.sid16}\n")
+            append("Money: ${trainer.money}\n")
             append("Watts: ${trainer.watts}\n\n")
-            append("Trainer Name opens the reviewed native editor; the other status fields remain read-only. ")
+            append("Trainer Name, Trainer ID and Money open in the reviewed native editor. ")
             append("Trainer gender and language are the saved game fields. ")
-            append("Money, play time, badges, League Card and appearance details are not read in this view.")
+            append("Play time, badges, League Card and appearance details are not read in this view.")
         }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

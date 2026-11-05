@@ -7,7 +7,7 @@ import java.nio.charset.CodingErrorAction
 data class SwordShieldTrainerRead(
     val version: SwordShieldVersion, val name: String, val gender: Int,
     val languageId: Int, val languageName: String, val jerseyNumber: String,
-    val id32: Long, val tid16: Int, val sid16: Int, val watts: Long
+    val id32: Long, val tid16: Int, val sid16: Int, val money: Long, val watts: Long
 ) {
     val displayTrainerId: String get() = (id32 % 1000000L).toString().padStart(6, '0')
 }
@@ -27,6 +27,7 @@ object SwordShieldTrainerReadOnly {
             ?: throw IllegalArgumentException("The saved trainer language is not supported by Sword/Shield.")
         val watts = uint32(bytes, 0xD0)
         require(watts <= 9999999L) { "The saved Watt balance exceeds the native maximum." }
+        require(block.money <= 9999999L) { "The saved money exceeds the native maximum." }
         val jersey = StringBuilder()
         var terminated = false
         for (offset in 1..3) {
@@ -49,7 +50,7 @@ object SwordShieldTrainerReadOnly {
         }
         require(name.none { Character.isISOControl(it) }) { "The saved trainer name contains control characters." }
         return SwordShieldTrainerRead(block.version, name, gender, language, languageName, jersey.toString(),
-            uint32(bytes, 0xA0), uint16(bytes, 0xA0), uint16(bytes, 0xA2), watts)
+            uint32(bytes, 0xA0), uint16(bytes, 0xA0), uint16(bytes, 0xA2), block.money, watts)
     }
 
     private fun byte(bytes: ByteArray, offset: Int): Int = bytes[offset].toInt() and 255
