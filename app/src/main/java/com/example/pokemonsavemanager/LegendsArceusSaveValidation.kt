@@ -19,6 +19,8 @@ internal data class LegendsArceusPokemonBlocks(val version: LegendsArceusVersion
 internal data class LegendsArceusTrainerBlocks(val version: LegendsArceusVersion, val status: ByteArray,
     val money: Long?, val meritCurrent: Long?, val meritTotal: Long?, val satchelUpgrades: Long?, val expeditionRank: Long?)
 
+internal data class LegendsArceusPlayTimeBlock(val version: LegendsArceusVersion, val data: ByteArray)
+
 internal data class LegendsArceusInventoryBlocks(val regular: ByteArray, val keyItems: ByteArray,
     val stored: ByteArray, val recipes: ByteArray, val favorites: ByteArray, val satchelUpgrades: Long)
 
@@ -29,7 +31,8 @@ internal data class LegendsArceusTrainerWriteResult(
     val bytes: ByteArray,
     val nameOffset: Int,
     val trainerIdOffset: Int,
-    val moneyOffset: Int
+    val moneyOffset: Int,
+    val playTimeOffset: Int
 )
 
 /** Independent read-only container gate; pinned format evidence is in SWITCH_READ_ONLY_FORMATS.md. */
@@ -37,6 +40,7 @@ object LegendsArceusSaveValidation {
     private val knownSizes = setOf(0x136DDE, 0x13AD06)
     private const val STATUS_KEY = 0xF25C070EL
     private const val MONEY_KEY = 0x3279D927L
+    private const val PLAY_TIME_KEY = 0xC4FA7C8CL
     private val requiredObjects = mapOf(0x47E1CEABL to 0x54600,
         0x2985FE5DL to 0x8D4, 0x02168706L to 0x1E460, STATUS_KEY to 0x80)
     private val intro = decodeHex("9ec99cd70ed33c44fb9303dceb39b42a1947e9634ba2334416bf82a2ba6355b63d9df24b5f7b6ab2621dc21b68e5c8b53a059000e8a8103de2ecf00cb2ed4f6d")
@@ -77,6 +81,19 @@ object LegendsArceusSaveValidation {
             optionalUint(0x75CE2CF6L), optionalUint(0x50FE632AL))
     }
 
+    /** Native four-byte recorded-time object, detached only after complete container validation. */
+    internal fun readPlayTimeBlock(source: ByteArray): LegendsArceusPlayTimeBlock {
+        val captured = mutableMapOf(PLAY_TIME_KEY to ByteArray(0))
+        val checked = inspect(source, captured, objectSizes = mapOf(PLAY_TIME_KEY to 4))
+        require(checked is LegendsArceusValidation.Verified) {
+            (checked as? LegendsArceusValidation.Invalid)?.reason ?:
+                "A validated native Legends: Arceus save is required."
+        }
+        val data = captured.getValue(PLAY_TIME_KEY)
+        require(data.size == 4) { "The native Legends: Arceus Play Time object is missing." }
+        return LegendsArceusPlayTimeBlock(checked.version, data)
+    }
+
     /** Inventory-specific shapes add checks without changing existing reader gates. */
     internal fun readInventoryBlocks(source: ByteArray): LegendsArceusInventoryBlocks {
         val captured = (inventoryObjects.keys + setOf(0x00EF4BAEL, 0x75CE2CF6L))
@@ -100,10 +117,12 @@ object LegendsArceusSaveValidation {
         source: ByteArray,
         encodedName: ByteArray?,
         trainerId: Int?,
-        money: Long?
+        money: Long?,
+        playTime: ByteArray?
     ): LegendsArceusTrainerWriteResult {
         val blocks = readTrainerBlocks(source)
-        require(encodedName != null || trainerId != null || money != null) {
+        if (playTime != null) readPlayTimeBlock(source)
+        require(encodedName != null || trainerId != null || money != null || playTime != null) {
             "Select at least one Trainer Data field to change."
         }
         if (encodedName != null) require(encodedName.size == 26) {
@@ -115,6 +134,9 @@ object LegendsArceusSaveValidation {
         if (money != null) {
             require(blocks.money != null) { "This save does not contain the native money counter." }
             require(money in 0L..9_999_999L) { "Money must be between 0 and 9,999,999." }
+        }
+        if (playTime != null) require(playTime.size == 4) {
+            "The native Legends: Arceus Play Time field must be exactly four bytes."
         }
         val nameRelativeOffset = 0x20
         val trainerIdRelativeOffset = 0x10
@@ -128,6 +150,7 @@ object LegendsArceusSaveValidation {
         var nameOffset = -1
         var trainerIdOffset = -1
         var moneyOffset = -1
+        var playTimeOffset = -1
         while (cursor.remaining > 0) {
             val key = cursor.uint32()
             val stream = KeyStream(key)
@@ -175,6 +198,16 @@ object LegendsArceusSaveValidation {
                     }
                     moneyOffset = blockStart
                 }
+            } else if (key == PLAY_TIME_KEY) {
+                require(type == 4 && length == 4L) {
+                    "The Legends: Arceus Play Time object has the wrong native type or size."
+                }
+                if (playTime != null) {
+                    playTime.forEachIndexed { byteIndex, value ->
+                        payload[blockStart + byteIndex] = ((value.toInt() and 255) xor stream.next()).toByte()
+                    }
+                    playTimeOffset = blockStart
+                }
             }
             cursor.skip(length.toInt())
         }
@@ -182,6 +215,7 @@ object LegendsArceusSaveValidation {
             "The Legends: Arceus trainer status object is missing."
         }
         require(money == null || moneyOffset >= 0) { "The Legends: Arceus money counter is missing." }
+        require(playTime == null || playTimeOffset >= 0) { "The Legends: Arceus Play Time object is missing." }
 
         val edited = source.copyOf()
         for (index in payload.indices) edited[index] =
@@ -192,7 +226,8 @@ object LegendsArceusSaveValidation {
         digest.update(outro)
         digest.digest().copyInto(edited, end)
         readTrainerBlocks(edited)
-        return LegendsArceusTrainerWriteResult(edited, nameOffset, trainerIdOffset, moneyOffset)
+        if (playTime != null) readPlayTimeBlock(edited)
+        return LegendsArceusTrainerWriteResult(edited, nameOffset, trainerIdOffset, moneyOffset, playTimeOffset)
     }
 
     /** Replaces one decoded four-byte inventory record and rebuilds native container integrity. */
@@ -443,7 +478,9 @@ object LegendsArceusSaveValidation {
             // Only trainer extraction requests these keys; identity/Pokémon gates retain their original behavior.
             if (key in uintKeys) require(type == 10 && length == 4L) { "A trainer counter must be a native UInt32." }
             objectSizes[key]?.let { expectedSize ->
-                require(type == 4 && length == expectedSize.toLong()) { "An Arceus inventory pocket has the wrong type or size." }
+                require(type == 4 && length == expectedSize.toLong()) {
+                    "A requested Legends: Arceus object has the wrong native type or size."
+                }
             }
             byteDataSizes[key]?.let { expectedSize ->
                 require((type == 4 || (type == 5 && arraySubtype == 8)) && length == expectedSize.toLong()) {

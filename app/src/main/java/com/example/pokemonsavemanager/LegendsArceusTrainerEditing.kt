@@ -12,6 +12,7 @@ object LegendsArceusTrainerEditing {
     private const val NAME_SIZE = 26
     private const val TRAINER_ID_SIZE = 2
     private const val MONEY_SIZE = 4
+    private const val PLAY_TIME_SIZE = 4
 
     fun readDocumentBytes(input: InputStream): ByteArray = input.use {
         val output = ByteArrayOutputStream()
@@ -37,11 +38,15 @@ object LegendsArceusTrainerEditing {
         expectedSha256: String,
         requestedName: String,
         requestedTrainerId: Int,
-        requestedMoney: Long?
+        requestedMoney: Long?,
+        requestedPlayHours: Int,
+        requestedPlayMinutes: Int,
+        requestedPlaySeconds: Int
     ): LegendsArceusTrainerCopyPlan {
         val original = source.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
         val before = LegendsArceusTrainerReadOnly.read(original)
+        val beforePlayTime = LegendsArceusPlayTimeReadOnly.read(original)
         val name = if (requestedName == before.name) before.name else requestedName.trim()
         require(requestedTrainerId in 0..65535) { "Trainer ID must be between 0 and 65535." }
         if (requestedMoney != null) require(requestedMoney in 0L..9_999_999L) {
@@ -50,27 +55,41 @@ object LegendsArceusTrainerEditing {
         require(before.money != null || requestedMoney == null) {
             "This save does not contain the native money counter."
         }
+        require(requestedPlayHours in 0..65535) { "Play Time hours must be between 0 and 65535." }
+        require(requestedPlayMinutes in 0..59) { "Play Time minutes must be between 0 and 59." }
+        require(requestedPlaySeconds in 0..59) { "Play Time seconds must be between 0 and 59." }
         val nameChanged = name != before.name
         val trainerIdChanged = requestedTrainerId != before.tid16
         val moneyChanged = requestedMoney != null && requestedMoney != before.money
-        require(nameChanged || trainerIdChanged || moneyChanged) {
-            "Change the Trainer Name, Trainer ID, or Money before reviewing."
+        val playTimeChanged = requestedPlayHours != beforePlayTime.hours ||
+            requestedPlayMinutes != beforePlayTime.minutes || requestedPlaySeconds != beforePlayTime.seconds
+        require(nameChanged || trainerIdChanged || moneyChanged || playTimeChanged) {
+            "Change the Trainer Name, Trainer ID, Money, or Play Time before reviewing."
         }
         val afterMoney = if (moneyChanged) requestedMoney else before.money
+        val playTime = if (playTimeChanged) byteArrayOf(
+            requestedPlayHours.toByte(), (requestedPlayHours ushr 8).toByte(),
+            requestedPlayMinutes.toByte(), requestedPlaySeconds.toByte()
+        ) else null
         val write = LegendsArceusSaveValidation.writeTrainerFields(
             original,
             if (nameChanged) encodeName(name) else null,
             if (trainerIdChanged) requestedTrainerId else null,
-            if (moneyChanged) requestedMoney else null
+            if (moneyChanged) requestedMoney else null,
+            playTime
         )
         verify(
-            original, write.bytes, name, requestedTrainerId, afterMoney, write.nameOffset,
-            write.trainerIdOffset, write.moneyOffset, nameChanged, trainerIdChanged, moneyChanged
+            original, write.bytes, name, requestedTrainerId, afterMoney,
+            requestedPlayHours, requestedPlayMinutes, requestedPlaySeconds,
+            write.nameOffset, write.trainerIdOffset, write.moneyOffset, write.playTimeOffset,
+            nameChanged, trainerIdChanged, moneyChanged, playTimeChanged
         )
         return LegendsArceusTrainerCopyPlan(
             original, write.bytes, before.name, name, before.tid16, requestedTrainerId,
-            before.money, afterMoney, write.nameOffset, write.trainerIdOffset, write.moneyOffset,
-            nameChanged, trainerIdChanged, moneyChanged
+            before.money, afterMoney, beforePlayTime.hours, requestedPlayHours,
+            beforePlayTime.minutes, requestedPlayMinutes, beforePlayTime.seconds, requestedPlaySeconds,
+            write.nameOffset, write.trainerIdOffset, write.moneyOffset, write.playTimeOffset,
+            nameChanged, trainerIdChanged, moneyChanged, playTimeChanged
         )
     }
 
@@ -80,12 +99,17 @@ object LegendsArceusTrainerEditing {
         expectedName: String,
         expectedTrainerId: Int,
         expectedMoney: Long?,
+        expectedPlayHours: Int,
+        expectedPlayMinutes: Int,
+        expectedPlaySeconds: Int,
         nameOffset: Int,
         trainerIdOffset: Int,
         moneyOffset: Int,
+        playTimeOffset: Int,
         nameChanged: Boolean,
         trainerIdChanged: Boolean,
-        moneyChanged: Boolean
+        moneyChanged: Boolean,
+        playTimeChanged: Boolean
     ) {
         val beforeValidation = LegendsArceusSaveValidation.inspect(original)
         val afterValidation = LegendsArceusSaveValidation.inspect(edited)
@@ -96,6 +120,8 @@ object LegendsArceusTrainerEditing {
         }
         val before = LegendsArceusTrainerReadOnly.read(original)
         val after = LegendsArceusTrainerReadOnly.read(edited)
+        val beforePlayTime = LegendsArceusPlayTimeReadOnly.read(original)
+        val afterPlayTime = LegendsArceusPlayTimeReadOnly.read(edited)
         val expectedId32 = (before.id32 and 0xFFFF0000L) or expectedTrainerId.toLong()
         require(
             after.name == expectedName && after.tid16 == expectedTrainerId && after.money == expectedMoney &&
@@ -104,11 +130,17 @@ object LegendsArceusTrainerEditing {
         ) {
             "The Trainer Data edit did not reopen exactly."
         }
+        require(
+            afterPlayTime.version == beforePlayTime.version &&
+                afterPlayTime.hours == expectedPlayHours && afterPlayTime.minutes == expectedPlayMinutes &&
+                afterPlayTime.seconds == expectedPlaySeconds
+        ) { "The Play Time edit did not reopen exactly." }
         val hashOffset = original.size - 32
         require(original.indices.all { index ->
             (nameChanged && index in nameOffset until nameOffset + NAME_SIZE) ||
                 (trainerIdChanged && index in trainerIdOffset until trainerIdOffset + TRAINER_ID_SIZE) ||
                 (moneyChanged && index in moneyOffset until moneyOffset + MONEY_SIZE) ||
+                (playTimeChanged && index in playTimeOffset until playTimeOffset + PLAY_TIME_SIZE) ||
                 index in hashOffset until original.size || original[index] == edited[index]
         }) { "The Trainer Data edit changed unrelated save data." }
     }
@@ -144,12 +176,20 @@ class LegendsArceusTrainerCopyPlan internal constructor(
     val afterTrainerId: Int,
     val beforeMoney: Long?,
     val afterMoney: Long?,
+    val beforePlayHours: Int,
+    val afterPlayHours: Int,
+    val beforePlayMinutes: Int,
+    val afterPlayMinutes: Int,
+    val beforePlaySeconds: Int,
+    val afterPlaySeconds: Int,
     val nameOffset: Int,
     val trainerIdOffset: Int,
     val moneyOffset: Int,
+    val playTimeOffset: Int,
     val nameChanged: Boolean,
     val trainerIdChanged: Boolean,
-    val moneyChanged: Boolean
+    val moneyChanged: Boolean,
+    val playTimeChanged: Boolean
 ) {
     private val original = original.copyOf()
     private val edited = edited.copyOf()
@@ -179,16 +219,20 @@ class LegendsArceusTrainerCopyPlan internal constructor(
         var started = false
         try {
             LegendsArceusTrainerEditing.verify(
-                original, edited, afterName, afterTrainerId, afterMoney, nameOffset, trainerIdOffset,
-                moneyOffset, nameChanged, trainerIdChanged, moneyChanged
+                original, edited, afterName, afterTrainerId, afterMoney,
+                afterPlayHours, afterPlayMinutes, afterPlaySeconds,
+                nameOffset, trainerIdOffset, moneyOffset, playTimeOffset,
+                nameChanged, trainerIdChanged, moneyChanged, playTimeChanged
             )
             started = true
             writeDestination(edited.copyOf())
             val persisted = readDestination()
             require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed edit." }
             LegendsArceusTrainerEditing.verify(
-                original, persisted, afterName, afterTrainerId, afterMoney, nameOffset, trainerIdOffset,
-                moneyOffset, nameChanged, trainerIdChanged, moneyChanged
+                original, persisted, afterName, afterTrainerId, afterMoney,
+                afterPlayHours, afterPlayMinutes, afterPlaySeconds,
+                nameOffset, trainerIdOffset, moneyOffset, playTimeOffset,
+                nameChanged, trainerIdChanged, moneyChanged, playTimeChanged
             )
             requireSource()
         } catch (failure: Exception) {
