@@ -10,6 +10,7 @@
         <activity android:name=".SwitchReadOnlyActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspTextSpeedActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoItemActivity" android:exported="false"/>
+        <activity android:name=".SwitchLetsGoPokemonNicknameActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoEventActivity" android:exported="false"/>

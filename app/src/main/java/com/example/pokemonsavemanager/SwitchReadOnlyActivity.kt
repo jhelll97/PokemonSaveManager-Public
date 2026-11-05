@@ -380,7 +380,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { session?.let { showBdspMenuSelection(it) } }
         }
         root.addView(menuSelectionButton)
-        root.addView(label("Read-only phase: editing, transfers, conversion, export and save replacement are unavailable. The preview is held in memory and closes when you leave this screen."))
+        root.addView(label("Inspection stays read-only. Supported edit actions open a separate before/after review and write only to a verified new copy. The preview is held in memory and closes when you leave this screen."))
         root.addView(Button(this).apply { text = "Back to PSE"; setOnClickListener { finish() } })
         setContentView(scroll)
         val source = intent?.data
@@ -402,7 +402,8 @@ class SwitchReadOnlyActivity : Activity() {
         partyButton.isEnabled = !busy && session?.supports(SwitchReadCapability.PARTY) == true
         storageButton.isEnabled = !busy && (session?.supports(SwitchReadCapability.PC_OR_BOXES) == true ||
             session?.supports(SwitchReadCapability.PASTURES) == true)
-        storageButton.text = "◉  Pokémon Boxes • Read-only"
+        storageButton.text = if (session?.profile?.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE)
+            "◉  Pokémon Boxes • Nickname edit" else "◉  Pokémon Boxes • Read-only"
         menuSelectionButton.isEnabled = !busy && session?.bdspMenuSelection != null
         menuSelectionButton.visibility = if (session?.profile?.family == SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL) android.view.View.VISIBLE else android.view.View.GONE
         randomGroupsButton.isEnabled = !busy && session?.bdspRandomGroups != null
@@ -1164,7 +1165,7 @@ class SwitchReadOnlyActivity : Activity() {
                         "File size: ${result.snapshot.byteCount} bytes\n" +
                         "SHA-256: ${result.snapshot.sourceSha256}\n\n" +
                         identity + "\n\n" + (result.letsGoStorage?.let {
-                            "Stored Pokémon: ${it.count}/1000\nParty and storage: read-only access available"
+                            "Stored Pokémon: ${it.count}/1000\nParty and storage browsing available • Native nickname editing available"
                         } ?: result.swordShieldStorage?.let {
                             "Party: ${it.partyCount}/6\nOccupied box slots: ${it.occupiedBoxSlots}/960 " +
                                 "(${it.unreadableBoxSlots} unreadable)\nParty and 32 boxes: read-only access available"
@@ -1446,18 +1447,34 @@ class SwitchReadOnlyActivity : Activity() {
             p.moves.forEachIndexed { i, move -> append("${i + 1}. Move #${move.id} • PP ${move.pp}\n") }
             append("\nIVs (HP/Atk/Def/Speed/SpA/SpD): ${p.ivs.joinToString(" / ")}\n")
             append("Awakening values: ${p.awakened.joinToString(" / ")}\n\n")
-            append("Pokémon record checksum passed. Read-only access; legality is not evaluated.")
+            append("Pokémon record checksum passed. Native nickname editing is available; legality is not evaluated.")
         }
-        val scroll = ScrollView(this)
-        scroll.addView(TextView(this).apply {
+        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        content.addView(TextView(this).apply {
             text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
         })
-        val dialog = AlertDialog.Builder(this).setTitle("Storage #${slot.index + 1} • Read-only")
+        val edit = Button(this).apply {
+            text = "Edit Pokémon"
+            isAllCaps = false
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && source != null) startActivity(
+                    Intent(this@SwitchReadOnlyActivity, SwitchLetsGoPokemonNicknameActivity::class.java)
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.switch.pokemon.index", slot.index)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
+        }
+        content.addView(edit)
+        val bank = Button(this).apply { text = "Add to PSE Bank"; isAllCaps = false }
+        content.addView(bank)
+        val scroll = ScrollView(this).apply { addView(content) }
+        val dialog = AlertDialog.Builder(this).setTitle("Storage #${slot.index + 1} • Pokémon Details")
             .setView(scroll).setNegativeButton("Close", null).create()
-        dialog.setButton(AlertDialog.BUTTON_POSITIVE, "Add to PSE Bank",
-            null as android.content.DialogInterface.OnClickListener?)
         dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            bank.setOnClickListener {
                 if (session !== bound) { dialog.dismiss(); return@setOnClickListener }
                 try {
                     val raw = letsGoRecordBytes(bound, slot.index)
