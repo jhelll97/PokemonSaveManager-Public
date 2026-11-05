@@ -86,6 +86,11 @@ object ScarletVioletPokedexReadOnly {
         725, 726, 727, 728, 729, 730, 810, 811, 812, 813, 814, 815, 816, 817, 818, 1020, 1021, 1023, 1022, 1024,
         1009, 1010, 1025
     )
+    internal fun supportedSpecies(source: ByteArray): List<Int> {
+        val modern = ScarletVioletSaveValidation.readDexBlocks(source).dlc != null
+        val tables = if (modern) listOf(paldea, kitakami, blueberry) else listOf(paldea)
+        return tables.flatMap { it.asList() }.distinct().sorted()
+    }
     fun read(source: ByteArray): ScarletVioletPokedexRead {
         val blocks = ScarletVioletSaveValidation.readDexBlocks(source)
         val modern = blocks.dlc != null

@@ -44,6 +44,7 @@
         <activity android:name=".SwitchLegendsArceusEventActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletItemActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonNicknameActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletPokemonSpeciesActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletEventActivity" android:exported="false"/>
