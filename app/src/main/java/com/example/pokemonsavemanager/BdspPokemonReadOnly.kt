@@ -11,6 +11,7 @@ data class BdspPokemonRead(
     val shiny: Boolean, val isEgg: Boolean, val fatefulEncounter: Boolean,
     val heldItem: Int, val ability: Int,
     val originalTrainerFriendship: Int, val handlingTrainerFriendship: Int, val currentHandler: Int,
+    val hyperTrainingFlags: Int,
     val moves: List<BdspMoveRead>, val ivs: List<Int>, val evs: List<Int>,
     val relearnMoves: List<Int>, val cachedStats: List<Int>, val contestValues: List<Int>
 )
@@ -61,6 +62,7 @@ object BdspPokemonReadOnly {
             shiny, iv32 and 0x40000000L != 0L, byte(plain, 0x22) and 1 != 0,
             u16(plain, 0x0A), u16(plain, 0x14),
             byte(plain, 0x112), byte(plain, 0xC8), byte(plain, 0xC4),
+            byte(plain, 0x126),
             immutable((0..3).map { BdspMoveRead(u16(plain, 0x72 + it * 2), byte(plain, 0x7A + it), byte(plain, 0x7E + it)) }),
             immutable((0..5).map { ((iv32 ushr (it * 5)) and 31).toInt() }),
             immutable((0..5).map { byte(plain, 0x26 + it) }),
