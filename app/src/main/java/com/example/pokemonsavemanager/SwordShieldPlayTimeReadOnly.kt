@@ -14,7 +14,7 @@ object SwordShieldPlayTimeReadOnly {
     fun read(source: ByteArray): SwordShieldPlayTimeRead {
         val block = SwordShieldSaveValidation.readPlayTimeBlock(source)
         val bytes = block.value
-        require(bytes.size == 4) { "A native Sword/Shield playtime record is truncated." }
+        require(bytes.size == 8) { "The native Sword/Shield Play Time object is truncated." }
         val hours = u16(bytes, 0)
         val minutes = u8(bytes, 2)
         val seconds = u8(bytes, 3)

@@ -13,6 +13,7 @@ object SwordShieldTrainerEditing {
     private const val TRAINER_ID_SIZE = 2
     private const val MONEY_SIZE = 4
     private const val BADGE_SIZE = 1
+    private const val PLAY_TIME_SIZE = 4
 
     fun readDocumentBytes(input: InputStream): ByteArray = input.use {
         val output = ByteArrayOutputStream()
@@ -37,7 +38,10 @@ object SwordShieldTrainerEditing {
         requestedName: String,
         requestedTrainerId: Int,
         requestedMoney: Long,
-        requestedBadgeCount: Int
+        requestedBadgeCount: Int,
+        requestedPlayHours: Int,
+        requestedPlayMinutes: Int,
+        requestedPlaySeconds: Int
     ): SwordShieldTrainerCopyPlan {
         val original = source.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
@@ -46,30 +50,46 @@ object SwordShieldTrainerEditing {
         require(requestedTrainerId in 0..65535) { "Trainer ID must be between 0 and 65535." }
         require(requestedMoney in 0L..9_999_999L) { "Money must be between 0 and 9,999,999." }
         require(requestedBadgeCount in 0..8) { "Badges must be between 0 and 8." }
+        require(requestedPlayHours in 0..65535) { "Play Time hours must be between 0 and 65535." }
+        require(requestedPlayMinutes in 0..59) { "Play Time minutes must be between 0 and 59." }
+        require(requestedPlaySeconds in 0..59) { "Play Time seconds must be between 0 and 59." }
+        val beforePlayTime = SwordShieldPlayTimeReadOnly.read(original)
         val nameChanged = name != before.name
         val trainerIdChanged = requestedTrainerId != before.tid16
         val moneyChanged = requestedMoney != before.money
         val badgesChanged = requestedBadgeCount != before.badgeCount
-        require(nameChanged || trainerIdChanged || moneyChanged || badgesChanged) {
-            "Change the Trainer Name, Trainer ID, Money, or Badges before reviewing."
+        val playTimeChanged = requestedPlayHours != beforePlayTime.hours ||
+            requestedPlayMinutes != beforePlayTime.minutes || requestedPlaySeconds != beforePlayTime.seconds
+        require(nameChanged || trainerIdChanged || moneyChanged || badgesChanged || playTimeChanged) {
+            "Change the Trainer Name, Trainer ID, Money, Badges, or Play Time before reviewing."
         }
+        val playTime = if (playTimeChanged) byteArrayOf(
+            requestedPlayHours.toByte(), (requestedPlayHours ushr 8).toByte(),
+            requestedPlayMinutes.toByte(), requestedPlaySeconds.toByte()
+        ) else null
         val written = SwordShieldSaveValidation.writeTrainerFields(
             original,
             if (nameChanged) encodeName(name) else null,
             if (trainerIdChanged) requestedTrainerId else null,
             if (moneyChanged) requestedMoney else null,
-            if (badgesChanged) requestedBadgeCount else null
+            if (badgesChanged) requestedBadgeCount else null,
+            playTime
         )
         verify(
             original, written.bytes, name, requestedTrainerId, requestedMoney, requestedBadgeCount,
+            requestedPlayHours, requestedPlayMinutes, requestedPlaySeconds,
             written.nameOffset, written.trainerIdOffset, written.moneyOffset, written.badgeOffset,
-            nameChanged, trainerIdChanged, moneyChanged, badgesChanged
+            written.playTimeOffset, nameChanged, trainerIdChanged, moneyChanged, badgesChanged,
+            playTimeChanged
         )
         return SwordShieldTrainerCopyPlan(
             original, written.bytes, before.name, name, before.tid16, requestedTrainerId,
             before.money, requestedMoney, before.badgeCount, requestedBadgeCount,
+            beforePlayTime.hours, requestedPlayHours, beforePlayTime.minutes, requestedPlayMinutes,
+            beforePlayTime.seconds, requestedPlaySeconds,
             written.nameOffset, written.trainerIdOffset, written.moneyOffset, written.badgeOffset,
-            nameChanged, trainerIdChanged, moneyChanged, badgesChanged
+            written.playTimeOffset, nameChanged, trainerIdChanged, moneyChanged, badgesChanged,
+            playTimeChanged
         )
     }
 
@@ -80,17 +100,24 @@ object SwordShieldTrainerEditing {
         expectedTrainerId: Int,
         expectedMoney: Long,
         expectedBadgeCount: Int,
+        expectedPlayHours: Int,
+        expectedPlayMinutes: Int,
+        expectedPlaySeconds: Int,
         nameOffset: Int,
         trainerIdOffset: Int,
         moneyOffset: Int,
         badgeOffset: Int,
+        playTimeOffset: Int,
         nameChanged: Boolean,
         trainerIdChanged: Boolean,
         moneyChanged: Boolean,
-        badgesChanged: Boolean
+        badgesChanged: Boolean,
+        playTimeChanged: Boolean
     ) {
         val before = SwordShieldTrainerReadOnly.read(original)
         val after = SwordShieldTrainerReadOnly.read(edited)
+        val beforePlayTime = SwordShieldPlayTimeReadOnly.read(original)
+        val afterPlayTime = SwordShieldPlayTimeReadOnly.read(edited)
         require(before.version == after.version && original.size == edited.size) {
             "The trainer edit changed title identity or save size."
         }
@@ -105,12 +132,18 @@ object SwordShieldTrainerEditing {
         ) {
             "The Trainer Data edit did not reopen exactly."
         }
+        require(
+            afterPlayTime == SwordShieldPlayTimeRead(
+                beforePlayTime.version, expectedPlayHours, expectedPlayMinutes, expectedPlaySeconds
+            )
+        ) { "The Play Time edit did not reopen exactly." }
         val hashOffset = original.size - 32
         require(original.indices.all { index ->
             (nameChanged && index in nameOffset until nameOffset + NAME_SIZE) ||
                 (trainerIdChanged && index in trainerIdOffset until trainerIdOffset + TRAINER_ID_SIZE) ||
                 (moneyChanged && index in moneyOffset until moneyOffset + MONEY_SIZE) ||
                 (badgesChanged && index in badgeOffset until badgeOffset + BADGE_SIZE) ||
+                (playTimeChanged && index in playTimeOffset until playTimeOffset + PLAY_TIME_SIZE) ||
                 index in hashOffset until original.size ||
                 original[index] == edited[index]
         }) { "The Trainer Data edit changed unrelated encrypted container data." }
@@ -149,14 +182,22 @@ class SwordShieldTrainerCopyPlan internal constructor(
     val afterMoney: Long,
     val beforeBadgeCount: Int,
     val afterBadgeCount: Int,
+    val beforePlayHours: Int,
+    val afterPlayHours: Int,
+    val beforePlayMinutes: Int,
+    val afterPlayMinutes: Int,
+    val beforePlaySeconds: Int,
+    val afterPlaySeconds: Int,
     val nameOffset: Int,
     val trainerIdOffset: Int,
     val moneyOffset: Int,
     val badgeOffset: Int,
+    val playTimeOffset: Int,
     val nameChanged: Boolean,
     val trainerIdChanged: Boolean,
     val moneyChanged: Boolean,
-    val badgesChanged: Boolean
+    val badgesChanged: Boolean,
+    val playTimeChanged: Boolean
 ) {
     private val original = original.copyOf()
     private val edited = edited.copyOf()
@@ -186,18 +227,20 @@ class SwordShieldTrainerCopyPlan internal constructor(
         var started = false
         try {
             SwordShieldTrainerEditing.verify(
-                original, edited, afterName, afterTrainerId, afterMoney, afterBadgeCount, nameOffset,
-                trainerIdOffset, moneyOffset, badgeOffset,
-                nameChanged, trainerIdChanged, moneyChanged, badgesChanged
+                original, edited, afterName, afterTrainerId, afterMoney, afterBadgeCount,
+                afterPlayHours, afterPlayMinutes, afterPlaySeconds, nameOffset,
+                trainerIdOffset, moneyOffset, badgeOffset, playTimeOffset,
+                nameChanged, trainerIdChanged, moneyChanged, badgesChanged, playTimeChanged
             )
             started = true
             writeDestination(edited.copyOf())
             val persisted = readDestination()
             require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed edit." }
             SwordShieldTrainerEditing.verify(
-                original, persisted, afterName, afterTrainerId, afterMoney, afterBadgeCount, nameOffset,
-                trainerIdOffset, moneyOffset, badgeOffset,
-                nameChanged, trainerIdChanged, moneyChanged, badgesChanged
+                original, persisted, afterName, afterTrainerId, afterMoney, afterBadgeCount,
+                afterPlayHours, afterPlayMinutes, afterPlaySeconds, nameOffset,
+                trainerIdOffset, moneyOffset, badgeOffset, playTimeOffset,
+                nameChanged, trainerIdChanged, moneyChanged, badgesChanged, playTimeChanged
             )
             requireSource()
         } catch (failure: Exception) {

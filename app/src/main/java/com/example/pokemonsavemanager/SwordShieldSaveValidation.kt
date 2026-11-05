@@ -20,7 +20,8 @@ internal data class SwordShieldTrainerWriteResult(
     val nameOffset: Int,
     val trainerIdOffset: Int,
     val moneyOffset: Int,
-    val badgeOffset: Int
+    val badgeOffset: Int,
+    val playTimeOffset: Int
 )
 internal data class SwordShieldDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldPokemonWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
@@ -118,6 +119,7 @@ object SwordShieldSaveValidation {
         0x1876B1, 0x187693, 0x187668, 0x18764A)
     private const val STATUS_KEY = 0xF25C070EL
     private const val MONEY_KEY = 0x1B882B09L
+    private const val PLAY_TIME_KEY = 0x8CBBFD90L
     private val requiredObjects = mapOf(0x0D66012CL to 0x50A00,
         0x2985FE5DL to 0x814, 0x4716C404L to 0x4B00, STATUS_KEY to 0x110)
     private val intro = decodeHex("9ec99cd70ed33c44fb9303dceb39b42a1947e9634ba2334416bf82a2ba6355b63d9df24b5f7b6ab2621dc21b68e5c8b53a059000e8a8103de2ecf00cb2ed4f6d")
@@ -437,9 +439,10 @@ object SwordShieldSaveValidation {
 
     /** Reads the documented four-byte Sword/Shield playtime counter after the complete container gate passes. */
     internal fun readPlayTimeBlock(source: ByteArray): SwordShieldPlayTimeBlock {
-        val key = 0x8CBBFD90L
-        val (checked, captured) = captureObjects(source, setOf(key), objectLayouts = mapOf(key to 8))
-        val value = captured.getValue(key)
+        val (checked, captured) = captureObjects(
+            source, setOf(PLAY_TIME_KEY), objectLayouts = mapOf(PLAY_TIME_KEY to 8)
+        )
+        val value = captured.getValue(PLAY_TIME_KEY)
         require(value.size == 8) { "The native Sword/Shield playtime block is missing or has the wrong native type." }
         return SwordShieldPlayTimeBlock(checked.version, value)
     }
@@ -600,10 +603,12 @@ object SwordShieldSaveValidation {
         encodedName: ByteArray?,
         trainerId: Int?,
         money: Long?,
-        badgeCount: Int?
+        badgeCount: Int?,
+        playTime: ByteArray?
     ): SwordShieldTrainerWriteResult {
         readTrainerBlock(source)
-        require(encodedName != null || trainerId != null || money != null || badgeCount != null) {
+        if (playTime != null) readPlayTimeBlock(source)
+        require(encodedName != null || trainerId != null || money != null || badgeCount != null || playTime != null) {
             "Select at least one Trainer Data field to change."
         }
         if (encodedName != null) require(encodedName.size == 26) {
@@ -618,10 +623,14 @@ object SwordShieldSaveValidation {
         if (badgeCount != null) require(badgeCount in 0..8) {
             "Badges must be between 0 and 8."
         }
+        if (playTime != null) require(playTime.size == 4) {
+            "The native Sword/Shield Play Time field must be exactly four bytes."
+        }
         val nameRelativeOffset = 0xB0
         val trainerIdRelativeOffset = 0xA0
         val moneyRelativeOffset = 4
         val badgeRelativeOffset = 0
+        val playTimeRelativeOffset = 0
         val end = source.size - 32
         val payload = source.copyOfRange(0, end)
         for (index in payload.indices) payload[index] =
@@ -632,6 +641,7 @@ object SwordShieldSaveValidation {
         var trainerIdOffset = -1
         var moneyOffset = -1
         var badgeOffset = -1
+        var playTimeOffset = -1
         while (cursor.remaining > 0) {
             val key = cursor.uint32()
             val stream = KeyStream(key)
@@ -689,9 +699,27 @@ object SwordShieldSaveValidation {
                 moneyOffset = blockStart + moneyRelativeOffset
                 badgeOffset = blockStart + badgeRelativeOffset
             }
+            if (key == PLAY_TIME_KEY) {
+                require(type == 4 && length == 8L) {
+                    "The Sword/Shield Play Time block has the wrong native type or size."
+                }
+                if (playTime != null) {
+                    val decoded = ByteArray(length.toInt()) { byteIndex ->
+                        (payload[blockStart + byteIndex].toInt() xor stream.next()).toByte()
+                    }
+                    playTime.copyInto(decoded, playTimeRelativeOffset)
+                    val replay = KeyStream(key)
+                    replay.next()
+                    replay.next32()
+                    decoded.forEachIndexed { byteIndex, value ->
+                        payload[blockStart + byteIndex] = ((value.toInt() and 255) xor replay.next()).toByte()
+                    }
+                }
+                playTimeOffset = blockStart + playTimeRelativeOffset
+            }
             cursor.skip(length.toInt())
         }
-        require(nameOffset >= 0 && trainerIdOffset >= 0 && moneyOffset >= 0 && badgeOffset >= 0) {
+        require(nameOffset >= 0 && trainerIdOffset >= 0 && moneyOffset >= 0 && badgeOffset >= 0 && playTimeOffset >= 0) {
             "A required Sword/Shield Trainer Data object is missing."
         }
 
@@ -704,7 +732,10 @@ object SwordShieldSaveValidation {
         digest.update(outro)
         digest.digest().copyInto(edited, end)
         readTrainerBlock(edited)
-        return SwordShieldTrainerWriteResult(edited, nameOffset, trainerIdOffset, moneyOffset, badgeOffset)
+        readPlayTimeBlock(edited)
+        return SwordShieldTrainerWriteResult(
+            edited, nameOffset, trainerIdOffset, moneyOffset, badgeOffset, playTimeOffset
+        )
     }
 
 
