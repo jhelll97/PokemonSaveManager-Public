@@ -15,6 +15,7 @@
         <activity android:name=".SwitchLetsGoPokemonLevelActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoPokemonExperienceActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoPokemonOriginalTrainerActivity" android:exported="false"/>
+        <activity android:name=".SwitchLetsGoPokemonTrainerIdActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoEventActivity" android:exported="false"/>

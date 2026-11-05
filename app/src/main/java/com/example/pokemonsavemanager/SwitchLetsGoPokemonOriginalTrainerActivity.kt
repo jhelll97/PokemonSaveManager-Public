@@ -27,6 +27,7 @@ class SwitchLetsGoPokemonOriginalTrainerActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var originalTrainer: EditText
     private lateinit var review: Button
+    private lateinit var trainerId: Button
     private lateinit var experience: Button
     private lateinit var inspectCopy: Button
 
@@ -60,6 +61,22 @@ class SwitchLetsGoPokemonOriginalTrainerActivity : Activity() {
             text = "Review Original Trainer name change"; isEnabled = false; setOnClickListener { reviewOriginalTrainer() }
         }
         root.addView(review)
+        trainerId = Button(this).apply {
+            text = "Next field: Trainer ID"
+            isEnabled = false
+            setOnClickListener {
+                val uri = sourceUri ?: return@setOnClickListener
+                val hash = expectedHash ?: return@setOnClickListener
+                startActivity(Intent(
+                    this@SwitchLetsGoPokemonOriginalTrainerActivity,
+                    SwitchLetsGoPokemonTrainerIdActivity::class.java
+                ).setData(uri)
+                    .putExtra("pse.switch.sha256", hash)
+                    .putExtra("pse.switch.pokemon.index", storageIndex)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            }
+        }
+        root.addView(trainerId)
         experience = Button(this).apply {
             text = "Back to Experience"; isEnabled = false
             setOnClickListener {
@@ -110,6 +127,7 @@ class SwitchLetsGoPokemonOriginalTrainerActivity : Activity() {
         busy = value
         originalTrainer.isEnabled = !value && opened != null
         review.isEnabled = !value && opened != null
+        trainerId.isEnabled = !value && opened != null
         experience.isEnabled = !value && opened != null
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
