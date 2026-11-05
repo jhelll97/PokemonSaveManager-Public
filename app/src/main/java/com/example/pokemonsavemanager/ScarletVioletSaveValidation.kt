@@ -18,7 +18,7 @@ internal data class ScarletVioletDexBlocks(val version: ScarletVioletVersion, va
 internal data class ScarletVioletPokemonBlocks(val version: ScarletVioletVersion, val boxes: ByteArray, val party: ByteArray)
 
 internal data class ScarletVioletTrainerBlocks(val version: ScarletVioletVersion, val status: ByteArray,
-    val money: Long?, val leaguePoints: Long?, val blueberryPoints: Long?)
+    val money: Long?, val leaguePoints: Long?, val blueberryPoints: Long?, val badgeMask: Int)
 
 internal data class ScarletVioletInventoryBlock(val version: ScarletVioletVersion, val data: ByteArray)
 
@@ -29,7 +29,8 @@ internal data class ScarletVioletTrainerWriteResult(
     val bytes: ByteArray,
     val nameOffset: Int,
     val trainerIdOffset: Int,
-    val moneyOffset: Int
+    val moneyOffset: Int,
+    val badgeOffsets: List<Int>
 )
 
 /** Independent read-only container gate; pinned format evidence is in SWITCH_READ_ONLY_FORMATS.md. */
@@ -45,6 +46,16 @@ object ScarletVioletSaveValidation {
     }
     private const val STATUS_KEY = 0xE3E89BD1L
     private const val MONEY_KEY = 0x4F35D0DDL
+    private val gymBadgeKeys = longArrayOf(
+        0x8485AC3AL, // Bug
+        0x26216312L, // Grass
+        0x815F4601L, // Electric
+        0x16452421L, // Water
+        0x9457390DL, // Normal
+        0x1C5C88A5L, // Ghost
+        0xD0249A05L, // Psychic
+        0x0A9299BCL  // Ice
+    )
     private val requiredObjects = mapOf(0x0D66012CL to 0x53250,
         0x3AA1A9ADL to 0x814, 0x0DEAAEBDL to 0xBD24, STATUS_KEY to 0x68)
     private val intro = decodeHex("9ec99cd70ed33c44fb9303dceb39b42a1947e9634ba2334416bf82a2ba6355b63d9df24b5f7b6ab2621dc21b68e5c8b53a059000e8a8103de2ecf00cb2ed4f6d")
@@ -73,13 +84,20 @@ object ScarletVioletSaveValidation {
     internal fun readTrainerBlocks(source: ByteArray): ScarletVioletTrainerBlocks {
         val uintKeys = setOf(0x4F35D0DDL, 0xADB4FE17L, 0x66A33824L)
         val captured = (uintKeys + STATUS_KEY).associateWith { ByteArray(0) }.toMutableMap()
-        val checked = inspect(source, captured, uintKeys)
+        val badgeTypes = gymBadgeKeys.associateWith { 0 }.toMutableMap()
+        val checked = inspect(source, captured, uintKeys, badgeTypes)
         require(checked is ScarletVioletValidation.Verified) { (checked as? ScarletVioletValidation.Invalid)?.reason ?: "A validated native Scarlet/Violet trainer save is required." }
         fun optionalUint(key: Long): Long? = captured.getValue(key).takeIf { it.size == 4 }?.let { bytes ->
             (0..3).fold(0L) { value, index -> value or ((bytes[index].toLong() and 255) shl (index * 8)) }
         }
+        require(badgeTypes.values.all { it == 1 || it == 2 }) {
+            "The eight native Scarlet/Violet Gym-clear flags are incomplete."
+        }
+        val badgeMask = gymBadgeKeys.indices.fold(0) { mask, index ->
+            if (badgeTypes.getValue(gymBadgeKeys[index]) == 2) mask or (1 shl index) else mask
+        }
         return ScarletVioletTrainerBlocks(checked.version, captured.getValue(STATUS_KEY),
-            optionalUint(0x4F35D0DDL), optionalUint(0xADB4FE17L), optionalUint(0x66A33824L))
+            optionalUint(0x4F35D0DDL), optionalUint(0xADB4FE17L), optionalUint(0x66A33824L), badgeMask)
     }
 
     /** Fixed native bag shape is checked only for inventory extraction. */
@@ -98,10 +116,11 @@ object ScarletVioletSaveValidation {
         source: ByteArray,
         encodedName: ByteArray?,
         trainerId: Int?,
-        money: Long?
+        money: Long?,
+        badgeMask: Int?
     ): ScarletVioletTrainerWriteResult {
         val blocks = readTrainerBlocks(source)
-        require(encodedName != null || trainerId != null || money != null) {
+        require(encodedName != null || trainerId != null || money != null || badgeMask != null) {
             "Select at least one Trainer Data field to change."
         }
         if (encodedName != null) require(encodedName.size == 26) {
@@ -113,6 +132,9 @@ object ScarletVioletSaveValidation {
         if (money != null) {
             require(blocks.money != null) { "This save does not contain the native money counter." }
             require(money in 0L..9_999_999L) { "Money must be between 0 and 9,999,999." }
+        }
+        if (badgeMask != null) require(badgeMask in 0..0xFF) {
+            "The native Scarlet/Violet Gym Badge mask must contain exactly eight bits."
         }
         val nameRelativeOffset = 0x10
         val trainerIdRelativeOffset = 0
@@ -126,9 +148,11 @@ object ScarletVioletSaveValidation {
         var nameOffset = -1
         var trainerIdOffset = -1
         var moneyOffset = -1
+        val badgeOffsets = mutableListOf<Int>()
         while (cursor.remaining > 0) {
             val key = cursor.uint32()
             val stream = KeyStream(key)
+            val typeOffset = payload.size - cursor.remaining
             val type = cursor.byte() xor stream.next()
             val length = when (type) {
                 1, 2, 3 -> 0L
@@ -174,12 +198,26 @@ object ScarletVioletSaveValidation {
                     moneyOffset = blockStart
                 }
             }
+            val badgeIndex = gymBadgeKeys.indexOf(key)
+            if (badgeIndex >= 0 && badgeMask != null) {
+                require(type == 1 || type == 2) {
+                    "A Scarlet/Violet Gym-clear flag has the wrong native boolean type."
+                }
+                val desiredType = if (badgeMask and (1 shl badgeIndex) != 0) 2 else 1
+                if (type != desiredType) {
+                    payload[typeOffset] = (desiredType xor KeyStream(key).next()).toByte()
+                    badgeOffsets += typeOffset
+                }
+            }
             cursor.skip(length.toInt())
         }
         require(nameOffset >= 0 && trainerIdOffset >= 0) {
             "The Scarlet/Violet trainer status object is missing."
         }
         require(money == null || moneyOffset >= 0) { "The Scarlet/Violet money counter is missing." }
+        require(badgeMask == null || badgeOffsets.size == Integer.bitCount(blocks.badgeMask xor badgeMask)) {
+            "The Scarlet/Violet Gym Badge edit did not resolve to the expected native flags."
+        }
 
         val edited = source.copyOf()
         for (index in payload.indices) edited[index] =
@@ -190,7 +228,9 @@ object ScarletVioletSaveValidation {
         digest.update(outro)
         digest.digest().copyInto(edited, end)
         readTrainerBlocks(edited)
-        return ScarletVioletTrainerWriteResult(edited, nameOffset, trainerIdOffset, moneyOffset)
+        return ScarletVioletTrainerWriteResult(
+            edited, nameOffset, trainerIdOffset, moneyOffset, badgeOffsets.toList()
+        )
     }
 
     /** Replaces one decoded 16-byte item record and rebuilds native container integrity. */
@@ -392,7 +432,12 @@ object ScarletVioletSaveValidation {
         return ScarletVioletPokemonWriteResult(edited, absoluteOffset)
     }
 
-    private fun inspect(source: ByteArray, captured: MutableMap<Long, ByteArray>?, uintKeys: Set<Long> = emptySet()): ScarletVioletValidation {
+    private fun inspect(
+        source: ByteArray,
+        captured: MutableMap<Long, ByteArray>?,
+        uintKeys: Set<Long> = emptySet(),
+        booleanTypes: MutableMap<Long, Int>? = null
+    ): ScarletVioletValidation {
         if (!isKnownSize(source.size)) return ScarletVioletValidation.Unrecognized
         val end = source.size - 32
         val digest = MessageDigest.getInstance("SHA-256")
@@ -402,11 +447,16 @@ object ScarletVioletSaveValidation {
         // Only the detached payload is decrypted. The caller's bytes are never changed.
         val payload = source.copyOfRange(0, end)
         for (index in payload.indices) payload[index] = (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
-        return try { inspectBlocks(payload, captured, uintKeys) }
+        return try { inspectBlocks(payload, captured, uintKeys, booleanTypes) }
         catch (e: IllegalArgumentException) { ScarletVioletValidation.Invalid(e.message ?: "Malformed Scarlet/Violet blocks.") }
     }
 
-    private fun inspectBlocks(bytes: ByteArray, captured: MutableMap<Long, ByteArray>?, uintKeys: Set<Long>): ScarletVioletValidation {
+    private fun inspectBlocks(
+        bytes: ByteArray,
+        captured: MutableMap<Long, ByteArray>?,
+        uintKeys: Set<Long>,
+        booleanTypes: MutableMap<Long, Int>?
+    ): ScarletVioletValidation {
         val cursor = Cursor(bytes)
         val found = mutableSetOf<Long>()
         var previous = -1L
@@ -437,6 +487,10 @@ object ScarletVioletSaveValidation {
             }
             // Only trainer extraction requests these keys; existing identity/Pokémon gates retain their behavior.
             if (key in uintKeys) require(type == 10 && length == 4L) { "A trainer currency counter must be a native UInt32." }
+            if (booleanTypes?.containsKey(key) == true) {
+                require(type == 1 || type == 2) { "A trainer progression flag must be a native boolean." }
+                booleanTypes[key] = type
+            }
             // Dex extraction alone requests this optional object. Keep identity/storage/trainer behavior unchanged.
             if (key == 0xF5D7C0E2L && captured?.containsKey(key) == true)
                 require(type == 4 && (length == 0L || length == 0x8130L)) { "The DLC Pokédex object has the wrong native type or size." }

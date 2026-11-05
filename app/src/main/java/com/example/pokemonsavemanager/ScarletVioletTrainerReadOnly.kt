@@ -7,9 +7,11 @@ import java.nio.charset.CodingErrorAction
 data class ScarletVioletTrainerRead(
     val version: ScarletVioletVersion, val name: String, val gender: Int,
     val languageId: Int, val languageName: String, val id32: Long, val tid16: Int, val sid16: Int,
-    val birthMonth: Int, val birthDay: Int, val money: Long?, val leaguePoints: Long?, val blueberryPoints: Long?
+    val birthMonth: Int, val birthDay: Int, val money: Long?, val leaguePoints: Long?, val blueberryPoints: Long?,
+    val badgeMask: Int
 ) {
     val displayTrainerId: String get() = (id32 % 1000000L).toString().padStart(6, '0')
+    val badgeCount: Int get() = Integer.bitCount(badgeMask)
 }
 
 /** Native trainer status and optional typed currencies after the complete container gate. */
@@ -33,7 +35,7 @@ object ScarletVioletTrainerReadOnly {
         }
         return ScarletVioletTrainerRead(blocks.version, name(status), gender, language, languageName,
             u32(status, 0), u16(status, 0), u16(status, 2), month, day,
-            blocks.money, blocks.leaguePoints, blocks.blueberryPoints)
+            blocks.money, blocks.leaguePoints, blocks.blueberryPoints, blocks.badgeMask)
     }
 
     private fun name(bytes: ByteArray): String {
