@@ -38,6 +38,7 @@
         <activity android:name=".SwitchBdspPokemonNicknameActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokemonSpeciesActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokemonLevelActivity" android:exported="false"/>
+        <activity android:name=".SwitchBdspPokemonExperienceActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspEventActivity" android:exported="false"/>

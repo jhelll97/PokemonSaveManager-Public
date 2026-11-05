@@ -36,6 +36,13 @@ object BdspPokemonLevelEditing {
 
     fun sha256(bytes: ByteArray): String = BdspPokemonNicknameEditing.sha256(bytes)
 
+    internal fun maximumExperience(pokemon: BdspPokemonRead): Long {
+        require(pokemon.statNature in 0..24) {
+            "The PB8 stat nature is invalid, so derived stats cannot be rebuilt safely."
+        }
+        return minimumExperience(100, resolvePersonal(pokemon).growth)
+    }
+
     fun stage(
         source: ByteArray,
         expectedSha256: String,
@@ -74,6 +81,52 @@ object BdspPokemonLevelEditing {
         verify(original, edited, area, box, position, recordOffset, after)
         return BdspLevelCopyPlan(
             original, edited, area, box, position, recordOffset, before, after
+        )
+    }
+
+    internal fun stageExperience(
+        source: ByteArray,
+        expectedSha256: String,
+        area: BdspPokemonArea,
+        box: Int,
+        position: Int,
+        requestedExperience: Long
+    ): BdspExperienceCopyPlan {
+        val original = source.copyOf()
+        require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        val validation = BdspSaveValidation.inspect(original)
+        require(validation is BdspValidation.Verified) { "A validated native BDSP save is required." }
+        val recordOffset = targetOffset(original, area, box, position)
+        val target = original.copyOfRange(recordOffset, recordOffset + BdspPokemonReadOnly.RECORD_SIZE)
+        val before = (BdspPokemonReadOnly.read(target) as? BdspSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The selected native PB8 is not checksum-valid.")
+        require(!before.isEgg) { "Egg experience editing is not supported for BDSP." }
+        require(requestedExperience != before.experience) { "Enter different experience before review." }
+        require(before.statNature in 0..24) {
+            "The PB8 stat nature is invalid, so derived stats cannot be rebuilt safely."
+        }
+        val personal = resolvePersonal(before)
+        val maximumExperience = minimumExperience(100, personal.growth)
+        require(requestedExperience in 0L..maximumExperience) {
+            "Experience must be between 0 and $maximumExperience for this Pokémon's native growth group."
+        }
+        require(before.experience in 0L..maximumExperience && before.cachedLevel in 1..100 &&
+            levelForExperience(before.experience, personal.growth) == before.cachedLevel) {
+            "The saved Level and EXP do not agree with this Pokémon's verified growth group."
+        }
+        require(matchesCachedValues(before,
+            calculate(before, personal, before.cachedLevel, before.experience))) {
+            "The saved Level-dependent values do not match this PB8's verified species/form profile."
+        }
+        val requestedLevel = levelForExperience(requestedExperience, personal.growth)
+        val after = calculate(before, personal, requestedLevel, requestedExperience)
+        val afterRecord = editRecord(target, after)
+        val edited = original.copyOf()
+        afterRecord.copyInto(edited, recordOffset)
+        refreshDigest(edited)
+        verify(original, edited, area, box, position, recordOffset, after)
+        return BdspExperienceCopyPlan(
+            original, edited, area, box, position, recordOffset, before, after, maximumExperience
         )
     }
 
@@ -152,10 +205,16 @@ object BdspPokemonLevelEditing {
             pokemon.cachedStats == listOf(values.attack, values.defense, values.speed,
                 values.specialAttack, values.specialDefense)
 
+    private fun matchesCachedValues(
+        pokemon: BdspPokemonRead,
+        values: BdspLevelValues
+    ): Boolean = matchesCachedStats(pokemon, values) && pokemon.currentHp == values.currentHp
+
     private fun calculate(
         before: BdspPokemonRead,
         personal: BdspPersonalData,
-        level: Int
+        level: Int,
+        experience: Long = minimumExperience(level, personal.growth)
     ): BdspLevelValues {
         val effectiveIv = IntArray(6) { index ->
             val hyperBit = intArrayOf(0, 1, 2, 5, 3, 4)[index]
@@ -187,7 +246,7 @@ object BdspPokemonLevelEditing {
             else -> min(before.currentHp, maximumHp)
         }
         return BdspLevelValues(
-            level, minimumExperience(level, personal.growth), currentHp, maximumHp,
+            level, experience, currentHp, maximumHp,
             attack, defense, speed, specialAttack, specialDefense
         )
     }
@@ -314,6 +373,93 @@ object BdspPokemonLevelEditing {
     private fun writeU32(bytes: ByteArray, offset: Int, value: Long) {
         writeU16(bytes, offset, value.toInt())
         writeU16(bytes, offset + 2, (value ushr 16).toInt())
+    }
+}
+
+/** Gen 1-ordered Experience action backed by the verified PB8 level-dependent write scope. */
+object BdspPokemonExperienceEditing {
+    fun readDocumentBytes(input: java.io.InputStream): ByteArray =
+        BdspPokemonLevelEditing.readDocumentBytes(input)
+
+    fun sha256(bytes: ByteArray): String = BdspPokemonLevelEditing.sha256(bytes)
+
+    fun maximumExperience(pokemon: BdspPokemonRead): Long =
+        BdspPokemonLevelEditing.maximumExperience(pokemon)
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        area: BdspPokemonArea,
+        box: Int,
+        position: Int,
+        requestedExperience: Long
+    ): BdspExperienceCopyPlan = BdspPokemonLevelEditing.stageExperience(
+        source, expectedSha256, area, box, position, requestedExperience
+    )
+}
+
+class BdspExperienceCopyPlan internal constructor(
+    original: ByteArray,
+    edited: ByteArray,
+    val area: BdspPokemonArea,
+    val box: Int,
+    val position: Int,
+    val recordOffset: Int,
+    val before: BdspPokemonRead,
+    val after: BdspLevelValues,
+    val maximumExperience: Long
+) {
+    private val original = original.copyOf()
+    private val edited = edited.copyOf()
+    val sourceSha256 = BdspPokemonExperienceEditing.sha256(this.original)
+    val editedSha256 = BdspPokemonExperienceEditing.sha256(this.edited)
+    private var consumed = false
+    val location: String
+        get() = if (area == BdspPokemonArea.BOX) "Box $box • Slot $position" else "Party $position"
+
+    @Synchronized
+    fun saveNewCopy(
+        readSource: () -> ByteArray,
+        retainBackup: (ByteArray) -> ByteArray,
+        readDestination: () -> ByteArray,
+        writeDestination: (ByteArray) -> Unit,
+        discardDestination: () -> Boolean
+    ) {
+        check(!consumed) { "This Experience review was already used. Reopen Pokémon Boxes." }
+        consumed = true
+        fun requireSource() = require(readSource().contentEquals(original)) {
+            "The selected source changed. Reopen it from PSE."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "Choose a new empty document; existing files cannot be replaced." }
+        val backup = retainBackup(original.copyOf())
+        require(backup.contentEquals(original)) { "The recovery backup did not verify. Nothing was written." }
+        requireSource()
+        require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
+        var started = false
+        try {
+            BdspPokemonLevelEditing.verify(
+                original, edited, area, box, position, recordOffset, after
+            )
+            started = true
+            writeDestination(edited.copyOf())
+            val persisted = readDestination()
+            require(persisted.contentEquals(edited)) {
+                "The saved copy differs from the reviewed Experience edit."
+            }
+            BdspPokemonLevelEditing.verify(
+                original, persisted, area, box, position, recordOffset, after
+            )
+            requireSource()
+        } catch (failure: Exception) {
+            val removed = started && runCatching { discardDestination() }.getOrDefault(false)
+            throw IllegalStateException(
+                (failure.message ?: "Experience copy verification failed.") +
+                    if (removed) " The failed new copy was removed; the recovery backup is retained."
+                    else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
+                failure
+            )
+        }
     }
 }
 
