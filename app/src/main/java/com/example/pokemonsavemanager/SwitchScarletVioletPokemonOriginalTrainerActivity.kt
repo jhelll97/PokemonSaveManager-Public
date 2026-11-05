@@ -30,6 +30,7 @@ class SwitchScarletVioletPokemonOriginalTrainerActivity : Activity() {
     private lateinit var originalTrainer: EditText
     private lateinit var review: Button
     private lateinit var experience: Button
+    private lateinit var trainerId: Button
     private lateinit var inspectCopy: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -88,6 +89,23 @@ class SwitchScarletVioletPokemonOriginalTrainerActivity : Activity() {
             setOnClickListener { reviewOriginalTrainer() }
         }
         root.addView(review)
+        trainerId = Button(this).apply {
+            text = "Next field: Trainer ID"
+            isEnabled = false
+            setOnClickListener {
+                val uri = sourceUri ?: return@setOnClickListener
+                val hash = expectedHash ?: return@setOnClickListener
+                val selectedArea = area ?: return@setOnClickListener
+                startActivity(Intent(this@SwitchScarletVioletPokemonOriginalTrainerActivity,
+                    SwitchScarletVioletPokemonTrainerIdActivity::class.java)
+                    .setData(uri).putExtra("pse.switch.sha256", hash)
+                    .putExtra("pse.switch.pokemon.area", selectedArea.name)
+                    .putExtra("pse.switch.pokemon.box", box)
+                    .putExtra("pse.switch.pokemon.position", position)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            }
+        }
+        root.addView(trainerId)
         experience = Button(this).apply {
             text = "Back to Experience"
             isEnabled = false
@@ -146,6 +164,7 @@ class SwitchScarletVioletPokemonOriginalTrainerActivity : Activity() {
         busy = value
         originalTrainer.isEnabled = !value && opened != null
         review.isEnabled = !value && opened != null
+        trainerId.isEnabled = !value && opened != null
         experience.isEnabled = !value && opened != null
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
