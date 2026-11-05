@@ -69,6 +69,7 @@
         <activity android:name=".SwitchScarletVioletPokemonExperienceActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonOriginalTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonTrainerIdActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletPokemonMove1Activity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletEventActivity" android:exported="false"/>
