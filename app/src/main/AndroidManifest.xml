@@ -62,6 +62,7 @@
         <activity android:name=".SwitchLegendsZaPokemonNicknameActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaPokemonSpeciesActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaPokemonLevelActivity" android:exported="false"/>
+        <activity android:name=".SwitchLegendsZaPokemonExperienceActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaEventActivity" android:exported="false"/>
