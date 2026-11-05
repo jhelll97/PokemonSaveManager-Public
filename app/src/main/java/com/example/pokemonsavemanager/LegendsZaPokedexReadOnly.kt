@@ -61,6 +61,11 @@ object LegendsZaPokedexReadOnly {
         590, 591, 485, 721, 638, 639, 640, 647, 648, 649, 720, 802, 808, 809, 491, 380, 381, 382,
         383, 384, 801, 807
     )
+    fun supportedSpecies(source: ByteArray): List<Int> {
+        val revision = LegendsZaSaveValidation.readDexBlock(source).revision
+        val count = if (revision == LegendsZaRevision.MEGA_DIMENSION || revision == LegendsZaRevision.END_OF_LIFE) 364 else 232
+        return Collections.unmodifiableList(speciesOrder.take(count))
+    }
     fun read(source: ByteArray): LegendsZaPokedexRead {
         val block = LegendsZaSaveValidation.readDexBlock(source)
         val bytes = block.data
