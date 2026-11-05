@@ -13,18 +13,19 @@ import android.widget.ScrollView
 import android.widget.TextView
 import java.util.concurrent.Executors
 
-/** Gen 1-shaped Scarlet/Violet Trainer Data editor; currently implements the first field, Trainer Name. */
+/** Gen 1-shaped Scarlet/Violet Trainer Data editor, preserving the reference field order. */
 class SwitchScarletVioletTrainerActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
     private val createCopyRequest = 2116
     private var sourceUri: Uri? = null
     private var expectedHash: String? = null
     private var opened: ByteArray? = null
-    private var pendingPlan: ScarletVioletTrainerNameCopyPlan? = null
+    private var pendingPlan: ScarletVioletTrainerCopyPlan? = null
     private var busy = false
     private var verifiedCopy: Pair<Uri, String>? = null
     private lateinit var status: TextView
     private lateinit var name: EditText
+    private lateinit var trainerId: EditText
     private lateinit var review: Button
     private lateinit var inspectCopy: Button
 
@@ -44,7 +45,7 @@ class SwitchScarletVioletTrainerActivity : Activity() {
         }
         root.addView(TextView(this).apply { text = "Trainer Data"; textSize = 28f })
         root.addView(TextView(this).apply {
-            text = "Pokémon Scarlet/Violet\nEdit the first Gen 1 Trainer Data field using the native Scarlet/Violet save layout. The selected source stays unchanged."
+            text = "Pokémon Scarlet/Violet\nEdit Trainer Data in the same field order as Gen 1 using the native Scarlet/Violet save layout. The selected source stays unchanged."
             textSize = 16f
         })
         status = TextView(this).apply {
@@ -63,6 +64,19 @@ class SwitchScarletVioletTrainerActivity : Activity() {
         })
         name = EditText(this).apply { hint = "Trainer name" }
         root.addView(name)
+        root.addView(TextView(this).apply {
+            text = "Trainer ID"
+            textSize = 18f
+        })
+        root.addView(TextView(this).apply {
+            text = "The native 16-bit ID attached to your trainer • 0–65535"
+            textSize = 14f
+        })
+        trainerId = EditText(this).apply {
+            hint = "Trainer ID"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        }
+        root.addView(trainerId)
         review = Button(this).apply {
             text = "Review and save new copy"
             setOnClickListener { reviewChange() }
@@ -94,7 +108,9 @@ class SwitchScarletVioletTrainerActivity : Activity() {
                 result.onSuccess { (bytes, trainer) ->
                     opened = bytes
                     name.setText(trainer.name)
+                    trainerId.setText(trainer.tid16.toString())
                     status.text = "${trainer.version.displayName}\nCurrent trainer name: ${trainer.name.ifBlank { "Not set" }}\n" +
+                        "Current Trainer ID: ${trainer.tid16}\n" +
                         "Source SHA-256: ${ScarletVioletTrainerEditing.sha256(bytes)}"
                 }.onFailure { status.text = it.message ?: "The save could not be opened safely." }
                 setBusy(false)
@@ -106,6 +122,7 @@ class SwitchScarletVioletTrainerActivity : Activity() {
         busy = value
         val ready = opened != null
         name.isEnabled = !value && ready
+        trainerId.isEnabled = !value && ready
         review.isEnabled = !value && ready
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
@@ -114,19 +131,32 @@ class SwitchScarletVioletTrainerActivity : Activity() {
         if (busy || pendingPlan != null) return
         val bytes = opened ?: return
         val hash = expectedHash ?: return
+        val requestedTrainerId = trainerId.text.toString().toIntOrNull()
+        if (requestedTrainerId == null || requestedTrainerId !in 0..65535) {
+            status.text = "Trainer ID must be a whole number between 0 and 65535."
+            return
+        }
         val plan = try {
-            ScarletVioletTrainerEditing.stage(bytes, hash, name.text.toString())
+            ScarletVioletTrainerEditing.stage(bytes, hash, name.text.toString(), requestedTrainerId)
         } catch (failure: Exception) {
             status.text = failure.message ?: "The requested trainer change is unavailable."
             return
         }
         setBusy(true)
         var dispatched = false
+        val changes = buildList {
+            if (plan.nameChanged) add("Trainer Name\n${plan.beforeName.ifBlank { "(blank)" }} → ${plan.afterName}")
+            if (plan.trainerIdChanged) add("Trainer ID\n${plan.beforeTrainerId} → ${plan.afterTrainerId}")
+        }.joinToString("\n\n")
+        val scopes = buildList {
+            if (plan.nameChanged) add("the 26-byte native trainer-name field at encrypted container offset 0x${plan.nameOffset.toString(16).uppercase()}")
+            if (plan.trainerIdChanged) add("the 2-byte native Trainer ID field at encrypted container offset 0x${plan.trainerIdOffset.toString(16).uppercase()}")
+        }.joinToString(" and ")
         AlertDialog.Builder(this)
             .setTitle("Save Trainer Data to a new copy?")
             .setMessage(
-                "Trainer Name\n${plan.beforeName.ifBlank { "(blank)" }} → ${plan.afterName}\n\n" +
-                    "Allowed byte scope: the 26-byte native trainer-name field at encrypted container offset 0x${plan.nameOffset.toString(16).uppercase()} plus the native SHA-256 footer. " +
+                "$changes\n\n" +
+                    "Allowed byte scope: $scopes plus the native SHA-256 footer. " +
                     "PSE will verify a recovery backup and reopen the persisted copy. Choose a NEW empty document; the selected source cannot be replaced."
             )
             .setNegativeButton("Cancel", null)
@@ -202,8 +232,12 @@ class SwitchScarletVioletTrainerActivity : Activity() {
                 inspectCopy.visibility = if (verifiedCopy != null) android.view.View.VISIBLE else android.view.View.GONE
                 status.text = result.fold(
                     onSuccess = {
+                        val changes = buildList {
+                            if (plan.nameChanged) add("Trainer Name: ${plan.beforeName.ifBlank { "(blank)" }} → ${plan.afterName}")
+                            if (plan.trainerIdChanged) add("Trainer ID: ${plan.beforeTrainerId} → ${plan.afterTrainerId}")
+                        }.joinToString("\n")
                         "Trainer Data copy saved and reopened successfully.\n" +
-                            "${plan.beforeName.ifBlank { "(blank)" }} → ${plan.afterName}\n" +
+                            "$changes\n" +
                             "SHA-256: ${plan.editedSha256}\nRecovery backup: $backupName\nOriginal source unchanged."
                     },
                     onFailure = {
