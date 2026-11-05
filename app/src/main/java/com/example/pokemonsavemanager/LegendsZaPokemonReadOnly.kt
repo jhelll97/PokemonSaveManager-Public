@@ -12,6 +12,7 @@ data class LegendsZaPokemonRead(
     val heldItem: Int, val ability: Int,
     val originalTrainerFriendship: Int, val handlingTrainerFriendship: Int, val currentHandler: Int,
     val moves: List<LegendsZaMoveRead>, val ivs: List<Int>, val evs: List<Int>,
+    val hyperTrainingFlags: Int,
     val relearnMoves: List<Int>, val cachedStats: List<Int>,
     val isAlpha: Boolean, val ball: Int, val scale: Int, val obedienceLevel: Int
 )
@@ -65,6 +66,7 @@ object LegendsZaPokemonReadOnly {
             immutable((0..3).map { LegendsZaMoveRead(u16(plain, 0x72 + it * 2), byte(plain, 0x7A + it), byte(plain, 0x7E + it)) }),
             immutable((0..5).map { ((iv32 ushr (it * 5)) and 31).toInt() }),
             immutable((0..5).map { byte(plain, 0x26 + it) }),
+            byte(plain, 0x126),
             immutable((0..3).map { u16(plain, 0x82 + it * 2) }),
             immutable((0..4).map { u16(plain, 0x14C + it * 2) }),
             byte(plain, 0x23) != 0, byte(plain, 0x124), byte(plain, 0x4A), byte(plain, 0x11F)
