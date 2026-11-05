@@ -23,6 +23,8 @@ internal data class LegendsZaPokemonBlocks(val version: LegendsZaVersion, val re
 internal data class LegendsZaTrainerBlocks(val version: LegendsZaVersion, val revision: LegendsZaRevision?, val status: ByteArray,
     val money: Long?, val royaleTicketPoints: Long?, val infiniteTicketPoints: Long?)
 
+internal data class LegendsZaPlayTimeBlock(val version: LegendsZaVersion, val revision: LegendsZaRevision?, val data: ByteArray)
+
 internal data class LegendsZaInventoryBlock(val version: LegendsZaVersion, val revision: LegendsZaRevision?,
     val data: ByteArray, val megaShardMaxPatched: Boolean)
 
@@ -31,7 +33,8 @@ internal data class LegendsZaTrainerWriteResult(
     val bytes: ByteArray,
     val nameOffset: Int,
     val trainerIdOffset: Int,
-    val moneyOffset: Int
+    val moneyOffset: Int,
+    val playTimeOffset: Int
 )
 
 internal data class LegendsZaDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
@@ -42,6 +45,7 @@ object LegendsZaSaveValidation {
     private val knownSizes = setOf(0x2F3284, 0x2F3289, 0x309FA6, 0x309FB3)
     private const val STATUS_KEY = 0xE3E89BD1L
     private const val MONEY_KEY = 0x4F35D0DDL
+    private const val PLAYED_SECONDS_KEY = 0xCE3AF8F2L
     private const val REVISION_KEY = 0x0926555AL
     private val requiredObjects = mapOf(0x0D66012CL to 0x5FA00,
         0x3AA1A9ADL to 0xB40, 0x2D87BE5CL to 0x27068, STATUS_KEY to 0x78)
@@ -80,15 +84,30 @@ object LegendsZaSaveValidation {
             optionalUint(0x4F35D0DDL), optionalUint(0x9A730DE1L), optionalUint(0x1D7EE369L))
     }
 
+    /** Detach the native elapsed-seconds scalar after complete container and title validation. */
+    internal fun readPlayTimeBlock(source: ByteArray): LegendsZaPlayTimeBlock {
+        val captured = mutableMapOf(PLAYED_SECONDS_KEY to ByteArray(0))
+        val checked = inspect(source, captured)
+        require(checked is LegendsZaValidation.Verified) {
+            (checked as? LegendsZaValidation.Invalid)?.reason ?: "A validated native Legends: Z-A Play Time save is required."
+        }
+        require(captured.getValue(PLAYED_SECONDS_KEY).size == 8) {
+            "The native Legends: Z-A elapsed-seconds scalar is missing."
+        }
+        return LegendsZaPlayTimeBlock(checked.version, checked.revision, captured.getValue(PLAYED_SECONDS_KEY))
+    }
+
     /** Replaces selected decoded Trainer Data fields and rebuilds native container integrity. */
     internal fun writeTrainerFields(
         source: ByteArray,
         encodedName: ByteArray?,
         trainerId: Int?,
-        money: Long?
+        money: Long?,
+        playTime: ByteArray?
     ): LegendsZaTrainerWriteResult {
         val blocks = readTrainerBlocks(source)
-        require(encodedName != null || trainerId != null || money != null) {
+        if (playTime != null) readPlayTimeBlock(source)
+        require(encodedName != null || trainerId != null || money != null || playTime != null) {
             "Select at least one Trainer Data field to change."
         }
         if (encodedName != null) require(encodedName.size == 26) {
@@ -100,6 +119,9 @@ object LegendsZaSaveValidation {
         if (money != null) {
             require(blocks.money != null) { "This save does not contain the native money counter." }
             require(money in 0L..9_999_999L) { "Money must be between 0 and 9,999,999." }
+        }
+        if (playTime != null) require(playTime.size == 8) {
+            "A complete native Legends: Z-A elapsed-seconds scalar is required."
         }
         val nameRelativeOffset = 0x10
         val trainerIdRelativeOffset = 0
@@ -113,6 +135,7 @@ object LegendsZaSaveValidation {
         var nameOffset = -1
         var trainerIdOffset = -1
         var moneyOffset = -1
+        var playTimeOffset = -1
         while (cursor.remaining > 0) {
             val key = cursor.uint32()
             val stream = KeyStream(key)
@@ -160,6 +183,16 @@ object LegendsZaSaveValidation {
                     }
                     moneyOffset = blockStart
                 }
+            } else if (key == PLAYED_SECONDS_KEY) {
+                require(type == 17 && length == 8L) {
+                    "The Legends: Z-A elapsed-seconds scalar has the wrong native type or size."
+                }
+                if (playTime != null) {
+                    repeat(playTime.size) { byteIndex ->
+                        payload[blockStart + byteIndex] = (playTime[byteIndex].toInt() xor stream.next()).toByte()
+                    }
+                    playTimeOffset = blockStart
+                }
             }
             cursor.skip(length.toInt())
         }
@@ -167,6 +200,7 @@ object LegendsZaSaveValidation {
             "The Legends: Z-A trainer status object is missing."
         }
         require(money == null || moneyOffset >= 0) { "The Legends: Z-A money counter is missing." }
+        require(playTime == null || playTimeOffset >= 0) { "The Legends: Z-A elapsed-seconds scalar is missing." }
 
         val edited = source.copyOf()
         for (index in payload.indices) edited[index] =
@@ -177,7 +211,8 @@ object LegendsZaSaveValidation {
         digest.update(outro)
         digest.digest().copyInto(edited, end)
         readTrainerBlocks(edited)
-        return LegendsZaTrainerWriteResult(edited, nameOffset, trainerIdOffset, moneyOffset)
+        if (playTime != null) readPlayTimeBlock(edited)
+        return LegendsZaTrainerWriteResult(edited, nameOffset, trainerIdOffset, moneyOffset, playTimeOffset)
     }
 
     /** Return the native bag plus patch-key presence only after the complete container gate. */
@@ -431,6 +466,8 @@ object LegendsZaSaveValidation {
             }
             // Trainer-only constraints preserve generic identity and Pokémon reader behavior.
             if (key in uintKeys) require(type == 10 && length == 4L) { "A trainer currency counter must be a native UInt32." }
+            if (key == PLAYED_SECONDS_KEY && captured?.containsKey(key) == true)
+                require(type == 17 && length == 8L) { "The Z-A elapsed-seconds scalar must be a native Double." }
             if (key == 0x21C9BD44L && captured?.containsKey(key) == true)
                 require(type == 4 && length == 0xBC00L) { "The Z-A inventory object has the wrong native type or size." }
             // The reference uses HasBlock: its presence, not its value or save revision.
