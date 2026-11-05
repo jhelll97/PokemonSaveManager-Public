@@ -12,6 +12,7 @@ data class ScarletVioletPokemonRead(
     val heldItem: Int, val ability: Int,
     val originalTrainerFriendship: Int, val handlingTrainerFriendship: Int, val currentHandler: Int,
     val moves: List<ScarletVioletMoveRead>, val ivs: List<Int>, val evs: List<Int>,
+    val hyperTrainingFlags: Int,
     val relearnMoves: List<Int>, val cachedStats: List<Int>,
     val teraTypeOriginal: Int, val teraTypeOverride: Int, val scale: Int, val obedienceLevel: Int
 )
@@ -65,6 +66,7 @@ object ScarletVioletPokemonReadOnly {
             immutable((0..3).map { ScarletVioletMoveRead(u16(plain, 0x72 + it * 2), byte(plain, 0x7A + it), byte(plain, 0x7E + it)) }),
             immutable((0..5).map { ((iv32 ushr (it * 5)) and 31).toInt() }),
             immutable((0..5).map { byte(plain, 0x26 + it) }),
+            byte(plain, 0x126),
             immutable((0..3).map { u16(plain, 0x82 + it * 2) }),
             immutable((0..4).map { u16(plain, 0x14C + it * 2) }),
             byte(plain, 0x94), byte(plain, 0x95), byte(plain, 0x4A), byte(plain, 0x11F)
