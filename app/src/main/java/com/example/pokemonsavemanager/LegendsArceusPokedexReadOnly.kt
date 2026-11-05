@@ -51,6 +51,7 @@ object LegendsArceusPokedexReadOnly {
         459, 460, 570, 571, 627, 628, 447, 448, 480, 481, 482, 485, 486, 488, 641, 642, 645, 905,
         483, 484, 487, 493, 489, 490, 492, 491
     )
+    val supportedSpecies: List<Int> = hisuiSpecies.toList()
     private val counterLabels = listOf("Defeated", "Evolved", "Alpha caught", "Large caught", "Small caught",
         "Heavy caught", "Light caught", "Caught at task time", "Caught sleeping", "Caught in air",
         "Caught without being spotted", "Given food", "Stunned with items", "Scared", "Lured",

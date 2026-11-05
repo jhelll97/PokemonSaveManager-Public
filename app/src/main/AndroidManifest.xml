@@ -38,6 +38,7 @@
         <activity android:name=".SwitchBdspEventActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusItemActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokemonNicknameActivity" android:exported="false"/>
+        <activity android:name=".SwitchLegendsArceusPokemonSpeciesActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusEventActivity" android:exported="false"/>
