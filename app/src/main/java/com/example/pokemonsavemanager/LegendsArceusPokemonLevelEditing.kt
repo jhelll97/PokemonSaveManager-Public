@@ -78,6 +78,9 @@ object LegendsArceusPokemonLevelEditing {
         return levelForExperience(pokemon.experience, growth)
     }
 
+    fun maximumExperience(pokemon: LegendsArceusPokemonRead): Long =
+        minimumExperience(100, resolveGrowth(pokemon))
+
     fun stage(
         source: ByteArray,
         expectedSha256: String,
@@ -125,6 +128,59 @@ object LegendsArceusPokemonLevelEditing {
         return LegendsArceusLevelCopyPlan(
             original, written.bytes, area, pasture, position, written.absoluteOffset,
             before, beforeLevel, after
+        )
+    }
+
+    internal fun stageExperience(
+        source: ByteArray,
+        expectedSha256: String,
+        area: LegendsArceusPokemonArea,
+        pasture: Int,
+        position: Int,
+        requestedExperience: Long
+    ): LegendsArceusExperienceCopyPlan {
+        val original = source.copyOf()
+        require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        require(LegendsArceusSaveValidation.inspect(original) is LegendsArceusValidation.Verified) {
+            "A validated native Legends: Arceus save is required."
+        }
+        val blocks = LegendsArceusSaveValidation.readPokemonBlocks(original)
+        val target = targetRecord(blocks, area, pasture, position)
+        val before = (LegendsArceusPokemonReadOnly.read(target) as? LegendsArceusSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The selected native PA8 is not checksum-valid.")
+        require(!before.isEgg) { "Egg Experience editing is not supported for Legends: Arceus." }
+        require(requestedExperience != before.experience) { "Enter different Experience before review." }
+        val growth = resolveGrowth(before)
+        val maximumExperience = minimumExperience(100, growth)
+        require(requestedExperience in 0L..maximumExperience) {
+            "Experience must be between 0 and $maximumExperience for this Pokémon's native growth group."
+        }
+        val beforeLevel = levelForExperience(before.experience, growth)
+        require(before.experience in 0L..maximumExperience &&
+            (before.cachedLevel == null || before.cachedLevel == beforeLevel)) {
+            "The saved party Level and EXP do not agree with this Pokémon's verified growth group."
+        }
+        val requestedLevel = levelForExperience(requestedExperience, growth)
+        val after = if (area == LegendsArceusPokemonArea.PARTY) {
+            require(before.statNature in 0..24) {
+                "The PA8 stat nature is invalid, so derived stats cannot be rebuilt safely."
+            }
+            val personal = resolvePartyPersonal(before, beforeLevel)
+            require(matchesCachedValues(before, calculateParty(before, personal, beforeLevel))) {
+                "The saved Level-dependent values do not match this PA8's verified species/form profile."
+            }
+            calculateParty(before, personal, requestedLevel).copy(experience = requestedExperience)
+        } else LegendsArceusLevelValues(
+            requestedLevel, requestedExperience, before.currentHp, null, null
+        )
+        val afterRecord = editRecord(target, after)
+        val written = if (area == LegendsArceusPokemonArea.PASTURE) {
+            LegendsArceusSaveValidation.writePastureRecord(original, pasture, position, afterRecord)
+        } else LegendsArceusSaveValidation.writePartyRecord(original, position, afterRecord)
+        verify(original, written.bytes, area, pasture, position, written.absoluteOffset, after)
+        return LegendsArceusExperienceCopyPlan(
+            original, written.bytes, area, pasture, position, written.absoluteOffset,
+            before, beforeLevel, after, maximumExperience
         )
     }
 
@@ -214,6 +270,11 @@ object LegendsArceusPokemonLevelEditing {
         pokemon: LegendsArceusPokemonRead,
         values: LegendsArceusLevelValues
     ): Boolean = pokemon.maximumHp == values.maximumHp && pokemon.cachedStats == values.cachedStats
+
+    private fun matchesCachedValues(
+        pokemon: LegendsArceusPokemonRead,
+        values: LegendsArceusLevelValues
+    ): Boolean = matchesCachedStats(pokemon, values) && pokemon.currentHp == values.currentHp
 
     private fun calculateParty(
         before: LegendsArceusPokemonRead,
@@ -395,6 +456,99 @@ object LegendsArceusPokemonLevelEditing {
     }
     private fun writeU32(bytes: ByteArray, offset: Int, value: Long) {
         writeU16(bytes, offset, value.toInt()); writeU16(bytes, offset + 2, (value ushr 16).toInt())
+    }
+}
+
+/** Gen 1-ordered Experience action backed by the verified PA8 level-dependent write scope. */
+object LegendsArceusPokemonExperienceEditing {
+    fun readDocumentBytes(input: java.io.InputStream): ByteArray =
+        LegendsArceusPokemonLevelEditing.readDocumentBytes(input)
+
+    fun sha256(bytes: ByteArray): String = LegendsArceusPokemonLevelEditing.sha256(bytes)
+
+    fun currentLevel(pokemon: LegendsArceusPokemonRead): Int =
+        LegendsArceusPokemonLevelEditing.currentLevel(pokemon)
+
+    fun maximumExperience(pokemon: LegendsArceusPokemonRead): Long =
+        LegendsArceusPokemonLevelEditing.maximumExperience(pokemon)
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        area: LegendsArceusPokemonArea,
+        pasture: Int,
+        position: Int,
+        requestedExperience: Long
+    ): LegendsArceusExperienceCopyPlan = LegendsArceusPokemonLevelEditing.stageExperience(
+        source, expectedSha256, area, pasture, position, requestedExperience
+    )
+}
+
+class LegendsArceusExperienceCopyPlan internal constructor(
+    original: ByteArray,
+    edited: ByteArray,
+    val area: LegendsArceusPokemonArea,
+    val pasture: Int,
+    val position: Int,
+    val absoluteOffset: Int,
+    val before: LegendsArceusPokemonRead,
+    val beforeLevel: Int,
+    val after: LegendsArceusLevelValues,
+    val maximumExperience: Long
+) {
+    private val original = original.copyOf()
+    private val edited = edited.copyOf()
+    val sourceSha256 = LegendsArceusPokemonExperienceEditing.sha256(this.original)
+    val editedSha256 = LegendsArceusPokemonExperienceEditing.sha256(this.edited)
+    private var consumed = false
+    val recordSize: Int get() = if (area == LegendsArceusPokemonArea.PASTURE)
+        LegendsArceusPokemonReadOnly.STORED_SIZE else LegendsArceusPokemonReadOnly.PARTY_SIZE
+    val location: String get() = if (area == LegendsArceusPokemonArea.PASTURE)
+        "Pasture $pasture • Slot $position" else "Party $position"
+
+    @Synchronized
+    fun saveNewCopy(
+        readSource: () -> ByteArray,
+        retainBackup: (ByteArray) -> ByteArray,
+        readDestination: () -> ByteArray,
+        writeDestination: (ByteArray) -> Unit,
+        discardDestination: () -> Boolean
+    ) {
+        check(!consumed) { "This Experience review was already used. Reopen Pokémon Boxes." }
+        consumed = true
+        fun requireSource() = require(readSource().contentEquals(original)) {
+            "The selected source changed. Reopen it from PSE."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "Choose a new empty document; existing files cannot be replaced." }
+        val backup = retainBackup(original.copyOf())
+        require(backup.contentEquals(original)) { "The recovery backup did not verify. Nothing was written." }
+        requireSource()
+        require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
+        var started = false
+        try {
+            LegendsArceusPokemonLevelEditing.verify(
+                original, edited, area, pasture, position, absoluteOffset, after
+            )
+            started = true
+            writeDestination(edited.copyOf())
+            val persisted = readDestination()
+            require(persisted.contentEquals(edited)) {
+                "The saved copy differs from the reviewed Experience edit."
+            }
+            LegendsArceusPokemonLevelEditing.verify(
+                original, persisted, area, pasture, position, absoluteOffset, after
+            )
+            requireSource()
+        } catch (failure: Exception) {
+            val removed = started && runCatching { discardDestination() }.getOrDefault(false)
+            throw IllegalStateException(
+                (failure.message ?: "Experience copy verification failed.") +
+                    if (removed) " The failed new copy was removed; the recovery backup is retained."
+                    else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
+                failure
+            )
+        }
     }
 }
 

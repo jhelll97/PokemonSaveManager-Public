@@ -31,6 +31,7 @@ class SwitchLegendsArceusPokemonLevelActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var level: EditText
     private lateinit var review: Button
+    private lateinit var experience: Button
     private lateinit var inspectCopy: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -84,6 +85,12 @@ class SwitchLegendsArceusPokemonLevelActivity : Activity() {
             setOnClickListener { reviewLevel() }
         }
         root.addView(review)
+        experience = Button(this).apply {
+            text = "Next field: Experience"
+            isEnabled = false
+            setOnClickListener { openExperience() }
+        }
+        root.addView(experience)
         inspectCopy = Button(this).apply {
             text = "Inspect verified copy"
             visibility = android.view.View.GONE
@@ -143,7 +150,21 @@ class SwitchLegendsArceusPokemonLevelActivity : Activity() {
         val ready = opened != null && current != null
         level.isEnabled = !value && ready
         review.isEnabled = !value && ready
+        experience.isEnabled = !value && ready
         inspectCopy.isEnabled = !value && verifiedCopy != null
+    }
+
+    private fun openExperience() {
+        if (busy || opened == null || current == null) return
+        val uri = sourceUri ?: return
+        val hash = expectedHash ?: return
+        val selectedArea = area ?: return
+        startActivity(Intent(this, SwitchLegendsArceusPokemonExperienceActivity::class.java).setData(uri)
+            .putExtra("pse.switch.sha256", hash)
+            .putExtra("pse.switch.pokemon.area", selectedArea.name)
+            .putExtra("pse.switch.pokemon.pasture", pasture)
+            .putExtra("pse.switch.pokemon.position", position)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }
 
     private fun readSource(): ByteArray {
