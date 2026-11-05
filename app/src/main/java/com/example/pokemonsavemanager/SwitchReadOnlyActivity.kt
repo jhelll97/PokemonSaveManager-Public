@@ -405,7 +405,7 @@ class SwitchReadOnlyActivity : Activity() {
         storageButton.text = if (session?.profile?.family in setOf(
                 SwitchGameFamily.LETS_GO_PIKACHU_EEVEE, SwitchGameFamily.SWORD_SHIELD,
                 SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL, SwitchGameFamily.LEGENDS_ARCEUS,
-                SwitchGameFamily.SCARLET_VIOLET))
+                SwitchGameFamily.SCARLET_VIOLET, SwitchGameFamily.LEGENDS_ZA))
             "◉  Pokémon Boxes • Nickname edit" else "◉  Pokémon Boxes • Read-only"
         menuSelectionButton.isEnabled = !busy && session?.bdspMenuSelection != null
         menuSelectionButton.visibility = if (session?.profile?.family == SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL) android.view.View.VISIBLE else android.view.View.GONE
@@ -528,7 +528,8 @@ class SwitchReadOnlyActivity : Activity() {
             SwitchGameFamily.SWORD_SHIELD,
             SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL,
             SwitchGameFamily.LEGENDS_ARCEUS,
-            SwitchGameFamily.SCARLET_VIOLET
+            SwitchGameFamily.SCARLET_VIOLET,
+            SwitchGameFamily.LEGENDS_ZA
         ) && selectedSourceUri != null
         dashboardRoot.addView(label("PSE", 38f, accent))
         dashboardRoot.addView(label(if (trainerDataEditing) "Pokémon Save Editor" else "Pokémon Save Editor • Read-only", 15f))
@@ -3301,7 +3302,7 @@ class SwitchReadOnlyActivity : Activity() {
         val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val scroll = ScrollView(this).apply { addView(list) }
         list.addView(TextView(this).apply {
-            text = "32 native boxes • 30 slots each • Read-only\n" +
+            text = "32 native boxes • 30 slots each • Native nickname editing available\n" +
                 "${storage.occupiedBoxSlots}/960 occupied slots (${storage.unreadableBoxSlots} unreadable). " +
                 "Box names, wallpapers and unlock state are not read in this view."
             setPadding(16, 16, 16, 16)
@@ -3356,21 +3357,45 @@ class SwitchReadOnlyActivity : Activity() {
             append("IVs (HP/Atk/Def/Speed/SpA/SpD): ${p.ivs.joinToString(" / ")}\n")
             append("EVs (same order): ${p.evs.joinToString(" / ")}\n\n")
             append("PA9 stored-data checksum passed. Cached party stats are outside that checksum and may be stale, especially in boxes. ")
-            append("Read-only access; legality and game-presence checks are not evaluated.")
+            append("Native nickname editing is available for party and PC-box records; legality and game-presence checks are not evaluated.")
         }
-        val scroll = ScrollView(this).apply {
-            addView(TextView(this@SwitchReadOnlyActivity).apply {
-                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
-            })
+        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        content.addView(TextView(this).apply {
+            text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+        })
+        val boxMatch = Regex("^Box ([0-9]+) • Slot ([0-9]+)$").matchEntire(location)
+        val partyMatch = Regex("^Party ([0-9]+)$").matchEntire(location)
+        val nativeTarget = when {
+            boxMatch != null -> Triple(LegendsZaPokemonArea.BOX,
+                boxMatch.groupValues[1].toInt(), boxMatch.groupValues[2].toInt())
+            partyMatch != null -> Triple(LegendsZaPokemonArea.PARTY, 0, partyMatch.groupValues[1].toInt())
+            else -> null
         }
+        if (nativeTarget != null) content.addView(Button(this).apply {
+            text = "Edit Pokémon"
+            isAllCaps = false
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && source != null) startActivity(
+                    Intent(this@SwitchReadOnlyActivity, SwitchLegendsZaPokemonNicknameActivity::class.java)
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                        .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                        .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
+        })
         val canAddToBank = Regex("^(Box [0-9]+ • Slot [0-9]+|Party [0-9]+)$").matches(location)
-        val dialog = AlertDialog.Builder(this).setTitle("$location • Read-only")
+        val bank = Button(this).apply { text = "Add to PSE Bank"; isAllCaps = false }
+        if (canAddToBank) content.addView(bank)
+        val scroll = ScrollView(this).apply { addView(content) }
+        val dialog = AlertDialog.Builder(this).setTitle("$location • Legends: Z-A")
             .setView(scroll).setNegativeButton("Close", null).create()
         if (canAddToBank) {
-            dialog.setButton(AlertDialog.BUTTON_POSITIVE, "Add to PSE Bank",
-                null as android.content.DialogInterface.OnClickListener?)
             dialog.setOnShowListener {
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                bank.setOnClickListener {
                     if (session !== bound) { dialog.dismiss(); return@setOnClickListener }
                     try {
                         val raw = legendsZaRecordBytes(bound, location)
