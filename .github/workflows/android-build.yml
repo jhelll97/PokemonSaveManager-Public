@@ -23,7 +23,7 @@ jobs:
   debug:
     name: Compile and lint source without APK
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - name: Check out source
         uses: actions/checkout@v4
