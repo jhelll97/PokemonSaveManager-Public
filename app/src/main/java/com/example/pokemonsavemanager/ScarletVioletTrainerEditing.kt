@@ -11,6 +11,7 @@ object ScarletVioletTrainerEditing {
     private const val MAX_SAVE_SIZE = 0x31CF81
     private const val NAME_SIZE = 26
     private const val TRAINER_ID_SIZE = 2
+    private const val MONEY_SIZE = 4
 
     fun readDocumentBytes(input: InputStream): ByteArray = input.use {
         val output = ByteArrayOutputStream()
@@ -35,28 +36,41 @@ object ScarletVioletTrainerEditing {
         source: ByteArray,
         expectedSha256: String,
         requestedName: String,
-        requestedTrainerId: Int
+        requestedTrainerId: Int,
+        requestedMoney: Long?
     ): ScarletVioletTrainerCopyPlan {
         val original = source.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
         val before = ScarletVioletTrainerReadOnly.read(original)
         val name = if (requestedName == before.name) before.name else requestedName.trim()
         require(requestedTrainerId in 0..65535) { "Trainer ID must be between 0 and 65535." }
+        require(before.money != null || requestedMoney == null) {
+            "This save does not contain the native money counter."
+        }
         val nameChanged = name != before.name
         val trainerIdChanged = requestedTrainerId != before.tid16
-        require(nameChanged || trainerIdChanged) { "Change the Trainer Name or Trainer ID before reviewing." }
+        val moneyChanged = requestedMoney != null && requestedMoney != before.money
+        if (moneyChanged) require(requestedMoney != null && requestedMoney in 0L..9_999_999L) {
+            "Money must be between 0 and 9,999,999."
+        }
+        require(nameChanged || trainerIdChanged || moneyChanged) {
+            "Change the Trainer Name, Trainer ID, or Money before reviewing."
+        }
+        val afterMoney = if (moneyChanged) requestedMoney else before.money
         val write = ScarletVioletSaveValidation.writeTrainerFields(
             original,
             if (nameChanged) encodeName(name) else null,
-            if (trainerIdChanged) requestedTrainerId else null
+            if (trainerIdChanged) requestedTrainerId else null,
+            if (moneyChanged) requestedMoney else null
         )
         verify(
-            original, write.bytes, name, requestedTrainerId, write.nameOffset,
-            write.trainerIdOffset, nameChanged, trainerIdChanged
+            original, write.bytes, name, requestedTrainerId, afterMoney, write.nameOffset,
+            write.trainerIdOffset, write.moneyOffset, nameChanged, trainerIdChanged, moneyChanged
         )
         return ScarletVioletTrainerCopyPlan(
             original, write.bytes, before.name, name, before.tid16, requestedTrainerId,
-            write.nameOffset, write.trainerIdOffset, nameChanged, trainerIdChanged
+            before.money, afterMoney, write.nameOffset, write.trainerIdOffset, write.moneyOffset,
+            nameChanged, trainerIdChanged, moneyChanged
         )
     }
 
@@ -65,10 +79,13 @@ object ScarletVioletTrainerEditing {
         edited: ByteArray,
         expectedName: String,
         expectedTrainerId: Int,
+        expectedMoney: Long?,
         nameOffset: Int,
         trainerIdOffset: Int,
+        moneyOffset: Int,
         nameChanged: Boolean,
-        trainerIdChanged: Boolean
+        trainerIdChanged: Boolean,
+        moneyChanged: Boolean
     ) {
         val beforeValidation = ScarletVioletSaveValidation.inspect(original)
         val afterValidation = ScarletVioletSaveValidation.inspect(edited)
@@ -81,8 +98,9 @@ object ScarletVioletTrainerEditing {
         val after = ScarletVioletTrainerReadOnly.read(edited)
         val expectedId32 = (before.id32 and 0xFFFF0000L) or expectedTrainerId.toLong()
         require(
-            after.name == expectedName && after.tid16 == expectedTrainerId &&
-                before.copy(name = expectedName, id32 = expectedId32, tid16 = expectedTrainerId) == after
+            after.name == expectedName && after.tid16 == expectedTrainerId && after.money == expectedMoney &&
+                before.copy(name = expectedName, id32 = expectedId32, tid16 = expectedTrainerId,
+                    money = expectedMoney) == after
         ) {
             "The Trainer Data edit did not reopen exactly."
         }
@@ -90,6 +108,7 @@ object ScarletVioletTrainerEditing {
         require(original.indices.all { index ->
             (nameChanged && index in nameOffset until nameOffset + NAME_SIZE) ||
                 (trainerIdChanged && index in trainerIdOffset until trainerIdOffset + TRAINER_ID_SIZE) ||
+                (moneyChanged && index in moneyOffset until moneyOffset + MONEY_SIZE) ||
                 index in hashOffset until original.size || original[index] == edited[index]
         }) { "The Trainer Data edit changed unrelated save data." }
     }
@@ -123,10 +142,14 @@ class ScarletVioletTrainerCopyPlan internal constructor(
     val afterName: String,
     val beforeTrainerId: Int,
     val afterTrainerId: Int,
+    val beforeMoney: Long?,
+    val afterMoney: Long?,
     val nameOffset: Int,
     val trainerIdOffset: Int,
+    val moneyOffset: Int,
     val nameChanged: Boolean,
-    val trainerIdChanged: Boolean
+    val trainerIdChanged: Boolean,
+    val moneyChanged: Boolean
 ) {
     private val original = original.copyOf()
     private val edited = edited.copyOf()
@@ -156,16 +179,16 @@ class ScarletVioletTrainerCopyPlan internal constructor(
         var started = false
         try {
             ScarletVioletTrainerEditing.verify(
-                original, edited, afterName, afterTrainerId, nameOffset, trainerIdOffset,
-                nameChanged, trainerIdChanged
+                original, edited, afterName, afterTrainerId, afterMoney, nameOffset, trainerIdOffset,
+                moneyOffset, nameChanged, trainerIdChanged, moneyChanged
             )
             started = true
             writeDestination(edited.copyOf())
             val persisted = readDestination()
             require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed edit." }
             ScarletVioletTrainerEditing.verify(
-                original, persisted, afterName, afterTrainerId, nameOffset, trainerIdOffset,
-                nameChanged, trainerIdChanged
+                original, persisted, afterName, afterTrainerId, afterMoney, nameOffset, trainerIdOffset,
+                moneyOffset, nameChanged, trainerIdChanged, moneyChanged
             )
             requireSource()
         } catch (failure: Exception) {

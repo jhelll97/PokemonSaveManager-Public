@@ -28,7 +28,8 @@ internal data class ScarletVioletPokemonWriteResult(val bytes: ByteArray, val ab
 internal data class ScarletVioletTrainerWriteResult(
     val bytes: ByteArray,
     val nameOffset: Int,
-    val trainerIdOffset: Int
+    val trainerIdOffset: Int,
+    val moneyOffset: Int
 )
 
 /** Independent read-only container gate; pinned format evidence is in SWITCH_READ_ONLY_FORMATS.md. */
@@ -43,6 +44,7 @@ object ScarletVioletSaveValidation {
         dlcOffsets.any { offset -> size >= range.first + offset && size <= range.last + offset }
     }
     private const val STATUS_KEY = 0xE3E89BD1L
+    private const val MONEY_KEY = 0x4F35D0DDL
     private val requiredObjects = mapOf(0x0D66012CL to 0x53250,
         0x3AA1A9ADL to 0x814, 0x0DEAAEBDL to 0xBD24, STATUS_KEY to 0x68)
     private val intro = decodeHex("9ec99cd70ed33c44fb9303dceb39b42a1947e9634ba2334416bf82a2ba6355b63d9df24b5f7b6ab2621dc21b68e5c8b53a059000e8a8103de2ecf00cb2ed4f6d")
@@ -95,15 +97,22 @@ object ScarletVioletSaveValidation {
     internal fun writeTrainerFields(
         source: ByteArray,
         encodedName: ByteArray?,
-        trainerId: Int?
+        trainerId: Int?,
+        money: Long?
     ): ScarletVioletTrainerWriteResult {
-        readTrainerBlocks(source)
-        require(encodedName != null || trainerId != null) { "Select at least one Trainer Data field to change." }
+        val blocks = readTrainerBlocks(source)
+        require(encodedName != null || trainerId != null || money != null) {
+            "Select at least one Trainer Data field to change."
+        }
         if (encodedName != null) require(encodedName.size == 26) {
             "A complete native Scarlet/Violet trainer-name field is required."
         }
         if (trainerId != null) require(trainerId in 0..65535) {
             "Trainer ID must be between 0 and 65535."
+        }
+        if (money != null) {
+            require(blocks.money != null) { "This save does not contain the native money counter." }
+            require(money in 0L..9_999_999L) { "Money must be between 0 and 9,999,999." }
         }
         val nameRelativeOffset = 0x10
         val trainerIdRelativeOffset = 0
@@ -116,6 +125,7 @@ object ScarletVioletSaveValidation {
         val cursor = Cursor(payload)
         var nameOffset = -1
         var trainerIdOffset = -1
+        var moneyOffset = -1
         while (cursor.remaining > 0) {
             val key = cursor.uint32()
             val stream = KeyStream(key)
@@ -152,12 +162,24 @@ object ScarletVioletSaveValidation {
                 }
                 nameOffset = blockStart + nameRelativeOffset
                 trainerIdOffset = blockStart + trainerIdRelativeOffset
+            } else if (key == MONEY_KEY) {
+                require(type == 10 && length == 4L) {
+                    "The Scarlet/Violet money counter has the wrong native type or size."
+                }
+                if (money != null) {
+                    repeat(4) { byteIndex ->
+                        val decoded = ((money ushr (byteIndex * 8)).toInt() and 255)
+                        payload[blockStart + byteIndex] = (decoded xor stream.next()).toByte()
+                    }
+                    moneyOffset = blockStart
+                }
             }
             cursor.skip(length.toInt())
         }
         require(nameOffset >= 0 && trainerIdOffset >= 0) {
             "The Scarlet/Violet trainer status object is missing."
         }
+        require(money == null || moneyOffset >= 0) { "The Scarlet/Violet money counter is missing." }
 
         val edited = source.copyOf()
         for (index in payload.indices) edited[index] =
@@ -168,7 +190,7 @@ object ScarletVioletSaveValidation {
         digest.update(outro)
         digest.digest().copyInto(edited, end)
         readTrainerBlocks(edited)
-        return ScarletVioletTrainerWriteResult(edited, nameOffset, trainerIdOffset)
+        return ScarletVioletTrainerWriteResult(edited, nameOffset, trainerIdOffset, moneyOffset)
     }
 
     /** Replaces one decoded 16-byte item record and rebuilds native container integrity. */

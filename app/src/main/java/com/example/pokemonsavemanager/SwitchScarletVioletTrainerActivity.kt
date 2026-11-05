@@ -23,9 +23,12 @@ class SwitchScarletVioletTrainerActivity : Activity() {
     private var pendingPlan: ScarletVioletTrainerCopyPlan? = null
     private var busy = false
     private var verifiedCopy: Pair<Uri, String>? = null
+    private var moneyAvailable = false
+    private var openedMoney: Long? = null
     private lateinit var status: TextView
     private lateinit var name: EditText
     private lateinit var trainerId: EditText
+    private lateinit var money: EditText
     private lateinit var review: Button
     private lateinit var inspectCopy: Button
 
@@ -77,6 +80,19 @@ class SwitchScarletVioletTrainerActivity : Activity() {
             inputType = android.text.InputType.TYPE_CLASS_NUMBER
         }
         root.addView(trainerId)
+        root.addView(TextView(this).apply {
+            text = "Money"
+            textSize = 18f
+        })
+        root.addView(TextView(this).apply {
+            text = "Current money carried by your trainer • 0–9,999,999"
+            textSize = 14f
+        })
+        money = EditText(this).apply {
+            hint = "Money"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        }
+        root.addView(money)
         review = Button(this).apply {
             text = "Review and save new copy"
             setOnClickListener { reviewChange() }
@@ -109,8 +125,13 @@ class SwitchScarletVioletTrainerActivity : Activity() {
                     opened = bytes
                     name.setText(trainer.name)
                     trainerId.setText(trainer.tid16.toString())
+                    moneyAvailable = trainer.money != null
+                    openedMoney = trainer.money
+                    money.setText(trainer.money?.toString().orEmpty())
+                    if (!moneyAvailable) money.hint = "Not present in this save"
                     status.text = "${trainer.version.displayName}\nCurrent trainer name: ${trainer.name.ifBlank { "Not set" }}\n" +
                         "Current Trainer ID: ${trainer.tid16}\n" +
+                        "Current Money: ${trainer.money?.toString() ?: "Not present"}\n" +
                         "Source SHA-256: ${ScarletVioletTrainerEditing.sha256(bytes)}"
                 }.onFailure { status.text = it.message ?: "The save could not be opened safely." }
                 setBusy(false)
@@ -123,6 +144,7 @@ class SwitchScarletVioletTrainerActivity : Activity() {
         val ready = opened != null
         name.isEnabled = !value && ready
         trainerId.isEnabled = !value && ready
+        money.isEnabled = !value && ready && moneyAvailable
         review.isEnabled = !value && ready
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
@@ -136,8 +158,16 @@ class SwitchScarletVioletTrainerActivity : Activity() {
             status.text = "Trainer ID must be a whole number between 0 and 65535."
             return
         }
+        val requestedMoney = if (moneyAvailable) money.text.toString().toLongOrNull() else null
+        if (moneyAvailable && (requestedMoney == null ||
+                (requestedMoney != openedMoney && requestedMoney !in 0L..9_999_999L))) {
+            status.text = "Money must be a whole number between 0 and 9,999,999."
+            return
+        }
         val plan = try {
-            ScarletVioletTrainerEditing.stage(bytes, hash, name.text.toString(), requestedTrainerId)
+            ScarletVioletTrainerEditing.stage(
+                bytes, hash, name.text.toString(), requestedTrainerId, requestedMoney
+            )
         } catch (failure: Exception) {
             status.text = failure.message ?: "The requested trainer change is unavailable."
             return
@@ -147,10 +177,12 @@ class SwitchScarletVioletTrainerActivity : Activity() {
         val changes = buildList {
             if (plan.nameChanged) add("Trainer Name\n${plan.beforeName.ifBlank { "(blank)" }} → ${plan.afterName}")
             if (plan.trainerIdChanged) add("Trainer ID\n${plan.beforeTrainerId} → ${plan.afterTrainerId}")
+            if (plan.moneyChanged) add("Money\n${plan.beforeMoney} → ${plan.afterMoney}")
         }.joinToString("\n\n")
         val scopes = buildList {
             if (plan.nameChanged) add("the 26-byte native trainer-name field at encrypted container offset 0x${plan.nameOffset.toString(16).uppercase()}")
             if (plan.trainerIdChanged) add("the 2-byte native Trainer ID field at encrypted container offset 0x${plan.trainerIdOffset.toString(16).uppercase()}")
+            if (plan.moneyChanged) add("the 4-byte native Money field at encrypted container offset 0x${plan.moneyOffset.toString(16).uppercase()}")
         }.joinToString(" and ")
         AlertDialog.Builder(this)
             .setTitle("Save Trainer Data to a new copy?")
@@ -235,6 +267,7 @@ class SwitchScarletVioletTrainerActivity : Activity() {
                         val changes = buildList {
                             if (plan.nameChanged) add("Trainer Name: ${plan.beforeName.ifBlank { "(blank)" }} → ${plan.afterName}")
                             if (plan.trainerIdChanged) add("Trainer ID: ${plan.beforeTrainerId} → ${plan.afterTrainerId}")
+                            if (plan.moneyChanged) add("Money: ${plan.beforeMoney} → ${plan.afterMoney}")
                         }.joinToString("\n")
                         "Trainer Data copy saved and reopened successfully.\n" +
                             "$changes\n" +

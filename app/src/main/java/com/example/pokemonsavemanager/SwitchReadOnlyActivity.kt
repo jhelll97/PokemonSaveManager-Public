@@ -4045,7 +4045,7 @@ class SwitchReadOnlyActivity : Activity() {
             append("Blueberry Points: ${saved(trainer.blueberryPoints)}\n\n")
             append("Currencies are raw saved unsigned values; game balance limits and story consistency are not evaluated. ")
             append("Absent counters stay marked Not present and do not establish DLC or progression status.\n\n")
-            append("Native container integrity passed before reading. Trainer Name opens the reviewed native editor; the other displayed fields remain read-only.")
+            append("Native container integrity passed before reading. Trainer Name, Trainer ID and Money open in the reviewed native editor when their native fields are present; the other displayed fields remain read-only.")
         }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
