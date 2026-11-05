@@ -29,6 +29,7 @@ class SwitchSwordShieldPokemonNicknameActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var nickname: EditText
     private lateinit var review: Button
+    private lateinit var species: Button
     private lateinit var inspectCopy: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,6 +70,21 @@ class SwitchSwordShieldPokemonNicknameActivity : Activity() {
             text = "Review nickname change"; isEnabled = false; setOnClickListener { reviewNickname() }
         }
         root.addView(review)
+        species = Button(this).apply {
+            text = "Next field: Species"; isEnabled = false
+            setOnClickListener {
+                val uri = sourceUri ?: return@setOnClickListener
+                val hash = expectedHash ?: return@setOnClickListener
+                val selectedArea = area ?: return@setOnClickListener
+                startActivity(Intent(this@SwitchSwordShieldPokemonNicknameActivity, SwitchSwordShieldPokemonSpeciesActivity::class.java)
+                    .setData(uri).putExtra("pse.switch.sha256", hash)
+                    .putExtra("pse.switch.pokemon.area", selectedArea.name)
+                    .putExtra("pse.switch.pokemon.box", box)
+                    .putExtra("pse.switch.pokemon.position", position)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            }
+        }
+        root.addView(species)
         inspectCopy = Button(this).apply {
             text = "Inspect verified copy"; visibility = android.view.View.GONE
             setOnClickListener { inspectVerifiedCopy() }
@@ -114,6 +130,7 @@ class SwitchSwordShieldPokemonNicknameActivity : Activity() {
         busy = value
         nickname.isEnabled = !value && opened != null
         review.isEnabled = !value && opened != null
+        species.isEnabled = !value && opened != null
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
 
