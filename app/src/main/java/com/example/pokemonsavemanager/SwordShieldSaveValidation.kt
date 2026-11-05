@@ -877,6 +877,72 @@ object SwordShieldSaveValidation {
         return SwordShieldPokemonWriteResult(edited, absoluteOffset)
     }
 
+    /** Replaces one decoded native party PK8 slot, then rebuilds encryption and the SHA-256 footer. */
+    internal fun writePartyRecord(
+        source: ByteArray,
+        position: Int,
+        record: ByteArray
+    ): SwordShieldPokemonWriteResult {
+        val blocks = readPokemonBlocks(source)
+        require(position in 1..6) { "The native Sword/Shield party slot is outside the six-slot party." }
+        require(record.size == SwordShieldPokemonReadOnly.RECORD_SIZE) { "A complete 344-byte native PK8 is required." }
+        require(SwordShieldPokemonReadOnly.read(record) is SwordShieldSlotRead.Pokemon) {
+            "The supplied native PK8 did not pass its stored-data checksum."
+        }
+        require(blocks.party.size == 0x814) { "The native Sword/Shield party object has the wrong size." }
+        val partyCount = blocks.party[6 * SwordShieldPokemonReadOnly.RECORD_SIZE].toInt() and 255
+        require(position <= partyCount) { "The selected native party slot is not occupied." }
+        val relativeOffset = (position - 1) * SwordShieldPokemonReadOnly.RECORD_SIZE
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var absoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            if (key == 0x2985FE5DL) {
+                require(type == 4 && length == 0x814L) {
+                    "The native Sword/Shield party object has the wrong type or size."
+                }
+                repeat(relativeOffset) { stream.next() }
+                repeat(record.size) { byteIndex ->
+                    payload[blockStart + relativeOffset + byteIndex] =
+                        (record[byteIndex].toInt() xor stream.next()).toByte()
+                }
+                absoluteOffset = blockStart + relativeOffset
+            }
+            cursor.skip(length.toInt())
+        }
+        require(absoluteOffset >= 0) { "The native Sword/Shield party object is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        SwordShieldStorageReadOnly.read(edited)
+        return SwordShieldPokemonWriteResult(edited, absoluteOffset)
+    }
+
     private fun captureObjects(
         source: ByteArray,
         keys: Set<Long>,
