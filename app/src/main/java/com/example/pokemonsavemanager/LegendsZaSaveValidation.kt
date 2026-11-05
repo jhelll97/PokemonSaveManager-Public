@@ -27,7 +27,11 @@ internal data class LegendsZaInventoryBlock(val version: LegendsZaVersion, val r
     val data: ByteArray, val megaShardMaxPatched: Boolean)
 
 internal data class LegendsZaInventoryWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
-internal data class LegendsZaTrainerWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
+internal data class LegendsZaTrainerWriteResult(
+    val bytes: ByteArray,
+    val nameOffset: Int,
+    val trainerIdOffset: Int
+)
 
 internal data class LegendsZaDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class LegendsZaPokemonWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
@@ -74,11 +78,22 @@ object LegendsZaSaveValidation {
             optionalUint(0x4F35D0DDL), optionalUint(0x9A730DE1L), optionalUint(0x1D7EE369L))
     }
 
-    /** Replaces the decoded native trainer-name field and rebuilds native container integrity. */
-    internal fun writeTrainerName(source: ByteArray, encodedName: ByteArray): LegendsZaTrainerWriteResult {
+    /** Replaces selected decoded Trainer Data fields and rebuilds native container integrity. */
+    internal fun writeTrainerFields(
+        source: ByteArray,
+        encodedName: ByteArray?,
+        trainerId: Int?
+    ): LegendsZaTrainerWriteResult {
         readTrainerBlocks(source)
-        require(encodedName.size == 26) { "A complete native Legends: Z-A trainer-name field is required." }
-        val relativeOffset = 0x10
+        require(encodedName != null || trainerId != null) { "Select at least one Trainer Data field to change." }
+        if (encodedName != null) require(encodedName.size == 26) {
+            "A complete native Legends: Z-A trainer-name field is required."
+        }
+        if (trainerId != null) require(trainerId in 0..65535) {
+            "Trainer ID must be between 0 and 65535."
+        }
+        val nameRelativeOffset = 0x10
+        val trainerIdRelativeOffset = 0
         val blockSize = requiredObjects.getValue(STATUS_KEY)
         val end = source.size - 32
         val payload = source.copyOfRange(0, end)
@@ -86,7 +101,8 @@ object LegendsZaSaveValidation {
             (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
 
         val cursor = Cursor(payload)
-        var absoluteOffset = -1
+        var nameOffset = -1
+        var trainerIdOffset = -1
         while (cursor.remaining > 0) {
             val key = cursor.uint32()
             val stream = KeyStream(key)
@@ -107,16 +123,28 @@ object LegendsZaSaveValidation {
                 require(type == 4 && length == blockSize.toLong()) {
                     "The Legends: Z-A trainer status object has the wrong native type or size."
                 }
-                repeat(relativeOffset) { stream.next() }
-                repeat(encodedName.size) { byteIndex ->
-                    payload[blockStart + relativeOffset + byteIndex] =
-                        (encodedName[byteIndex].toInt() xor stream.next()).toByte()
+                val decoded = ByteArray(length.toInt()) { byteIndex ->
+                    (payload[blockStart + byteIndex].toInt() xor stream.next()).toByte()
                 }
-                absoluteOffset = blockStart + relativeOffset
+                if (trainerId != null) {
+                    decoded[trainerIdRelativeOffset] = trainerId.toByte()
+                    decoded[trainerIdRelativeOffset + 1] = (trainerId ushr 8).toByte()
+                }
+                if (encodedName != null) encodedName.copyInto(decoded, nameRelativeOffset)
+                val replay = KeyStream(key)
+                replay.next()
+                replay.next32()
+                decoded.forEachIndexed { byteIndex, value ->
+                    payload[blockStart + byteIndex] = ((value.toInt() and 255) xor replay.next()).toByte()
+                }
+                nameOffset = blockStart + nameRelativeOffset
+                trainerIdOffset = blockStart + trainerIdRelativeOffset
             }
             cursor.skip(length.toInt())
         }
-        require(absoluteOffset >= 0) { "The Legends: Z-A trainer status object is missing." }
+        require(nameOffset >= 0 && trainerIdOffset >= 0) {
+            "The Legends: Z-A trainer status object is missing."
+        }
 
         val edited = source.copyOf()
         for (index in payload.indices) edited[index] =
@@ -127,7 +155,7 @@ object LegendsZaSaveValidation {
         digest.update(outro)
         digest.digest().copyInto(edited, end)
         readTrainerBlocks(edited)
-        return LegendsZaTrainerWriteResult(edited, absoluteOffset)
+        return LegendsZaTrainerWriteResult(edited, nameOffset, trainerIdOffset)
     }
 
     /** Return the native bag plus patch-key presence only after the complete container gate. */

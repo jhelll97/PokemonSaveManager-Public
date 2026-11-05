@@ -6,10 +6,11 @@ import java.nio.CharBuffer
 import java.nio.charset.CodingErrorAction
 import java.security.MessageDigest
 
-/** First Gen 1-ordered Legends: Z-A Trainer Data edit: the native trainer-name field. */
+/** Gen 1-ordered Legends: Z-A Trainer Data edits backed by the native status object. */
 object LegendsZaTrainerEditing {
     private const val MAX_SAVE_SIZE = 0x309FB3
     private const val NAME_SIZE = 26
+    private const val TRAINER_ID_SIZE = 2
 
     fun readDocumentBytes(input: InputStream): ByteArray = input.use {
         val output = ByteArrayOutputStream()
@@ -30,19 +31,45 @@ object LegendsZaTrainerEditing {
         output.toByteArray()
     }
 
-    fun stage(source: ByteArray, expectedSha256: String, requestedName: String): LegendsZaTrainerNameCopyPlan {
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        requestedName: String,
+        requestedTrainerId: Int
+    ): LegendsZaTrainerCopyPlan {
         val original = source.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
         val before = LegendsZaTrainerReadOnly.read(original)
-        val name = requestedName.trim()
-        val encoded = encodeName(name)
-        require(name != before.name) { "Enter a different trainer name." }
-        val write = LegendsZaSaveValidation.writeTrainerName(original, encoded)
-        verify(original, write.bytes, name, write.absoluteOffset)
-        return LegendsZaTrainerNameCopyPlan(original, write.bytes, before.name, name, write.absoluteOffset)
+        val name = if (requestedName == before.name) before.name else requestedName.trim()
+        require(requestedTrainerId in 0..65535) { "Trainer ID must be between 0 and 65535." }
+        val nameChanged = name != before.name
+        val trainerIdChanged = requestedTrainerId != before.tid16
+        require(nameChanged || trainerIdChanged) { "Change the Trainer Name or Trainer ID before reviewing." }
+        val write = LegendsZaSaveValidation.writeTrainerFields(
+            original,
+            if (nameChanged) encodeName(name) else null,
+            if (trainerIdChanged) requestedTrainerId else null
+        )
+        verify(
+            original, write.bytes, name, requestedTrainerId, write.nameOffset,
+            write.trainerIdOffset, nameChanged, trainerIdChanged
+        )
+        return LegendsZaTrainerCopyPlan(
+            original, write.bytes, before.name, name, before.tid16, requestedTrainerId,
+            write.nameOffset, write.trainerIdOffset, nameChanged, trainerIdChanged
+        )
     }
 
-    internal fun verify(original: ByteArray, edited: ByteArray, expectedName: String, absoluteOffset: Int) {
+    internal fun verify(
+        original: ByteArray,
+        edited: ByteArray,
+        expectedName: String,
+        expectedTrainerId: Int,
+        nameOffset: Int,
+        trainerIdOffset: Int,
+        nameChanged: Boolean,
+        trainerIdChanged: Boolean
+    ) {
         val beforeValidation = LegendsZaSaveValidation.inspect(original)
         val afterValidation = LegendsZaSaveValidation.inspect(edited)
         require(beforeValidation is LegendsZaValidation.Verified &&
@@ -53,14 +80,19 @@ object LegendsZaTrainerEditing {
         }
         val before = LegendsZaTrainerReadOnly.read(original)
         val after = LegendsZaTrainerReadOnly.read(edited)
-        require(after.name == expectedName && before.copy(name = expectedName) == after) {
-            "The trainer-name edit did not reopen exactly."
+        val expectedId32 = (before.id32 and 0xFFFF0000L) or expectedTrainerId.toLong()
+        require(
+            after.name == expectedName && after.tid16 == expectedTrainerId &&
+                before.copy(name = expectedName, id32 = expectedId32, tid16 = expectedTrainerId) == after
+        ) {
+            "The Trainer Data edit did not reopen exactly."
         }
         val hashOffset = original.size - 32
         require(original.indices.all { index ->
-            index in absoluteOffset until absoluteOffset + NAME_SIZE ||
+            (nameChanged && index in nameOffset until nameOffset + NAME_SIZE) ||
+                (trainerIdChanged && index in trainerIdOffset until trainerIdOffset + TRAINER_ID_SIZE) ||
                 index in hashOffset until original.size || original[index] == edited[index]
-        }) { "The trainer-name edit changed unrelated save data." }
+        }) { "The Trainer Data edit changed unrelated save data." }
     }
 
     fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes)
@@ -85,12 +117,17 @@ object LegendsZaTrainerEditing {
 }
 
 /** Single-use reviewed transaction to a new document; the selected source is never replaced. */
-class LegendsZaTrainerNameCopyPlan internal constructor(
+class LegendsZaTrainerCopyPlan internal constructor(
     original: ByteArray,
     edited: ByteArray,
     val beforeName: String,
     val afterName: String,
-    val nameOffset: Int
+    val beforeTrainerId: Int,
+    val afterTrainerId: Int,
+    val nameOffset: Int,
+    val trainerIdOffset: Int,
+    val nameChanged: Boolean,
+    val trainerIdChanged: Boolean
 ) {
     private val original = original.copyOf()
     private val edited = edited.copyOf()
@@ -119,12 +156,18 @@ class LegendsZaTrainerNameCopyPlan internal constructor(
         require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
         var started = false
         try {
-            LegendsZaTrainerEditing.verify(original, edited, afterName, nameOffset)
+            LegendsZaTrainerEditing.verify(
+                original, edited, afterName, afterTrainerId, nameOffset, trainerIdOffset,
+                nameChanged, trainerIdChanged
+            )
             started = true
             writeDestination(edited.copyOf())
             val persisted = readDestination()
             require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed edit." }
-            LegendsZaTrainerEditing.verify(original, persisted, afterName, nameOffset)
+            LegendsZaTrainerEditing.verify(
+                original, persisted, afterName, afterTrainerId, nameOffset, trainerIdOffset,
+                nameChanged, trainerIdChanged
+            )
             requireSource()
         } catch (failure: Exception) {
             val removed = started && runCatching { discardDestination() }.getOrDefault(false)
