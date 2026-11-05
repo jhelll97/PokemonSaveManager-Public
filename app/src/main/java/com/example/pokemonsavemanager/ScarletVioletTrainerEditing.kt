@@ -12,6 +12,7 @@ object ScarletVioletTrainerEditing {
     private const val NAME_SIZE = 26
     private const val TRAINER_ID_SIZE = 2
     private const val MONEY_SIZE = 4
+    private const val PLAY_TIME_SIZE = 12
 
     fun readDocumentBytes(input: InputStream): ByteArray = input.use {
         val output = ByteArrayOutputStream()
@@ -38,27 +39,36 @@ object ScarletVioletTrainerEditing {
         requestedName: String,
         requestedTrainerId: Int,
         requestedMoney: Long?,
-        requestedBadgeCount: Int
+        requestedBadgeCount: Int,
+        requestedPlayHours: Int,
+        requestedPlayMinutes: Int,
+        requestedPlaySeconds: Int
     ): ScarletVioletTrainerCopyPlan {
         val original = source.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
         val before = ScarletVioletTrainerReadOnly.read(original)
+        val beforePlayTime = ScarletVioletPlayTimeReadOnly.read(original)
         val name = if (requestedName == before.name) before.name else requestedName.trim()
         require(requestedTrainerId in 0..65535) { "Trainer ID must be between 0 and 65535." }
         require(before.money != null || requestedMoney == null) {
             "This save does not contain the native money counter."
         }
         require(requestedBadgeCount in 0..8) { "Badges must be between 0 and 8." }
+        require(requestedPlayHours in 0..65535) { "Play Time hours must be between 0 and 65535." }
+        require(requestedPlayMinutes in 0..59) { "Play Time minutes must be between 0 and 59." }
+        require(requestedPlaySeconds in 0..59) { "Play Time seconds must be between 0 and 59." }
         val nameChanged = name != before.name
         val trainerIdChanged = requestedTrainerId != before.tid16
         val moneyChanged = requestedMoney != null && requestedMoney != before.money
         val requestedBadgeMask = targetBadgeMask(before.badgeMask, requestedBadgeCount)
         val badgesChanged = requestedBadgeMask != before.badgeMask
+        val playTimeChanged = requestedPlayHours != beforePlayTime.hours ||
+            requestedPlayMinutes != beforePlayTime.minutes || requestedPlaySeconds != beforePlayTime.seconds
         if (moneyChanged) require(requestedMoney != null && requestedMoney in 0L..9_999_999L) {
             "Money must be between 0 and 9,999,999."
         }
-        require(nameChanged || trainerIdChanged || moneyChanged || badgesChanged) {
-            "Change the Trainer Name, Trainer ID, Money, or Badges before reviewing."
+        require(nameChanged || trainerIdChanged || moneyChanged || badgesChanged || playTimeChanged) {
+            "Change the Trainer Name, Trainer ID, Money, Badges, or Play Time before reviewing."
         }
         val afterMoney = if (moneyChanged) requestedMoney else before.money
         val write = ScarletVioletSaveValidation.writeTrainerFields(
@@ -66,18 +76,22 @@ object ScarletVioletTrainerEditing {
             if (nameChanged) encodeName(name) else null,
             if (trainerIdChanged) requestedTrainerId else null,
             if (moneyChanged) requestedMoney else null,
-            if (badgesChanged) requestedBadgeMask else null
+            if (badgesChanged) requestedBadgeMask else null,
+            if (playTimeChanged) encodePlayTime(requestedPlayHours, requestedPlayMinutes, requestedPlaySeconds) else null
         )
         verify(
             original, write.bytes, name, requestedTrainerId, afterMoney, requestedBadgeMask,
-            write.nameOffset, write.trainerIdOffset, write.moneyOffset, write.badgeOffsets,
-            nameChanged, trainerIdChanged, moneyChanged, badgesChanged
+            requestedPlayHours, requestedPlayMinutes, requestedPlaySeconds,
+            write.nameOffset, write.trainerIdOffset, write.moneyOffset, write.badgeOffsets, write.playTimeOffset,
+            nameChanged, trainerIdChanged, moneyChanged, badgesChanged, playTimeChanged
         )
         return ScarletVioletTrainerCopyPlan(
             original, write.bytes, before.name, name, before.tid16, requestedTrainerId,
             before.money, afterMoney, before.badgeMask, requestedBadgeMask,
-            write.nameOffset, write.trainerIdOffset, write.moneyOffset, write.badgeOffsets,
-            nameChanged, trainerIdChanged, moneyChanged, badgesChanged
+            beforePlayTime.hours, requestedPlayHours, beforePlayTime.minutes, requestedPlayMinutes,
+            beforePlayTime.seconds, requestedPlaySeconds,
+            write.nameOffset, write.trainerIdOffset, write.moneyOffset, write.badgeOffsets, write.playTimeOffset,
+            nameChanged, trainerIdChanged, moneyChanged, badgesChanged, playTimeChanged
         )
     }
 
@@ -88,14 +102,19 @@ object ScarletVioletTrainerEditing {
         expectedTrainerId: Int,
         expectedMoney: Long?,
         expectedBadgeMask: Int,
+        expectedPlayHours: Int,
+        expectedPlayMinutes: Int,
+        expectedPlaySeconds: Int,
         nameOffset: Int,
         trainerIdOffset: Int,
         moneyOffset: Int,
         badgeOffsets: List<Int>,
+        playTimeOffset: Int,
         nameChanged: Boolean,
         trainerIdChanged: Boolean,
         moneyChanged: Boolean,
-        badgesChanged: Boolean
+        badgesChanged: Boolean,
+        playTimeChanged: Boolean
     ) {
         val beforeValidation = ScarletVioletSaveValidation.inspect(original)
         val afterValidation = ScarletVioletSaveValidation.inspect(edited)
@@ -106,6 +125,8 @@ object ScarletVioletTrainerEditing {
         }
         val before = ScarletVioletTrainerReadOnly.read(original)
         val after = ScarletVioletTrainerReadOnly.read(edited)
+        val beforePlayTime = ScarletVioletPlayTimeReadOnly.read(original)
+        val afterPlayTime = ScarletVioletPlayTimeReadOnly.read(edited)
         val expectedId32 = (before.id32 and 0xFFFF0000L) or expectedTrainerId.toLong()
         require(
             after.name == expectedName && after.tid16 == expectedTrainerId &&
@@ -115,6 +136,11 @@ object ScarletVioletTrainerEditing {
         ) {
             "The Trainer Data edit did not reopen exactly."
         }
+        require(
+            afterPlayTime.version == beforePlayTime.version &&
+                afterPlayTime.hours == expectedPlayHours && afterPlayTime.minutes == expectedPlayMinutes &&
+                afterPlayTime.seconds == expectedPlaySeconds
+        ) { "The Play Time edit did not reopen exactly." }
         val hashOffset = original.size - 32
         val badgeOffsetSet = badgeOffsets.toSet()
         val expectedBadgeChanges = Integer.bitCount(before.badgeMask xor expectedBadgeMask)
@@ -130,12 +156,19 @@ object ScarletVioletTrainerEditing {
                 (trainerIdChanged && index in trainerIdOffset until trainerIdOffset + TRAINER_ID_SIZE) ||
                 (moneyChanged && index in moneyOffset until moneyOffset + MONEY_SIZE) ||
                 (badgesChanged && index in badgeOffsetSet) ||
+                (playTimeChanged && index in playTimeOffset until playTimeOffset + PLAY_TIME_SIZE) ||
                 index in hashOffset until original.size || original[index] == edited[index]
         }) { "The Trainer Data edit changed unrelated save data." }
     }
 
     fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes)
         .joinToString("") { "%02x".format(it.toInt() and 255) }
+
+    private fun encodePlayTime(hours: Int, minutes: Int, seconds: Int): ByteArray = ByteArray(12).also { bytes ->
+        listOf(hours, minutes, seconds).forEachIndexed { valueIndex, value ->
+            repeat(4) { byteIndex -> bytes[valueIndex * 4 + byteIndex] = (value ushr (byteIndex * 8)).toByte() }
+        }
+    }
 
     private fun targetBadgeMask(currentMask: Int, requestedCount: Int): Int {
         var mask = currentMask and 0xFF
@@ -190,14 +223,22 @@ class ScarletVioletTrainerCopyPlan internal constructor(
     val afterMoney: Long?,
     val beforeBadgeMask: Int,
     val afterBadgeMask: Int,
+    val beforePlayHours: Int,
+    val afterPlayHours: Int,
+    val beforePlayMinutes: Int,
+    val afterPlayMinutes: Int,
+    val beforePlaySeconds: Int,
+    val afterPlaySeconds: Int,
     val nameOffset: Int,
     val trainerIdOffset: Int,
     val moneyOffset: Int,
     val badgeOffsets: List<Int>,
+    val playTimeOffset: Int,
     val nameChanged: Boolean,
     val trainerIdChanged: Boolean,
     val moneyChanged: Boolean,
-    val badgesChanged: Boolean
+    val badgesChanged: Boolean,
+    val playTimeChanged: Boolean
 ) {
     private val original = original.copyOf()
     private val edited = edited.copyOf()
@@ -230,8 +271,9 @@ class ScarletVioletTrainerCopyPlan internal constructor(
         try {
             ScarletVioletTrainerEditing.verify(
                 original, edited, afterName, afterTrainerId, afterMoney, afterBadgeMask,
-                nameOffset, trainerIdOffset, moneyOffset, badgeOffsets,
-                nameChanged, trainerIdChanged, moneyChanged, badgesChanged
+                afterPlayHours, afterPlayMinutes, afterPlaySeconds,
+                nameOffset, trainerIdOffset, moneyOffset, badgeOffsets, playTimeOffset,
+                nameChanged, trainerIdChanged, moneyChanged, badgesChanged, playTimeChanged
             )
             started = true
             writeDestination(edited.copyOf())
@@ -239,8 +281,9 @@ class ScarletVioletTrainerCopyPlan internal constructor(
             require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed edit." }
             ScarletVioletTrainerEditing.verify(
                 original, persisted, afterName, afterTrainerId, afterMoney, afterBadgeMask,
-                nameOffset, trainerIdOffset, moneyOffset, badgeOffsets,
-                nameChanged, trainerIdChanged, moneyChanged, badgesChanged
+                afterPlayHours, afterPlayMinutes, afterPlaySeconds,
+                nameOffset, trainerIdOffset, moneyOffset, badgeOffsets, playTimeOffset,
+                nameChanged, trainerIdChanged, moneyChanged, badgesChanged, playTimeChanged
             )
             requireSource()
         } catch (failure: Exception) {

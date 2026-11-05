@@ -20,6 +20,8 @@ internal data class ScarletVioletPokemonBlocks(val version: ScarletVioletVersion
 internal data class ScarletVioletTrainerBlocks(val version: ScarletVioletVersion, val status: ByteArray,
     val money: Long?, val leaguePoints: Long?, val blueberryPoints: Long?, val badgeMask: Int)
 
+internal data class ScarletVioletPlayTimeBlock(val version: ScarletVioletVersion, val data: ByteArray)
+
 internal data class ScarletVioletInventoryBlock(val version: ScarletVioletVersion, val data: ByteArray)
 
 internal data class ScarletVioletInventoryWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
@@ -30,7 +32,8 @@ internal data class ScarletVioletTrainerWriteResult(
     val nameOffset: Int,
     val trainerIdOffset: Int,
     val moneyOffset: Int,
-    val badgeOffsets: List<Int>
+    val badgeOffsets: List<Int>,
+    val playTimeOffset: Int
 )
 
 /** Independent read-only container gate; pinned format evidence is in SWITCH_READ_ONLY_FORMATS.md. */
@@ -46,6 +49,7 @@ object ScarletVioletSaveValidation {
     }
     private const val STATUS_KEY = 0xE3E89BD1L
     private const val MONEY_KEY = 0x4F35D0DDL
+    private const val PLAY_TIME_KEY = 0xEDAFF794L
     private val gymBadgeKeys = longArrayOf(
         0x8485AC3AL, // Bug
         0x26216312L, // Grass
@@ -100,6 +104,19 @@ object ScarletVioletSaveValidation {
             optionalUint(0x4F35D0DDL), optionalUint(0xADB4FE17L), optionalUint(0x66A33824L), badgeMask)
     }
 
+    /** Native twelve-byte recorded-time object, detached only after complete container validation. */
+    internal fun readPlayTimeBlock(source: ByteArray): ScarletVioletPlayTimeBlock {
+        val captured = mutableMapOf(PLAY_TIME_KEY to ByteArray(0))
+        val checked = inspect(source, captured)
+        require(checked is ScarletVioletValidation.Verified) {
+            (checked as? ScarletVioletValidation.Invalid)?.reason ?:
+                "A validated native Scarlet/Violet save is required."
+        }
+        val data = captured.getValue(PLAY_TIME_KEY)
+        require(data.size == 12) { "The native Scarlet/Violet Play Time object is missing." }
+        return ScarletVioletPlayTimeBlock(checked.version, data)
+    }
+
     /** Fixed native bag shape is checked only for inventory extraction. */
     internal fun readInventoryBlock(source: ByteArray): ScarletVioletInventoryBlock {
         val captured = mutableMapOf(0x21C9BD44L to ByteArray(0))
@@ -117,10 +134,12 @@ object ScarletVioletSaveValidation {
         encodedName: ByteArray?,
         trainerId: Int?,
         money: Long?,
-        badgeMask: Int?
+        badgeMask: Int?,
+        playTime: ByteArray?
     ): ScarletVioletTrainerWriteResult {
         val blocks = readTrainerBlocks(source)
-        require(encodedName != null || trainerId != null || money != null || badgeMask != null) {
+        if (playTime != null) readPlayTimeBlock(source)
+        require(encodedName != null || trainerId != null || money != null || badgeMask != null || playTime != null) {
             "Select at least one Trainer Data field to change."
         }
         if (encodedName != null) require(encodedName.size == 26) {
@@ -136,6 +155,9 @@ object ScarletVioletSaveValidation {
         if (badgeMask != null) require(badgeMask in 0..0xFF) {
             "The native Scarlet/Violet Gym Badge mask must contain exactly eight bits."
         }
+        if (playTime != null) require(playTime.size == 12) {
+            "The native Scarlet/Violet Play Time field must be exactly twelve bytes."
+        }
         val nameRelativeOffset = 0x10
         val trainerIdRelativeOffset = 0
         val blockSize = requiredObjects.getValue(STATUS_KEY)
@@ -149,6 +171,7 @@ object ScarletVioletSaveValidation {
         var trainerIdOffset = -1
         var moneyOffset = -1
         val badgeOffsets = mutableListOf<Int>()
+        var playTimeOffset = -1
         while (cursor.remaining > 0) {
             val key = cursor.uint32()
             val stream = KeyStream(key)
@@ -197,6 +220,16 @@ object ScarletVioletSaveValidation {
                     }
                     moneyOffset = blockStart
                 }
+            } else if (key == PLAY_TIME_KEY) {
+                require(type == 4 && length == 12L) {
+                    "The Scarlet/Violet Play Time object has the wrong native type or size."
+                }
+                if (playTime != null) {
+                    playTime.forEachIndexed { byteIndex, value ->
+                        payload[blockStart + byteIndex] = ((value.toInt() and 255) xor stream.next()).toByte()
+                    }
+                    playTimeOffset = blockStart
+                }
             }
             val badgeIndex = gymBadgeKeys.indexOf(key)
             if (badgeIndex >= 0 && badgeMask != null) {
@@ -218,6 +251,7 @@ object ScarletVioletSaveValidation {
         require(badgeMask == null || badgeOffsets.size == Integer.bitCount(blocks.badgeMask xor badgeMask)) {
             "The Scarlet/Violet Gym Badge edit did not resolve to the expected native flags."
         }
+        require(playTime == null || playTimeOffset >= 0) { "The Scarlet/Violet Play Time object is missing." }
 
         val edited = source.copyOf()
         for (index in payload.indices) edited[index] =
@@ -228,8 +262,9 @@ object ScarletVioletSaveValidation {
         digest.update(outro)
         digest.digest().copyInto(edited, end)
         readTrainerBlocks(edited)
+        if (playTime != null) readPlayTimeBlock(edited)
         return ScarletVioletTrainerWriteResult(
-            edited, nameOffset, trainerIdOffset, moneyOffset, badgeOffsets.toList()
+            edited, nameOffset, trainerIdOffset, moneyOffset, badgeOffsets.toList(), playTimeOffset
         )
     }
 
@@ -496,6 +531,8 @@ object ScarletVioletSaveValidation {
                 require(type == 4 && (length == 0L || length == 0x8130L)) { "The DLC Pokédex object has the wrong native type or size." }
             if (key == 0x21C9BD44L && captured?.containsKey(key) == true)
                 require(type == 4 && length == 0xBB80L) { "The Scarlet/Violet inventory object has the wrong native type or size." }
+            if (key == PLAY_TIME_KEY && captured?.containsKey(key) == true)
+                require(type == 4 && length == 12L) { "The Scarlet/Violet Play Time object has the wrong native type or size." }
             val capture = captured?.containsKey(key) == true
             if (key == STATUS_KEY || capture) {
                 val decoded = if (capture) ByteArray(length.toInt()) else null

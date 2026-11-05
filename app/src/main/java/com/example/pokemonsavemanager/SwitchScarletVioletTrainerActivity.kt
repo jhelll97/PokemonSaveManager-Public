@@ -30,6 +30,9 @@ class SwitchScarletVioletTrainerActivity : Activity() {
     private lateinit var trainerId: EditText
     private lateinit var money: EditText
     private lateinit var badges: EditText
+    private lateinit var playHours: EditText
+    private lateinit var playMinutes: EditText
+    private lateinit var playSeconds: EditText
     private lateinit var review: Button
     private lateinit var inspectCopy: Button
 
@@ -107,6 +110,32 @@ class SwitchScarletVioletTrainerActivity : Activity() {
             inputType = android.text.InputType.TYPE_CLASS_NUMBER
         }
         root.addView(badges)
+        root.addView(TextView(this).apply {
+            text = "Play Time"
+            textSize = 18f
+        })
+        root.addView(TextView(this).apply {
+            text = "Set the save's recorded play time. Minutes and seconds must be 0–59."
+            textSize = 14f
+        })
+        root.addView(TextView(this).apply { text = "Hours • 0–65535"; textSize = 14f })
+        playHours = EditText(this).apply {
+            hint = "Hours"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        }
+        root.addView(playHours)
+        root.addView(TextView(this).apply { text = "Minutes • 0–59"; textSize = 14f })
+        playMinutes = EditText(this).apply {
+            hint = "Minutes"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        }
+        root.addView(playMinutes)
+        root.addView(TextView(this).apply { text = "Seconds • 0–59"; textSize = 14f })
+        playSeconds = EditText(this).apply {
+            hint = "Seconds"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        }
+        root.addView(playSeconds)
         review = Button(this).apply {
             text = "Review and save new copy"
             setOnClickListener { reviewChange() }
@@ -131,11 +160,11 @@ class SwitchScarletVioletTrainerActivity : Activity() {
                 require(ScarletVioletTrainerEditing.sha256(bytes) == expectedHash) {
                     "The source changed. Reopen it from PSE."
                 }
-                bytes to ScarletVioletTrainerReadOnly.read(bytes)
+                Triple(bytes, ScarletVioletTrainerReadOnly.read(bytes), ScarletVioletPlayTimeReadOnly.read(bytes))
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
-                result.onSuccess { (bytes, trainer) ->
+                result.onSuccess { (bytes, trainer, playTime) ->
                     opened = bytes
                     name.setText(trainer.name)
                     trainerId.setText(trainer.tid16.toString())
@@ -144,10 +173,14 @@ class SwitchScarletVioletTrainerActivity : Activity() {
                     money.setText(trainer.money?.toString().orEmpty())
                     if (!moneyAvailable) money.hint = "Not present in this save"
                     badges.setText(trainer.badgeCount.toString())
+                    playHours.setText(playTime.hours.toString())
+                    playMinutes.setText(playTime.minutes.toString())
+                    playSeconds.setText(playTime.seconds.toString())
                     status.text = "${trainer.version.displayName}\nCurrent trainer name: ${trainer.name.ifBlank { "Not set" }}\n" +
                         "Current Trainer ID: ${trainer.tid16}\n" +
                         "Current Money: ${trainer.money?.toString() ?: "Not present"}\n" +
                         "Current Badges: ${trainer.badgeCount} / 8\n" +
+                        "Current Play Time: ${playTime.savedTimeText}\n" +
                         "Source SHA-256: ${ScarletVioletTrainerEditing.sha256(bytes)}"
                 }.onFailure { status.text = it.message ?: "The save could not be opened safely." }
                 setBusy(false)
@@ -162,6 +195,9 @@ class SwitchScarletVioletTrainerActivity : Activity() {
         trainerId.isEnabled = !value && ready
         money.isEnabled = !value && ready && moneyAvailable
         badges.isEnabled = !value && ready
+        playHours.isEnabled = !value && ready
+        playMinutes.isEnabled = !value && ready
+        playSeconds.isEnabled = !value && ready
         review.isEnabled = !value && ready
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
@@ -186,9 +222,25 @@ class SwitchScarletVioletTrainerActivity : Activity() {
             status.text = "Badges must be a whole number between 0 and 8."
             return
         }
+        val requestedPlayHours = playHours.text.toString().toIntOrNull()
+        if (requestedPlayHours == null || requestedPlayHours !in 0..65535) {
+            status.text = "Play Time hours must be a whole number between 0 and 65535."
+            return
+        }
+        val requestedPlayMinutes = playMinutes.text.toString().toIntOrNull()
+        if (requestedPlayMinutes == null || requestedPlayMinutes !in 0..59) {
+            status.text = "Play Time minutes must be a whole number between 0 and 59."
+            return
+        }
+        val requestedPlaySeconds = playSeconds.text.toString().toIntOrNull()
+        if (requestedPlaySeconds == null || requestedPlaySeconds !in 0..59) {
+            status.text = "Play Time seconds must be a whole number between 0 and 59."
+            return
+        }
         val plan = try {
             ScarletVioletTrainerEditing.stage(
-                bytes, hash, name.text.toString(), requestedTrainerId, requestedMoney, requestedBadges
+                bytes, hash, name.text.toString(), requestedTrainerId, requestedMoney, requestedBadges,
+                requestedPlayHours, requestedPlayMinutes, requestedPlaySeconds
             )
         } catch (failure: Exception) {
             status.text = failure.message ?: "The requested trainer change is unavailable."
@@ -201,12 +253,17 @@ class SwitchScarletVioletTrainerActivity : Activity() {
             if (plan.trainerIdChanged) add("Trainer ID\n${plan.beforeTrainerId} → ${plan.afterTrainerId}")
             if (plan.moneyChanged) add("Money\n${plan.beforeMoney} → ${plan.afterMoney}")
             if (plan.badgesChanged) add("Badges\n${plan.beforeBadgeCount} → ${plan.afterBadgeCount}")
+            if (plan.playTimeChanged) add(
+                "Play Time\n${playTimeText(plan.beforePlayHours, plan.beforePlayMinutes, plan.beforePlaySeconds)} → " +
+                    playTimeText(plan.afterPlayHours, plan.afterPlayMinutes, plan.afterPlaySeconds)
+            )
         }.joinToString("\n\n")
         val scopes = buildList {
             if (plan.nameChanged) add("the 26-byte native trainer-name field at encrypted container offset 0x${plan.nameOffset.toString(16).uppercase()}")
             if (plan.trainerIdChanged) add("the 2-byte native Trainer ID field at encrypted container offset 0x${plan.trainerIdOffset.toString(16).uppercase()}")
             if (plan.moneyChanged) add("the 4-byte native Money field at encrypted container offset 0x${plan.moneyOffset.toString(16).uppercase()}")
             if (plan.badgesChanged) add("${plan.badgeOffsets.size} native Gym-clear flag byte${if (plan.badgeOffsets.size == 1) "" else "s"} at encrypted container offsets ${plan.badgeOffsets.joinToString { "0x${it.toString(16).uppercase()}" }}")
+            if (plan.playTimeChanged) add("the 12-byte native Play Time object at encrypted container offset 0x${plan.playTimeOffset.toString(16).uppercase()}")
         }.joinToString(" and ")
         AlertDialog.Builder(this)
             .setTitle("Save Trainer Data to a new copy?")
@@ -293,6 +350,10 @@ class SwitchScarletVioletTrainerActivity : Activity() {
                             if (plan.trainerIdChanged) add("Trainer ID: ${plan.beforeTrainerId} → ${plan.afterTrainerId}")
                             if (plan.moneyChanged) add("Money: ${plan.beforeMoney} → ${plan.afterMoney}")
                             if (plan.badgesChanged) add("Badges: ${plan.beforeBadgeCount} → ${plan.afterBadgeCount}")
+                            if (plan.playTimeChanged) add(
+                                "Play Time: ${playTimeText(plan.beforePlayHours, plan.beforePlayMinutes, plan.beforePlaySeconds)} → " +
+                                    playTimeText(plan.afterPlayHours, plan.afterPlayMinutes, plan.afterPlaySeconds)
+                            )
                         }.joinToString("\n")
                         "Trainer Data copy saved and reopened successfully.\n" +
                             "$changes\n" +
@@ -335,6 +396,9 @@ class SwitchScarletVioletTrainerActivity : Activity() {
         val input = contentResolver.openInputStream(uri) ?: error("The document cannot be read.")
         return ScarletVioletTrainerEditing.readDocumentBytes(input)
     }
+
+    private fun playTimeText(hours: Int, minutes: Int, seconds: Int): String =
+        "${hours.toString().padStart(4, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
 
     @Deprecated("Legacy Activity back callback")
     override fun onBackPressed() {
