@@ -467,6 +467,78 @@ object ScarletVioletSaveValidation {
         return ScarletVioletPokemonWriteResult(edited, absoluteOffset)
     }
 
+    /** Replaces one decoded native party PK9 slot, then rebuilds encryption and the SHA-256 footer. */
+    internal fun writePartyRecord(
+        source: ByteArray,
+        position: Int,
+        record: ByteArray
+    ): ScarletVioletPokemonWriteResult {
+        val blocks = readPokemonBlocks(source)
+        require(position in 1..6) { "The native Scarlet/Violet party slot is outside the six-slot party." }
+        require(record.size == ScarletVioletPokemonReadOnly.RECORD_SIZE) {
+            "A complete 344-byte native PK9 is required."
+        }
+        require(ScarletVioletPokemonReadOnly.read(record) is ScarletVioletSlotRead.Pokemon) {
+            "The supplied native PK9 did not pass its stored-data checksum."
+        }
+        require(blocks.party.size == requiredObjects.getValue(0x3AA1A9ADL)) {
+            "The native Scarlet/Violet party object has the wrong size."
+        }
+        val partyCount = blocks.party[6 * ScarletVioletPokemonReadOnly.RECORD_SIZE].toInt() and 255
+        require(partyCount in 0..6 && position <= partyCount) {
+            "The selected native Scarlet/Violet party slot is not occupied."
+        }
+        val relativeOffset = (position - 1) * ScarletVioletPokemonReadOnly.RECORD_SIZE
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var absoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = payload.size - cursor.remaining
+            if (key == 0x3AA1A9ADL) {
+                require(type == 4 && length == 0x814L) {
+                    "The native Scarlet/Violet party object has the wrong type or size."
+                }
+                repeat(relativeOffset) { stream.next() }
+                repeat(record.size) { byteIndex ->
+                    payload[blockStart + relativeOffset + byteIndex] =
+                        (record[byteIndex].toInt() xor stream.next()).toByte()
+                }
+                absoluteOffset = blockStart + relativeOffset
+            }
+            cursor.skip(length.toInt())
+        }
+        require(absoluteOffset >= 0) { "The native Scarlet/Violet party object is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        ScarletVioletStorageReadOnly.read(edited)
+        return ScarletVioletPokemonWriteResult(edited, absoluteOffset)
+    }
+
     private fun inspect(
         source: ByteArray,
         captured: MutableMap<Long, ByteArray>?,
