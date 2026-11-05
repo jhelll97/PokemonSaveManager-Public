@@ -6,10 +6,11 @@ import java.nio.CharBuffer
 import java.nio.charset.CodingErrorAction
 import java.security.MessageDigest
 
-/** First Gen 1-ordered Sword/Shield Trainer Data edit: the native trainer-name field. */
+/** Gen 1-ordered Sword/Shield Trainer Data edits backed by the native status object. */
 object SwordShieldTrainerEditing {
     private const val MAX_FILE_SIZE = 0x1876B1
     private const val NAME_SIZE = 26
+    private const val TRAINER_ID_SIZE = 2
 
     fun readDocumentBytes(input: InputStream): ByteArray = input.use {
         val output = ByteArrayOutputStream()
@@ -28,33 +29,64 @@ object SwordShieldTrainerEditing {
         output.toByteArray()
     }
 
-    fun stage(source: ByteArray, expectedSha256: String, requestedName: String): SwordShieldTrainerNameCopyPlan {
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        requestedName: String,
+        requestedTrainerId: Int
+    ): SwordShieldTrainerCopyPlan {
         val original = source.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
         val before = SwordShieldTrainerReadOnly.read(original)
-        val name = requestedName.trim()
-        val encoded = encodeName(name)
-        require(name != before.name) { "Enter a different trainer name." }
-        val written = SwordShieldSaveValidation.writeTrainerName(original, encoded)
-        verify(original, written.bytes, name, written.absoluteOffset)
-        return SwordShieldTrainerNameCopyPlan(original, written.bytes, before.name, name, written.absoluteOffset)
+        val name = if (requestedName == before.name) before.name else requestedName.trim()
+        require(requestedTrainerId in 0..65535) { "Trainer ID must be between 0 and 65535." }
+        val nameChanged = name != before.name
+        val trainerIdChanged = requestedTrainerId != before.tid16
+        require(nameChanged || trainerIdChanged) { "Change the Trainer Name or Trainer ID before reviewing." }
+        val written = SwordShieldSaveValidation.writeTrainerFields(
+            original,
+            if (nameChanged) encodeName(name) else null,
+            if (trainerIdChanged) requestedTrainerId else null
+        )
+        verify(
+            original, written.bytes, name, requestedTrainerId, written.nameOffset,
+            written.trainerIdOffset, nameChanged, trainerIdChanged
+        )
+        return SwordShieldTrainerCopyPlan(
+            original, written.bytes, before.name, name, before.tid16, requestedTrainerId,
+            written.nameOffset, written.trainerIdOffset, nameChanged, trainerIdChanged
+        )
     }
 
-    internal fun verify(original: ByteArray, edited: ByteArray, expectedName: String, absoluteOffset: Int) {
+    internal fun verify(
+        original: ByteArray,
+        edited: ByteArray,
+        expectedName: String,
+        expectedTrainerId: Int,
+        nameOffset: Int,
+        trainerIdOffset: Int,
+        nameChanged: Boolean,
+        trainerIdChanged: Boolean
+    ) {
         val before = SwordShieldTrainerReadOnly.read(original)
         val after = SwordShieldTrainerReadOnly.read(edited)
         require(before.version == after.version && original.size == edited.size) {
             "The trainer edit changed title identity or save size."
         }
-        require(after.name == expectedName && before.copy(name = expectedName) == after) {
-            "The trainer-name edit did not reopen exactly."
+        val expectedId32 = (before.id32 and 0xFFFF0000L) or expectedTrainerId.toLong()
+        require(
+            after.name == expectedName && after.tid16 == expectedTrainerId &&
+                before.copy(name = expectedName, id32 = expectedId32, tid16 = expectedTrainerId) == after
+        ) {
+            "The Trainer Data edit did not reopen exactly."
         }
         val hashOffset = original.size - 32
         require(original.indices.all { index ->
-            index in absoluteOffset until absoluteOffset + NAME_SIZE ||
+            (nameChanged && index in nameOffset until nameOffset + NAME_SIZE) ||
+                (trainerIdChanged && index in trainerIdOffset until trainerIdOffset + TRAINER_ID_SIZE) ||
                 index in hashOffset until original.size ||
                 original[index] == edited[index]
-        }) { "The trainer-name edit changed unrelated encrypted container data." }
+        }) { "The Trainer Data edit changed unrelated encrypted container data." }
     }
 
     fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes)
@@ -79,12 +111,17 @@ object SwordShieldTrainerEditing {
 }
 
 /** Single-use reviewed transaction to a new document; the selected source is never replaced. */
-class SwordShieldTrainerNameCopyPlan internal constructor(
+class SwordShieldTrainerCopyPlan internal constructor(
     original: ByteArray,
     edited: ByteArray,
     val beforeName: String,
     val afterName: String,
-    val nameOffset: Int
+    val beforeTrainerId: Int,
+    val afterTrainerId: Int,
+    val nameOffset: Int,
+    val trainerIdOffset: Int,
+    val nameChanged: Boolean,
+    val trainerIdChanged: Boolean
 ) {
     private val original = original.copyOf()
     private val edited = edited.copyOf()
@@ -113,12 +150,18 @@ class SwordShieldTrainerNameCopyPlan internal constructor(
         require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
         var started = false
         try {
-            SwordShieldTrainerEditing.verify(original, edited, afterName, nameOffset)
+            SwordShieldTrainerEditing.verify(
+                original, edited, afterName, afterTrainerId, nameOffset, trainerIdOffset,
+                nameChanged, trainerIdChanged
+            )
             started = true
             writeDestination(edited.copyOf())
             val persisted = readDestination()
             require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed edit." }
-            SwordShieldTrainerEditing.verify(original, persisted, afterName, nameOffset)
+            SwordShieldTrainerEditing.verify(
+                original, persisted, afterName, afterTrainerId, nameOffset, trainerIdOffset,
+                nameChanged, trainerIdChanged
+            )
             requireSource()
         } catch (failure: Exception) {
             val removed = started && runCatching { discardDestination() }.getOrDefault(false)

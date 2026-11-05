@@ -15,7 +15,11 @@ sealed class SwordShieldValidation {
 internal data class SwordShieldPokemonBlocks(val version: SwordShieldVersion, val boxes: ByteArray, val party: ByteArray)
 internal data class SwordShieldInventoryBlock(val version: SwordShieldVersion, val items: ByteArray)
 internal data class SwordShieldInventoryWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
-internal data class SwordShieldTrainerWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
+internal data class SwordShieldTrainerWriteResult(
+    val bytes: ByteArray,
+    val nameOffset: Int,
+    val trainerIdOffset: Int
+)
 internal data class SwordShieldDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldPokemonWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldTrainerBlock(val version: SwordShieldVersion, val status: ByteArray)
@@ -572,18 +576,30 @@ object SwordShieldSaveValidation {
         return SwordShieldInventoryWriteResult(edited, absoluteOffset)
     }
 
-    /** Replaces the decoded 26-byte trainer-name field, then rebuilds encryption and the SHA-256 footer. */
-    internal fun writeTrainerName(source: ByteArray, encodedName: ByteArray): SwordShieldTrainerWriteResult {
+    /** Replaces selected decoded Trainer Data fields, then rebuilds encryption and the SHA-256 footer. */
+    internal fun writeTrainerFields(
+        source: ByteArray,
+        encodedName: ByteArray?,
+        trainerId: Int?
+    ): SwordShieldTrainerWriteResult {
         readTrainerBlock(source)
-        require(encodedName.size == 26) { "The native Sword/Shield trainer-name field must be exactly 26 bytes." }
-        val relativeOffset = 0xB0
+        require(encodedName != null || trainerId != null) { "Select at least one Trainer Data field to change." }
+        if (encodedName != null) require(encodedName.size == 26) {
+            "The native Sword/Shield trainer-name field must be exactly 26 bytes."
+        }
+        if (trainerId != null) require(trainerId in 0..65535) {
+            "Trainer ID must be between 0 and 65535."
+        }
+        val nameRelativeOffset = 0xB0
+        val trainerIdRelativeOffset = 0xA0
         val end = source.size - 32
         val payload = source.copyOfRange(0, end)
         for (index in payload.indices) payload[index] =
             (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
 
         val cursor = Cursor(payload)
-        var absoluteOffset = -1
+        var nameOffset = -1
+        var trainerIdOffset = -1
         while (cursor.remaining > 0) {
             val key = cursor.uint32()
             val stream = KeyStream(key)
@@ -602,16 +618,26 @@ object SwordShieldSaveValidation {
             val blockStart = cursor.position
             if (key == STATUS_KEY) {
                 require(type == 4 && length == 0x110L) { "The Sword/Shield status block has the wrong native type or size." }
-                repeat(relativeOffset) { stream.next() }
-                encodedName.forEachIndexed { byteIndex, value ->
-                    payload[blockStart + relativeOffset + byteIndex] =
-                        ((value.toInt() and 255) xor stream.next()).toByte()
+                val decoded = ByteArray(length.toInt()) { byteIndex ->
+                    (payload[blockStart + byteIndex].toInt() xor stream.next()).toByte()
                 }
-                absoluteOffset = blockStart + relativeOffset
+                if (trainerId != null) {
+                    decoded[trainerIdRelativeOffset] = trainerId.toByte()
+                    decoded[trainerIdRelativeOffset + 1] = (trainerId ushr 8).toByte()
+                }
+                if (encodedName != null) encodedName.copyInto(decoded, nameRelativeOffset)
+                val replay = KeyStream(key)
+                replay.next()
+                replay.next32()
+                decoded.forEachIndexed { byteIndex, value ->
+                    payload[blockStart + byteIndex] = ((value.toInt() and 255) xor replay.next()).toByte()
+                }
+                nameOffset = blockStart + nameRelativeOffset
+                trainerIdOffset = blockStart + trainerIdRelativeOffset
             }
             cursor.skip(length.toInt())
         }
-        require(absoluteOffset >= 0) { "The native Sword/Shield status object is missing." }
+        require(nameOffset >= 0 && trainerIdOffset >= 0) { "The native Sword/Shield status object is missing." }
 
         val edited = source.copyOf()
         for (index in payload.indices) edited[index] =
@@ -622,7 +648,7 @@ object SwordShieldSaveValidation {
         digest.update(outro)
         digest.digest().copyInto(edited, end)
         readTrainerBlock(edited)
-        return SwordShieldTrainerWriteResult(edited, absoluteOffset)
+        return SwordShieldTrainerWriteResult(edited, nameOffset, trainerIdOffset)
     }
 
 
