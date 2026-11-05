@@ -48,3 +48,12 @@ dependencies {
     implementation 'androidx.documentfile:documentfile:1.0.1'
     testImplementation 'junit:junit:4.13.2'
 }
+
+// K2 FIR analysis exhausted the runner heap in run 41966929061 while
+// converting MainActivity. Kotlin 2.0.21 supports the K1 fallback via 1.9.
+// Limit this workaround to development compilation; release keeps its settings.
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    if (name == 'compileDebugKotlin') {
+        kotlinOptions.languageVersion = '1.9'
+    }
+}
