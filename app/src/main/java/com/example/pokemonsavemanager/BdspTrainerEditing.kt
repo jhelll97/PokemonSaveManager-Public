@@ -6,10 +6,12 @@ import java.nio.CharBuffer
 import java.nio.charset.CodingErrorAction
 import java.security.MessageDigest
 
-/** First Gen 1-ordered BDSP Trainer Data edit: the native trainer-name field. */
+/** Gen 1-ordered BDSP Trainer Data edits backed by native fixed-offset fields. */
 object BdspTrainerEditing {
     private const val NAME_OFFSET = 0x79BB4
     private const val NAME_SIZE = 26
+    private const val TRAINER_ID_OFFSET = 0x79BD0
+    private const val TRAINER_ID_SIZE = 2
     private const val HASH_OFFSET = 0xE9818
     private const val HASH_LENGTH = 16
 
@@ -31,34 +33,60 @@ object BdspTrainerEditing {
         output.toByteArray()
     }
 
-    fun stage(source: ByteArray, expectedSha256: String, requestedName: String): BdspTrainerNameCopyPlan {
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        requestedName: String,
+        requestedTrainerId: Int
+    ): BdspTrainerCopyPlan {
         val original = source.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
         val before = BdspTrainerReadOnly.read(original)
-        val name = requestedName.trim()
-        val encoded = encodeName(name)
-        require(name != before.name) { "Enter a different trainer name." }
+        val name = if (requestedName == before.name) before.name else requestedName.trim()
+        require(requestedTrainerId in 0..65535) { "Trainer ID must be between 0 and 65535." }
+        val nameChanged = name != before.name
+        val trainerIdChanged = requestedTrainerId != before.tid16
+        require(nameChanged || trainerIdChanged) { "Change the Trainer Name or Trainer ID before reviewing." }
         val edited = original.copyOf()
-        encoded.copyInto(edited, NAME_OFFSET)
+        if (nameChanged) encodeName(name).copyInto(edited, NAME_OFFSET)
+        if (trainerIdChanged) {
+            edited[TRAINER_ID_OFFSET] = requestedTrainerId.toByte()
+            edited[TRAINER_ID_OFFSET + 1] = (requestedTrainerId ushr 8).toByte()
+        }
         refreshDigest(edited)
-        verify(original, edited, name)
-        return BdspTrainerNameCopyPlan(original, edited, before.name, name)
+        verify(original, edited, name, requestedTrainerId, nameChanged, trainerIdChanged)
+        return BdspTrainerCopyPlan(
+            original, edited, before.name, name, before.tid16, requestedTrainerId,
+            nameChanged, trainerIdChanged
+        )
     }
 
-    internal fun verify(original: ByteArray, edited: ByteArray, expectedName: String) {
+    internal fun verify(
+        original: ByteArray,
+        edited: ByteArray,
+        expectedName: String,
+        expectedTrainerId: Int,
+        nameChanged: Boolean,
+        trainerIdChanged: Boolean
+    ) {
         val before = BdspTrainerReadOnly.read(original)
         val after = BdspTrainerReadOnly.read(edited)
         require(
             original.size == edited.size && before.version == after.version && before.revision == after.revision
         ) { "The trainer edit changed title identity, revision, or save size." }
-        require(after.name == expectedName && before.copy(name = expectedName) == after) {
-            "The trainer-name edit did not reopen exactly."
+        val expectedId32 = (before.id32 and 0xFFFF0000L) or expectedTrainerId.toLong()
+        require(
+            after.name == expectedName && after.tid16 == expectedTrainerId &&
+                before.copy(name = expectedName, id32 = expectedId32, tid16 = expectedTrainerId) == after
+        ) {
+            "The Trainer Data edit did not reopen exactly."
         }
         require(original.indices.all { index ->
-            index in NAME_OFFSET until NAME_OFFSET + NAME_SIZE ||
+            (nameChanged && index in NAME_OFFSET until NAME_OFFSET + NAME_SIZE) ||
+                (trainerIdChanged && index in TRAINER_ID_OFFSET until TRAINER_ID_OFFSET + TRAINER_ID_SIZE) ||
                 index in HASH_OFFSET until HASH_OFFSET + HASH_LENGTH ||
                 original[index] == edited[index]
-        }) { "The trainer-name edit changed unrelated save data." }
+        }) { "The Trainer Data edit changed unrelated save data." }
     }
 
     fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes)
@@ -88,17 +116,22 @@ object BdspTrainerEditing {
 }
 
 /** Single-use reviewed transaction to a new document; the selected source is never replaced. */
-class BdspTrainerNameCopyPlan internal constructor(
+class BdspTrainerCopyPlan internal constructor(
     original: ByteArray,
     edited: ByteArray,
     val beforeName: String,
-    val afterName: String
+    val afterName: String,
+    val beforeTrainerId: Int,
+    val afterTrainerId: Int,
+    val nameChanged: Boolean,
+    val trainerIdChanged: Boolean
 ) {
     private val original = original.copyOf()
     private val edited = edited.copyOf()
     val sourceSha256: String = BdspTrainerEditing.sha256(this.original)
     val editedSha256: String = BdspTrainerEditing.sha256(this.edited)
     val nameOffset: Int = 0x79BB4
+    val trainerIdOffset: Int = 0x79BD0
     private var consumed = false
 
     @Synchronized
@@ -122,12 +155,16 @@ class BdspTrainerNameCopyPlan internal constructor(
         require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
         var started = false
         try {
-            BdspTrainerEditing.verify(original, edited, afterName)
+            BdspTrainerEditing.verify(
+                original, edited, afterName, afterTrainerId, nameChanged, trainerIdChanged
+            )
             started = true
             writeDestination(edited.copyOf())
             val persisted = readDestination()
             require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed edit." }
-            BdspTrainerEditing.verify(original, persisted, afterName)
+            BdspTrainerEditing.verify(
+                original, persisted, afterName, afterTrainerId, nameChanged, trainerIdChanged
+            )
             requireSource()
         } catch (failure: Exception) {
             val removed = started && runCatching { discardDestination() }.getOrDefault(false)
