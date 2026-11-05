@@ -2,7 +2,7 @@ package com.example.pokemonsavemanager
 
 import java.util.Collections
 
-data class LetsGoMoveRead(val id: Int, val pp: Int)
+data class LetsGoMoveRead(val id: Int, val pp: Int, val ppUps: Int)
 data class LetsGoPokemonRead(
     val species: Int, val nickname: String, val form: Int, val gender: Int,
     val cachedLevel: Int, val experience: Long, val nature: Int,
@@ -65,7 +65,13 @@ object LetsGoPokemonReadOnly {
             currentFriendship, currentHandler, plain[0xDE].toInt() and 255, text(plain, 0xB0), tid, sid, pid, ec,
             shinyXor < 16, iv32 and 0x40000000L != 0L, plain[0x1D].toInt() and 1 != 0,
             (species == 25 && form == 8) || (species == 133 && form == 1),
-            Collections.unmodifiableList((0..3).map { LetsGoMoveRead(u16(plain, 0x5A + it * 2), plain[0x62 + it].toInt() and 255) }),
+            Collections.unmodifiableList((0..3).map {
+                LetsGoMoveRead(
+                    u16(plain, 0x5A + it * 2),
+                    plain[0x62 + it].toInt() and 255,
+                    plain[0x66 + it].toInt() and 255
+                )
+            }),
             Collections.unmodifiableList((0..5).map { ((iv32 ushr (it * 5)) and 31).toInt() }),
             Collections.unmodifiableList((0..5).map { plain[0x24 + it].toInt() and 255 })
         ))
