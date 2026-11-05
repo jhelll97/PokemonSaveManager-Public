@@ -8927,52 +8927,87 @@ class MainActivity : Activity() {
             }
             require(bound()&&selected()&&file.readBytes().contentEquals(opened)){"The backup or active context changed while preparing confirmation."}
         }catch(e:Exception){showDialog("Delete blocked",(e.message?:"Could not inspect this Gen 2 backup")+"\n\nNothing was deleted.");return}
-        val openedMirror=mirror;val openedMirrorUri=mirror?.uri;val openedRoot=root
+        val context=Gen2BackupDeleteContext(
+            file=file,
+            opened=opened,
+            openedPath=openedPath,
+            openedSource=openedSource,
+            openedLabel=openedLabel,
+            openedFolder=openedFolder,
+            openedKept=openedKept,
+            openedMirror=mirror,
+            openedMirrorUri=mirror?.uri,
+            openedRoot=root
+        )
         AlertDialog.Builder(this).setTitle("Delete this Gen 2 backup?")
-            .setMessage("Delete "+file.name+" from PSE"+if(openedMirror!=null)" and its verified identical Safe Files copy? Other backups, the emulator and working save will not be changed."else" only? No matching Safe Files copy was found. Other backups, the emulator and working save will not be changed.")
+            .setMessage("Delete "+file.name+" from PSE"+if(mirror!=null)" and its verified identical Safe Files copy? Other backups, the emulator and working save will not be changed."else" only? No matching Safe Files copy was found. Other backups, the emulator and working save will not be changed.")
             .setNegativeButton("Cancel",null)
-            .setPositiveButton("Delete"){_,_->
-                if(!bound()){showDialog("Delete blocked","The active save, source identity, folder or Keep pin changed. Reopen Backups. Nothing was deleted.");return@setPositiveButton}
-                var mirrorAttempted=false;var mirrorRemoved=false;var internalAttempted=false
-                try{
-                    fun checkSelected(){require(bound()&&selected()&&file.readBytes().contentEquals(opened)){"The confirmed internal backup or active context changed."}}
+            .setPositiveButton("Delete"){_,_->deleteGen2InternalBackupConfirmed(context)}
+            .show()
+    }
+
+    private class Gen2BackupDeleteContext(
+        val file:File,
+        val opened:ByteArray,
+        val openedPath:String?,
+        val openedSource:Uri?,
+        val openedLabel:String?,
+        val openedFolder:Uri?,
+        val openedKept:Boolean,
+        val openedMirror:DocumentFile?,
+        val openedMirrorUri:Uri?,
+        val openedRoot:DocumentFile?
+    )
+
+    private fun deleteGen2InternalBackupConfirmed(context:Gen2BackupDeleteContext) {
+        val file=context.file
+        val opened=context.opened
+        val openedMirror=context.openedMirror
+        val openedMirrorUri=context.openedMirrorUri
+        val openedRoot=context.openedRoot
+        fun bound()=importedFile?.absolutePath==context.openedPath&&currentSourceUri==context.openedSource&&currentSourceLabel==context.openedLabel&&safeFolderUri()==context.openedFolder&&keptBackupNames().contains(file.name)==context.openedKept
+        fun selected()=file.isFile&&!backupIsProtected(file)&&file.canonicalFile.parentFile==backupsDir().canonicalFile&&file.canonicalPath!=importedFile?.canonicalPath&&Uri.fromFile(file)!=currentSourceUri
+        if(!bound()){showDialog("Delete blocked","The active save, source identity, folder or Keep pin changed. Reopen Backups. Nothing was deleted.");return}
+        var mirrorAttempted=false;var mirrorRemoved=false;var internalAttempted=false
+        try{
+            fun checkSelected(){require(bound()&&selected()&&file.readBytes().contentEquals(opened)){"The confirmed internal backup or active context changed."}}
+            checkSelected()
+            if(openedRoot!=null){
+                require(openedRoot.exists()&&openedRoot.isDirectory){"The confirmed Safe Files folder is unavailable."}
+                val fresh=openedRoot.findFile(file.name)
+                require(fresh?.uri==openedMirrorUri){"The matching Safe Files entry changed after confirmation."}
+                openedMirror?.let{doc->
+                    require(doc.uri==openedMirrorUri&&doc.exists()&&doc.isFile&&doc.name==file.name&&doc.uri!=currentSourceUri){"The confirmed Safe Files copy changed or aliases the emulator source."}
+                    val bytes=contentResolver.openInputStream(doc.uri).use{requireNotNull(it).readBytes()}
+                    require(bytes.contentEquals(opened)){"The matching Safe Files copy changed bytes after confirmation."}
                     checkSelected()
-                    if(openedRoot!=null){
-                        require(openedRoot.exists()&&openedRoot.isDirectory){"The confirmed Safe Files folder is unavailable."}
-                        val fresh=openedRoot.findFile(file.name)
-                        require(fresh?.uri==openedMirrorUri){"The matching Safe Files entry changed after confirmation."}
-                        openedMirror?.let{doc->
-                            require(doc.uri==openedMirrorUri&&doc.exists()&&doc.isFile&&doc.name==file.name&&doc.uri!=currentSourceUri){"The confirmed Safe Files copy changed or aliases the emulator source."}
-                            val bytes=contentResolver.openInputStream(doc.uri).use{requireNotNull(it).readBytes()}
-                            require(bytes.contentEquals(opened)){"The matching Safe Files copy changed bytes after confirmation."}
-                            checkSelected()
-                            val finalBytes=contentResolver.openInputStream(doc.uri).use{requireNotNull(it).readBytes()}
-                            require(finalBytes.contentEquals(opened)&&doc.exists()&&doc.isFile&&doc.name==file.name&&doc.uri!=currentSourceUri&&openedRoot.findFile(file.name)?.uri==openedMirrorUri){"The matching Safe Files copy changed during final checks."}
-                            checkSelected()
-                            mirrorAttempted=true
-                            val deleted=doc.delete()
-                            require(deleted&&!doc.exists()&&openedRoot.findFile(file.name)==null){"PSE could not verify removal of the matching Safe Files copy."}
-                            mirrorRemoved=true
-                        }
-                    }
+                    val finalBytes=contentResolver.openInputStream(doc.uri).use{requireNotNull(it).readBytes()}
+                    require(finalBytes.contentEquals(opened)&&doc.exists()&&doc.isFile&&doc.name==file.name&&doc.uri!=currentSourceUri&&openedRoot.findFile(file.name)?.uri==openedMirrorUri){"The matching Safe Files copy changed during final checks."}
                     checkSelected()
-                    internalAttempted=true
-                    val deleted=file.delete()
-                    require(deleted&&!file.exists()){"PSE could not verify removal of the internal backup."}
-                }catch(e:Exception){
-                    val outcome=if(!mirrorAttempted&&!internalAttempted)"Nothing was deleted."else if(mirrorRemoved&&!internalAttempted)"The identical Safe Files copy was removed and verified; PSE did not delete the internal backup."else"The deletion was not fully verified and may be partial. Refresh Backups and Safe Files before taking further action."
-                    showDialog("Delete not completed",(e.message?:"Could not verify backup deletion")+"\n\n"+outcome+"\n\nKeep-pin metadata was not changed. PSE did not write to the emulator, working save or other backups.");return@setPositiveButton
+                    mirrorAttempted=true
+                    val deleted=doc.delete()
+                    require(deleted&&!doc.exists()&&openedRoot.findFile(file.name)==null){"PSE could not verify removal of the matching Safe Files copy."}
+                    mirrorRemoved=true
                 }
-                val pinCleaned=runCatching{
-                    val prefs=getSharedPreferences("pse_backup_state",MODE_PRIVATE)
-                    val names=keptBackupNames().apply{remove(file.name)}
-                    require(prefs.edit().putStringSet("kept",names).commit())
-                    require(prefs.getStringSet("kept",emptySet())==names)
-                }.isSuccess
-                if(!pinCleaned)showDialog("Deletion verified","The confirmed backup copy/copies were removed and verified. Keep-pin cleanup could not be verified; refresh Backups. No save data was written.")
-                else Toast.makeText(this,"Selected Gen 2 backup deletion verified",Toast.LENGTH_SHORT).show()
-                showBackups()
-            }.show()
+            }
+            checkSelected()
+            internalAttempted=true
+            val deleted=file.delete()
+            require(deleted&&!file.exists()){"PSE could not verify removal of the internal backup."}
+        }catch(e:Exception){
+            val outcome=if(!mirrorAttempted&&!internalAttempted)"Nothing was deleted."else if(mirrorRemoved&&!internalAttempted)"The identical Safe Files copy was removed and verified; PSE did not delete the internal backup."else"The deletion was not fully verified and may be partial. Refresh Backups and Safe Files before taking further action."
+            showDialog("Delete not completed",(e.message?:"Could not verify backup deletion")+"\n\n"+outcome+"\n\nKeep-pin metadata was not changed. PSE did not write to the emulator, working save or other backups.")
+            return
+        }
+        val pinCleaned=runCatching{
+            val prefs=getSharedPreferences("pse_backup_state",MODE_PRIVATE)
+            val names=keptBackupNames().apply{remove(file.name)}
+            require(prefs.edit().putStringSet("kept",names).commit())
+            require(prefs.getStringSet("kept",emptySet())==names)
+        }.isSuccess
+        if(!pinCleaned)showDialog("Deletion verified","The confirmed backup copy/copies were removed and verified. Keep-pin cleanup could not be verified; refresh Backups. No save data was written.")
+        else Toast.makeText(this,"Selected Gen 2 backup deletion verified",Toast.LENGTH_SHORT).show()
+        showBackups()
     }
 
     data class PokemonEntry(
