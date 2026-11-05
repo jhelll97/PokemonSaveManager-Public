@@ -29,6 +29,7 @@ class SwitchLetsGoPokemonLevelActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var level: EditText
     private lateinit var review: Button
+    private lateinit var experience: Button
     private lateinit var inspectCopy: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -73,6 +74,12 @@ class SwitchLetsGoPokemonLevelActivity : Activity() {
             setOnClickListener { reviewLevel() }
         }
         root.addView(review)
+        experience = Button(this).apply {
+            text = "Next field: Experience"
+            isEnabled = false
+            setOnClickListener { openExperience() }
+        }
+        root.addView(experience)
         inspectCopy = Button(this).apply {
             text = "Inspect verified copy"
             visibility = android.view.View.GONE
@@ -129,7 +136,18 @@ class SwitchLetsGoPokemonLevelActivity : Activity() {
         val ready = opened != null && current != null
         level.isEnabled = !value && ready
         review.isEnabled = !value && ready
+        experience.isEnabled = !value && ready
         inspectCopy.isEnabled = !value && verifiedCopy != null
+    }
+
+    private fun openExperience() {
+        if (busy || opened == null || current == null) return
+        val uri = sourceUri ?: return
+        val hash = expectedHash ?: return
+        startActivity(Intent(this, SwitchLetsGoPokemonExperienceActivity::class.java).setData(uri)
+            .putExtra("pse.switch.sha256", hash)
+            .putExtra("pse.switch.pokemon.index", storageIndex)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }
 
     private fun readSource(): ByteArray {

@@ -38,6 +38,9 @@ object LetsGoPokemonLevelEditing {
 
     fun sha256(bytes: ByteArray): String = LetsGoPokemonNicknameEditing.sha256(bytes)
 
+    internal fun maximumExperience(species: Int, form: Int): Long? =
+        LetsGoPersonalCatalogue.resolve(species, form)?.let { minimumExperience(100, it.growth) }
+
     fun stage(source: ByteArray, expectedSha256: String, storageIndex: Int, requestedLevel: Int): LetsGoLevelCopyPlan {
         val original = source.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
@@ -73,6 +76,56 @@ object LetsGoPokemonLevelEditing {
             LetsGoSaveValidation.crc16(edited, STORAGE_RECORDS, STORAGE_RECORDS_LENGTH))
         verify(original, edited, storageIndex, after)
         return LetsGoLevelCopyPlan(original, edited, storageIndex, recordOffset, before, after)
+    }
+
+    internal fun stageExperience(
+        source: ByteArray,
+        expectedSha256: String,
+        storageIndex: Int,
+        requestedExperience: Long
+    ): LetsGoExperienceCopyPlan {
+        val original = source.copyOf()
+        require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        require(LetsGoSaveValidation.inspect(original) is LetsGoValidation.Verified) {
+            "A validated native Let's Go save is required."
+        }
+        val storage = LetsGoStorageReadOnly.read(original)
+        require(storageIndex in 0 until storage.count) { "The selected native Pokémon record no longer exists." }
+        val before = (storage.slot(storageIndex).read as? LetsGoSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The selected native PB7 is not checksum-valid.")
+        require(!before.isEgg) { "Egg experience editing is not supported for Let's Go." }
+        require(requestedExperience != before.experience) { "Enter different experience before review." }
+        val personal = LetsGoPersonalCatalogue.resolve(before.species, before.form)
+            ?: throw IllegalArgumentException(
+                "This PB7 form has no verified native Let's Go stat entry, so Experience remains protected."
+            )
+        require(before.nature in 0..24 && before.currentHandler in 0..1) {
+            "The PB7 nature or current-handler identity is invalid, so derived stats cannot be rebuilt safely."
+        }
+        val maximumExperience = minimumExperience(100, personal.growth)
+        require(requestedExperience in 0L..maximumExperience) {
+            "Experience must be between 0 and $maximumExperience for this Pokémon's native growth group."
+        }
+        require(before.experience in 0L..maximumExperience && before.cachedLevel in 1..100 &&
+            levelForExperience(before.experience, personal.growth) == before.cachedLevel) {
+            "The saved Level and EXP do not agree with this Pokémon's verified growth group."
+        }
+        require(matchesCachedValues(before, calculate(before, personal, before.cachedLevel, before.experience))) {
+            "The saved Level-dependent values do not match this PB7's verified species/form profile."
+        }
+        val requestedLevel = levelForExperience(requestedExperience, personal.growth)
+        val after = calculate(before, personal, requestedLevel, requestedExperience)
+
+        val recordOffset = STORAGE_RECORDS + storageIndex * LetsGoPokemonReadOnly.RECORD_SIZE
+        val beforeRecord = original.copyOfRange(recordOffset, recordOffset + LetsGoPokemonReadOnly.RECORD_SIZE)
+        val afterRecord = editRecord(beforeRecord, after)
+        val edited = original.copyOf()
+        afterRecord.copyInto(edited, recordOffset)
+        writeU16(edited, descriptorCrcOffset(RECORD_BLOCK),
+            LetsGoSaveValidation.crc16(edited, STORAGE_RECORDS, STORAGE_RECORDS_LENGTH))
+        verify(original, edited, storageIndex, after)
+        return LetsGoExperienceCopyPlan(original, edited, storageIndex, recordOffset, before, after,
+            maximumExperience)
     }
 
     internal fun verify(original: ByteArray, edited: ByteArray, storageIndex: Int, expected: LetsGoLevelValues) {
@@ -141,7 +194,18 @@ object LetsGoPokemonLevelEditing {
         }) { "An unrelated Let's Go save byte changed." }
     }
 
-    private fun calculate(before: LetsGoPokemonRead, personal: LetsGoPersonalData, level: Int): LetsGoLevelValues {
+    private fun matchesCachedValues(before: LetsGoPokemonRead, expected: LetsGoLevelValues): Boolean =
+        before.currentHp == expected.currentHp && before.maximumHp == expected.maximumHp &&
+            before.attack == expected.attack && before.defense == expected.defense &&
+            before.speed == expected.speed && before.specialAttack == expected.specialAttack &&
+            before.specialDefense == expected.specialDefense && before.combatPower == expected.combatPower
+
+    private fun calculate(
+        before: LetsGoPokemonRead,
+        personal: LetsGoPersonalData,
+        level: Int,
+        experience: Long = minimumExperience(level, personal.growth)
+    ): LetsGoLevelValues {
         val effectiveIv = IntArray(6) { index ->
             val hyperBit = intArrayOf(0, 1, 2, 5, 3, 4)[index]
             if (before.hyperTrainingFlags and (1 shl hyperBit) != 0) 31 else before.ivs[index]
@@ -184,7 +248,7 @@ object LetsGoPokemonLevelEditing {
             else -> min(before.currentHp, maximumHp)
         }
         return LetsGoLevelValues(
-            level, minimumExperience(level, personal.growth), currentHp, maximumHp,
+            level, experience, currentHp, maximumHp,
             attack, defense, speed, specialAttack, specialDefense, combatPower
         )
     }
@@ -291,6 +355,86 @@ object LetsGoPokemonLevelEditing {
     private fun writeU32(bytes: ByteArray, offset: Int, value: Long) {
         writeU16(bytes, offset, value.toInt())
         writeU16(bytes, offset + 2, (value ushr 16).toInt())
+    }
+}
+
+/** Gen 1-ordered Experience action backed by the same verified PB7 level-dependent write scope. */
+object LetsGoPokemonExperienceEditing {
+    fun readDocumentBytes(input: java.io.InputStream): ByteArray =
+        LetsGoPokemonLevelEditing.readDocumentBytes(input)
+
+    fun readSaveBytes(input: java.io.InputStream): ByteArray =
+        LetsGoPokemonLevelEditing.readSaveBytes(input)
+
+    fun sha256(bytes: ByteArray): String = LetsGoPokemonLevelEditing.sha256(bytes)
+
+    fun maximumExperience(species: Int, form: Int): Long? =
+        LetsGoPokemonLevelEditing.maximumExperience(species, form)
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        storageIndex: Int,
+        requestedExperience: Long
+    ): LetsGoExperienceCopyPlan = LetsGoPokemonLevelEditing.stageExperience(
+        source, expectedSha256, storageIndex, requestedExperience
+    )
+}
+
+class LetsGoExperienceCopyPlan internal constructor(
+    original: ByteArray,
+    edited: ByteArray,
+    val storageIndex: Int,
+    val recordOffset: Int,
+    val before: LetsGoPokemonRead,
+    val after: LetsGoLevelValues,
+    val maximumExperience: Long
+) {
+    private val original = original.copyOf()
+    private val edited = edited.copyOf()
+    val sourceSha256: String = LetsGoPokemonExperienceEditing.sha256(this.original)
+    val editedSha256: String = LetsGoPokemonExperienceEditing.sha256(this.edited)
+    private var consumed = false
+
+    @Synchronized
+    fun saveNewCopy(
+        readSource: () -> ByteArray,
+        retainBackup: (ByteArray) -> ByteArray,
+        readDestination: () -> ByteArray,
+        writeDestination: (ByteArray) -> Unit,
+        discardDestination: () -> Boolean
+    ) {
+        check(!consumed) { "This Experience review was already used. Reopen Pokémon Boxes." }
+        consumed = true
+        fun requireSource() = require(readSource().contentEquals(original)) {
+            "The selected source changed. Reopen it from PSE."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "Choose a new empty document; existing files cannot be replaced." }
+        val backup = retainBackup(original.copyOf())
+        require(backup.contentEquals(original)) { "The recovery backup did not verify. Nothing was written." }
+        requireSource()
+        require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
+        var started = false
+        try {
+            LetsGoPokemonLevelEditing.verify(original, edited, storageIndex, after)
+            started = true
+            writeDestination(edited.copyOf())
+            val persisted = readDestination()
+            require(persisted.contentEquals(edited)) {
+                "The saved copy differs from the reviewed Experience edit."
+            }
+            LetsGoPokemonLevelEditing.verify(original, persisted, storageIndex, after)
+            requireSource()
+        } catch (failure: Exception) {
+            val removed = started && runCatching { discardDestination() }.getOrDefault(false)
+            throw IllegalStateException(
+                (failure.message ?: "Experience copy verification failed.") +
+                    if (removed) " The failed new copy was removed; the recovery backup is retained."
+                    else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
+                failure
+            )
+        }
     }
 }
 
