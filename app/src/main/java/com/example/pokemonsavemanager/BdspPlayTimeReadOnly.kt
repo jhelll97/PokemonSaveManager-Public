@@ -9,7 +9,7 @@ class BdspPlayTimeRead internal constructor(val version: BdspVersion, val revisi
     val savedTimeText: String get() = "${hours.toString().padStart(4, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
 }
 
-/** Native recorded playtime only. No wall-clock calculation, timer advance, normalization or writing. */
+/** Native recorded playtime projection. No wall-clock calculation, timer advance, or normalization. */
 object BdspPlayTimeReadOnly {
     fun read(source: ByteArray): BdspPlayTimeRead {
         val checked = BdspSaveValidation.inspect(source)

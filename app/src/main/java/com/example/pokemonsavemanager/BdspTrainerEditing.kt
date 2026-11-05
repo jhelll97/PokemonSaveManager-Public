@@ -16,6 +16,8 @@ object BdspTrainerEditing {
     private const val MONEY_SIZE = 4
     private const val BADGE_OFFSET = 0x79BDD
     private const val BADGE_SIZE = 1
+    private const val PLAY_TIME_OFFSET = 0x79C04
+    private const val PLAY_TIME_SIZE = 4
     private const val HASH_OFFSET = 0xE9818
     private const val HASH_LENGTH = 16
 
@@ -43,7 +45,10 @@ object BdspTrainerEditing {
         requestedName: String,
         requestedTrainerId: Int,
         requestedMoney: Long,
-        requestedBadgeCount: Int
+        requestedBadgeCount: Int,
+        requestedPlayHours: Int,
+        requestedPlayMinutes: Int,
+        requestedPlaySeconds: Int
     ): BdspTrainerCopyPlan {
         val original = source.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
@@ -52,12 +57,18 @@ object BdspTrainerEditing {
         require(requestedTrainerId in 0..65535) { "Trainer ID must be between 0 and 65535." }
         require(requestedMoney in 0L..999_999L) { "Money must be between 0 and 999,999." }
         require(requestedBadgeCount in 0..8) { "Badges must be between 0 and 8." }
+        require(requestedPlayHours in 0..65535) { "Play Time hours must be between 0 and 65535." }
+        require(requestedPlayMinutes in 0..59) { "Play Time minutes must be between 0 and 59." }
+        require(requestedPlaySeconds in 0..59) { "Play Time seconds must be between 0 and 59." }
+        val beforePlayTime = BdspPlayTimeReadOnly.read(original)
         val nameChanged = name != before.name
         val trainerIdChanged = requestedTrainerId != before.tid16
         val moneyChanged = requestedMoney != before.money
         val badgesChanged = requestedBadgeCount != before.badgeCount
-        require(nameChanged || trainerIdChanged || moneyChanged || badgesChanged) {
-            "Change the Trainer Name, Trainer ID, Money, or Badges before reviewing."
+        val playTimeChanged = requestedPlayHours != beforePlayTime.hours ||
+            requestedPlayMinutes != beforePlayTime.minutes || requestedPlaySeconds != beforePlayTime.seconds
+        require(nameChanged || trainerIdChanged || moneyChanged || badgesChanged || playTimeChanged) {
+            "Change the Trainer Name, Trainer ID, Money, Badges, or Play Time before reviewing."
         }
         val edited = original.copyOf()
         if (nameChanged) encodeName(name).copyInto(edited, NAME_OFFSET)
@@ -67,13 +78,22 @@ object BdspTrainerEditing {
         }
         if (moneyChanged) writeU32(edited, MONEY_OFFSET, requestedMoney)
         if (badgesChanged) edited[BADGE_OFFSET] = requestedBadgeCount.toByte()
+        if (playTimeChanged) {
+            edited[PLAY_TIME_OFFSET] = requestedPlayHours.toByte()
+            edited[PLAY_TIME_OFFSET + 1] = (requestedPlayHours ushr 8).toByte()
+            edited[PLAY_TIME_OFFSET + 2] = requestedPlayMinutes.toByte()
+            edited[PLAY_TIME_OFFSET + 3] = requestedPlaySeconds.toByte()
+        }
         refreshDigest(edited)
         verify(original, edited, name, requestedTrainerId, requestedMoney, requestedBadgeCount,
-            nameChanged, trainerIdChanged, moneyChanged, badgesChanged)
+            requestedPlayHours, requestedPlayMinutes, requestedPlaySeconds,
+            nameChanged, trainerIdChanged, moneyChanged, badgesChanged, playTimeChanged)
         return BdspTrainerCopyPlan(
             original, edited, before.name, name, before.tid16, requestedTrainerId,
             before.money, requestedMoney, before.badgeCount, requestedBadgeCount,
-            nameChanged, trainerIdChanged, moneyChanged, badgesChanged
+            beforePlayTime.hours, requestedPlayHours, beforePlayTime.minutes, requestedPlayMinutes,
+            beforePlayTime.seconds, requestedPlaySeconds,
+            nameChanged, trainerIdChanged, moneyChanged, badgesChanged, playTimeChanged
         )
     }
 
@@ -84,13 +104,19 @@ object BdspTrainerEditing {
         expectedTrainerId: Int,
         expectedMoney: Long,
         expectedBadgeCount: Int,
+        expectedPlayHours: Int,
+        expectedPlayMinutes: Int,
+        expectedPlaySeconds: Int,
         nameChanged: Boolean,
         trainerIdChanged: Boolean,
         moneyChanged: Boolean,
-        badgesChanged: Boolean
+        badgesChanged: Boolean,
+        playTimeChanged: Boolean
     ) {
         val before = BdspTrainerReadOnly.read(original)
         val after = BdspTrainerReadOnly.read(edited)
+        val beforePlayTime = BdspPlayTimeReadOnly.read(original)
+        val afterPlayTime = BdspPlayTimeReadOnly.read(edited)
         require(
             original.size == edited.size && before.version == after.version && before.revision == after.revision
         ) { "The trainer edit changed title identity, revision, or save size." }
@@ -103,11 +129,17 @@ object BdspTrainerEditing {
         ) {
             "The Trainer Data edit did not reopen exactly."
         }
+        require(
+            afterPlayTime.version == beforePlayTime.version && afterPlayTime.revision == beforePlayTime.revision &&
+                afterPlayTime.hours == expectedPlayHours && afterPlayTime.minutes == expectedPlayMinutes &&
+                afterPlayTime.seconds == expectedPlaySeconds
+        ) { "The Play Time edit did not reopen exactly." }
         require(original.indices.all { index ->
             (nameChanged && index in NAME_OFFSET until NAME_OFFSET + NAME_SIZE) ||
                 (trainerIdChanged && index in TRAINER_ID_OFFSET until TRAINER_ID_OFFSET + TRAINER_ID_SIZE) ||
                 (moneyChanged && index in MONEY_OFFSET until MONEY_OFFSET + MONEY_SIZE) ||
                 (badgesChanged && index in BADGE_OFFSET until BADGE_OFFSET + BADGE_SIZE) ||
+                (playTimeChanged && index in PLAY_TIME_OFFSET until PLAY_TIME_OFFSET + PLAY_TIME_SIZE) ||
                 index in HASH_OFFSET until HASH_OFFSET + HASH_LENGTH ||
                 original[index] == edited[index]
         }) { "The Trainer Data edit changed unrelated save data." }
@@ -155,10 +187,17 @@ class BdspTrainerCopyPlan internal constructor(
     val afterMoney: Long,
     val beforeBadgeCount: Int,
     val afterBadgeCount: Int,
+    val beforePlayHours: Int,
+    val afterPlayHours: Int,
+    val beforePlayMinutes: Int,
+    val afterPlayMinutes: Int,
+    val beforePlaySeconds: Int,
+    val afterPlaySeconds: Int,
     val nameChanged: Boolean,
     val trainerIdChanged: Boolean,
     val moneyChanged: Boolean,
-    val badgesChanged: Boolean
+    val badgesChanged: Boolean,
+    val playTimeChanged: Boolean
 ) {
     private val original = original.copyOf()
     private val edited = edited.copyOf()
@@ -168,6 +207,7 @@ class BdspTrainerCopyPlan internal constructor(
     val trainerIdOffset: Int = 0x79BD0
     val moneyOffset: Int = 0x79BD4
     val badgeOffset: Int = 0x79BDD
+    val playTimeOffset: Int = 0x79C04
     private var consumed = false
 
     @Synchronized
@@ -193,7 +233,8 @@ class BdspTrainerCopyPlan internal constructor(
         try {
             BdspTrainerEditing.verify(
                 original, edited, afterName, afterTrainerId, afterMoney, afterBadgeCount,
-                nameChanged, trainerIdChanged, moneyChanged, badgesChanged
+                afterPlayHours, afterPlayMinutes, afterPlaySeconds,
+                nameChanged, trainerIdChanged, moneyChanged, badgesChanged, playTimeChanged
             )
             started = true
             writeDestination(edited.copyOf())
@@ -201,7 +242,8 @@ class BdspTrainerCopyPlan internal constructor(
             require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed edit." }
             BdspTrainerEditing.verify(
                 original, persisted, afterName, afterTrainerId, afterMoney, afterBadgeCount,
-                nameChanged, trainerIdChanged, moneyChanged, badgesChanged
+                afterPlayHours, afterPlayMinutes, afterPlaySeconds,
+                nameChanged, trainerIdChanged, moneyChanged, badgesChanged, playTimeChanged
             )
             requireSource()
         } catch (failure: Exception) {
