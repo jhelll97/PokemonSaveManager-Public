@@ -4088,7 +4088,7 @@ class SwitchReadOnlyActivity : Activity() {
             append("Player HP (raw): ${trainer.playerHp}\nSaved Mega gauge (raw): ${trainer.megaGaugePercent}\n\n")
             append("Counters and Mega gauge are raw saved values; balance limits, percentage scaling and story consistency are not evaluated. ")
             append("Absent counters stay marked Not present and do not establish DLC or progression status.\n\n")
-            append("Native container integrity passed before reading. Trainer Name opens the reviewed native editor; the other displayed fields remain read-only.")
+            append("Native container integrity passed before reading. Trainer Name, Trainer ID and Money open in the reviewed native editor when their native fields are present; the other displayed fields remain read-only.")
         }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

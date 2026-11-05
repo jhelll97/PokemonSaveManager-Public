@@ -30,7 +30,8 @@ internal data class LegendsZaInventoryWriteResult(val bytes: ByteArray, val abso
 internal data class LegendsZaTrainerWriteResult(
     val bytes: ByteArray,
     val nameOffset: Int,
-    val trainerIdOffset: Int
+    val trainerIdOffset: Int,
+    val moneyOffset: Int
 )
 
 internal data class LegendsZaDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
@@ -40,6 +41,7 @@ internal data class LegendsZaPokemonWriteResult(val bytes: ByteArray, val absolu
 object LegendsZaSaveValidation {
     private val knownSizes = setOf(0x2F3284, 0x2F3289, 0x309FA6, 0x309FB3)
     private const val STATUS_KEY = 0xE3E89BD1L
+    private const val MONEY_KEY = 0x4F35D0DDL
     private const val REVISION_KEY = 0x0926555AL
     private val requiredObjects = mapOf(0x0D66012CL to 0x5FA00,
         0x3AA1A9ADL to 0xB40, 0x2D87BE5CL to 0x27068, STATUS_KEY to 0x78)
@@ -82,15 +84,22 @@ object LegendsZaSaveValidation {
     internal fun writeTrainerFields(
         source: ByteArray,
         encodedName: ByteArray?,
-        trainerId: Int?
+        trainerId: Int?,
+        money: Long?
     ): LegendsZaTrainerWriteResult {
-        readTrainerBlocks(source)
-        require(encodedName != null || trainerId != null) { "Select at least one Trainer Data field to change." }
+        val blocks = readTrainerBlocks(source)
+        require(encodedName != null || trainerId != null || money != null) {
+            "Select at least one Trainer Data field to change."
+        }
         if (encodedName != null) require(encodedName.size == 26) {
             "A complete native Legends: Z-A trainer-name field is required."
         }
         if (trainerId != null) require(trainerId in 0..65535) {
             "Trainer ID must be between 0 and 65535."
+        }
+        if (money != null) {
+            require(blocks.money != null) { "This save does not contain the native money counter." }
+            require(money in 0L..9_999_999L) { "Money must be between 0 and 9,999,999." }
         }
         val nameRelativeOffset = 0x10
         val trainerIdRelativeOffset = 0
@@ -103,6 +112,7 @@ object LegendsZaSaveValidation {
         val cursor = Cursor(payload)
         var nameOffset = -1
         var trainerIdOffset = -1
+        var moneyOffset = -1
         while (cursor.remaining > 0) {
             val key = cursor.uint32()
             val stream = KeyStream(key)
@@ -139,12 +149,24 @@ object LegendsZaSaveValidation {
                 }
                 nameOffset = blockStart + nameRelativeOffset
                 trainerIdOffset = blockStart + trainerIdRelativeOffset
+            } else if (key == MONEY_KEY) {
+                require(type == 10 && length == 4L) {
+                    "The Legends: Z-A money counter has the wrong native type or size."
+                }
+                if (money != null) {
+                    repeat(4) { byteIndex ->
+                        val decoded = ((money ushr (byteIndex * 8)).toInt() and 255)
+                        payload[blockStart + byteIndex] = (decoded xor stream.next()).toByte()
+                    }
+                    moneyOffset = blockStart
+                }
             }
             cursor.skip(length.toInt())
         }
         require(nameOffset >= 0 && trainerIdOffset >= 0) {
             "The Legends: Z-A trainer status object is missing."
         }
+        require(money == null || moneyOffset >= 0) { "The Legends: Z-A money counter is missing." }
 
         val edited = source.copyOf()
         for (index in payload.indices) edited[index] =
@@ -155,7 +177,7 @@ object LegendsZaSaveValidation {
         digest.update(outro)
         digest.digest().copyInto(edited, end)
         readTrainerBlocks(edited)
-        return LegendsZaTrainerWriteResult(edited, nameOffset, trainerIdOffset)
+        return LegendsZaTrainerWriteResult(edited, nameOffset, trainerIdOffset, moneyOffset)
     }
 
     /** Return the native bag plus patch-key presence only after the complete container gate. */
