@@ -50,6 +50,7 @@
         <activity android:name=".SwitchLegendsArceusPokemonSpeciesActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokemonLevelActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokemonExperienceActivity" android:exported="false"/>
+        <activity android:name=".SwitchLegendsArceusPokemonOriginalTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusEventActivity" android:exported="false"/>
