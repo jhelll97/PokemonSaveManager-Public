@@ -3879,6 +3879,7 @@ class SwitchReadOnlyActivity : Activity() {
             append("Displayed trainer ID: ${trainer.displayTrainerId}\n")
             append("Raw ID32: ${trainer.id32}\nTID16: ${trainer.tid16}\nSID16: ${trainer.sid16}\n\n")
             append("Rival: ${trainer.rivalName.ifBlank { "Not set" }}\nSaved money: ${trainer.money}\n")
+            append("Gym Badges: ${trainer.badgeCount}/8\n")
             append("Native trainer-class index: ${trainer.trainerClassIndex}\n")
             append("Overworld model gender ID: ${trainer.overworldGenderId}\n")
             append("Saved partner choice: $starter\nSaved partner gender: $starterGender\n\n")

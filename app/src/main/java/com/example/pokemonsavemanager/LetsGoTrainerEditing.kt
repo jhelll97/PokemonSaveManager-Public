@@ -19,7 +19,13 @@ object LetsGoTrainerEditing {
     private const val MONEY_OFFSET = MISC_OFFSET + 4
     private const val MONEY_SIZE = 4
     private const val MAX_MONEY = 9_999_999L
+    private const val EVENT_WORK_OFFSET = 0x1200
+    private const val EVENT_WORK_LENGTH = 0x1800
+    private const val EVENT_FLAG_OFFSET = EVENT_WORK_OFFSET + 1000 * 4
+    private const val FIRST_BADGE_FLAG = 0x08C
+    private const val BADGE_FLAG_COUNT = 8
     private const val STATUS_CRC_OFFSET = LetsGoSaveValidation.DESCRIPTORS + (2 * 8) + 6
+    private const val EVENT_WORK_CRC_OFFSET = LetsGoSaveValidation.DESCRIPTORS + (3 * 8) + 6
     private const val MISC_CRC_OFFSET = LetsGoSaveValidation.DESCRIPTORS + (5 * 8) + 6
 
     fun readDocumentBytes(input: InputStream): ByteArray = input.use {
@@ -46,7 +52,8 @@ object LetsGoTrainerEditing {
         expectedSha256: String,
         requestedName: String,
         requestedTrainerId: Int,
-        requestedMoney: Long
+        requestedMoney: Long,
+        requestedBadgeCount: Int
     ): LetsGoTrainerCopyPlan {
         val original = source.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
@@ -54,11 +61,15 @@ object LetsGoTrainerEditing {
         val name = if (requestedName == before.name) before.name else requestedName.trim()
         require(requestedTrainerId in 0..65535) { "Trainer ID must be between 0 and 65535." }
         require(requestedMoney in 0L..MAX_MONEY) { "Money must be between 0 and 9,999,999." }
+        require(requestedBadgeCount in 0..8) { "Badges must be between 0 and 8." }
+        val requestedBadgeMask = if (requestedBadgeCount == before.badgeCount) before.badgeMask
+            else (1 shl requestedBadgeCount) - 1
         val nameChanged = name != before.name
         val trainerIdChanged = requestedTrainerId != before.tid16
         val moneyChanged = requestedMoney != before.money
-        require(nameChanged || trainerIdChanged || moneyChanged) {
-            "Change the Trainer Name, Trainer ID, or Money before reviewing."
+        val badgesChanged = requestedBadgeMask != before.badgeMask
+        require(nameChanged || trainerIdChanged || moneyChanged || badgesChanged) {
+            "Change the Trainer Name, Trainer ID, Money, or Badges before reviewing."
         }
 
         val edited = original.copyOf()
@@ -71,13 +82,19 @@ object LetsGoTrainerEditing {
             writeU32(edited, MONEY_OFFSET, requestedMoney)
             writeU16(edited, MISC_CRC_OFFSET, LetsGoSaveValidation.crc16(edited, MISC_OFFSET, MISC_LENGTH))
         }
+        if (badgesChanged) {
+            writeBadgeMask(edited, requestedBadgeMask)
+            writeU16(edited, EVENT_WORK_CRC_OFFSET,
+                LetsGoSaveValidation.crc16(edited, EVENT_WORK_OFFSET, EVENT_WORK_LENGTH))
+        }
         verify(
-            original, edited, name, requestedTrainerId, requestedMoney,
-            nameChanged, trainerIdChanged, moneyChanged
+            original, edited, name, requestedTrainerId, requestedMoney, requestedBadgeMask,
+            nameChanged, trainerIdChanged, moneyChanged, badgesChanged
         )
         return LetsGoTrainerCopyPlan(
             original, edited, before.name, name, before.tid16, requestedTrainerId,
-            before.money, requestedMoney, nameChanged, trainerIdChanged, moneyChanged
+            before.money, requestedMoney, before.badgeMask, requestedBadgeMask,
+            nameChanged, trainerIdChanged, moneyChanged, badgesChanged
         )
     }
 
@@ -87,9 +104,11 @@ object LetsGoTrainerEditing {
         expectedName: String,
         expectedTrainerId: Int,
         expectedMoney: Long,
+        expectedBadgeMask: Int,
         nameChanged: Boolean,
         trainerIdChanged: Boolean,
-        moneyChanged: Boolean
+        moneyChanged: Boolean,
+        badgesChanged: Boolean
     ) {
         val before = LetsGoTrainerReadOnly.read(original)
         val after = LetsGoTrainerReadOnly.read(edited)
@@ -99,10 +118,10 @@ object LetsGoTrainerEditing {
         val expectedId32 = (before.id32 and 0xFFFF0000L) or expectedTrainerId.toLong()
         require(
             after.name == expectedName && after.tid16 == expectedTrainerId &&
-                after.money == expectedMoney &&
+                after.money == expectedMoney && after.badgeMask == expectedBadgeMask &&
                 before.copy(
                     name = expectedName, id32 = expectedId32, tid16 = expectedTrainerId,
-                    money = expectedMoney
+                    money = expectedMoney, badgeMask = expectedBadgeMask
                 ) == after
         ) {
             "The Trainer Data edit did not reopen exactly."
@@ -111,10 +130,34 @@ object LetsGoTrainerEditing {
             (nameChanged && index in NAME_OFFSET until NAME_OFFSET + NAME_SIZE) ||
                 (trainerIdChanged && index in TRAINER_ID_OFFSET until TRAINER_ID_OFFSET + TRAINER_ID_SIZE) ||
                 (moneyChanged && index in MONEY_OFFSET until MONEY_OFFSET + MONEY_SIZE) ||
+                (badgesChanged && badgeByteChangeAllowed(original, edited, index)) ||
                 ((nameChanged || trainerIdChanged) && index in STATUS_CRC_OFFSET until STATUS_CRC_OFFSET + 2) ||
+                (badgesChanged && index in EVENT_WORK_CRC_OFFSET until EVENT_WORK_CRC_OFFSET + 2) ||
                 (moneyChanged && index in MISC_CRC_OFFSET until MISC_CRC_OFFSET + 2) ||
                 original[index] == edited[index]
         }) { "The Trainer Data edit changed unrelated save data." }
+    }
+
+    private fun writeBadgeMask(bytes: ByteArray, mask: Int) {
+        repeat(BADGE_FLAG_COUNT) { index ->
+            val flag = FIRST_BADGE_FLAG + index
+            val offset = EVENT_FLAG_OFFSET + (flag ushr 3)
+            val bit = 1 shl (flag and 7)
+            val value = bytes[offset].toInt() and 0xFF
+            bytes[offset] = (if (mask and (1 shl index) != 0) value or bit else value and bit.inv()).toByte()
+        }
+    }
+
+    private fun badgeByteChangeAllowed(original: ByteArray, edited: ByteArray, offset: Int): Boolean {
+        val first = EVENT_FLAG_OFFSET + (FIRST_BADGE_FLAG ushr 3)
+        val last = EVENT_FLAG_OFFSET + ((FIRST_BADGE_FLAG + BADGE_FLAG_COUNT - 1) ushr 3)
+        if (offset !in first..last) return false
+        var allowedBits = 0
+        repeat(BADGE_FLAG_COUNT) { index ->
+            val flag = FIRST_BADGE_FLAG + index
+            if (EVENT_FLAG_OFFSET + (flag ushr 3) == offset) allowedBits = allowedBits or (1 shl (flag and 7))
+        }
+        return ((original[offset].toInt() xor edited[offset].toInt()) and allowedBits.inv() and 0xFF) == 0
     }
 
     fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes)
@@ -157,9 +200,12 @@ class LetsGoTrainerCopyPlan internal constructor(
     val afterTrainerId: Int,
     val beforeMoney: Long,
     val afterMoney: Long,
+    val beforeBadgeMask: Int,
+    val afterBadgeMask: Int,
     val nameChanged: Boolean,
     val trainerIdChanged: Boolean,
-    val moneyChanged: Boolean
+    val moneyChanged: Boolean,
+    val badgesChanged: Boolean
 ) {
     private val original = original.copyOf()
     private val edited = edited.copyOf()
@@ -168,6 +214,9 @@ class LetsGoTrainerCopyPlan internal constructor(
     val nameOffset: Int = 0x1038
     val trainerIdOffset: Int = 0x1000
     val moneyOffset: Int = 0x4C04
+    val badgeFlagOffset: Int = 0x21B1
+    val beforeBadgeCount: Int = Integer.bitCount(beforeBadgeMask)
+    val afterBadgeCount: Int = Integer.bitCount(afterBadgeMask)
     private var consumed = false
 
     @Synchronized
@@ -192,16 +241,16 @@ class LetsGoTrainerCopyPlan internal constructor(
         var started = false
         try {
             LetsGoTrainerEditing.verify(
-                original, edited, afterName, afterTrainerId, afterMoney,
-                nameChanged, trainerIdChanged, moneyChanged
+                original, edited, afterName, afterTrainerId, afterMoney, afterBadgeMask,
+                nameChanged, trainerIdChanged, moneyChanged, badgesChanged
             )
             started = true
             writeDestination(edited.copyOf())
             val persisted = readDestination()
             require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed edit." }
             LetsGoTrainerEditing.verify(
-                original, persisted, afterName, afterTrainerId, afterMoney,
-                nameChanged, trainerIdChanged, moneyChanged
+                original, persisted, afterName, afterTrainerId, afterMoney, afterBadgeMask,
+                nameChanged, trainerIdChanged, moneyChanged, badgesChanged
             )
             requireSource()
         } catch (failure: Exception) {
