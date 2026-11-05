@@ -7,7 +7,8 @@ import java.nio.charset.CodingErrorAction
 data class SwordShieldTrainerRead(
     val version: SwordShieldVersion, val name: String, val gender: Int,
     val languageId: Int, val languageName: String, val jerseyNumber: String,
-    val id32: Long, val tid16: Int, val sid16: Int, val money: Long, val watts: Long
+    val id32: Long, val tid16: Int, val sid16: Int, val money: Long,
+    val badgeCount: Int, val watts: Long
 ) {
     val displayTrainerId: String get() = (id32 % 1000000L).toString().padStart(6, '0')
 }
@@ -50,7 +51,8 @@ object SwordShieldTrainerReadOnly {
         }
         require(name.none { Character.isISOControl(it) }) { "The saved trainer name contains control characters." }
         return SwordShieldTrainerRead(block.version, name, gender, language, languageName, jersey.toString(),
-            uint32(bytes, 0xA0), uint16(bytes, 0xA0), uint16(bytes, 0xA2), block.money, watts)
+            uint32(bytes, 0xA0), uint16(bytes, 0xA0), uint16(bytes, 0xA2), block.money,
+            block.badgeCount, watts)
     }
 
     private fun byte(bytes: ByteArray, offset: Int): Int = bytes[offset].toInt() and 255

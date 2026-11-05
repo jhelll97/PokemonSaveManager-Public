@@ -19,14 +19,16 @@ internal data class SwordShieldTrainerWriteResult(
     val bytes: ByteArray,
     val nameOffset: Int,
     val trainerIdOffset: Int,
-    val moneyOffset: Int
+    val moneyOffset: Int,
+    val badgeOffset: Int
 )
 internal data class SwordShieldDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldPokemonWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldTrainerBlock(
     val version: SwordShieldVersion,
     val status: ByteArray,
-    val money: Long
+    val money: Long,
+    val badgeCount: Int
 )
 internal data class SwordShieldBattleTowerBlocks(
     val version: SwordShieldVersion,
@@ -140,7 +142,9 @@ object SwordShieldSaveValidation {
         val money = (0..3).fold(0L) { value, index ->
             value or ((misc[4 + index].toLong() and 255) shl (index * 8))
         }
-        return SwordShieldTrainerBlock(checked.version, captured.getValue(STATUS_KEY), money)
+        val badges = misc[0].toInt() and 255
+        require(badges <= 8) { "The saved Sword/Shield badge count exceeds eight." }
+        return SwordShieldTrainerBlock(checked.version, captured.getValue(STATUS_KEY), money, badges)
     }
 
     /** Reads the four documented native Battle Tower counters after the complete container gate passes. */
@@ -595,10 +599,11 @@ object SwordShieldSaveValidation {
         source: ByteArray,
         encodedName: ByteArray?,
         trainerId: Int?,
-        money: Long?
+        money: Long?,
+        badgeCount: Int?
     ): SwordShieldTrainerWriteResult {
         readTrainerBlock(source)
-        require(encodedName != null || trainerId != null || money != null) {
+        require(encodedName != null || trainerId != null || money != null || badgeCount != null) {
             "Select at least one Trainer Data field to change."
         }
         if (encodedName != null) require(encodedName.size == 26) {
@@ -610,9 +615,13 @@ object SwordShieldSaveValidation {
         if (money != null) require(money in 0L..9_999_999L) {
             "Money must be between 0 and 9,999,999."
         }
+        if (badgeCount != null) require(badgeCount in 0..8) {
+            "Badges must be between 0 and 8."
+        }
         val nameRelativeOffset = 0xB0
         val trainerIdRelativeOffset = 0xA0
         val moneyRelativeOffset = 4
+        val badgeRelativeOffset = 0
         val end = source.size - 32
         val payload = source.copyOfRange(0, end)
         for (index in payload.indices) payload[index] =
@@ -622,6 +631,7 @@ object SwordShieldSaveValidation {
         var nameOffset = -1
         var trainerIdOffset = -1
         var moneyOffset = -1
+        var badgeOffset = -1
         while (cursor.remaining > 0) {
             val key = cursor.uint32()
             val stream = KeyStream(key)
@@ -661,13 +671,14 @@ object SwordShieldSaveValidation {
                 require(type == 4 && length == 0x21CL) {
                     "The Sword/Shield money block has the wrong native type or size."
                 }
-                if (money != null) {
+                if (money != null || badgeCount != null) {
                     val decoded = ByteArray(length.toInt()) { byteIndex ->
                         (payload[blockStart + byteIndex].toInt() xor stream.next()).toByte()
                     }
-                    repeat(4) { byteIndex ->
+                    if (money != null) repeat(4) { byteIndex ->
                         decoded[moneyRelativeOffset + byteIndex] = (money ushr (byteIndex * 8)).toByte()
                     }
+                    if (badgeCount != null) decoded[badgeRelativeOffset] = badgeCount.toByte()
                     val replay = KeyStream(key)
                     replay.next()
                     replay.next32()
@@ -676,10 +687,11 @@ object SwordShieldSaveValidation {
                     }
                 }
                 moneyOffset = blockStart + moneyRelativeOffset
+                badgeOffset = blockStart + badgeRelativeOffset
             }
             cursor.skip(length.toInt())
         }
-        require(nameOffset >= 0 && trainerIdOffset >= 0 && moneyOffset >= 0) {
+        require(nameOffset >= 0 && trainerIdOffset >= 0 && moneyOffset >= 0 && badgeOffset >= 0) {
             "A required Sword/Shield Trainer Data object is missing."
         }
 
@@ -692,7 +704,7 @@ object SwordShieldSaveValidation {
         digest.update(outro)
         digest.digest().copyInto(edited, end)
         readTrainerBlock(edited)
-        return SwordShieldTrainerWriteResult(edited, nameOffset, trainerIdOffset, moneyOffset)
+        return SwordShieldTrainerWriteResult(edited, nameOffset, trainerIdOffset, moneyOffset, badgeOffset)
     }
 
 

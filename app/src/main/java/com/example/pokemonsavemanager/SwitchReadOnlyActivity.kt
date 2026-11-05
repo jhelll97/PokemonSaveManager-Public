@@ -2440,8 +2440,9 @@ class SwitchReadOnlyActivity : Activity() {
             append("Trainer ID (six digits): ${trainer.displayTrainerId}\n")
             append("Stored ID32: ${trainer.id32}\nTID16: ${trainer.tid16}\nSID16: ${trainer.sid16}\n")
             append("Money: ${trainer.money}\n")
+            append("Gym Badges: ${trainer.badgeCount}/8\n")
             append("Watts: ${trainer.watts}\n\n")
-            append("Trainer Name, Trainer ID and Money open in the reviewed native editor. ")
+            append("Trainer Name, Trainer ID, Money and Badges open in the reviewed native editor. ")
             append("Trainer gender and language are the saved game fields. ")
             append("Play time, badges, League Card and appearance details are not read in this view.")
         }
