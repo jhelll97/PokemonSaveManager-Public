@@ -6,12 +6,14 @@ import java.nio.CharBuffer
 import java.nio.charset.CodingErrorAction
 import java.security.MessageDigest
 
-/** First Gen 1-ordered Trainer Data edit: one native Let's Go trainer-name field. */
+/** Gen 1-ordered Trainer Data edits for the native Let's Go status block. */
 object LetsGoTrainerEditing {
     private const val STATUS_OFFSET = 0x1000
     private const val STATUS_LENGTH = 0x168
     private const val NAME_OFFSET = STATUS_OFFSET + 0x38
     private const val NAME_SIZE = 26
+    private const val TRAINER_ID_OFFSET = STATUS_OFFSET
+    private const val TRAINER_ID_SIZE = 2
     private const val STATUS_CRC_OFFSET = LetsGoSaveValidation.DESCRIPTORS + (2 * 8) + 6
 
     fun readDocumentBytes(input: InputStream): ByteArray = input.use {
@@ -33,35 +35,58 @@ object LetsGoTrainerEditing {
         output.toByteArray()
     }
 
-    fun stage(source: ByteArray, expectedSha256: String, requestedName: String): LetsGoTrainerNameCopyPlan {
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        requestedName: String,
+        requestedTrainerId: Int
+    ): LetsGoTrainerCopyPlan {
         val original = source.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
         val before = LetsGoTrainerReadOnly.read(original)
-        val name = requestedName.trim()
-        val encoded = encodeName(name)
-        require(name != before.name) { "Enter a different trainer name." }
+        val name = if (requestedName == before.name) before.name else requestedName.trim()
+        require(requestedTrainerId in 0..65535) { "Trainer ID must be between 0 and 65535." }
+        val nameChanged = name != before.name
+        val trainerIdChanged = requestedTrainerId != before.tid16
+        require(nameChanged || trainerIdChanged) { "Change the Trainer Name or Trainer ID before reviewing." }
 
         val edited = original.copyOf()
-        encoded.copyInto(edited, NAME_OFFSET)
+        if (nameChanged) encodeName(name).copyInto(edited, NAME_OFFSET)
+        if (trainerIdChanged) writeU16(edited, TRAINER_ID_OFFSET, requestedTrainerId)
         writeU16(edited, STATUS_CRC_OFFSET, LetsGoSaveValidation.crc16(edited, STATUS_OFFSET, STATUS_LENGTH))
-        verify(original, edited, name)
-        return LetsGoTrainerNameCopyPlan(original, edited, before.name, name)
+        verify(original, edited, name, requestedTrainerId, nameChanged, trainerIdChanged)
+        return LetsGoTrainerCopyPlan(
+            original, edited, before.name, name, before.tid16, requestedTrainerId,
+            nameChanged, trainerIdChanged
+        )
     }
 
-    internal fun verify(original: ByteArray, edited: ByteArray, expectedName: String) {
+    internal fun verify(
+        original: ByteArray,
+        edited: ByteArray,
+        expectedName: String,
+        expectedTrainerId: Int,
+        nameChanged: Boolean,
+        trainerIdChanged: Boolean
+    ) {
         val before = LetsGoTrainerReadOnly.read(original)
         val after = LetsGoTrainerReadOnly.read(edited)
         require(before.version == after.version && original.size == edited.size) {
             "The trainer edit changed title identity or save size."
         }
-        require(after.name == expectedName && before.copy(name = expectedName) == after) {
-            "The trainer-name edit did not reopen exactly."
+        val expectedId32 = (before.id32 and 0xFFFF0000L) or expectedTrainerId.toLong()
+        require(
+            after.name == expectedName && after.tid16 == expectedTrainerId &&
+                before.copy(name = expectedName, id32 = expectedId32, tid16 = expectedTrainerId) == after
+        ) {
+            "The Trainer Data edit did not reopen exactly."
         }
         require(original.indices.all { index ->
-            index in NAME_OFFSET until NAME_OFFSET + NAME_SIZE ||
+            (nameChanged && index in NAME_OFFSET until NAME_OFFSET + NAME_SIZE) ||
+                (trainerIdChanged && index in TRAINER_ID_OFFSET until TRAINER_ID_OFFSET + TRAINER_ID_SIZE) ||
                 index in STATUS_CRC_OFFSET until STATUS_CRC_OFFSET + 2 ||
                 original[index] == edited[index]
-        }) { "The trainer-name edit changed unrelated save data." }
+        }) { "The Trainer Data edit changed unrelated save data." }
     }
 
     fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes)
@@ -91,17 +116,22 @@ object LetsGoTrainerEditing {
 }
 
 /** Single-use reviewed transaction to a new document; the selected source is never replaced. */
-class LetsGoTrainerNameCopyPlan internal constructor(
+class LetsGoTrainerCopyPlan internal constructor(
     original: ByteArray,
     edited: ByteArray,
     val beforeName: String,
-    val afterName: String
+    val afterName: String,
+    val beforeTrainerId: Int,
+    val afterTrainerId: Int,
+    val nameChanged: Boolean,
+    val trainerIdChanged: Boolean
 ) {
     private val original = original.copyOf()
     private val edited = edited.copyOf()
     val sourceSha256: String = LetsGoTrainerEditing.sha256(this.original)
     val editedSha256: String = LetsGoTrainerEditing.sha256(this.edited)
     val nameOffset: Int = 0x1038
+    val trainerIdOffset: Int = 0x1000
     private var consumed = false
 
     @Synchronized
@@ -125,12 +155,16 @@ class LetsGoTrainerNameCopyPlan internal constructor(
         require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
         var started = false
         try {
-            LetsGoTrainerEditing.verify(original, edited, afterName)
+            LetsGoTrainerEditing.verify(
+                original, edited, afterName, afterTrainerId, nameChanged, trainerIdChanged
+            )
             started = true
             writeDestination(edited.copyOf())
             val persisted = readDestination()
             require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed edit." }
-            LetsGoTrainerEditing.verify(original, persisted, afterName)
+            LetsGoTrainerEditing.verify(
+                original, persisted, afterName, afterTrainerId, nameChanged, trainerIdChanged
+            )
             requireSource()
         } catch (failure: Exception) {
             val removed = started && runCatching { discardDestination() }.getOrDefault(false)
