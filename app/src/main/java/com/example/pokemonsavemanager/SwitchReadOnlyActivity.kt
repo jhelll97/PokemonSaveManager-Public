@@ -515,7 +515,10 @@ class SwitchReadOnlyActivity : Activity() {
         val accent = Color.rgb(70, 190, 255)
         val trainerNameEditing = (bound.profile.family == SwitchGameFamily.LETS_GO_PIKACHU_EEVEE ||
             bound.profile.family == SwitchGameFamily.SWORD_SHIELD ||
-            bound.profile.family == SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL) && selectedSourceUri != null
+            bound.profile.family == SwitchGameFamily.BRILLIANT_DIAMOND_SHINING_PEARL ||
+            bound.profile.family == SwitchGameFamily.LEGENDS_ARCEUS ||
+            bound.profile.family == SwitchGameFamily.SCARLET_VIOLET ||
+            bound.profile.family == SwitchGameFamily.LEGENDS_ZA) && selectedSourceUri != null
         dashboardRoot.addView(label("PSE", 38f, accent))
         dashboardRoot.addView(label(if (trainerNameEditing) "Pokémon Save Editor" else "Pokémon Save Editor • Read-only", 15f))
         dashboardRoot.addView(label("CURRENT SAVE", 13f, accent))
@@ -4070,7 +4073,7 @@ class SwitchReadOnlyActivity : Activity() {
         val trainer = bound.legendsZaTrainer ?: return
         fun saved(value: Long?): String = value?.toString() ?: "Not present"
         val detail = buildString {
-            append("${trainer.version.displayName} • Trainer Data • Read-only\n\n")
+            append("${trainer.version.displayName} • Trainer Data\n\n")
             append("Revision marker: ${trainer.revision?.displayName ?: "Not present"}\n")
             append("Trainer: ${trainer.name.ifBlank { "Not set" }}\nGender: ${if (trainer.gender == 0) "Male" else "Female"}\n")
             append("Language: ${trainer.languageName} (ID ${trainer.languageId})\n")
@@ -4084,15 +4087,28 @@ class SwitchReadOnlyActivity : Activity() {
             append("Player HP (raw): ${trainer.playerHp}\nSaved Mega gauge (raw): ${trainer.megaGaugePercent}\n\n")
             append("Counters and Mega gauge are raw saved values; balance limits, percentage scaling and story consistency are not evaluated. ")
             append("Absent counters stay marked Not present and do not establish DLC or progression status.\n\n")
-            append("Native container integrity passed before reading. No editing or save replacement is available.")
+            append("Native container integrity passed before reading. Trainer Name opens the reviewed native editor; the other displayed fields remain read-only.")
         }
-        val scroll = ScrollView(this).apply {
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
+            val source = selectedSourceUri
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Trainer Data"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchLegendsZaTrainerActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
         }
         AlertDialog.Builder(this).setTitle("${bound.displayName} • Trainer Data")
-            .setView(scroll).setPositiveButton("Close", null).show()
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
     private fun showLetsGoPokedex(bound: SwitchReadSession, requestedPage: Int) {
