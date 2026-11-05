@@ -3928,7 +3928,7 @@ class SwitchReadOnlyActivity : Activity() {
             bound.bdspGameOptions?.let { append(bdspGameOptionsSummary(it)); append("\n") }
             bound.bdspPlayTime?.let { append(bdspPlayTimeSummary(it)); append("\n") }
             bound.bdspTimestamps?.let { append(bdspTimestampSummary(it)); append("\n") }
-            append("Native whole-file MD5 passed before reading. Trainer Name opens the reviewed native editor; the other displayed fields remain read-only.")
+            append("Native whole-file MD5 passed before reading. Trainer Name, Trainer ID and Money open in the reviewed native editor; the other displayed fields remain read-only.")
         }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

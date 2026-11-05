@@ -12,6 +12,8 @@ object BdspTrainerEditing {
     private const val NAME_SIZE = 26
     private const val TRAINER_ID_OFFSET = 0x79BD0
     private const val TRAINER_ID_SIZE = 2
+    private const val MONEY_OFFSET = 0x79BD4
+    private const val MONEY_SIZE = 4
     private const val HASH_OFFSET = 0xE9818
     private const val HASH_LENGTH = 16
 
@@ -37,27 +39,34 @@ object BdspTrainerEditing {
         source: ByteArray,
         expectedSha256: String,
         requestedName: String,
-        requestedTrainerId: Int
+        requestedTrainerId: Int,
+        requestedMoney: Long
     ): BdspTrainerCopyPlan {
         val original = source.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
         val before = BdspTrainerReadOnly.read(original)
         val name = if (requestedName == before.name) before.name else requestedName.trim()
         require(requestedTrainerId in 0..65535) { "Trainer ID must be between 0 and 65535." }
+        require(requestedMoney in 0L..999_999L) { "Money must be between 0 and 999,999." }
         val nameChanged = name != before.name
         val trainerIdChanged = requestedTrainerId != before.tid16
-        require(nameChanged || trainerIdChanged) { "Change the Trainer Name or Trainer ID before reviewing." }
+        val moneyChanged = requestedMoney != before.money
+        require(nameChanged || trainerIdChanged || moneyChanged) {
+            "Change the Trainer Name, Trainer ID, or Money before reviewing."
+        }
         val edited = original.copyOf()
         if (nameChanged) encodeName(name).copyInto(edited, NAME_OFFSET)
         if (trainerIdChanged) {
             edited[TRAINER_ID_OFFSET] = requestedTrainerId.toByte()
             edited[TRAINER_ID_OFFSET + 1] = (requestedTrainerId ushr 8).toByte()
         }
+        if (moneyChanged) writeU32(edited, MONEY_OFFSET, requestedMoney)
         refreshDigest(edited)
-        verify(original, edited, name, requestedTrainerId, nameChanged, trainerIdChanged)
+        verify(original, edited, name, requestedTrainerId, requestedMoney,
+            nameChanged, trainerIdChanged, moneyChanged)
         return BdspTrainerCopyPlan(
             original, edited, before.name, name, before.tid16, requestedTrainerId,
-            nameChanged, trainerIdChanged
+            before.money, requestedMoney, nameChanged, trainerIdChanged, moneyChanged
         )
     }
 
@@ -66,8 +75,10 @@ object BdspTrainerEditing {
         edited: ByteArray,
         expectedName: String,
         expectedTrainerId: Int,
+        expectedMoney: Long,
         nameChanged: Boolean,
-        trainerIdChanged: Boolean
+        trainerIdChanged: Boolean,
+        moneyChanged: Boolean
     ) {
         val before = BdspTrainerReadOnly.read(original)
         val after = BdspTrainerReadOnly.read(edited)
@@ -76,14 +87,16 @@ object BdspTrainerEditing {
         ) { "The trainer edit changed title identity, revision, or save size." }
         val expectedId32 = (before.id32 and 0xFFFF0000L) or expectedTrainerId.toLong()
         require(
-            after.name == expectedName && after.tid16 == expectedTrainerId &&
-                before.copy(name = expectedName, id32 = expectedId32, tid16 = expectedTrainerId) == after
+            after.name == expectedName && after.tid16 == expectedTrainerId && after.money == expectedMoney &&
+                before.copy(name = expectedName, id32 = expectedId32, tid16 = expectedTrainerId,
+                    money = expectedMoney) == after
         ) {
             "The Trainer Data edit did not reopen exactly."
         }
         require(original.indices.all { index ->
             (nameChanged && index in NAME_OFFSET until NAME_OFFSET + NAME_SIZE) ||
                 (trainerIdChanged && index in TRAINER_ID_OFFSET until TRAINER_ID_OFFSET + TRAINER_ID_SIZE) ||
+                (moneyChanged && index in MONEY_OFFSET until MONEY_OFFSET + MONEY_SIZE) ||
                 index in HASH_OFFSET until HASH_OFFSET + HASH_LENGTH ||
                 original[index] == edited[index]
         }) { "The Trainer Data edit changed unrelated save data." }
@@ -113,6 +126,10 @@ object BdspTrainerEditing {
         bytes.fill(0, HASH_OFFSET, HASH_OFFSET + HASH_LENGTH)
         MessageDigest.getInstance("MD5").digest(bytes).copyInto(bytes, HASH_OFFSET)
     }
+
+    private fun writeU32(bytes: ByteArray, offset: Int, value: Long) {
+        for (index in 0..3) bytes[offset + index] = (value ushr (index * 8)).toByte()
+    }
 }
 
 /** Single-use reviewed transaction to a new document; the selected source is never replaced. */
@@ -123,8 +140,11 @@ class BdspTrainerCopyPlan internal constructor(
     val afterName: String,
     val beforeTrainerId: Int,
     val afterTrainerId: Int,
+    val beforeMoney: Long,
+    val afterMoney: Long,
     val nameChanged: Boolean,
-    val trainerIdChanged: Boolean
+    val trainerIdChanged: Boolean,
+    val moneyChanged: Boolean
 ) {
     private val original = original.copyOf()
     private val edited = edited.copyOf()
@@ -132,6 +152,7 @@ class BdspTrainerCopyPlan internal constructor(
     val editedSha256: String = BdspTrainerEditing.sha256(this.edited)
     val nameOffset: Int = 0x79BB4
     val trainerIdOffset: Int = 0x79BD0
+    val moneyOffset: Int = 0x79BD4
     private var consumed = false
 
     @Synchronized
@@ -156,14 +177,16 @@ class BdspTrainerCopyPlan internal constructor(
         var started = false
         try {
             BdspTrainerEditing.verify(
-                original, edited, afterName, afterTrainerId, nameChanged, trainerIdChanged
+                original, edited, afterName, afterTrainerId, afterMoney,
+                nameChanged, trainerIdChanged, moneyChanged
             )
             started = true
             writeDestination(edited.copyOf())
             val persisted = readDestination()
             require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed edit." }
             BdspTrainerEditing.verify(
-                original, persisted, afterName, afterTrainerId, nameChanged, trainerIdChanged
+                original, persisted, afterName, afterTrainerId, afterMoney,
+                nameChanged, trainerIdChanged, moneyChanged
             )
             requireSource()
         } catch (failure: Exception) {
