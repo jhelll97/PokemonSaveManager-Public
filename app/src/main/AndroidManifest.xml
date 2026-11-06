@@ -182,6 +182,7 @@
         <activity android:name=".SwitchLegendsZaPokemonDuplicateActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaPokemonSwapActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaPokemonPartyMoveActivity" android:exported="false"/>
+        <activity android:name=".SwitchLegendsZaPokemonDeleteActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaEventActivity" android:exported="false"/>
