@@ -2460,6 +2460,23 @@ class SwitchReadOnlyActivity : Activity() {
                 )
             }
         })
+        if (nativeTarget != null && nativeTarget.first == SwordShieldPokemonArea.BOX && !p.isEgg) {
+            content.addView(Button(this).apply {
+                text = "Swap with Pokémon in this Box"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchSwordShieldPokemonSwapActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                            .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
         val bankEntryName = location.takeIf { it.startsWith("PSE Bank • ") }
             ?.removePrefix("PSE Bank • ")
         val restore = bankEntryName?.let {
