@@ -65,6 +65,13 @@ data class LetsGoSpeedStatExpValues(
     val combatPower: Int
 )
 
+data class LetsGoSpecialStatExpValues(
+    val specialAwakeningValue: Int,
+    val specialAttack: Int,
+    val specialDefense: Int,
+    val combatPower: Int
+)
+
 /** Rebuilds one PB7's native level-dependent values in a reviewed new Let's Go save copy. */
 object LetsGoPokemonLevelEditing {
     private const val STORAGE_RECORDS = 0x5C00
@@ -89,6 +96,8 @@ object LetsGoPokemonLevelEditing {
     private const val ATTACK_AWAKENING_VALUE = 0x25
     private const val DEFENSE_AWAKENING_VALUE = 0x26
     private const val SPEED_AWAKENING_VALUE = 0x27
+    private const val SPECIAL_ATTACK_AWAKENING_VALUE = 0x28
+    private const val SPECIAL_DEFENSE_AWAKENING_VALUE = 0x29
     private const val LEVEL = 0xEC
     private const val CURRENT_HP = 0xF0
     private const val MAXIMUM_HP = 0xF2
@@ -657,6 +666,70 @@ object LetsGoPokemonLevelEditing {
         return LetsGoSpeedStatExpCopyPlan(original, edited, storageIndex, recordOffset, before, after)
     }
 
+    internal fun stageSpecialStatExp(
+        source: ByteArray,
+        expectedSha256: String,
+        storageIndex: Int,
+        requestedSpecialAwakeningValue: Int
+    ): LetsGoSpecialStatExpCopyPlan {
+        val original = source.copyOf()
+        require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        require(LetsGoSaveValidation.inspect(original) is LetsGoValidation.Verified) {
+            "A validated native Let's Go save is required."
+        }
+        require(requestedSpecialAwakeningValue in 0..200) {
+            "Special Awakening Value must be between 0 and 200."
+        }
+        val storage = LetsGoStorageReadOnly.read(original)
+        require(storageIndex in 0 until storage.count) { "The selected native Pokémon record no longer exists." }
+        val before = (storage.slot(storageIndex).read as? LetsGoSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The selected native PB7 is not checksum-valid.")
+        require(!before.isEgg) { "Egg Special Stat Exp / Awakening Value editing is not supported for Let's Go." }
+        require(requestedSpecialAwakeningValue != before.awakened[4] || requestedSpecialAwakeningValue != before.awakened[5]) {
+            "Enter a different Special Awakening Value before review."
+        }
+        val personal = LetsGoPersonalCatalogue.resolve(before.species, before.form)
+            ?: throw IllegalArgumentException(
+                "This PB7 form has no verified native Let's Go stat entry, so Special Stat Exp remains protected."
+            )
+        require(before.nature in 0..24 && before.currentHandler in 0..1) {
+            "The PB7 nature or current-handler identity is invalid, so derived stats cannot be rebuilt safely."
+        }
+        require(before.cachedLevel in 1..100 &&
+            levelForExperience(before.experience, personal.growth) == before.cachedLevel) {
+            "The saved Level and EXP do not agree with this Pokémon's verified growth group."
+        }
+        require(matchesCachedValues(before, calculate(before, personal, before.cachedLevel, before.experience))) {
+            "The saved battle values do not match this PB7's verified species/form profile."
+        }
+        val requestedAwakeningValues = before.awakened.toMutableList().also {
+            it[4] = requestedSpecialAwakeningValue
+            it[5] = requestedSpecialAwakeningValue
+        }
+        val recalculated = calculate(
+            before.copy(awakened = requestedAwakeningValues),
+            personal,
+            before.cachedLevel,
+            before.experience
+        )
+        val after = LetsGoSpecialStatExpValues(
+            requestedSpecialAwakeningValue,
+            recalculated.specialAttack,
+            recalculated.specialDefense,
+            recalculated.combatPower
+        )
+
+        val recordOffset = STORAGE_RECORDS + storageIndex * LetsGoPokemonReadOnly.RECORD_SIZE
+        val beforeRecord = original.copyOfRange(recordOffset, recordOffset + LetsGoPokemonReadOnly.RECORD_SIZE)
+        val afterRecord = editSpecialStatExpRecord(beforeRecord, after)
+        val edited = original.copyOf()
+        afterRecord.copyInto(edited, recordOffset)
+        writeU16(edited, descriptorCrcOffset(RECORD_BLOCK),
+            LetsGoSaveValidation.crc16(edited, STORAGE_RECORDS, STORAGE_RECORDS_LENGTH))
+        verifySpecialStatExp(original, edited, storageIndex, after)
+        return LetsGoSpecialStatExpCopyPlan(original, edited, storageIndex, recordOffset, before, after)
+    }
+
     internal fun verifyAttackDv(
         original: ByteArray,
         edited: ByteArray,
@@ -1180,6 +1253,80 @@ object LetsGoPokemonLevelEditing {
         }) { "An unrelated Let's Go save byte changed." }
     }
 
+    internal fun verifySpecialStatExp(
+        original: ByteArray,
+        edited: ByteArray,
+        storageIndex: Int,
+        expected: LetsGoSpecialStatExpValues
+    ) {
+        val beforeValidation = LetsGoSaveValidation.inspect(original)
+        val afterValidation = LetsGoSaveValidation.inspect(edited)
+        require(beforeValidation is LetsGoValidation.Verified && afterValidation is LetsGoValidation.Verified &&
+            beforeValidation.version == afterValidation.version && original.size == edited.size) {
+            "The Special Stat Exp edit changed native title identity, size, or block integrity."
+        }
+        val beforeStorage = LetsGoStorageReadOnly.read(original)
+        val afterStorage = LetsGoStorageReadOnly.read(edited)
+        require(beforeStorage.count == afterStorage.count && storageIndex in 0 until beforeStorage.count) {
+            "The native stored-list identity changed."
+        }
+        val recordOffset = STORAGE_RECORDS + storageIndex * LetsGoPokemonReadOnly.RECORD_SIZE
+        require((0 until beforeStorage.count).all { index ->
+            index == storageIndex || run {
+                val offset = STORAGE_RECORDS + index * LetsGoPokemonReadOnly.RECORD_SIZE
+                original.copyOfRange(offset, offset + LetsGoPokemonReadOnly.RECORD_SIZE)
+                    .contentEquals(edited.copyOfRange(offset, offset + LetsGoPokemonReadOnly.RECORD_SIZE))
+            }
+        }) { "Another native Pokémon record changed." }
+
+        val beforeSlot = beforeStorage.slot(storageIndex)
+        val afterSlot = afterStorage.slot(storageIndex)
+        require(beforeSlot.partyPositions == afterSlot.partyPositions && beforeSlot.partner == afterSlot.partner) {
+            "The selected Pokémon's party or partner identity changed."
+        }
+        val before = (beforeSlot.read as? LetsGoSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The original PB7 no longer reopens as a Pokémon.")
+        val after = (afterSlot.read as? LetsGoSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The edited PB7 did not reopen as a Pokémon.")
+        require(after.awakened[4] == expected.specialAwakeningValue &&
+            after.awakened[5] == expected.specialAwakeningValue &&
+            after.awakened.indices.filter { it != 4 && it != 5 }
+                .all { after.awakened[it] == before.awakened[it] } &&
+            after.specialAttack == expected.specialAttack &&
+            after.specialDefense == expected.specialDefense &&
+            after.combatPower == expected.combatPower &&
+            after.copy(
+                awakened = before.awakened,
+                specialAttack = before.specialAttack,
+                specialDefense = before.specialDefense,
+                combatPower = before.combatPower
+            ) == before) {
+            "The persisted PB7 changed outside the paired Special Awakening Values and their derived stats and CP."
+        }
+
+        val beforePlain = decryptAndUnshuffle(
+            original.copyOfRange(recordOffset, recordOffset + LetsGoPokemonReadOnly.RECORD_SIZE))
+        val afterPlain = decryptAndUnshuffle(
+            edited.copyOfRange(recordOffset, recordOffset + LetsGoPokemonReadOnly.RECORD_SIZE))
+        require(beforePlain.indices.all { offset ->
+            offset in 6..7 ||
+                offset == SPECIAL_ATTACK_AWAKENING_VALUE ||
+                offset == SPECIAL_DEFENSE_AWAKENING_VALUE ||
+                offset in SPECIAL_ATTACK_STAT until SPECIAL_ATTACK_STAT + 2 ||
+                offset in SPECIAL_DEFENSE_STAT until SPECIAL_DEFENSE_STAT + 2 ||
+                offset in COMBAT_POWER until COMBAT_POWER + 2 ||
+                beforePlain[offset] == afterPlain[offset]
+        }) {
+            "The PB7 edit exceeded paired Special Awakening Values, derived Special stats and CP, and checksum fields."
+        }
+
+        val crcOffset = descriptorCrcOffset(RECORD_BLOCK)
+        require(original.indices.all { offset ->
+            offset in recordOffset until recordOffset + LetsGoPokemonReadOnly.RECORD_SIZE ||
+                offset in crcOffset until crcOffset + 2 || original[offset] == edited[offset]
+        }) { "An unrelated Let's Go save byte changed." }
+    }
+
     internal fun verify(original: ByteArray, edited: ByteArray, storageIndex: Int, expected: LetsGoLevelValues) {
         val beforeValidation = LetsGoSaveValidation.inspect(original)
         val afterValidation = LetsGoSaveValidation.inspect(edited)
@@ -1458,6 +1605,19 @@ object LetsGoPokemonLevelEditing {
         return shuffleAndEncrypt(plain)
     }
 
+    private fun editSpecialStatExpRecord(record: ByteArray, values: LetsGoSpecialStatExpValues): ByteArray {
+        val plain = decryptAndUnshuffle(record)
+        plain[SPECIAL_ATTACK_AWAKENING_VALUE] = values.specialAwakeningValue.toByte()
+        plain[SPECIAL_DEFENSE_AWAKENING_VALUE] = values.specialAwakeningValue.toByte()
+        writeU16(plain, SPECIAL_ATTACK_STAT, values.specialAttack)
+        writeU16(plain, SPECIAL_DEFENSE_STAT, values.specialDefense)
+        writeU16(plain, COMBAT_POWER, values.combatPower)
+        var checksum = 0
+        for (offset in 8 until 0xE8 step 2) checksum += u16(plain, offset)
+        writeU16(plain, 6, checksum and 0xFFFF)
+        return shuffleAndEncrypt(plain)
+    }
+
     private fun decryptAndUnshuffle(record: ByteArray): ByteArray {
         require(record.size == LetsGoPokemonReadOnly.RECORD_SIZE) { "Expected one complete native PB7 record." }
         val ec = u32(record, 0)
@@ -1689,6 +1849,26 @@ object LetsGoPokemonSpeedStatExpEditing {
         requestedSpeedAwakeningValue: Int
     ): LetsGoSpeedStatExpCopyPlan = LetsGoPokemonLevelEditing.stageSpeedStatExp(
         source, expectedSha256, storageIndex, requestedSpeedAwakeningValue
+    )
+}
+
+/** Gen 1 Special Stat Exp mapped to Let's Go's paired native Special Attack and Special Defense Awakening Values. */
+object LetsGoPokemonSpecialStatExpEditing {
+    fun readDocumentBytes(input: java.io.InputStream): ByteArray =
+        LetsGoPokemonLevelEditing.readDocumentBytes(input)
+
+    fun readSaveBytes(input: java.io.InputStream): ByteArray =
+        LetsGoPokemonLevelEditing.readSaveBytes(input)
+
+    fun sha256(bytes: ByteArray): String = LetsGoPokemonLevelEditing.sha256(bytes)
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        storageIndex: Int,
+        requestedSpecialAwakeningValue: Int
+    ): LetsGoSpecialStatExpCopyPlan = LetsGoPokemonLevelEditing.stageSpecialStatExp(
+        source, expectedSha256, storageIndex, requestedSpecialAwakeningValue
     )
 }
 
@@ -2243,6 +2423,63 @@ class LetsGoSpeedStatExpCopyPlan internal constructor(
             val removed = started && runCatching { discardDestination() }.getOrDefault(false)
             throw IllegalStateException(
                 (failure.message ?: "Speed Stat Exp copy verification failed.") +
+                    if (removed) " The failed new copy was removed; the recovery backup is retained."
+                    else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
+                failure
+            )
+        }
+    }
+}
+
+
+class LetsGoSpecialStatExpCopyPlan internal constructor(
+    original: ByteArray,
+    edited: ByteArray,
+    val storageIndex: Int,
+    val recordOffset: Int,
+    val before: LetsGoPokemonRead,
+    val after: LetsGoSpecialStatExpValues
+) {
+    private val original = original.copyOf()
+    private val edited = edited.copyOf()
+    val sourceSha256: String = LetsGoPokemonSpecialStatExpEditing.sha256(this.original)
+    val editedSha256: String = LetsGoPokemonSpecialStatExpEditing.sha256(this.edited)
+    private var consumed = false
+
+    @Synchronized
+    fun saveNewCopy(
+        readSource: () -> ByteArray,
+        retainBackup: (ByteArray) -> ByteArray,
+        readDestination: () -> ByteArray,
+        writeDestination: (ByteArray) -> Unit,
+        discardDestination: () -> Boolean
+    ) {
+        check(!consumed) { "This Special Stat Exp review was already used. Reopen Pokémon Boxes." }
+        consumed = true
+        fun requireSource() = require(readSource().contentEquals(original)) {
+            "The selected source changed. Reopen it from PSE."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "Choose a new empty document; existing files cannot be replaced." }
+        val backup = retainBackup(original.copyOf())
+        require(backup.contentEquals(original)) { "The recovery backup did not verify. Nothing was written." }
+        requireSource()
+        require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
+        var started = false
+        try {
+            LetsGoPokemonLevelEditing.verifySpecialStatExp(original, edited, storageIndex, after)
+            started = true
+            writeDestination(edited.copyOf())
+            val persisted = readDestination()
+            require(persisted.contentEquals(edited)) {
+                "The saved copy differs from the reviewed Special Stat Exp edit."
+            }
+            LetsGoPokemonLevelEditing.verifySpecialStatExp(original, persisted, storageIndex, after)
+            requireSource()
+        } catch (failure: Exception) {
+            val removed = started && runCatching { discardDestination() }.getOrDefault(false)
+            throw IllegalStateException(
+                (failure.message ?: "Special Stat Exp copy verification failed.") +
                     if (removed) " The failed new copy was removed; the recovery backup is retained."
                     else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
                 failure
