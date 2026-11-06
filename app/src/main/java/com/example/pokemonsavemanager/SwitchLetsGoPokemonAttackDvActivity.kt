@@ -28,6 +28,7 @@ class SwitchLetsGoPokemonAttackDvActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var attackIv: EditText
     private lateinit var review: Button
+    private lateinit var defenseDv: Button
     private lateinit var move4: Button
     private lateinit var inspectCopy: Button
 
@@ -66,6 +67,19 @@ class SwitchLetsGoPokemonAttackDvActivity : Activity() {
             text = "Review Attack DV / IV change"; isEnabled = false; setOnClickListener { reviewAttackDv() }
         }
         root.addView(review)
+        defenseDv = Button(this).apply {
+            text = "Next field: Defense DV / IV"; isEnabled = false
+            setOnClickListener {
+                val uri = sourceUri ?: return@setOnClickListener
+                val hash = expectedHash ?: return@setOnClickListener
+                startActivity(Intent(this@SwitchLetsGoPokemonAttackDvActivity,
+                    SwitchLetsGoPokemonDefenseDvActivity::class.java)
+                    .setData(uri).putExtra("pse.switch.sha256", hash)
+                    .putExtra("pse.switch.pokemon.index", storageIndex)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            }
+        }
+        root.addView(defenseDv)
         move4 = Button(this).apply {
             text = "Back to Move 4"; isEnabled = false
             setOnClickListener {
@@ -119,6 +133,7 @@ class SwitchLetsGoPokemonAttackDvActivity : Activity() {
         busy = value
         attackIv.isEnabled = !value && opened != null
         review.isEnabled = !value && opened != null
+        defenseDv.isEnabled = !value && opened != null
         move4.isEnabled = !value && opened != null
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
@@ -249,3 +264,4 @@ class SwitchLetsGoPokemonAttackDvActivity : Activity() {
     override fun onBackPressed() { if (!busy) super.onBackPressed() }
     override fun onDestroy() { pendingPlan = null; worker.shutdown(); super.onDestroy() }
 }
+
