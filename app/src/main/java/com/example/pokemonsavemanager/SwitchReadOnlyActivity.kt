@@ -1495,6 +1495,22 @@ class SwitchReadOnlyActivity : Activity() {
                 )
             }
         })
+        if (slot.partyPositions.isEmpty() && !slot.partner && !p.isPartnerForm && !p.isEgg) {
+            content.addView(Button(this).apply {
+                text = "Swap with Pokémon in this Box"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchLetsGoPokemonSwapActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.index", slot.index)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
         val bank = Button(this).apply { text = "Add to PSE Bank"; isAllCaps = false }
         content.addView(bank)
         val scroll = ScrollView(this).apply { addView(content) }
