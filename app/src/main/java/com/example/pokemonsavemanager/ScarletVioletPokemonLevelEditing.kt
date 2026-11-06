@@ -46,6 +46,11 @@ data class ScarletVioletAttackStatExpValues(
     val attack: Int
 )
 
+data class ScarletVioletDefenseStatExpValues(
+    val defenseEv: Int,
+    val defense: Int
+)
+
 /** Rebuilds one PK9's native level-dependent values in a reviewed new Scarlet/Violet save copy. */
 object ScarletVioletPokemonLevelEditing {
     private const val STORED_END = 0x148
@@ -64,6 +69,7 @@ object ScarletVioletPokemonLevelEditing {
     private const val SPECIAL_IV_MASK = SPECIAL_ATTACK_IV_MASK or SPECIAL_DEFENSE_IV_MASK
     private const val HP_EV = 0x26
     private const val ATTACK_EV = 0x27
+    private const val DEFENSE_EV = 0x28
     private const val CURRENT_HP = 0x8A
     private const val LEVEL = 0x148
     private const val MAXIMUM_HP = 0x14A
@@ -393,6 +399,52 @@ object ScarletVioletPokemonLevelEditing {
         } else ScarletVioletSaveValidation.writePartyRecord(original, position, afterRecord)
         verifyAttackStatExp(original, written.bytes, area, box, position, written.absoluteOffset, after)
         return ScarletVioletAttackStatExpCopyPlan(
+            original, written.bytes, area, box, position, written.absoluteOffset, before, after
+        )
+    }
+
+    internal fun stageDefenseStatExp(
+        source: ByteArray,
+        expectedSha256: String,
+        area: ScarletVioletPokemonArea,
+        box: Int,
+        position: Int,
+        requestedDefenseEv: Int
+    ): ScarletVioletDefenseStatExpCopyPlan {
+        val original = source.copyOf()
+        require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        require(requestedDefenseEv in 0..252) { "Defense EV must be between 0 and 252." }
+        val blocks = ScarletVioletSaveValidation.readPokemonBlocks(original)
+        val target = targetRecord(blocks, area, box, position)
+        val before = (ScarletVioletPokemonReadOnly.read(target) as? ScarletVioletSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The selected native PK9 is not checksum-valid.")
+        require(!before.isEgg) { "Egg Defense Stat Exp / EV editing is not supported for Scarlet/Violet." }
+        require(requestedDefenseEv != before.evs[2]) { "Enter a different Defense EV before review." }
+        require(requestedDefenseEv + before.evs.filterIndexed { index, _ -> index != 2 }.sum() <= 510) {
+            "The requested Defense EV would exceed Scarlet/Violet's native 510 total EV limit."
+        }
+        require(before.cachedLevel in 1..100 && before.statNature in 0..24) {
+            "The PK9 Level or stat nature is invalid, so derived stats cannot be rebuilt safely."
+        }
+        val personal = resolvePersonal(before)
+        require(levelForExperience(before.experience, personal.growth) == before.cachedLevel) {
+            "The saved Level and EXP do not agree with this Pokémon's verified growth group."
+        }
+        require(matchesCachedValues(before,
+            calculate(before, personal, before.cachedLevel, before.experience))) {
+            "The saved battle values do not match this PK9's verified species/form profile."
+        }
+        val requestedEvs = before.evs.toMutableList().also { it[2] = requestedDefenseEv }
+        val recalculated = calculate(
+            before.copy(evs = requestedEvs), personal, before.cachedLevel, before.experience
+        )
+        val after = ScarletVioletDefenseStatExpValues(requestedDefenseEv, recalculated.defense)
+        val afterRecord = editDefenseStatExpRecord(target, after)
+        val written = if (area == ScarletVioletPokemonArea.BOX) {
+            ScarletVioletSaveValidation.writeBoxRecord(original, box, position, afterRecord)
+        } else ScarletVioletSaveValidation.writePartyRecord(original, position, afterRecord)
+        verifyDefenseStatExp(original, written.bytes, area, box, position, written.absoluteOffset, after)
+        return ScarletVioletDefenseStatExpCopyPlan(
             original, written.bytes, area, box, position, written.absoluteOffset, before, after
         )
     }
@@ -872,6 +924,63 @@ object ScarletVioletPokemonLevelEditing {
         }) { "An unrelated encrypted container byte changed." }
     }
 
+    internal fun verifyDefenseStatExp(
+        original: ByteArray,
+        edited: ByteArray,
+        area: ScarletVioletPokemonArea,
+        box: Int,
+        position: Int,
+        absoluteOffset: Int,
+        expected: ScarletVioletDefenseStatExpValues
+    ) {
+        val beforeBlocks = ScarletVioletSaveValidation.readPokemonBlocks(original)
+        val afterBlocks = ScarletVioletSaveValidation.readPokemonBlocks(edited)
+        require(beforeBlocks.version == afterBlocks.version && original.size == edited.size) {
+            "The Defense Stat Exp edit changed native title identity or save size."
+        }
+        val beforeRecord = targetRecord(beforeBlocks, area, box, position)
+        val afterRecord = targetRecord(afterBlocks, area, box, position)
+        val before = (ScarletVioletPokemonReadOnly.read(beforeRecord) as? ScarletVioletSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The original PK9 no longer reopens as a Pokémon.")
+        val after = (ScarletVioletPokemonReadOnly.read(afterRecord) as? ScarletVioletSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The edited PK9 did not reopen as a Pokémon.")
+        require(after.evs[2] == expected.defenseEv &&
+            after.evs.indices.filter { it != 2 }.all { after.evs[it] == before.evs[it] } &&
+            after.cachedStats[1] == expected.defense &&
+            after.cachedStats.indices.filter { it != 1 }.all { after.cachedStats[it] == before.cachedStats[it] } &&
+            after.copy(evs = before.evs, cachedStats = before.cachedStats) == before) {
+            "The persisted PK9 changed outside Defense EV and its derived Defense value."
+        }
+
+        val relativeOffset = if (area == ScarletVioletPokemonArea.BOX)
+            ((box - 1) * 30 + position - 1) * ScarletVioletPokemonReadOnly.RECORD_SIZE
+        else (position - 1) * ScarletVioletPokemonReadOnly.RECORD_SIZE
+        val beforeTargetBlock = if (area == ScarletVioletPokemonArea.BOX) beforeBlocks.boxes else beforeBlocks.party
+        val afterTargetBlock = if (area == ScarletVioletPokemonArea.BOX) afterBlocks.boxes else afterBlocks.party
+        val beforeOtherBlock = if (area == ScarletVioletPokemonArea.BOX) beforeBlocks.party else beforeBlocks.boxes
+        val afterOtherBlock = if (area == ScarletVioletPokemonArea.BOX) afterBlocks.party else afterBlocks.boxes
+        require(beforeOtherBlock.contentEquals(afterOtherBlock)) {
+            "The unselected native Pokémon storage object changed."
+        }
+        require(beforeTargetBlock.indices.all { index ->
+            index in relativeOffset until relativeOffset + ScarletVioletPokemonReadOnly.RECORD_SIZE ||
+                beforeTargetBlock[index] == afterTargetBlock[index]
+        }) { "Another native Pokémon slot or the dedicated ride Pokémon changed." }
+
+        val beforePlain = decryptAndUnshuffle(beforeRecord)
+        val afterPlain = decryptAndUnshuffle(afterRecord)
+        require(beforePlain.indices.all { offset ->
+            offset in 6..7 || offset == DEFENSE_EV ||
+                offset in 0x14E until 0x150 || beforePlain[offset] == afterPlain[offset]
+        }) { "The PK9 edit exceeded Defense EV, derived Defense, and checksum fields." }
+
+        val hashOffset = original.size - 32
+        require(original.indices.all { index ->
+            index in absoluteOffset until absoluteOffset + ScarletVioletPokemonReadOnly.RECORD_SIZE ||
+                index in hashOffset until original.size || original[index] == edited[index]
+        }) { "An unrelated encrypted container byte changed." }
+    }
+
     private fun resolvePersonal(pokemon: ScarletVioletPokemonRead): ScarletVioletPersonalData =
         ScarletVioletPersonalCatalogue.profile(pokemon.species, pokemon.form)
             ?: throw IllegalArgumentException(
@@ -1081,6 +1190,19 @@ object ScarletVioletPokemonLevelEditing {
         return shuffleAndEncrypt(plain)
     }
 
+    private fun editDefenseStatExpRecord(
+        record: ByteArray,
+        values: ScarletVioletDefenseStatExpValues
+    ): ByteArray {
+        val plain = decryptAndUnshuffle(record)
+        plain[DEFENSE_EV] = values.defenseEv.toByte()
+        writeU16(plain, 0x14E, values.defense)
+        var checksum = 0
+        for (offset in 8 until STORED_END step 2) checksum += u16(plain, offset)
+        writeU16(plain, 6, checksum and 0xFFFF)
+        return shuffleAndEncrypt(plain)
+    }
+
     private fun decryptAndUnshuffle(record: ByteArray): ByteArray {
         require(record.size == ScarletVioletPokemonReadOnly.RECORD_SIZE) {
             "Expected one complete native PK9 record."
@@ -1266,6 +1388,25 @@ object ScarletVioletPokemonAttackStatExpEditing {
         requestedAttackEv: Int
     ): ScarletVioletAttackStatExpCopyPlan = ScarletVioletPokemonLevelEditing.stageAttackStatExp(
         source, expectedSha256, area, box, position, requestedAttackEv
+    )
+}
+
+/** Gen 1 Defense Stat Exp mapped to Scarlet/Violet's native Defense EV. */
+object ScarletVioletPokemonDefenseStatExpEditing {
+    fun readDocumentBytes(input: java.io.InputStream): ByteArray =
+        ScarletVioletPokemonLevelEditing.readDocumentBytes(input)
+
+    fun sha256(bytes: ByteArray): String = ScarletVioletPokemonLevelEditing.sha256(bytes)
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        area: ScarletVioletPokemonArea,
+        box: Int,
+        position: Int,
+        requestedDefenseEv: Int
+    ): ScarletVioletDefenseStatExpCopyPlan = ScarletVioletPokemonLevelEditing.stageDefenseStatExp(
+        source, expectedSha256, area, box, position, requestedDefenseEv
     )
 }
 
@@ -1645,6 +1786,70 @@ class ScarletVioletAttackStatExpCopyPlan internal constructor(
             val removed = started && runCatching { discardDestination() }.getOrDefault(false)
             throw IllegalStateException(
                 (failure.message ?: "Attack Stat Exp copy verification failed.") +
+                    if (removed) " The failed new copy was removed; the recovery backup is retained."
+                    else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
+                failure
+            )
+        }
+    }
+}
+
+class ScarletVioletDefenseStatExpCopyPlan internal constructor(
+    original: ByteArray,
+    edited: ByteArray,
+    val area: ScarletVioletPokemonArea,
+    val box: Int,
+    val position: Int,
+    val absoluteOffset: Int,
+    val before: ScarletVioletPokemonRead,
+    val after: ScarletVioletDefenseStatExpValues
+) {
+    private val original = original.copyOf()
+    private val edited = edited.copyOf()
+    val sourceSha256 = ScarletVioletPokemonDefenseStatExpEditing.sha256(this.original)
+    val editedSha256 = ScarletVioletPokemonDefenseStatExpEditing.sha256(this.edited)
+    private var consumed = false
+    val location: String
+        get() = if (area == ScarletVioletPokemonArea.BOX) "Box $box • Slot $position" else "Party $position"
+
+    @Synchronized
+    fun saveNewCopy(
+        readSource: () -> ByteArray,
+        retainBackup: (ByteArray) -> ByteArray,
+        readDestination: () -> ByteArray,
+        writeDestination: (ByteArray) -> Unit,
+        discardDestination: () -> Boolean
+    ) {
+        check(!consumed) { "This Defense Stat Exp review was already used. Reopen Pokémon Boxes." }
+        consumed = true
+        fun requireSource() = require(readSource().contentEquals(original)) {
+            "The selected source changed. Reopen it from PSE."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "Choose a new empty document; existing files cannot be replaced." }
+        val backup = retainBackup(original.copyOf())
+        require(backup.contentEquals(original)) { "The recovery backup did not verify. Nothing was written." }
+        requireSource()
+        require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
+        var started = false
+        try {
+            ScarletVioletPokemonLevelEditing.verifyDefenseStatExp(
+                original, edited, area, box, position, absoluteOffset, after
+            )
+            started = true
+            writeDestination(edited.copyOf())
+            val persisted = readDestination()
+            require(persisted.contentEquals(edited)) {
+                "The saved copy differs from the reviewed Defense Stat Exp edit."
+            }
+            ScarletVioletPokemonLevelEditing.verifyDefenseStatExp(
+                original, persisted, area, box, position, absoluteOffset, after
+            )
+            requireSource()
+        } catch (failure: Exception) {
+            val removed = started && runCatching { discardDestination() }.getOrDefault(false)
+            throw IllegalStateException(
+                (failure.message ?: "Defense Stat Exp copy verification failed.") +
                     if (removed) " The failed new copy was removed; the recovery backup is retained."
                     else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
                 failure
