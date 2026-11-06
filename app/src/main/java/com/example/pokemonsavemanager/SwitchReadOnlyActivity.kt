@@ -2270,13 +2270,36 @@ class SwitchReadOnlyActivity : Activity() {
             append("Nickname: ${p.nickname.ifBlank { "None" }}\n")
             append("Shiny: ${if (p.shiny) "Yes" else "No"} • Alpha: ${if (p.isAlpha) "Yes" else "No"} • Egg: ${if (p.isEgg) "Yes" else "No"}\n")
             append("Original trainer: ${p.originalTrainer}\n\n")
-            append("Native PA9 checksum passed. Removing this Bank copy never changes the Switch save.")
+            append("Native PA9 checksum passed. Restore writes the exact Bank record only to a reviewed new save copy; the active source and Bank entry remain unchanged. Removing this Bank copy never changes the Switch save.")
         }
         val dialog = AlertDialog.Builder(this).setTitle("PSE Bank • Legends: Z-A")
             .setMessage(detail).setNegativeButton("Close", null).create()
         dialog.setButton(AlertDialog.BUTTON_POSITIVE, "Remove from PSE Bank",
             null as android.content.DialogInterface.OnClickListener?)
+        dialog.setButton(AlertDialog.BUTTON_NEUTRAL, "Restore to new save copy",
+            null as android.content.DialogInterface.OnClickListener?)
         dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                try {
+                    require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                    val source = selectedSourceUri ?: error("Reopen the selected Legends: Z-A save from PSE.")
+                    require(entry.parentFile == directory && entry.name.startsWith("switch_za_") && entry.extension == "pa9") {
+                        "This is not a current Legends: Z-A Bank entry."
+                    }
+                    require(LegendsZaPokemonReadOnly.read(entry.readBytes()) is LegendsZaSlotRead.Pokemon) {
+                        "The Bank record is invalid and cannot be restored."
+                    }
+                    dialog.dismiss()
+                    startActivity(Intent(this, SwitchLegendsZaPseBankRestoreActivity::class.java).setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.bank.entry", entry.name)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not prepare Bank restore")
+                        .setMessage(error.message ?: "The source and Bank entry were left unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 try {
                     require(session === bound) { "The active save changed; the Bank entry was left unchanged." }
