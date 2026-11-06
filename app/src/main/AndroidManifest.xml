@@ -149,6 +149,7 @@
         <activity android:name=".SwitchScarletVioletPseBankRestoreActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonDuplicateActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonSwapActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletPokemonPartyMoveActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletEventActivity" android:exported="false"/>
