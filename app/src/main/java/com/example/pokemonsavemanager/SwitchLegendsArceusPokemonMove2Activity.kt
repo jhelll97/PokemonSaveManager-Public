@@ -94,7 +94,7 @@ class SwitchLegendsArceusPokemonMove2Activity : Activity() {
                     SwitchLegendsArceusPokemonMove3Activity::class.java)
                     .setData(uri).putExtra("pse.switch.sha256", hash)
                     .putExtra("pse.switch.pokemon.area", selected.name)
-                    .putExtra("pse.switch.pokemon.box", box)
+                    .putExtra("pse.switch.pokemon.pasture", pasture)
                     .putExtra("pse.switch.pokemon.position", position)
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
             }
