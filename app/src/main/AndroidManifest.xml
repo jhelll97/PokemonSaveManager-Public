@@ -114,6 +114,7 @@
         <activity android:name=".SwitchLegendsArceusPokemonSpeedStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokemonSpecialStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPseBankRestoreActivity" android:exported="false"/>
+        <activity android:name=".SwitchLegendsArceusPokemonDuplicateActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusEventActivity" android:exported="false"/>
