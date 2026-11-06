@@ -1857,13 +1857,36 @@ class SwitchReadOnlyActivity : Activity() {
             append("${LetsGoSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form}\n")
             append("Nickname: ${p.nickname.ifBlank { "None" }}\nCached level: ${p.cachedLevel}\n")
             append("Shiny: ${if (p.shiny) "Yes" else "No"}\nOriginal trainer: ${p.originalTrainer}\n\n")
-            append("Native PB7 checksum passed. Removing this Bank copy never changes the Switch save.")
+            append("Native PB7 checksum passed. Restore writes the exact Bank record only to a reviewed new save copy; the active source and Bank entry remain unchanged. Removing this Bank copy never changes the Switch save.")
         }
         val dialog = AlertDialog.Builder(this).setTitle("PSE Bank • Let's Go")
             .setMessage(detail).setNegativeButton("Close", null).create()
         dialog.setButton(AlertDialog.BUTTON_POSITIVE, "Remove from PSE Bank",
             null as android.content.DialogInterface.OnClickListener?)
+        dialog.setButton(AlertDialog.BUTTON_NEUTRAL, "Restore to new save copy",
+            null as android.content.DialogInterface.OnClickListener?)
         dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                try {
+                    require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                    val source = selectedSourceUri ?: error("Reopen the selected Let's Go save from PSE.")
+                    require(entry.parentFile == directory && entry.name.startsWith("switch_lgpe_") && entry.extension == "pb7") {
+                        "This is not a current Let's Go Bank entry."
+                    }
+                    require(LetsGoPokemonReadOnly.read(entry.readBytes()) is LetsGoSlotRead.Pokemon) {
+                        "The Bank record is invalid and cannot be restored."
+                    }
+                    dialog.dismiss()
+                    startActivity(Intent(this, SwitchLetsGoPseBankRestoreActivity::class.java).setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.bank.entry", entry.name)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not prepare Bank restore")
+                        .setMessage(error.message ?: "The source and Bank entry were left unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 try {
                     require(session === bound) { "The active save changed; the Bank entry was left unchanged." }
