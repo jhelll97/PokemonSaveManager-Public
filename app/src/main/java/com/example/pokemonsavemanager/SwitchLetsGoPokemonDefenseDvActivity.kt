@@ -29,6 +29,7 @@ class SwitchLetsGoPokemonDefenseDvActivity : Activity() {
     private lateinit var defenseIv: EditText
     private lateinit var review: Button
     private lateinit var attackDv: Button
+    private lateinit var speedDv: Button
     private lateinit var inspectCopy: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -78,6 +79,18 @@ class SwitchLetsGoPokemonDefenseDvActivity : Activity() {
             }
         }
         root.addView(attackDv)
+        speedDv = Button(this).apply {
+            text = "Next: Speed DV / IV"; isEnabled = false
+            setOnClickListener {
+                val uri = sourceUri ?: return@setOnClickListener
+                val hash = expectedHash ?: return@setOnClickListener
+                startActivity(Intent(this@SwitchLetsGoPokemonDefenseDvActivity, SwitchLetsGoPokemonSpeedDvActivity::class.java)
+                    .setData(uri).putExtra("pse.switch.sha256", hash)
+                    .putExtra("pse.switch.pokemon.index", storageIndex)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            }
+        }
+        root.addView(speedDv)
         inspectCopy = Button(this).apply {
             text = "Inspect verified copy"; visibility = android.view.View.GONE
             setOnClickListener { inspectVerifiedCopy() }
@@ -120,6 +133,7 @@ class SwitchLetsGoPokemonDefenseDvActivity : Activity() {
         defenseIv.isEnabled = !value && opened != null
         review.isEnabled = !value && opened != null
         attackDv.isEnabled = !value && opened != null
+        speedDv.isEnabled = !value && opened != null
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
 
