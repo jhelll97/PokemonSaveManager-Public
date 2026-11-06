@@ -52,6 +52,11 @@ data class BdspDefenseStatExpValues(
     val defense: Int
 )
 
+data class BdspSpeedStatExpValues(
+    val speedEv: Int,
+    val speed: Int
+)
+
 /** Rebuilds one PB8's native level-dependent values in a reviewed new BDSP save copy. */
 object BdspPokemonLevelEditing {
     private const val PARTY_OFFSET = 0x14098
@@ -75,6 +80,7 @@ object BdspPokemonLevelEditing {
     private const val HP_EV = 0x26
     private const val ATTACK_EV = 0x27
     private const val DEFENSE_EV = 0x28
+    private const val SPEED_EV = 0x29
     private const val CURRENT_HP = 0x8A
     private const val LEVEL = 0x148
     private const val PARTY_VALUES = 0x14A
@@ -465,6 +471,54 @@ object BdspPokemonLevelEditing {
         refreshDigest(edited)
         verifyDefenseStatExp(original, edited, area, box, position, recordOffset, after)
         return BdspDefenseStatExpCopyPlan(
+            original, edited, area, box, position, recordOffset, before, after
+        )
+    }
+
+    internal fun stageSpeedStatExp(
+        source: ByteArray,
+        expectedSha256: String,
+        area: BdspPokemonArea,
+        box: Int,
+        position: Int,
+        requestedSpeedEv: Int
+    ): BdspSpeedStatExpCopyPlan {
+        val original = source.copyOf()
+        require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        val validation = BdspSaveValidation.inspect(original)
+        require(validation is BdspValidation.Verified) { "A validated native BDSP save is required." }
+        require(requestedSpeedEv in 0..252) { "Speed EV must be between 0 and 252." }
+        val recordOffset = targetOffset(original, area, box, position)
+        val target = original.copyOfRange(recordOffset, recordOffset + BdspPokemonReadOnly.RECORD_SIZE)
+        val before = (BdspPokemonReadOnly.read(target) as? BdspSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The selected native PB8 is not checksum-valid.")
+        require(!before.isEgg) { "Egg Speed Stat Exp / EV editing is not supported for BDSP." }
+        require(requestedSpeedEv != before.evs[3]) { "Enter a different Speed EV before review." }
+        require(requestedSpeedEv + before.evs.filterIndexed { index, _ -> index != 3 }.sum() <= 510) {
+            "The requested Speed EV would exceed BDSP's native 510 total EV limit."
+        }
+        require(before.cachedLevel in 1..100 && before.statNature in 0..24) {
+            "The PB8 Level or stat nature is invalid, so derived stats cannot be rebuilt safely."
+        }
+        val personal = resolvePersonal(before)
+        require(levelForExperience(before.experience, personal.growth) == before.cachedLevel) {
+            "The saved Level and EXP do not agree with this Pokémon's verified growth group."
+        }
+        require(matchesCachedValues(before,
+            calculate(before, personal, before.cachedLevel, before.experience))) {
+            "The saved battle values do not match this PB8's verified species/form profile."
+        }
+        val requestedEvs = before.evs.toMutableList().also { it[3] = requestedSpeedEv }
+        val recalculated = calculate(
+            before.copy(evs = requestedEvs), personal, before.cachedLevel, before.experience
+        )
+        val after = BdspSpeedStatExpValues(requestedSpeedEv, recalculated.speed)
+        val afterRecord = editSpeedStatExpRecord(target, after)
+        val edited = original.copyOf()
+        afterRecord.copyInto(edited, recordOffset)
+        refreshDigest(edited)
+        verifySpeedStatExp(original, edited, area, box, position, recordOffset, after)
+        return BdspSpeedStatExpCopyPlan(
             original, edited, area, box, position, recordOffset, before, after
         )
     }
@@ -921,6 +975,53 @@ object BdspPokemonLevelEditing {
         }) { "An unrelated BDSP save byte changed." }
     }
 
+    internal fun verifySpeedStatExp(
+        original: ByteArray,
+        edited: ByteArray,
+        area: BdspPokemonArea,
+        box: Int,
+        position: Int,
+        recordOffset: Int,
+        expected: BdspSpeedStatExpValues
+    ) {
+        val beforeValidation = BdspSaveValidation.inspect(original)
+        val afterValidation = BdspSaveValidation.inspect(edited)
+        require(beforeValidation is BdspValidation.Verified && afterValidation is BdspValidation.Verified &&
+            beforeValidation.version == afterValidation.version &&
+            beforeValidation.revision == afterValidation.revision && original.size == edited.size) {
+            "The Speed Stat Exp edit changed native title identity, revision, size, or integrity."
+        }
+        require(recordOffset == targetOffset(original, area, box, position) &&
+            recordOffset == targetOffset(edited, area, box, position)) {
+            "The selected native Pokémon location changed."
+        }
+        val beforeRecord = original.copyOfRange(recordOffset, recordOffset + BdspPokemonReadOnly.RECORD_SIZE)
+        val afterRecord = edited.copyOfRange(recordOffset, recordOffset + BdspPokemonReadOnly.RECORD_SIZE)
+        val before = (BdspPokemonReadOnly.read(beforeRecord) as? BdspSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The original PB8 no longer reopens as a Pokémon.")
+        val after = (BdspPokemonReadOnly.read(afterRecord) as? BdspSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The edited PB8 did not reopen as a Pokémon.")
+        require(after.evs[3] == expected.speedEv &&
+            after.evs.indices.filter { it != 3 }.all { after.evs[it] == before.evs[it] } &&
+            after.cachedStats[2] == expected.speed &&
+            after.cachedStats.indices.filter { it != 2 }.all { after.cachedStats[it] == before.cachedStats[it] } &&
+            after.copy(evs = before.evs, cachedStats = before.cachedStats) == before) {
+            "The persisted PB8 changed outside Speed EV and its derived Speed value."
+        }
+
+        val beforePlain = decryptAndUnshuffle(beforeRecord)
+        val afterPlain = decryptAndUnshuffle(afterRecord)
+        require(beforePlain.indices.all { offset ->
+            offset in 6..7 || offset == SPEED_EV ||
+                offset in 0x150 until 0x152 || beforePlain[offset] == afterPlain[offset]
+        }) { "The PB8 edit exceeded Speed EV, derived Speed, and checksum fields." }
+
+        require(original.indices.all { index ->
+            index in recordOffset until recordOffset + BdspPokemonReadOnly.RECORD_SIZE ||
+                index in HASH_OFFSET until HASH_OFFSET + HASH_LENGTH || original[index] == edited[index]
+        }) { "An unrelated BDSP save byte changed." }
+    }
+
     private fun resolvePersonal(pokemon: BdspPokemonRead): BdspPersonalData {
         val all = BdspPersonalCatalogue.profiles(pokemon.species, pokemon.form)
         require(all.isNotEmpty()) { "Verified Generation 8 personal data is unavailable for this species." }
@@ -1137,6 +1238,16 @@ object BdspPokemonLevelEditing {
         return shuffleAndEncrypt(plain)
     }
 
+    private fun editSpeedStatExpRecord(record: ByteArray, values: BdspSpeedStatExpValues): ByteArray {
+        val plain = decryptAndUnshuffle(record)
+        plain[SPEED_EV] = values.speedEv.toByte()
+        writeU16(plain, 0x150, values.speed)
+        var checksum = 0
+        for (offset in 8 until STORED_END step 2) checksum += u16(plain, offset)
+        writeU16(plain, 6, checksum and 0xFFFF)
+        return shuffleAndEncrypt(plain)
+    }
+
     private fun decryptAndUnshuffle(record: ByteArray): ByteArray {
         require(record.size == BdspPokemonReadOnly.RECORD_SIZE) {
             "Expected one complete native PB8 record."
@@ -1346,6 +1457,25 @@ object BdspPokemonDefenseStatExpEditing {
         requestedDefenseEv: Int
     ): BdspDefenseStatExpCopyPlan = BdspPokemonLevelEditing.stageDefenseStatExp(
         source, expectedSha256, area, box, position, requestedDefenseEv
+    )
+}
+
+/** Gen 1 Speed Stat Exp mapped to BDSP's native Speed EV. */
+object BdspPokemonSpeedStatExpEditing {
+    fun readDocumentBytes(input: java.io.InputStream): ByteArray =
+        BdspPokemonLevelEditing.readDocumentBytes(input)
+
+    fun sha256(bytes: ByteArray): String = BdspPokemonLevelEditing.sha256(bytes)
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        area: BdspPokemonArea,
+        box: Int,
+        position: Int,
+        requestedSpeedEv: Int
+    ): BdspSpeedStatExpCopyPlan = BdspPokemonLevelEditing.stageSpeedStatExp(
+        source, expectedSha256, area, box, position, requestedSpeedEv
     )
 }
 
@@ -1725,6 +1855,70 @@ class BdspDefenseStatExpCopyPlan internal constructor(
             val removed = started && runCatching { discardDestination() }.getOrDefault(false)
             throw IllegalStateException(
                 (failure.message ?: "Defense Stat Exp copy verification failed.") +
+                    if (removed) " The failed new copy was removed; the recovery backup is retained."
+                    else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
+                failure
+            )
+        }
+    }
+}
+
+class BdspSpeedStatExpCopyPlan internal constructor(
+    original: ByteArray,
+    edited: ByteArray,
+    val area: BdspPokemonArea,
+    val box: Int,
+    val position: Int,
+    val recordOffset: Int,
+    val before: BdspPokemonRead,
+    val after: BdspSpeedStatExpValues
+) {
+    private val original = original.copyOf()
+    private val edited = edited.copyOf()
+    val sourceSha256 = BdspPokemonSpeedStatExpEditing.sha256(this.original)
+    val editedSha256 = BdspPokemonSpeedStatExpEditing.sha256(this.edited)
+    private var consumed = false
+    val location: String
+        get() = if (area == BdspPokemonArea.BOX) "Box $box • Slot $position" else "Party $position"
+
+    @Synchronized
+    fun saveNewCopy(
+        readSource: () -> ByteArray,
+        retainBackup: (ByteArray) -> ByteArray,
+        readDestination: () -> ByteArray,
+        writeDestination: (ByteArray) -> Unit,
+        discardDestination: () -> Boolean
+    ) {
+        check(!consumed) { "This Speed Stat Exp review was already used. Reopen Pokémon Boxes." }
+        consumed = true
+        fun requireSource() = require(readSource().contentEquals(original)) {
+            "The selected source changed. Reopen it from PSE."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "Choose a new empty document; existing files cannot be replaced." }
+        val backup = retainBackup(original.copyOf())
+        require(backup.contentEquals(original)) { "The recovery backup did not verify. Nothing was written." }
+        requireSource()
+        require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
+        var started = false
+        try {
+            BdspPokemonLevelEditing.verifySpeedStatExp(
+                original, edited, area, box, position, recordOffset, after
+            )
+            started = true
+            writeDestination(edited.copyOf())
+            val persisted = readDestination()
+            require(persisted.contentEquals(edited)) {
+                "The saved copy differs from the reviewed Speed Stat Exp edit."
+            }
+            BdspPokemonLevelEditing.verifySpeedStatExp(
+                original, persisted, area, box, position, recordOffset, after
+            )
+            requireSource()
+        } catch (failure: Exception) {
+            val removed = started && runCatching { discardDestination() }.getOrDefault(false)
+            throw IllegalStateException(
+                (failure.message ?: "Speed Stat Exp copy verification failed.") +
                     if (removed) " The failed new copy was removed; the recovery backup is retained."
                     else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
                 failure
