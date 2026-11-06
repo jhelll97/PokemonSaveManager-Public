@@ -27,6 +27,7 @@
         <activity android:name=".SwitchLetsGoPokemonHpStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoPokemonAttackStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoPokemonDefenseStatExpActivity" android:exported="false"/>
+        <activity android:name=".SwitchLetsGoPokemonSpeedStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoEventActivity" android:exported="false"/>
