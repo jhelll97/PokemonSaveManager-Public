@@ -36,6 +36,12 @@ data class BdspSpecialDvValues(
     val specialDefense: Int
 )
 
+data class BdspHpStatExpValues(
+    val hpEv: Int,
+    val currentHp: Int,
+    val maximumHp: Int
+)
+
 /** Rebuilds one PB8's native level-dependent values in a reviewed new BDSP save copy. */
 object BdspPokemonLevelEditing {
     private const val PARTY_OFFSET = 0x14098
@@ -56,6 +62,7 @@ object BdspPokemonLevelEditing {
     private const val SPECIAL_DEFENSE_IV_SHIFT = 25
     private const val SPECIAL_DEFENSE_IV_MASK = 31L shl SPECIAL_DEFENSE_IV_SHIFT
     private const val SPECIAL_IV_MASK = SPECIAL_ATTACK_IV_MASK or SPECIAL_DEFENSE_IV_MASK
+    private const val HP_EV = 0x26
     private const val CURRENT_HP = 0x8A
     private const val LEVEL = 0x148
     private const val PARTY_VALUES = 0x14A
@@ -300,6 +307,56 @@ object BdspPokemonLevelEditing {
         refreshDigest(edited)
         verifySpecialDv(original, edited, area, box, position, recordOffset, after)
         return BdspSpecialDvCopyPlan(
+            original, edited, area, box, position, recordOffset, before, after
+        )
+    }
+
+    internal fun stageHpStatExp(
+        source: ByteArray,
+        expectedSha256: String,
+        area: BdspPokemonArea,
+        box: Int,
+        position: Int,
+        requestedHpEv: Int
+    ): BdspHpStatExpCopyPlan {
+        val original = source.copyOf()
+        require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        val validation = BdspSaveValidation.inspect(original)
+        require(validation is BdspValidation.Verified) { "A validated native BDSP save is required." }
+        require(requestedHpEv in 0..252) { "HP EV must be between 0 and 252." }
+        val recordOffset = targetOffset(original, area, box, position)
+        val target = original.copyOfRange(recordOffset, recordOffset + BdspPokemonReadOnly.RECORD_SIZE)
+        val before = (BdspPokemonReadOnly.read(target) as? BdspSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The selected native PB8 is not checksum-valid.")
+        require(!before.isEgg) { "Egg HP Stat Exp / EV editing is not supported for BDSP." }
+        require(requestedHpEv != before.evs[0]) { "Enter a different HP EV before review." }
+        require(requestedHpEv + before.evs.drop(1).sum() <= 510) {
+            "The requested HP EV would exceed BDSP's native 510 total EV limit."
+        }
+        require(before.cachedLevel in 1..100 && before.statNature in 0..24) {
+            "The PB8 Level or stat nature is invalid, so derived stats cannot be rebuilt safely."
+        }
+        val personal = resolvePersonal(before)
+        require(levelForExperience(before.experience, personal.growth) == before.cachedLevel) {
+            "The saved Level and EXP do not agree with this Pokémon's verified growth group."
+        }
+        require(matchesCachedValues(before,
+            calculate(before, personal, before.cachedLevel, before.experience))) {
+            "The saved battle values do not match this PB8's verified species/form profile."
+        }
+        val requestedEvs = before.evs.toMutableList().also { it[0] = requestedHpEv }
+        val recalculated = calculate(
+            before.copy(evs = requestedEvs), personal, before.cachedLevel, before.experience
+        )
+        val after = BdspHpStatExpValues(
+            requestedHpEv, recalculated.currentHp, recalculated.maximumHp
+        )
+        val afterRecord = editHpStatExpRecord(target, after)
+        val edited = original.copyOf()
+        afterRecord.copyInto(edited, recordOffset)
+        refreshDigest(edited)
+        verifyHpStatExp(original, edited, area, box, position, recordOffset, after)
+        return BdspHpStatExpCopyPlan(
             original, edited, area, box, position, recordOffset, before, after
         )
     }
@@ -614,6 +671,54 @@ object BdspPokemonLevelEditing {
         }) { "An unrelated BDSP save byte changed." }
     }
 
+    internal fun verifyHpStatExp(
+        original: ByteArray,
+        edited: ByteArray,
+        area: BdspPokemonArea,
+        box: Int,
+        position: Int,
+        recordOffset: Int,
+        expected: BdspHpStatExpValues
+    ) {
+        val beforeValidation = BdspSaveValidation.inspect(original)
+        val afterValidation = BdspSaveValidation.inspect(edited)
+        require(beforeValidation is BdspValidation.Verified && afterValidation is BdspValidation.Verified &&
+            beforeValidation.version == afterValidation.version &&
+            beforeValidation.revision == afterValidation.revision && original.size == edited.size) {
+            "The HP Stat Exp edit changed native title identity, revision, size, or integrity."
+        }
+        require(recordOffset == targetOffset(original, area, box, position) &&
+            recordOffset == targetOffset(edited, area, box, position)) {
+            "The selected native Pokémon location changed."
+        }
+        val beforeRecord = original.copyOfRange(recordOffset, recordOffset + BdspPokemonReadOnly.RECORD_SIZE)
+        val afterRecord = edited.copyOfRange(recordOffset, recordOffset + BdspPokemonReadOnly.RECORD_SIZE)
+        val before = (BdspPokemonReadOnly.read(beforeRecord) as? BdspSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The original PB8 no longer reopens as a Pokémon.")
+        val after = (BdspPokemonReadOnly.read(afterRecord) as? BdspSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The edited PB8 did not reopen as a Pokémon.")
+        require(after.evs[0] == expected.hpEv &&
+            after.evs.indices.filter { it != 0 }.all { after.evs[it] == before.evs[it] } &&
+            after.currentHp == expected.currentHp && after.maximumHp == expected.maximumHp &&
+            after.cachedStats == before.cachedStats &&
+            after.copy(evs = before.evs, currentHp = before.currentHp, maximumHp = before.maximumHp) == before) {
+            "The persisted PB8 changed outside HP EV and its derived current and maximum HP values."
+        }
+
+        val beforePlain = decryptAndUnshuffle(beforeRecord)
+        val afterPlain = decryptAndUnshuffle(afterRecord)
+        require(beforePlain.indices.all { offset ->
+            offset in 6..7 || offset == HP_EV ||
+                offset in CURRENT_HP until CURRENT_HP + 2 ||
+                offset in 0x14A until 0x14C || beforePlain[offset] == afterPlain[offset]
+        }) { "The PB8 edit exceeded HP EV, derived current and maximum HP, and checksum fields." }
+
+        require(original.indices.all { index ->
+            index in recordOffset until recordOffset + BdspPokemonReadOnly.RECORD_SIZE ||
+                index in HASH_OFFSET until HASH_OFFSET + HASH_LENGTH || original[index] == edited[index]
+        }) { "An unrelated BDSP save byte changed." }
+    }
+
     private fun resolvePersonal(pokemon: BdspPokemonRead): BdspPersonalData {
         val all = BdspPersonalCatalogue.profiles(pokemon.species, pokemon.form)
         require(all.isNotEmpty()) { "Verified Generation 8 personal data is unavailable for this species." }
@@ -799,6 +904,17 @@ object BdspPokemonLevelEditing {
         return shuffleAndEncrypt(plain)
     }
 
+    private fun editHpStatExpRecord(record: ByteArray, values: BdspHpStatExpValues): ByteArray {
+        val plain = decryptAndUnshuffle(record)
+        plain[HP_EV] = values.hpEv.toByte()
+        writeU16(plain, CURRENT_HP, values.currentHp)
+        writeU16(plain, 0x14A, values.maximumHp)
+        var checksum = 0
+        for (offset in 8 until STORED_END step 2) checksum += u16(plain, offset)
+        writeU16(plain, 6, checksum and 0xFFFF)
+        return shuffleAndEncrypt(plain)
+    }
+
     private fun decryptAndUnshuffle(record: ByteArray): ByteArray {
         require(record.size == BdspPokemonReadOnly.RECORD_SIZE) {
             "Expected one complete native PB8 record."
@@ -951,6 +1067,25 @@ object BdspPokemonSpecialDvEditing {
         requestedSpecialIv: Int
     ): BdspSpecialDvCopyPlan = BdspPokemonLevelEditing.stageSpecialDv(
         source, expectedSha256, area, box, position, requestedSpecialIv
+    )
+}
+
+/** Gen 1 HP Stat Exp mapped to BDSP's native HP EV. */
+object BdspPokemonHpStatExpEditing {
+    fun readDocumentBytes(input: java.io.InputStream): ByteArray =
+        BdspPokemonLevelEditing.readDocumentBytes(input)
+
+    fun sha256(bytes: ByteArray): String = BdspPokemonLevelEditing.sha256(bytes)
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        area: BdspPokemonArea,
+        box: Int,
+        position: Int,
+        requestedHpEv: Int
+    ): BdspHpStatExpCopyPlan = BdspPokemonLevelEditing.stageHpStatExp(
+        source, expectedSha256, area, box, position, requestedHpEv
     )
 }
 
@@ -1138,6 +1273,70 @@ class BdspSpecialDvCopyPlan internal constructor(
             val removed = started && runCatching { discardDestination() }.getOrDefault(false)
             throw IllegalStateException(
                 (failure.message ?: "Special DV / IV copy verification failed.") +
+                    if (removed) " The failed new copy was removed; the recovery backup is retained."
+                    else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
+                failure
+            )
+        }
+    }
+}
+
+class BdspHpStatExpCopyPlan internal constructor(
+    original: ByteArray,
+    edited: ByteArray,
+    val area: BdspPokemonArea,
+    val box: Int,
+    val position: Int,
+    val recordOffset: Int,
+    val before: BdspPokemonRead,
+    val after: BdspHpStatExpValues
+) {
+    private val original = original.copyOf()
+    private val edited = edited.copyOf()
+    val sourceSha256 = BdspPokemonHpStatExpEditing.sha256(this.original)
+    val editedSha256 = BdspPokemonHpStatExpEditing.sha256(this.edited)
+    private var consumed = false
+    val location: String
+        get() = if (area == BdspPokemonArea.BOX) "Box $box • Slot $position" else "Party $position"
+
+    @Synchronized
+    fun saveNewCopy(
+        readSource: () -> ByteArray,
+        retainBackup: (ByteArray) -> ByteArray,
+        readDestination: () -> ByteArray,
+        writeDestination: (ByteArray) -> Unit,
+        discardDestination: () -> Boolean
+    ) {
+        check(!consumed) { "This HP Stat Exp review was already used. Reopen Pokémon Boxes." }
+        consumed = true
+        fun requireSource() = require(readSource().contentEquals(original)) {
+            "The selected source changed. Reopen it from PSE."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "Choose a new empty document; existing files cannot be replaced." }
+        val backup = retainBackup(original.copyOf())
+        require(backup.contentEquals(original)) { "The recovery backup did not verify. Nothing was written." }
+        requireSource()
+        require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
+        var started = false
+        try {
+            BdspPokemonLevelEditing.verifyHpStatExp(
+                original, edited, area, box, position, recordOffset, after
+            )
+            started = true
+            writeDestination(edited.copyOf())
+            val persisted = readDestination()
+            require(persisted.contentEquals(edited)) {
+                "The saved copy differs from the reviewed HP Stat Exp edit."
+            }
+            BdspPokemonLevelEditing.verifyHpStatExp(
+                original, persisted, area, box, position, recordOffset, after
+            )
+            requireSource()
+        } catch (failure: Exception) {
+            val removed = started && runCatching { discardDestination() }.getOrDefault(false)
+            throw IllegalStateException(
+                (failure.message ?: "HP Stat Exp copy verification failed.") +
                     if (removed) " The failed new copy was removed; the recovery backup is retained."
                     else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
                 failure

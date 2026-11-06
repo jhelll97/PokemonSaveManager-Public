@@ -71,6 +71,7 @@
         <activity android:name=".SwitchBdspPokemonDefenseDvActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokemonSpeedDvActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokemonSpecialDvActivity" android:exported="false"/>
+        <activity android:name=".SwitchBdspPokemonHpStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspEventActivity" android:exported="false"/>
