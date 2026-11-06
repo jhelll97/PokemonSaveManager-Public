@@ -81,6 +81,11 @@ data class LegendsArceusHpStatExpValues(
     val maximumHp: Int?
 )
 
+data class LegendsArceusAttackStatExpValues(
+    val attackGanbaru: Int,
+    val attack: Int?
+)
+
 /** Rebuilds one PA8's native level-dependent values in a reviewed new Legends: Arceus save copy. */
 object LegendsArceusPokemonLevelEditing {
     private const val STORED_END = 0x168
@@ -98,6 +103,7 @@ object LegendsArceusPokemonLevelEditing {
     private const val SPECIAL_DEFENSE_IV_MASK = 31L shl SPECIAL_DEFENSE_IV_SHIFT
     private const val SPECIAL_IV_MASK = SPECIAL_ATTACK_IV_MASK or SPECIAL_DEFENSE_IV_MASK
     private const val HP_GANBARU = 0xA4
+    private const val ATTACK_GANBARU = 0xA5
     private const val CURRENT_HP = 0x92
     private const val LEVEL = 0x168
     private const val MAXIMUM_HP = 0x16A
@@ -410,6 +416,56 @@ object LegendsArceusPokemonLevelEditing {
         } else LegendsArceusSaveValidation.writePartyRecord(original, position, afterRecord)
         verifyHpStatExp(original, written.bytes, area, pasture, position, written.absoluteOffset, after)
         return LegendsArceusHpStatExpCopyPlan(
+            original, written.bytes, area, pasture, position, written.absoluteOffset, before, after
+        )
+    }
+
+    internal fun stageAttackStatExp(
+        source: ByteArray,
+        expectedSha256: String,
+        area: LegendsArceusPokemonArea,
+        pasture: Int,
+        position: Int,
+        requestedAttackGanbaru: Int
+    ): LegendsArceusAttackStatExpCopyPlan {
+        val original = source.copyOf()
+        require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        require(LegendsArceusSaveValidation.inspect(original) is LegendsArceusValidation.Verified) {
+            "A validated native Legends: Arceus save is required."
+        }
+        require(requestedAttackGanbaru in 0..10) { "Attack Ganbaru Value must be between 0 and 10." }
+        val blocks = LegendsArceusSaveValidation.readPokemonBlocks(original)
+        val target = targetRecord(blocks, area, pasture, position)
+        val before = (LegendsArceusPokemonReadOnly.read(target) as? LegendsArceusSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The selected native PA8 is not checksum-valid.")
+        require(!before.isEgg) { "Egg Attack Stat Exp editing is not supported for Legends: Arceus." }
+        require(requestedAttackGanbaru != before.ganbaruValues[1]) {
+            "Enter a different Attack Ganbaru Value before review."
+        }
+        val attack = if (area == LegendsArceusPokemonArea.PARTY) {
+            val growth = resolveGrowth(before)
+            val beforeLevel = levelForExperience(before.experience, growth)
+            require(before.cachedLevel == beforeLevel && before.statNature in 0..24) {
+                "The party PA8 Level, EXP, or stat nature is invalid, so Attack cannot be rebuilt safely."
+            }
+            val personal = resolvePartyPersonal(before, beforeLevel)
+            require(matchesCachedValues(before, calculateParty(before, personal, beforeLevel))) {
+                "The saved battle values do not match this PA8's verified species/form profile."
+            }
+            val requestedGanbaru = before.ganbaruValues.toMutableList().also {
+                it[1] = requestedAttackGanbaru
+            }
+            requireNotNull(calculateParty(
+                before.copy(ganbaruValues = requestedGanbaru), personal, beforeLevel
+            ).cachedStats)[0]
+        } else null
+        val after = LegendsArceusAttackStatExpValues(requestedAttackGanbaru, attack)
+        val afterRecord = editAttackStatExpRecord(target, after)
+        val written = if (area == LegendsArceusPokemonArea.PASTURE) {
+            LegendsArceusSaveValidation.writePastureRecord(original, pasture, position, afterRecord)
+        } else LegendsArceusSaveValidation.writePartyRecord(original, position, afterRecord)
+        verifyAttackStatExp(original, written.bytes, area, pasture, position, written.absoluteOffset, after)
+        return LegendsArceusAttackStatExpCopyPlan(
             original, written.bytes, area, pasture, position, written.absoluteOffset, before, after
         )
     }
@@ -875,6 +931,72 @@ object LegendsArceusPokemonLevelEditing {
         }) { "An unrelated encrypted container byte changed." }
     }
 
+    internal fun verifyAttackStatExp(
+        original: ByteArray,
+        edited: ByteArray,
+        area: LegendsArceusPokemonArea,
+        pasture: Int,
+        position: Int,
+        absoluteOffset: Int,
+        expected: LegendsArceusAttackStatExpValues
+    ) {
+        val beforeBlocks = LegendsArceusSaveValidation.readPokemonBlocks(original)
+        val afterBlocks = LegendsArceusSaveValidation.readPokemonBlocks(edited)
+        require(beforeBlocks.version == afterBlocks.version && original.size == edited.size) {
+            "The Attack Stat Exp edit changed native title identity or save size."
+        }
+        val beforeRecord = targetRecord(beforeBlocks, area, pasture, position)
+        val afterRecord = targetRecord(afterBlocks, area, pasture, position)
+        val before = (LegendsArceusPokemonReadOnly.read(beforeRecord) as? LegendsArceusSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The original PA8 no longer reopens as a Pokémon.")
+        val after = (LegendsArceusPokemonReadOnly.read(afterRecord) as? LegendsArceusSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The edited PA8 did not reopen as a Pokémon.")
+        val beforeStats = before.cachedStats
+        val afterStats = after.cachedStats
+        val cachedAttackMatches = if (expected.attack == null) {
+            beforeStats == null && afterStats == null
+        } else {
+            beforeStats != null && afterStats != null && afterStats[0] == expected.attack &&
+                (1..4).all { afterStats[it] == beforeStats[it] }
+        }
+        require(after.ganbaruValues[1] == expected.attackGanbaru && cachedAttackMatches &&
+            after.ganbaruValues.indices.filter { it != 1 }
+                .all { after.ganbaruValues[it] == before.ganbaruValues[it] } &&
+            after.copy(ganbaruValues = before.ganbaruValues, cachedStats = before.cachedStats) == before) {
+            "The persisted PA8 changed outside Attack Ganbaru Value and its optional derived Attack value."
+        }
+
+        val recordSize = recordSize(area)
+        val relativeOffset = if (area == LegendsArceusPokemonArea.PASTURE)
+            ((pasture - 1) * 30 + position - 1) * recordSize else (position - 1) * recordSize
+        val beforeTargetBlock = if (area == LegendsArceusPokemonArea.PASTURE) beforeBlocks.pastures else beforeBlocks.party
+        val afterTargetBlock = if (area == LegendsArceusPokemonArea.PASTURE) afterBlocks.pastures else afterBlocks.party
+        val beforeOtherBlock = if (area == LegendsArceusPokemonArea.PASTURE) beforeBlocks.party else beforeBlocks.pastures
+        val afterOtherBlock = if (area == LegendsArceusPokemonArea.PASTURE) afterBlocks.party else afterBlocks.pastures
+        require(beforeOtherBlock.contentEquals(afterOtherBlock)) {
+            "The unselected native Pokémon storage object changed."
+        }
+        require(beforeTargetBlock.indices.all { index ->
+            index in relativeOffset until relativeOffset + recordSize ||
+                beforeTargetBlock[index] == afterTargetBlock[index]
+        }) { "Another native Pokémon slot changed." }
+
+        val beforePlain = decryptAndUnshuffle(beforeRecord)
+        val afterPlain = decryptAndUnshuffle(afterRecord)
+        require(beforePlain.indices.all { offset ->
+            offset in 6..7 || offset == ATTACK_GANBARU ||
+                (area == LegendsArceusPokemonArea.PARTY &&
+                    offset in PARTY_STATS until PARTY_STATS + 2) ||
+                beforePlain[offset] == afterPlain[offset]
+        }) { "The PA8 edit exceeded Attack Ganbaru Value, optional derived Attack, and checksum fields." }
+
+        val hashOffset = original.size - 32
+        require(original.indices.all { index ->
+            index in absoluteOffset until absoluteOffset + recordSize ||
+                index in hashOffset until original.size || original[index] == edited[index]
+        }) { "An unrelated encrypted container byte changed." }
+    }
+
     private fun resolveGrowth(pokemon: LegendsArceusPokemonRead): Int {
         val growth = LegendsArceusPersonalCatalogue.profiles(pokemon.species, pokemon.form)
             .map { it.growth }.distinct()
@@ -1125,6 +1247,24 @@ object LegendsArceusPokemonLevelEditing {
         return shuffleAndEncrypt(plain)
     }
 
+    private fun editAttackStatExpRecord(
+        record: ByteArray,
+        values: LegendsArceusAttackStatExpValues
+    ): ByteArray {
+        val plain = decryptAndUnshuffle(record)
+        plain[ATTACK_GANBARU] = values.attackGanbaru.toByte()
+        values.attack?.let {
+            require(record.size == LegendsArceusPokemonReadOnly.PARTY_SIZE) {
+                "Only a party PA8 can store a cached Attack stat."
+            }
+            writeU16(plain, PARTY_STATS, it)
+        }
+        var checksum = 0
+        for (offset in 8 until STORED_END step 2) checksum += u16(plain, offset)
+        writeU16(plain, 6, checksum and 0xFFFF)
+        return shuffleAndEncrypt(plain)
+    }
+
     private fun decryptAndUnshuffle(record: ByteArray): ByteArray {
         require(record.size == LegendsArceusPokemonReadOnly.STORED_SIZE ||
             record.size == LegendsArceusPokemonReadOnly.PARTY_SIZE) {
@@ -1296,6 +1436,25 @@ object LegendsArceusPokemonHpStatExpEditing {
         requestedHpGanbaru: Int
     ): LegendsArceusHpStatExpCopyPlan = LegendsArceusPokemonLevelEditing.stageHpStatExp(
         source, expectedSha256, area, pasture, position, requestedHpGanbaru
+    )
+}
+
+/** Gen 1 Attack Stat Exp mapped to Legends: Arceus's native Attack Ganbaru Value. */
+object LegendsArceusPokemonAttackStatExpEditing {
+    fun readDocumentBytes(input: java.io.InputStream): ByteArray =
+        LegendsArceusPokemonLevelEditing.readDocumentBytes(input)
+
+    fun sha256(bytes: ByteArray): String = LegendsArceusPokemonLevelEditing.sha256(bytes)
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        area: LegendsArceusPokemonArea,
+        pasture: Int,
+        position: Int,
+        requestedAttackGanbaru: Int
+    ): LegendsArceusAttackStatExpCopyPlan = LegendsArceusPokemonLevelEditing.stageAttackStatExp(
+        source, expectedSha256, area, pasture, position, requestedAttackGanbaru
     )
 }
 
@@ -1564,6 +1723,74 @@ class LegendsArceusHpStatExpCopyPlan internal constructor(
             val removed = started && runCatching { discardDestination() }.getOrDefault(false)
             throw IllegalStateException(
                 (failure.message ?: "HP Stat Exp copy verification failed.") +
+                    if (removed) " The failed new copy was removed; the recovery backup is retained."
+                    else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
+                failure
+            )
+        }
+    }
+}
+
+class LegendsArceusAttackStatExpCopyPlan internal constructor(
+    original: ByteArray,
+    edited: ByteArray,
+    val area: LegendsArceusPokemonArea,
+    val pasture: Int,
+    val position: Int,
+    val absoluteOffset: Int,
+    val before: LegendsArceusPokemonRead,
+    val after: LegendsArceusAttackStatExpValues
+) {
+    private val original = original.copyOf()
+    private val edited = edited.copyOf()
+    val sourceSha256 = LegendsArceusPokemonAttackStatExpEditing.sha256(this.original)
+    val editedSha256 = LegendsArceusPokemonAttackStatExpEditing.sha256(this.edited)
+    private var consumed = false
+    val location: String
+        get() = if (area == LegendsArceusPokemonArea.PASTURE)
+            "Pasture $pasture • Slot $position" else "Party $position"
+    val recordSize: Int
+        get() = if (area == LegendsArceusPokemonArea.PASTURE)
+            LegendsArceusPokemonReadOnly.STORED_SIZE else LegendsArceusPokemonReadOnly.PARTY_SIZE
+
+    @Synchronized
+    fun saveNewCopy(
+        readSource: () -> ByteArray,
+        retainBackup: (ByteArray) -> ByteArray,
+        readDestination: () -> ByteArray,
+        writeDestination: (ByteArray) -> Unit,
+        discardDestination: () -> Boolean
+    ) {
+        check(!consumed) { "This Attack Stat Exp review was already used. Reopen Pokémon Boxes." }
+        consumed = true
+        fun requireSource() = require(readSource().contentEquals(original)) {
+            "The selected source changed. Reopen it from PSE."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "Choose a new empty document; existing files cannot be replaced." }
+        val backup = retainBackup(original.copyOf())
+        require(backup.contentEquals(original)) { "The recovery backup did not verify. Nothing was written." }
+        requireSource()
+        require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
+        var started = false
+        try {
+            LegendsArceusPokemonLevelEditing.verifyAttackStatExp(
+                original, edited, area, pasture, position, absoluteOffset, after
+            )
+            started = true
+            writeDestination(edited.copyOf())
+            val persisted = readDestination()
+            require(persisted.contentEquals(edited)) {
+                "The saved copy differs from the reviewed Attack Stat Exp edit."
+            }
+            LegendsArceusPokemonLevelEditing.verifyAttackStatExp(
+                original, persisted, area, pasture, position, absoluteOffset, after
+            )
+            requireSource()
+        } catch (failure: Exception) {
+            val removed = started && runCatching { discardDestination() }.getOrDefault(false)
+            throw IllegalStateException(
+                (failure.message ?: "Attack Stat Exp copy verification failed.") +
                     if (removed) " The failed new copy was removed; the recovery backup is retained."
                     else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
                 failure

@@ -32,6 +32,7 @@ class SwitchLegendsArceusPokemonHpStatExpActivity : Activity() {
     private lateinit var hpGanbaru: EditText
     private lateinit var review: Button
     private lateinit var specialDv: Button
+    private lateinit var attackStatExp: Button
     private lateinit var inspectCopy: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -92,6 +93,22 @@ class SwitchLegendsArceusPokemonHpStatExpActivity : Activity() {
             }
         }
         root.addView(specialDv)
+        attackStatExp = Button(this).apply {
+            text = "Next: Attack Stat Exp"; isEnabled = false
+            setOnClickListener {
+                val uri = sourceUri ?: return@setOnClickListener
+                val hash = expectedHash ?: return@setOnClickListener
+                val selected = area ?: return@setOnClickListener
+                startActivity(Intent(this@SwitchLegendsArceusPokemonHpStatExpActivity,
+                    SwitchLegendsArceusPokemonAttackStatExpActivity::class.java)
+                    .setData(uri).putExtra("pse.switch.sha256", hash)
+                    .putExtra("pse.switch.pokemon.area", selected.name)
+                    .putExtra("pse.switch.pokemon.pasture", pasture)
+                    .putExtra("pse.switch.pokemon.position", position)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            }
+        }
+        root.addView(attackStatExp)
         inspectCopy = Button(this).apply {
             text = "Inspect verified copy"; visibility = android.view.View.GONE
             setOnClickListener { inspectVerifiedCopy() }
@@ -147,6 +164,7 @@ class SwitchLegendsArceusPokemonHpStatExpActivity : Activity() {
         hpGanbaru.isEnabled = !value && ready
         review.isEnabled = !value && ready
         specialDv.isEnabled = !value && ready
+        attackStatExp.isEnabled = !value && ready
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
 
