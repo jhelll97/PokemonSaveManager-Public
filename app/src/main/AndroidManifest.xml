@@ -53,6 +53,7 @@
         <activity android:name=".SwitchBdspPokemonTrainerIdActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokemonMove1Activity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokemonMove2Activity" android:exported="false"/>
+        <activity android:name=".SwitchBdspPokemonMove3Activity" android:exported="false"/>
         <activity android:name=".SwitchBdspTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspEventActivity" android:exported="false"/>
