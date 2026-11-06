@@ -29,6 +29,7 @@ class SwitchLetsGoPokemonAttackStatExpActivity : Activity() {
     private lateinit var attackAwakeningValue: EditText
     private lateinit var review: Button
     private lateinit var hpStatExp: Button
+    private lateinit var defenseStatExp: Button
     private lateinit var inspectCopy: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -78,6 +79,19 @@ class SwitchLetsGoPokemonAttackStatExpActivity : Activity() {
             }
         }
         root.addView(hpStatExp)
+        defenseStatExp = Button(this).apply {
+            text = "Next: Defense Stat Exp"; isEnabled = false
+            setOnClickListener {
+                val uri = sourceUri ?: return@setOnClickListener
+                val hash = expectedHash ?: return@setOnClickListener
+                startActivity(Intent(this@SwitchLetsGoPokemonAttackStatExpActivity,
+                    SwitchLetsGoPokemonDefenseStatExpActivity::class.java)
+                    .setData(uri).putExtra("pse.switch.sha256", hash)
+                    .putExtra("pse.switch.pokemon.index", storageIndex)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            }
+        }
+        root.addView(defenseStatExp)
         inspectCopy = Button(this).apply {
             text = "Inspect verified copy"; visibility = android.view.View.GONE
             setOnClickListener { inspectVerifiedCopy() }
@@ -121,6 +135,7 @@ class SwitchLetsGoPokemonAttackStatExpActivity : Activity() {
         attackAwakeningValue.isEnabled = !value && opened != null
         review.isEnabled = !value && opened != null
         hpStatExp.isEnabled = !value && opened != null
+        defenseStatExp.isEnabled = !value && opened != null
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
 
