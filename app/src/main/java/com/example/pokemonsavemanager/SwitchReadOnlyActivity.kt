@@ -2322,17 +2322,49 @@ class SwitchReadOnlyActivity : Activity() {
                 )
             }
         })
+        val bankEntryName = location.takeIf { it.startsWith("PSE Bank • ") }
+            ?.removePrefix("PSE Bank • ")
+        val restore = bankEntryName?.let {
+            Button(this).apply {
+                text = "Restore to new save copy"
+                isAllCaps = false
+            }
+        }
+        if (restore != null) content.addView(restore)
         val bank = Button(this).apply {
             text = if (location.startsWith("PSE Bank • ")) "Remove from PSE Bank" else "Add to PSE Bank"
             isAllCaps = false
         }
         content.addView(bank)
         val scroll = ScrollView(this).apply { addView(content) }
-        val bankEntryName = location.takeIf { it.startsWith("PSE Bank • ") }
-            ?.removePrefix("PSE Bank • ")
         val dialog = AlertDialog.Builder(this).setTitle("$location • Sword/Shield")
             .setView(scroll).setNegativeButton("Close", null).create()
         dialog.setOnShowListener {
+            restore?.setOnClickListener {
+                try {
+                    require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                    val source = selectedSourceUri ?: error("Reopen the selected Sword/Shield save from PSE.")
+                    val entryName = bankEntryName ?: error("Reopen PSE Bank.")
+                    val directory = File(filesDir, "pse_bank").canonicalFile
+                    val entry = File(directory, entryName).canonicalFile
+                    require(entry.parentFile == directory && entry.name.startsWith("switch_swsh_") &&
+                        entry.extension == "pk8") {
+                        "This is not a current Sword/Shield Bank entry."
+                    }
+                    require(SwordShieldPokemonReadOnly.read(entry.readBytes()) is SwordShieldSlotRead.Pokemon) {
+                        "The Bank record is invalid and cannot be restored."
+                    }
+                    dialog.dismiss()
+                    startActivity(Intent(this, SwitchSwordShieldPseBankRestoreActivity::class.java).setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.bank.entry", entry.name)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not prepare Bank restore")
+                        .setMessage(error.message ?: "The source and Bank entry were left unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }
             bank.setOnClickListener {
                 if (session !== bound) { dialog.dismiss(); return@setOnClickListener }
                 if (bankEntryName != null) {

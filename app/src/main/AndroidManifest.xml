@@ -62,6 +62,7 @@
         <activity android:name=".SwitchSwordShieldPokemonDefenseStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokemonSpeedStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokemonSpecialStatExpActivity" android:exported="false"/>
+        <activity android:name=".SwitchSwordShieldPseBankRestoreActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldEventActivity" android:exported="false"/>
