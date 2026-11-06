@@ -1481,6 +1481,20 @@ class SwitchReadOnlyActivity : Activity() {
             }
         }
         content.addView(edit)
+        content.addView(Button(this).apply {
+            text = "Duplicate Pokémon"
+            isAllCaps = false
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && source != null) startActivity(
+                    Intent(this@SwitchReadOnlyActivity, SwitchLetsGoPokemonDuplicateActivity::class.java)
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.switch.pokemon.index", slot.index)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
+        })
         val bank = Button(this).apply { text = "Add to PSE Bank"; isAllCaps = false }
         content.addView(bank)
         val scroll = ScrollView(this).apply { addView(content) }
