@@ -129,6 +129,7 @@
         <activity android:name=".SwitchScarletVioletPokemonAttackStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonDefenseStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonSpeedStatExpActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletPokemonSpecialStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletEventActivity" android:exported="false"/>
