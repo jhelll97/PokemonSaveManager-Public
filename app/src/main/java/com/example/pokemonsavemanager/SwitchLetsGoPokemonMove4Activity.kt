@@ -31,6 +31,7 @@ class SwitchLetsGoPokemonMove4Activity : Activity() {
     private lateinit var move: Button
     private lateinit var pp: EditText
     private lateinit var review: Button
+    private lateinit var attackDv: Button
     private lateinit var move3: Button
     private lateinit var inspectCopy: Button
 
@@ -74,6 +75,19 @@ class SwitchLetsGoPokemonMove4Activity : Activity() {
             text = "Review Move 4 change"; isEnabled = false; setOnClickListener { reviewMove() }
         }
         root.addView(review)
+        attackDv = Button(this).apply {
+            text = "Next field: Attack DV / IV"; isEnabled = false
+            setOnClickListener {
+                val uri = sourceUri ?: return@setOnClickListener
+                val hash = expectedHash ?: return@setOnClickListener
+                startActivity(Intent(this@SwitchLetsGoPokemonMove4Activity,
+                    SwitchLetsGoPokemonAttackDvActivity::class.java)
+                    .setData(uri).putExtra("pse.switch.sha256", hash)
+                    .putExtra("pse.switch.pokemon.index", storageIndex)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            }
+        }
+        root.addView(attackDv)
         move3 = Button(this).apply {
             text = "Back to Move 3"; isEnabled = false
             setOnClickListener {
@@ -142,6 +156,7 @@ class SwitchLetsGoPokemonMove4Activity : Activity() {
         move.isEnabled = !value && opened != null
         pp.isEnabled = !value && opened != null
         review.isEnabled = !value && opened != null
+        attackDv.isEnabled = !value && opened != null
         move3.isEnabled = !value && opened != null
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
