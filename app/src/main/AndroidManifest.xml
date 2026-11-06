@@ -94,6 +94,7 @@
         <activity android:name=".SwitchScarletVioletPokemonMove3Activity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonMove4Activity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonAttackDvActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletPokemonDefenseDvActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletEventActivity" android:exported="false"/>
