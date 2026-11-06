@@ -32,6 +32,7 @@ class SwitchBdspPokemonHpStatExpActivity : Activity() {
     private lateinit var hpEv: EditText
     private lateinit var review: Button
     private lateinit var specialDv: Button
+    private lateinit var attackStatExp: Button
     private lateinit var inspectCopy: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -92,6 +93,22 @@ class SwitchBdspPokemonHpStatExpActivity : Activity() {
             }
         }
         root.addView(specialDv)
+        attackStatExp = Button(this).apply {
+            text = "Next: Attack Stat Exp"; isEnabled = false
+            setOnClickListener {
+                val uri = sourceUri ?: return@setOnClickListener
+                val hash = expectedHash ?: return@setOnClickListener
+                val selected = area ?: return@setOnClickListener
+                startActivity(Intent(this@SwitchBdspPokemonHpStatExpActivity,
+                    SwitchBdspPokemonAttackStatExpActivity::class.java)
+                    .setData(uri).putExtra("pse.switch.sha256", hash)
+                    .putExtra("pse.switch.pokemon.area", selected.name)
+                    .putExtra("pse.switch.pokemon.box", box)
+                    .putExtra("pse.switch.pokemon.position", position)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            }
+        }
+        root.addView(attackStatExp)
         inspectCopy = Button(this).apply {
             text = "Inspect verified copy"; visibility = android.view.View.GONE
             setOnClickListener { inspectVerifiedCopy() }
@@ -144,6 +161,7 @@ class SwitchBdspPokemonHpStatExpActivity : Activity() {
         hpEv.isEnabled = !value && ready
         review.isEnabled = !value && ready
         specialDv.isEnabled = !value && ready
+        attackStatExp.isEnabled = !value && ready
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
 
