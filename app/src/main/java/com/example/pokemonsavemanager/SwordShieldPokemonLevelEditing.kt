@@ -56,6 +56,12 @@ data class SwordShieldSpeedStatExpValues(
     val speed: Int
 )
 
+data class SwordShieldSpecialStatExpValues(
+    val specialEv: Int,
+    val specialAttack: Int,
+    val specialDefense: Int
+)
+
 /** Rebuilds one PK8's native level-dependent values in a reviewed new Sword/Shield save copy. */
 object SwordShieldPokemonLevelEditing {
     private const val STORED_END = 0x148
@@ -76,6 +82,8 @@ object SwordShieldPokemonLevelEditing {
     private const val ATTACK_EV = 0x27
     private const val DEFENSE_EV = 0x28
     private const val SPEED_EV = 0x29
+    private const val SPECIAL_ATTACK_EV = 0x2A
+    private const val SPECIAL_DEFENSE_EV = 0x2B
     private const val CURRENT_HP = 0x8A
     private const val LEVEL = 0x148
     private const val MAXIMUM_HP = 0x14A
@@ -497,6 +505,58 @@ object SwordShieldPokemonLevelEditing {
         } else SwordShieldSaveValidation.writePartyRecord(original, position, afterRecord)
         verifySpeedStatExp(original, written.bytes, area, box, position, written.absoluteOffset, after)
         return SwordShieldSpeedStatExpCopyPlan(
+            original, written.bytes, area, box, position, written.absoluteOffset, before, after
+        )
+    }
+
+    internal fun stageSpecialStatExp(
+        source: ByteArray,
+        expectedSha256: String,
+        area: SwordShieldPokemonArea,
+        box: Int,
+        position: Int,
+        requestedSpecialEv: Int
+    ): SwordShieldSpecialStatExpCopyPlan {
+        val original = source.copyOf()
+        require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        require(requestedSpecialEv in 0..252) { "Special EV must be between 0 and 252." }
+        val blocks = SwordShieldSaveValidation.readPokemonBlocks(original)
+        val target = targetRecord(blocks, area, box, position)
+        val before = (SwordShieldPokemonReadOnly.read(target) as? SwordShieldSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The selected native PK8 is not checksum-valid.")
+        require(!before.isEgg) { "Egg Special Stat Exp / EV editing is not supported for Sword/Shield." }
+        require(requestedSpecialEv != before.evs[4] || requestedSpecialEv != before.evs[5]) { "Enter a different Special EV before review." }
+        require(requestedSpecialEv * 2 +
+            before.evs.filterIndexed { index, _ -> index != 4 && index != 5 }.sum() <= 510) {
+            "The paired requested Special EVs would exceed Sword/Shield's native 510 total EV limit."
+        }
+        require(before.cachedLevel in 1..100 && before.statNature in 0..24) {
+            "The PK8 Level or stat nature is invalid, so derived stats cannot be rebuilt safely."
+        }
+        val personal = resolvePersonal(before)
+        require(levelForExperience(before.experience, personal.growth) == before.cachedLevel) {
+            "The saved Level and EXP do not agree with this Pokémon's verified growth group."
+        }
+        require(matchesCachedValues(before,
+            calculate(before, personal, before.cachedLevel, before.experience))) {
+            "The saved battle values do not match this PK8's verified species/form profile."
+        }
+        val requestedEvs = before.evs.toMutableList().also {
+            it[4] = requestedSpecialEv
+            it[5] = requestedSpecialEv
+        }
+        val recalculated = calculate(
+            before.copy(evs = requestedEvs), personal, before.cachedLevel, before.experience
+        )
+        val after = SwordShieldSpecialStatExpValues(
+            requestedSpecialEv, recalculated.specialAttack, recalculated.specialDefense
+        )
+        val afterRecord = editSpecialStatExpRecord(target, after)
+        val written = if (area == SwordShieldPokemonArea.BOX) {
+            SwordShieldSaveValidation.writeBoxRecord(original, box, position, afterRecord)
+        } else SwordShieldSaveValidation.writePartyRecord(original, position, afterRecord)
+        verifySpecialStatExp(original, written.bytes, area, box, position, written.absoluteOffset, after)
+        return SwordShieldSpecialStatExpCopyPlan(
             original, written.bytes, area, box, position, written.absoluteOffset, before, after
         )
     }
@@ -1090,6 +1150,67 @@ object SwordShieldPokemonLevelEditing {
         }) { "An unrelated encrypted container byte changed." }
     }
 
+    internal fun verifySpecialStatExp(
+        original: ByteArray,
+        edited: ByteArray,
+        area: SwordShieldPokemonArea,
+        box: Int,
+        position: Int,
+        absoluteOffset: Int,
+        expected: SwordShieldSpecialStatExpValues
+    ) {
+        val beforeBlocks = SwordShieldSaveValidation.readPokemonBlocks(original)
+        val afterBlocks = SwordShieldSaveValidation.readPokemonBlocks(edited)
+        require(beforeBlocks.version == afterBlocks.version && original.size == edited.size) {
+            "The Special Stat Exp edit changed native title identity or save size."
+        }
+        val beforeRecord = targetRecord(beforeBlocks, area, box, position)
+        val afterRecord = targetRecord(afterBlocks, area, box, position)
+        val before = (SwordShieldPokemonReadOnly.read(beforeRecord) as? SwordShieldSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The original PK8 no longer reopens as a Pokémon.")
+        val after = (SwordShieldPokemonReadOnly.read(afterRecord) as? SwordShieldSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The edited PK8 did not reopen as a Pokémon.")
+        require(after.evs[4] == expected.specialEv && after.evs[5] == expected.specialEv &&
+            after.evs.indices.filter { it != 4 && it != 5 }
+                .all { after.evs[it] == before.evs[it] } &&
+            after.cachedStats[3] == expected.specialAttack &&
+            after.cachedStats[4] == expected.specialDefense &&
+            after.cachedStats.indices.filter { it != 3 && it != 4 }
+                .all { after.cachedStats[it] == before.cachedStats[it] } &&
+            after.copy(evs = before.evs, cachedStats = before.cachedStats) == before) {
+            "The persisted PK8 changed outside the paired Special EVs and their derived stats."
+        }
+
+        val relativeOffset = if (area == SwordShieldPokemonArea.BOX)
+            ((box - 1) * 30 + position - 1) * SwordShieldPokemonReadOnly.RECORD_SIZE
+        else (position - 1) * SwordShieldPokemonReadOnly.RECORD_SIZE
+        val beforeTargetBlock = if (area == SwordShieldPokemonArea.BOX) beforeBlocks.boxes else beforeBlocks.party
+        val afterTargetBlock = if (area == SwordShieldPokemonArea.BOX) afterBlocks.boxes else afterBlocks.party
+        val beforeOtherBlock = if (area == SwordShieldPokemonArea.BOX) beforeBlocks.party else beforeBlocks.boxes
+        val afterOtherBlock = if (area == SwordShieldPokemonArea.BOX) afterBlocks.party else afterBlocks.boxes
+        require(beforeOtherBlock.contentEquals(afterOtherBlock)) {
+            "The unselected native Pokémon storage object changed."
+        }
+        require(beforeTargetBlock.indices.all { index ->
+            index in relativeOffset until relativeOffset + SwordShieldPokemonReadOnly.RECORD_SIZE ||
+                beforeTargetBlock[index] == afterTargetBlock[index]
+        }) { "Another native Pokémon slot changed." }
+
+        val beforePlain = decryptAndUnshuffle(beforeRecord)
+        val afterPlain = decryptAndUnshuffle(afterRecord)
+        require(beforePlain.indices.all { offset ->
+            offset in 6..7 ||
+                offset == SPECIAL_ATTACK_EV || offset == SPECIAL_DEFENSE_EV ||
+                offset in 0x152 until 0x156 || beforePlain[offset] == afterPlain[offset]
+        }) { "The PK8 edit exceeded paired Special EVs, derived Special stats, and checksum fields." }
+
+        val hashOffset = original.size - 32
+        require(original.indices.all { index ->
+            index in absoluteOffset until absoluteOffset + SwordShieldPokemonReadOnly.RECORD_SIZE ||
+                index in hashOffset until original.size || original[index] == edited[index]
+        }) { "An unrelated encrypted container byte changed." }
+    }
+
     private fun resolvePersonal(pokemon: SwordShieldPokemonRead): SwordShieldPersonalData {
         val all = SwordShieldPersonalCatalogue.profiles(pokemon.species)
         require(all.isNotEmpty()) { "Verified Generation 8 personal data is unavailable for this species." }
@@ -1327,6 +1448,18 @@ object SwordShieldPokemonLevelEditing {
         return shuffleAndEncrypt(plain)
     }
 
+    private fun editSpecialStatExpRecord(record: ByteArray, values: SwordShieldSpecialStatExpValues): ByteArray {
+        val plain = decryptAndUnshuffle(record)
+        plain[SPECIAL_ATTACK_EV] = values.specialEv.toByte()
+        plain[SPECIAL_DEFENSE_EV] = values.specialEv.toByte()
+        writeU16(plain, 0x152, values.specialAttack)
+        writeU16(plain, 0x154, values.specialDefense)
+        var checksum = 0
+        for (offset in 8 until STORED_END step 2) checksum += u16(plain, offset)
+        writeU16(plain, 6, checksum and 0xFFFF)
+        return shuffleAndEncrypt(plain)
+    }
+
     private fun decryptAndUnshuffle(record: ByteArray): ByteArray {
         require(record.size == SwordShieldPokemonReadOnly.RECORD_SIZE) {
             "Expected one complete native PK8 record."
@@ -1550,6 +1683,25 @@ object SwordShieldPokemonSpeedStatExpEditing {
         requestedSpeedEv: Int
     ): SwordShieldSpeedStatExpCopyPlan = SwordShieldPokemonLevelEditing.stageSpeedStatExp(
         source, expectedSha256, area, box, position, requestedSpeedEv
+    )
+}
+
+/** Gen 1 Special Stat Exp mapped to Sword/Shield's paired native Special Attack and Special Defense EVs. */
+object SwordShieldPokemonSpecialStatExpEditing {
+    fun readDocumentBytes(input: java.io.InputStream): ByteArray =
+        SwordShieldPokemonLevelEditing.readDocumentBytes(input)
+
+    fun sha256(bytes: ByteArray): String = SwordShieldPokemonLevelEditing.sha256(bytes)
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        area: SwordShieldPokemonArea,
+        box: Int,
+        position: Int,
+        requestedSpecialEv: Int
+    ): SwordShieldSpecialStatExpCopyPlan = SwordShieldPokemonLevelEditing.stageSpecialStatExp(
+        source, expectedSha256, area, box, position, requestedSpecialEv
     )
 }
 
@@ -2057,6 +2209,70 @@ class SwordShieldSpeedStatExpCopyPlan internal constructor(
             val removed = started && runCatching { discardDestination() }.getOrDefault(false)
             throw IllegalStateException(
                 (failure.message ?: "Speed Stat Exp copy verification failed.") +
+                    if (removed) " The failed new copy was removed; the recovery backup is retained."
+                    else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
+                failure
+            )
+        }
+    }
+}
+
+class SwordShieldSpecialStatExpCopyPlan internal constructor(
+    original: ByteArray,
+    edited: ByteArray,
+    val area: SwordShieldPokemonArea,
+    val box: Int,
+    val position: Int,
+    val absoluteOffset: Int,
+    val before: SwordShieldPokemonRead,
+    val after: SwordShieldSpecialStatExpValues
+) {
+    private val original = original.copyOf()
+    private val edited = edited.copyOf()
+    val sourceSha256 = SwordShieldPokemonSpecialStatExpEditing.sha256(this.original)
+    val editedSha256 = SwordShieldPokemonSpecialStatExpEditing.sha256(this.edited)
+    private var consumed = false
+    val location: String
+        get() = if (area == SwordShieldPokemonArea.BOX) "Box $box • Slot $position" else "Party $position"
+
+    @Synchronized
+    fun saveNewCopy(
+        readSource: () -> ByteArray,
+        retainBackup: (ByteArray) -> ByteArray,
+        readDestination: () -> ByteArray,
+        writeDestination: (ByteArray) -> Unit,
+        discardDestination: () -> Boolean
+    ) {
+        check(!consumed) { "This Special Stat Exp review was already used. Reopen Pokémon Boxes." }
+        consumed = true
+        fun requireSource() = require(readSource().contentEquals(original)) {
+            "The selected source changed. Reopen it from PSE."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "Choose a new empty document; existing files cannot be replaced." }
+        val backup = retainBackup(original.copyOf())
+        require(backup.contentEquals(original)) { "The recovery backup did not verify. Nothing was written." }
+        requireSource()
+        require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
+        var started = false
+        try {
+            SwordShieldPokemonLevelEditing.verifySpecialStatExp(
+                original, edited, area, box, position, absoluteOffset, after
+            )
+            started = true
+            writeDestination(edited.copyOf())
+            val persisted = readDestination()
+            require(persisted.contentEquals(edited)) {
+                "The saved copy differs from the reviewed Special Stat Exp edit."
+            }
+            SwordShieldPokemonLevelEditing.verifySpecialStatExp(
+                original, persisted, area, box, position, absoluteOffset, after
+            )
+            requireSource()
+        } catch (failure: Exception) {
+            val removed = started && runCatching { discardDestination() }.getOrDefault(false)
+            throw IllegalStateException(
+                (failure.message ?: "Special Stat Exp copy verification failed.") +
                     if (removed) " The failed new copy was removed; the recovery backup is retained."
                     else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
                 failure
