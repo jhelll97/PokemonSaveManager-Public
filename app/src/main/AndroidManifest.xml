@@ -146,6 +146,7 @@
         <activity android:name=".SwitchLegendsZaPokemonHpStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaPokemonAttackStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaPokemonDefenseStatExpActivity" android:exported="false"/>
+        <activity android:name=".SwitchLegendsZaPokemonSpeedStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaEventActivity" android:exported="false"/>
