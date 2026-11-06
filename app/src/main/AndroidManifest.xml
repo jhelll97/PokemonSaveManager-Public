@@ -46,6 +46,7 @@
         <activity android:name=".SwitchSwordShieldPokemonMove3Activity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokemonMove4Activity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokemonAttackDvActivity" android:exported="false"/>
+        <activity android:name=".SwitchSwordShieldPokemonDefenseDvActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldEventActivity" android:exported="false"/>

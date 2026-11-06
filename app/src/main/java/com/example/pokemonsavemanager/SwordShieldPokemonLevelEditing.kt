@@ -19,6 +19,11 @@ data class SwordShieldAttackDvValues(
     val attack: Int
 )
 
+data class SwordShieldDefenseDvValues(
+    val defenseIv: Int,
+    val defense: Int
+)
+
 /** Rebuilds one PK8's native level-dependent values in a reviewed new Sword/Shield save copy. */
 object SwordShieldPokemonLevelEditing {
     private const val STORED_END = 0x148
@@ -26,6 +31,8 @@ object SwordShieldPokemonLevelEditing {
     private const val IV32 = 0x8C
     private const val ATTACK_IV_SHIFT = 5
     private const val ATTACK_IV_MASK = 31L shl ATTACK_IV_SHIFT
+    private const val DEFENSE_IV_SHIFT = 10
+    private const val DEFENSE_IV_MASK = 31L shl DEFENSE_IV_SHIFT
     private const val CURRENT_HP = 0x8A
     private const val LEVEL = 0x148
     private const val PARTY_VALUES = 0x14A
@@ -124,6 +131,49 @@ object SwordShieldPokemonLevelEditing {
         } else SwordShieldSaveValidation.writePartyRecord(original, position, afterRecord)
         verifyAttackDv(original, written.bytes, area, box, position, written.absoluteOffset, after)
         return SwordShieldAttackDvCopyPlan(
+            original, written.bytes, area, box, position, written.absoluteOffset, before, after
+        )
+    }
+
+    internal fun stageDefenseDv(
+        source: ByteArray,
+        expectedSha256: String,
+        area: SwordShieldPokemonArea,
+        box: Int,
+        position: Int,
+        requestedDefenseIv: Int
+    ): SwordShieldDefenseDvCopyPlan {
+        val original = source.copyOf()
+        require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        require(requestedDefenseIv in 0..31) { "Defense IV must be between 0 and 31." }
+        val blocks = SwordShieldSaveValidation.readPokemonBlocks(original)
+        val target = targetRecord(blocks, area, box, position)
+        val before = (SwordShieldPokemonReadOnly.read(target) as? SwordShieldSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The selected native PK8 is not checksum-valid.")
+        require(!before.isEgg) { "Egg Defense DV / IV editing is not supported for Sword/Shield." }
+        require(requestedDefenseIv != before.ivs[2]) { "Enter a different Defense IV before review." }
+        require(before.cachedLevel in 1..100 && before.statNature in 0..24) {
+            "The PK8 Level or stat nature is invalid, so derived stats cannot be rebuilt safely."
+        }
+        val personal = resolvePersonal(before)
+        require(levelForExperience(before.experience, personal.growth) == before.cachedLevel) {
+            "The saved Level and EXP do not agree with this Pokémon's verified growth group."
+        }
+        require(matchesCachedValues(before,
+            calculate(before, personal, before.cachedLevel, before.experience))) {
+            "The saved battle values do not match this PK8's verified species/form profile."
+        }
+        val requestedIvs = before.ivs.toMutableList().also { it[2] = requestedDefenseIv }
+        val recalculated = calculate(
+            before.copy(ivs = requestedIvs), personal, before.cachedLevel, before.experience
+        )
+        val after = SwordShieldDefenseDvValues(requestedDefenseIv, recalculated.defense)
+        val afterRecord = editDefenseDvRecord(target, after)
+        val written = if (area == SwordShieldPokemonArea.BOX) {
+            SwordShieldSaveValidation.writeBoxRecord(original, box, position, afterRecord)
+        } else SwordShieldSaveValidation.writePartyRecord(original, position, afterRecord)
+        verifyDefenseDv(original, written.bytes, area, box, position, written.absoluteOffset, after)
+        return SwordShieldDefenseDvCopyPlan(
             original, written.bytes, area, box, position, written.absoluteOffset, before, after
         )
     }
@@ -299,6 +349,68 @@ object SwordShieldPokemonLevelEditing {
         }) { "An unrelated encrypted container byte changed." }
     }
 
+    internal fun verifyDefenseDv(
+        original: ByteArray,
+        edited: ByteArray,
+        area: SwordShieldPokemonArea,
+        box: Int,
+        position: Int,
+        absoluteOffset: Int,
+        expected: SwordShieldDefenseDvValues
+    ) {
+        val beforeBlocks = SwordShieldSaveValidation.readPokemonBlocks(original)
+        val afterBlocks = SwordShieldSaveValidation.readPokemonBlocks(edited)
+        require(beforeBlocks.version == afterBlocks.version && original.size == edited.size) {
+            "The Defense DV / IV edit changed native title identity or save size."
+        }
+        val beforeRecord = targetRecord(beforeBlocks, area, box, position)
+        val afterRecord = targetRecord(afterBlocks, area, box, position)
+        val before = (SwordShieldPokemonReadOnly.read(beforeRecord) as? SwordShieldSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The original PK8 no longer reopens as a Pokémon.")
+        val after = (SwordShieldPokemonReadOnly.read(afterRecord) as? SwordShieldSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The edited PK8 did not reopen as a Pokémon.")
+        require(after.ivs[2] == expected.defenseIv &&
+            after.ivs.indices.filter { it != 2 }.all { after.ivs[it] == before.ivs[it] } &&
+            after.cachedStats[1] == expected.defense &&
+            after.cachedStats.indices.filter { it != 1 }.all { after.cachedStats[it] == before.cachedStats[it] } &&
+            after.copy(ivs = before.ivs, cachedStats = before.cachedStats) == before) {
+            "The persisted PK8 changed outside Defense IV and its derived Defense value."
+        }
+
+        val relativeOffset = if (area == SwordShieldPokemonArea.BOX)
+            ((box - 1) * 30 + position - 1) * SwordShieldPokemonReadOnly.RECORD_SIZE
+        else (position - 1) * SwordShieldPokemonReadOnly.RECORD_SIZE
+        val beforeTargetBlock = if (area == SwordShieldPokemonArea.BOX) beforeBlocks.boxes else beforeBlocks.party
+        val afterTargetBlock = if (area == SwordShieldPokemonArea.BOX) afterBlocks.boxes else afterBlocks.party
+        val beforeOtherBlock = if (area == SwordShieldPokemonArea.BOX) beforeBlocks.party else beforeBlocks.boxes
+        val afterOtherBlock = if (area == SwordShieldPokemonArea.BOX) afterBlocks.party else afterBlocks.boxes
+        require(beforeOtherBlock.contentEquals(afterOtherBlock)) {
+            "The unselected native Pokémon storage object changed."
+        }
+        require(beforeTargetBlock.indices.all { index ->
+            index in relativeOffset until relativeOffset + SwordShieldPokemonReadOnly.RECORD_SIZE ||
+                beforeTargetBlock[index] == afterTargetBlock[index]
+        }) { "Another native Pokémon slot changed." }
+
+        val beforePlain = decryptAndUnshuffle(beforeRecord)
+        val afterPlain = decryptAndUnshuffle(afterRecord)
+        val preserveIvMask = 0xFFFFFFFFL xor DEFENSE_IV_MASK
+        require((u32(beforePlain, IV32) and preserveIvMask) ==
+            (u32(afterPlain, IV32) and preserveIvMask)) {
+            "A non-Defense IV or PK8 identity bit changed."
+        }
+        require(beforePlain.indices.all { offset ->
+            offset in 6..7 || offset in IV32 until IV32 + 4 ||
+                offset in 0x14E until 0x150 || beforePlain[offset] == afterPlain[offset]
+        }) { "The PK8 edit exceeded Defense IV, derived Defense, and checksum fields." }
+
+        val hashOffset = original.size - 32
+        require(original.indices.all { index ->
+            index in absoluteOffset until absoluteOffset + SwordShieldPokemonReadOnly.RECORD_SIZE ||
+                index in hashOffset until original.size || original[index] == edited[index]
+        }) { "An unrelated encrypted container byte changed." }
+    }
+
     private fun resolvePersonal(pokemon: SwordShieldPokemonRead): SwordShieldPersonalData {
         val all = SwordShieldPersonalCatalogue.profiles(pokemon.species)
         require(all.isNotEmpty()) { "Verified Generation 8 personal data is unavailable for this species." }
@@ -457,6 +569,18 @@ object SwordShieldPokemonLevelEditing {
         return shuffleAndEncrypt(plain)
     }
 
+    private fun editDefenseDvRecord(record: ByteArray, values: SwordShieldDefenseDvValues): ByteArray {
+        val plain = decryptAndUnshuffle(record)
+        val iv32 = (u32(plain, IV32) and (0xFFFFFFFFL xor DEFENSE_IV_MASK)) or
+            (values.defenseIv.toLong() shl DEFENSE_IV_SHIFT)
+        writeU32(plain, IV32, iv32)
+        writeU16(plain, 0x14E, values.defense)
+        var checksum = 0
+        for (offset in 8 until STORED_END step 2) checksum += u16(plain, offset)
+        writeU16(plain, 6, checksum and 0xFFFF)
+        return shuffleAndEncrypt(plain)
+    }
+
     private fun decryptAndUnshuffle(record: ByteArray): ByteArray {
         require(record.size == SwordShieldPokemonReadOnly.RECORD_SIZE) {
             "Expected one complete native PK8 record."
@@ -550,6 +674,25 @@ object SwordShieldPokemonAttackDvEditing {
     )
 }
 
+/** Gen 1-ordered Defense DV action mapped to Sword/Shield's native Defense IV. */
+object SwordShieldPokemonDefenseDvEditing {
+    fun readDocumentBytes(input: java.io.InputStream): ByteArray =
+        SwordShieldPokemonLevelEditing.readDocumentBytes(input)
+
+    fun sha256(bytes: ByteArray): String = SwordShieldPokemonLevelEditing.sha256(bytes)
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        area: SwordShieldPokemonArea,
+        box: Int,
+        position: Int,
+        requestedDefenseIv: Int
+    ): SwordShieldDefenseDvCopyPlan = SwordShieldPokemonLevelEditing.stageDefenseDv(
+        source, expectedSha256, area, box, position, requestedDefenseIv
+    )
+}
+
 class SwordShieldAttackDvCopyPlan internal constructor(
     original: ByteArray,
     edited: ByteArray,
@@ -606,6 +749,70 @@ class SwordShieldAttackDvCopyPlan internal constructor(
             val removed = started && runCatching { discardDestination() }.getOrDefault(false)
             throw IllegalStateException(
                 (failure.message ?: "Attack DV / IV copy verification failed.") +
+                    if (removed) " The failed new copy was removed; the recovery backup is retained."
+                    else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
+                failure
+            )
+        }
+    }
+}
+
+class SwordShieldDefenseDvCopyPlan internal constructor(
+    original: ByteArray,
+    edited: ByteArray,
+    val area: SwordShieldPokemonArea,
+    val box: Int,
+    val position: Int,
+    val absoluteOffset: Int,
+    val before: SwordShieldPokemonRead,
+    val after: SwordShieldDefenseDvValues
+) {
+    private val original = original.copyOf()
+    private val edited = edited.copyOf()
+    val sourceSha256 = SwordShieldPokemonDefenseDvEditing.sha256(this.original)
+    val editedSha256 = SwordShieldPokemonDefenseDvEditing.sha256(this.edited)
+    private var consumed = false
+    val location: String
+        get() = if (area == SwordShieldPokemonArea.BOX) "Box $box • Slot $position" else "Party $position"
+
+    @Synchronized
+    fun saveNewCopy(
+        readSource: () -> ByteArray,
+        retainBackup: (ByteArray) -> ByteArray,
+        readDestination: () -> ByteArray,
+        writeDestination: (ByteArray) -> Unit,
+        discardDestination: () -> Boolean
+    ) {
+        check(!consumed) { "This Defense DV / IV review was already used. Reopen Pokémon Boxes." }
+        consumed = true
+        fun requireSource() = require(readSource().contentEquals(original)) {
+            "The selected source changed. Reopen it from PSE."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "Choose a new empty document; existing files cannot be replaced." }
+        val backup = retainBackup(original.copyOf())
+        require(backup.contentEquals(original)) { "The recovery backup did not verify. Nothing was written." }
+        requireSource()
+        require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
+        var started = false
+        try {
+            SwordShieldPokemonLevelEditing.verifyDefenseDv(
+                original, edited, area, box, position, absoluteOffset, after
+            )
+            started = true
+            writeDestination(edited.copyOf())
+            val persisted = readDestination()
+            require(persisted.contentEquals(edited)) {
+                "The saved copy differs from the reviewed Defense DV / IV edit."
+            }
+            SwordShieldPokemonLevelEditing.verifyDefenseDv(
+                original, persisted, area, box, position, absoluteOffset, after
+            )
+            requireSource()
+        } catch (failure: Exception) {
+            val removed = started && runCatching { discardDestination() }.getOrDefault(false)
+            throw IllegalStateException(
+                (failure.message ?: "Defense DV / IV copy verification failed.") +
                     if (removed) " The failed new copy was removed; the recovery backup is retained."
                     else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
                 failure
@@ -742,3 +949,4 @@ class SwordShieldLevelCopyPlan internal constructor(
         }
     }
 }
+
