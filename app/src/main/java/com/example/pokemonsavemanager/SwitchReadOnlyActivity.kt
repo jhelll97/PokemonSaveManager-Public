@@ -3698,6 +3698,25 @@ class SwitchReadOnlyActivity : Activity() {
         val canAddToBank = Regex("^(Box [0-9]+ • Slot [0-9]+|Party [0-9]+|Ride Pokémon)$").matches(location)
         val bank = Button(this).apply { text = "Add to PSE Bank"; isAllCaps = false }
         if (canAddToBank) content.addView(bank)
+        if (nativeTarget != null) content.addView(Button(this).apply {
+            text = "Delete Pokémon"
+            isAllCaps = false
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && source != null) startActivity(
+                    Intent(
+                        this@SwitchReadOnlyActivity,
+                        SwitchScarletVioletPokemonDeleteActivity::class.java
+                    )
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                        .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                        .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
+        })
         val scroll = ScrollView(this).apply { addView(content) }
         val dialog = AlertDialog.Builder(this).setTitle("$location • Scarlet/Violet")
             .setView(scroll).setNegativeButton("Close", null).create()
