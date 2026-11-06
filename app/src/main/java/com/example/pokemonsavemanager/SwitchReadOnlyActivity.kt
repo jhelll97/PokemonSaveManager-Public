@@ -3821,6 +3821,26 @@ class SwitchReadOnlyActivity : Activity() {
                 }
             })
         }
+        if (nativeTarget != null && !p.isEgg) content.addView(Button(this).apply {
+            text = if (nativeTarget.first == LegendsZaPokemonArea.BOX)
+                "Move to Party" else "Move to PC Box"
+            isAllCaps = false
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && source != null) startActivity(
+                    Intent(
+                        this@SwitchReadOnlyActivity,
+                        SwitchLegendsZaPokemonPartyMoveActivity::class.java
+                    )
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                        .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                        .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
+        })
         val canAddToBank = Regex("^(Box [0-9]+ • Slot [0-9]+|Party [0-9]+)$").matches(location)
         val bank = Button(this).apply { text = "Add to PSE Bank"; isAllCaps = false }
         if (canAddToBank) content.addView(bank)

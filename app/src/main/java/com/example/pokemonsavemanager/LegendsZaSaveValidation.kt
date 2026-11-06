@@ -39,6 +39,11 @@ internal data class LegendsZaTrainerWriteResult(
 
 internal data class LegendsZaDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class LegendsZaPokemonWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
+internal data class LegendsZaPokemonBlocksWriteResult(
+    val bytes: ByteArray,
+    val boxesAbsoluteOffset: Int,
+    val partyAbsoluteOffset: Int
+)
 
 /** Independent read-only container gate; pinned format evidence is in SWITCH_READ_ONLY_FORMATS.md. */
 object LegendsZaSaveValidation {
@@ -489,6 +494,106 @@ object LegendsZaSaveValidation {
         digest.digest().copyInto(edited, end)
         LegendsZaStorageReadOnly.read(edited)
         return LegendsZaPokemonWriteResult(edited, absoluteOffset)
+    }
+
+    /** Replaces the decoded native PC-storage and party objects together, then rebuilds the SHA-256 footer. */
+    internal fun writePokemonBlocks(
+        source: ByteArray,
+        boxes: ByteArray,
+        party: ByteArray
+    ): LegendsZaPokemonBlocksWriteResult {
+        val before = readPokemonBlocks(source)
+        require(boxes.size == 0x5FA00 && boxes.size == before.boxes.size) {
+            "The native Legends: Z-A PC-storage object has the wrong size."
+        }
+        require(party.size == 0xB40 && party.size == before.party.size) {
+            "The native Legends: Z-A party object has the wrong size."
+        }
+        val recordSize = LegendsZaPokemonReadOnly.RECORD_SIZE
+        val count = (0 until 6).firstOrNull {
+            !LegendsZaStorageReadOnly.hasNativePresence(
+                party, it * LegendsZaStorageReadOnly.PARTY_STRIDE
+            )
+        } ?: 6
+        require(count in 1..6 && (count until 6).all {
+            !LegendsZaStorageReadOnly.hasNativePresence(
+                party, it * LegendsZaStorageReadOnly.PARTY_STRIDE
+            )
+        }) { "The edited native Legends: Z-A party must be one contiguous prefix of one through six Pokémon." }
+        require((0 until count).all { index ->
+            val offset = index * LegendsZaStorageReadOnly.PARTY_STRIDE
+            LegendsZaPokemonReadOnly.read(
+                party.copyOfRange(offset, offset + recordSize)
+            ) is LegendsZaSlotRead.Pokemon
+        }) { "Every occupied edited party body must pass its native PA9 checksum." }
+
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var boxesAbsoluteOffset = -1
+        var partyAbsoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) {
+                "A native block length exceeds the remaining payload."
+            }
+            val blockStart = payload.size - cursor.remaining
+            val replacement = when (key) {
+                0x0D66012CL -> boxes.also {
+                    require(type == 4 && length == it.size.toLong()) {
+                        "The native Legends: Z-A PC-storage object has the wrong type or size."
+                    }
+                    boxesAbsoluteOffset = blockStart
+                }
+                0x3AA1A9ADL -> party.also {
+                    require(type == 4 && length == it.size.toLong()) {
+                        "The native Legends: Z-A party object has the wrong type or size."
+                    }
+                    partyAbsoluteOffset = blockStart
+                }
+                else -> null
+            }
+            if (replacement != null) repeat(replacement.size) { byteIndex ->
+                payload[blockStart + byteIndex] =
+                    (replacement[byteIndex].toInt() xor stream.next()).toByte()
+            }
+            cursor.skip(length.toInt())
+        }
+        require(boxesAbsoluteOffset >= 0 && partyAbsoluteOffset >= 0) {
+            "The native Legends: Z-A Pokémon storage objects are missing."
+        }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        val reopened = readPokemonBlocks(edited)
+        require(reopened.boxes.contentEquals(boxes) && reopened.party.contentEquals(party)) {
+            "The rebuilt native Legends: Z-A Pokémon storage objects did not reopen exactly."
+        }
+        LegendsZaStorageReadOnly.read(edited)
+        return LegendsZaPokemonBlocksWriteResult(
+            edited, boxesAbsoluteOffset, partyAbsoluteOffset
+        )
     }
 
     private fun inspect(source: ByteArray, captured: MutableMap<Long, ByteArray>?, uintKeys: Set<Long> = emptySet()): LegendsZaValidation {
