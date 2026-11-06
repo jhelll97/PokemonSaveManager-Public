@@ -31,6 +31,7 @@ class SwitchLegendsZaPokemonAttackDvActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var attackIv: EditText
     private lateinit var review: Button
+    private lateinit var defenseDv: Button
     private lateinit var move4: Button
     private lateinit var inspectCopy: Button
 
@@ -76,6 +77,22 @@ class SwitchLegendsZaPokemonAttackDvActivity : Activity() {
             setOnClickListener { reviewAttackDv() }
         }
         root.addView(review)
+        defenseDv = Button(this).apply {
+            text = "Next: Defense DV / IV"; isEnabled = false
+            setOnClickListener {
+                val uri = sourceUri ?: return@setOnClickListener
+                val hash = expectedHash ?: return@setOnClickListener
+                val selected = area ?: return@setOnClickListener
+                startActivity(Intent(this@SwitchLegendsZaPokemonAttackDvActivity,
+                    SwitchLegendsZaPokemonDefenseDvActivity::class.java)
+                    .setData(uri).putExtra("pse.switch.sha256", hash)
+                    .putExtra("pse.switch.pokemon.area", selected.name)
+                    .putExtra("pse.switch.pokemon.box", box)
+                    .putExtra("pse.switch.pokemon.position", position)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            }
+        }
+        root.addView(defenseDv)
         move4 = Button(this).apply {
             text = "Back to Move 4"; isEnabled = false
             setOnClickListener {
@@ -144,6 +161,7 @@ class SwitchLegendsZaPokemonAttackDvActivity : Activity() {
         val ready = opened != null && current != null
         attackIv.isEnabled = !value && ready
         review.isEnabled = !value && ready
+        defenseDv.isEnabled = !value && ready
         move4.isEnabled = !value && ready
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
