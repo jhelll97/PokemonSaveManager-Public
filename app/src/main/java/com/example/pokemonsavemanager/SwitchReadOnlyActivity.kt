@@ -2792,6 +2792,22 @@ class SwitchReadOnlyActivity : Activity() {
             isAllCaps = false
         }
         if (nativeTarget != null) content.addView(bank)
+        if (nativeTarget != null) content.addView(Button(this).apply {
+            text = "Delete Pokémon"
+            isAllCaps = false
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && source != null) startActivity(
+                    Intent(this@SwitchReadOnlyActivity, SwitchBdspPokemonDeleteActivity::class.java)
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                        .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                        .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
+        })
         val scroll = ScrollView(this).apply { addView(content) }
         val dialog = AlertDialog.Builder(this).setTitle("$location • BDSP")
             .setView(scroll).setNegativeButton("Close", null).create()
