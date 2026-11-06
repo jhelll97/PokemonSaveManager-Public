@@ -70,6 +70,7 @@
         <activity android:name=".SwitchLegendsArceusPokemonMove1Activity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokemonMove2Activity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokemonMove3Activity" android:exported="false"/>
+        <activity android:name=".SwitchLegendsArceusPokemonMove4Activity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusEventActivity" android:exported="false"/>

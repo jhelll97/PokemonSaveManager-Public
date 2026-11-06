@@ -32,6 +32,7 @@ class SwitchLegendsArceusPokemonMove3Activity : Activity() {
     private lateinit var move: Button
     private lateinit var pp: EditText
     private lateinit var review: Button
+    private lateinit var move4: Button
     private lateinit var move2: Button
     private lateinit var inspectCopy: Button
 
@@ -83,6 +84,22 @@ class SwitchLegendsArceusPokemonMove3Activity : Activity() {
             text = "Review Move 3 change"; isEnabled = false; setOnClickListener { reviewMove() }
         }
         root.addView(review)
+        move4 = Button(this).apply {
+            text = "Next field: Move 4"; isEnabled = false
+            setOnClickListener {
+                val uri = sourceUri ?: return@setOnClickListener
+                val hash = expectedHash ?: return@setOnClickListener
+                val selected = area ?: return@setOnClickListener
+                startActivity(Intent(this@SwitchLegendsArceusPokemonMove3Activity,
+                    SwitchLegendsArceusPokemonMove4Activity::class.java)
+                    .setData(uri).putExtra("pse.switch.sha256", hash)
+                    .putExtra("pse.switch.pokemon.area", selected.name)
+                    .putExtra("pse.switch.pokemon.pasture", pasture)
+                    .putExtra("pse.switch.pokemon.position", position)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            }
+        }
+        root.addView(move4)
         move2 = Button(this).apply {
             text = "Back to Move 2"; isEnabled = false
             setOnClickListener {
@@ -160,6 +177,7 @@ class SwitchLegendsArceusPokemonMove3Activity : Activity() {
         move.isEnabled = !value && opened != null
         pp.isEnabled = !value && opened != null
         review.isEnabled = !value && opened != null
+        move4.isEnabled = !value && opened != null
         move2.isEnabled = !value && opened != null
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
