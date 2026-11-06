@@ -32,6 +32,7 @@
         <activity android:name=".SwitchLetsGoPseBankRestoreActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoPokemonDuplicateActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoPokemonSwapActivity" android:exported="false"/>
+        <activity android:name=".SwitchLetsGoPokemonPartyMoveActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoEventActivity" android:exported="false"/>
