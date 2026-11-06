@@ -2640,6 +2640,22 @@ class SwitchReadOnlyActivity : Activity() {
                 )
             }
         })
+        if (nativeTarget != null) content.addView(Button(this).apply {
+            text = "Duplicate Pokémon"
+            isAllCaps = false
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && source != null) startActivity(
+                    Intent(this@SwitchReadOnlyActivity, SwitchBdspPokemonDuplicateActivity::class.java)
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                        .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                        .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
+        })
         val bank = Button(this).apply {
             text = "Add to PSE Bank"
             isAllCaps = false
