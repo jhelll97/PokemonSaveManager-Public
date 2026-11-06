@@ -32,6 +32,7 @@ class SwitchScarletVioletPokemonDefenseDvActivity : Activity() {
     private lateinit var defenseIv: EditText
     private lateinit var review: Button
     private lateinit var attackDv: Button
+    private lateinit var speedDv: Button
     private lateinit var inspectCopy: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -92,6 +93,22 @@ class SwitchScarletVioletPokemonDefenseDvActivity : Activity() {
             }
         }
         root.addView(attackDv)
+        speedDv = Button(this).apply {
+            text = "Next: Speed DV / IV"; isEnabled = false
+            setOnClickListener {
+                val uri = sourceUri ?: return@setOnClickListener
+                val hash = expectedHash ?: return@setOnClickListener
+                val selected = area ?: return@setOnClickListener
+                startActivity(Intent(this@SwitchScarletVioletPokemonDefenseDvActivity,
+                    SwitchScarletVioletPokemonSpeedDvActivity::class.java)
+                    .setData(uri).putExtra("pse.switch.sha256", hash)
+                    .putExtra("pse.switch.pokemon.area", selected.name)
+                    .putExtra("pse.switch.pokemon.box", box)
+                    .putExtra("pse.switch.pokemon.position", position)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            }
+        }
+        root.addView(speedDv)
         inspectCopy = Button(this).apply {
             text = "Inspect verified copy"; visibility = android.view.View.GONE
             setOnClickListener { inspectVerifiedCopy() }
@@ -145,6 +162,7 @@ class SwitchScarletVioletPokemonDefenseDvActivity : Activity() {
         defenseIv.isEnabled = !value && ready
         review.isEnabled = !value && ready
         attackDv.isEnabled = !value && ready
+        speedDv.isEnabled = !value && ready
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
 
