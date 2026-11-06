@@ -92,6 +92,7 @@
         <activity android:name=".SwitchBdspPokemonSpecialStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPseBankRestoreActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokemonDuplicateActivity" android:exported="false"/>
+        <activity android:name=".SwitchBdspPokemonSwapActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspEventActivity" android:exported="false"/>
