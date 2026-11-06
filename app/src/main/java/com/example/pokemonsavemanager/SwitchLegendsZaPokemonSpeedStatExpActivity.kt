@@ -32,6 +32,7 @@ class SwitchLegendsZaPokemonSpeedStatExpActivity : Activity() {
     private lateinit var speedEv: EditText
     private lateinit var review: Button
     private lateinit var defenseStatExp: Button
+    private lateinit var specialStatExp: Button
     private lateinit var inspectCopy: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -92,6 +93,22 @@ class SwitchLegendsZaPokemonSpeedStatExpActivity : Activity() {
             }
         }
         root.addView(defenseStatExp)
+        specialStatExp = Button(this).apply {
+            text = "Next: Special Stat Exp"; isEnabled = false
+            setOnClickListener {
+                val uri = sourceUri ?: return@setOnClickListener
+                val hash = expectedHash ?: return@setOnClickListener
+                val selected = area ?: return@setOnClickListener
+                startActivity(Intent(this@SwitchLegendsZaPokemonSpeedStatExpActivity,
+                    SwitchLegendsZaPokemonSpecialStatExpActivity::class.java)
+                    .setData(uri).putExtra("pse.switch.sha256", hash)
+                    .putExtra("pse.switch.pokemon.area", selected.name)
+                    .putExtra("pse.switch.pokemon.box", box)
+                    .putExtra("pse.switch.pokemon.position", position)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            }
+        }
+        root.addView(specialStatExp)
         inspectCopy = Button(this).apply {
             text = "Inspect verified copy"; visibility = android.view.View.GONE
             setOnClickListener { inspectVerifiedCopy() }
@@ -144,6 +161,7 @@ class SwitchLegendsZaPokemonSpeedStatExpActivity : Activity() {
         speedEv.isEnabled = !value && ready
         review.isEnabled = !value && ready
         defenseStatExp.isEnabled = !value && ready
+        specialStatExp.isEnabled = !value && ready
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
 
