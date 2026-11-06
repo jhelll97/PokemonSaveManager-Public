@@ -25,6 +25,11 @@ internal data class SwordShieldTrainerWriteResult(
 )
 internal data class SwordShieldDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldPokemonWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
+internal data class SwordShieldPokemonBlocksWriteResult(
+    val bytes: ByteArray,
+    val boxesAbsoluteOffset: Int,
+    val partyAbsoluteOffset: Int
+)
 internal data class SwordShieldTrainerBlock(
     val version: SwordShieldVersion,
     val status: ByteArray,
@@ -941,6 +946,90 @@ object SwordShieldSaveValidation {
         digest.digest().copyInto(edited, end)
         SwordShieldStorageReadOnly.read(edited)
         return SwordShieldPokemonWriteResult(edited, absoluteOffset)
+    }
+
+    /** Replaces the decoded native PC and party objects together, then rebuilds the SHA-256 footer. */
+    internal fun writePokemonBlocks(
+        source: ByteArray,
+        boxes: ByteArray,
+        party: ByteArray
+    ): SwordShieldPokemonBlocksWriteResult {
+        val before = readPokemonBlocks(source)
+        require(boxes.size == 0x50A00 && boxes.size == before.boxes.size) {
+            "The native Sword/Shield PC storage object has the wrong size."
+        }
+        require(party.size == 0x814 && party.size == before.party.size) {
+            "The native Sword/Shield party object has the wrong size."
+        }
+        val count = party[6 * SwordShieldPokemonReadOnly.RECORD_SIZE].toInt() and 255
+        require(count in 1..6) { "The edited native Sword/Shield party count must be one through six." }
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var boxesAbsoluteOffset = -1
+        var partyAbsoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) {
+                "A native block length exceeds the remaining payload."
+            }
+            val blockStart = cursor.position
+            val replacement = when (key) {
+                0x0D66012CL -> boxes.also {
+                    require(type == 4 && length == it.size.toLong()) {
+                        "The native Sword/Shield PC storage object has the wrong type or size."
+                    }
+                    boxesAbsoluteOffset = blockStart
+                }
+                0x2985FE5DL -> party.also {
+                    require(type == 4 && length == it.size.toLong()) {
+                        "The native Sword/Shield party object has the wrong type or size."
+                    }
+                    partyAbsoluteOffset = blockStart
+                }
+                else -> null
+            }
+            if (replacement != null) repeat(replacement.size) { byteIndex ->
+                payload[blockStart + byteIndex] =
+                    (replacement[byteIndex].toInt() xor stream.next()).toByte()
+            }
+            cursor.skip(length.toInt())
+        }
+        require(boxesAbsoluteOffset >= 0 && partyAbsoluteOffset >= 0) {
+            "The native Sword/Shield Pokémon storage objects are missing."
+        }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        val reopened = readPokemonBlocks(edited)
+        require(reopened.boxes.contentEquals(boxes) && reopened.party.contentEquals(party)) {
+            "The rebuilt native Pokémon storage objects did not reopen exactly."
+        }
+        SwordShieldStorageReadOnly.read(edited)
+        return SwordShieldPokemonBlocksWriteResult(
+            edited, boxesAbsoluteOffset, partyAbsoluteOffset
+        )
     }
 
     private fun captureObjects(
