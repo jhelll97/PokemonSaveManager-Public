@@ -1529,6 +1529,20 @@ class SwitchReadOnlyActivity : Activity() {
         }
         val bank = Button(this).apply { text = "Add to PSE Bank"; isAllCaps = false }
         content.addView(bank)
+        content.addView(Button(this).apply {
+            text = "Delete Pokémon"
+            isAllCaps = false
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && source != null) startActivity(
+                    Intent(this@SwitchReadOnlyActivity, SwitchLetsGoPokemonDeleteActivity::class.java)
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.switch.pokemon.index", slot.index)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
+        })
         val scroll = ScrollView(this).apply { addView(content) }
         val dialog = AlertDialog.Builder(this).setTitle("Storage #${slot.index + 1} • Pokémon Details")
             .setView(scroll).setNegativeButton("Close", null).create()
