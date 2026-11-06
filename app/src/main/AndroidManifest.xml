@@ -86,6 +86,7 @@
         <activity android:name=".SwitchLegendsArceusPokemonAttackDvActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokemonDefenseDvActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokemonSpeedDvActivity" android:exported="false"/>
+        <activity android:name=".SwitchLegendsArceusPokemonSpecialDvActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusEventActivity" android:exported="false"/>
