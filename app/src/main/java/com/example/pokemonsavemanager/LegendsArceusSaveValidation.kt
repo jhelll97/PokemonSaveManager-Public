@@ -27,6 +27,11 @@ internal data class LegendsArceusInventoryBlocks(val regular: ByteArray, val key
 internal data class LegendsArceusInventoryWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class LegendsArceusDexWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class LegendsArceusPokemonWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
+internal data class LegendsArceusPokemonBlocksWriteResult(
+    val bytes: ByteArray,
+    val pasturesAbsoluteOffset: Int,
+    val partyAbsoluteOffset: Int
+)
 internal data class LegendsArceusTrainerWriteResult(
     val bytes: ByteArray,
     val nameOffset: Int,
@@ -498,6 +503,99 @@ object LegendsArceusSaveValidation {
         return LegendsArceusPokemonWriteResult(edited, absoluteOffset)
     }
 
+    /** Replaces the decoded native pasture and party objects together, then rebuilds the SHA-256 footer. */
+    internal fun writePokemonBlocks(
+        source: ByteArray,
+        pastures: ByteArray,
+        party: ByteArray
+    ): LegendsArceusPokemonBlocksWriteResult {
+        val before = readPokemonBlocks(source)
+        require(pastures.size == 0x54600 && pastures.size == before.pastures.size) {
+            "The native Legends: Arceus pasture object has the wrong size."
+        }
+        require(party.size == 0x8D4 && party.size == before.party.size) {
+            "The native Legends: Arceus party object has the wrong size."
+        }
+        val partySize = LegendsArceusPokemonReadOnly.PARTY_SIZE
+        val count = party[6 * partySize].toInt() and 255
+        require(count in 1..6) {
+            "The edited native Legends: Arceus party count must be one through six."
+        }
+        require((0 until count).all { index ->
+            LegendsArceusPokemonReadOnly.read(
+                party.copyOfRange(index * partySize, (index + 1) * partySize)
+            ) is LegendsArceusSlotRead.Pokemon
+        }) { "Every occupied edited party record must pass its native PA8 checksum." }
+
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var pasturesAbsoluteOffset = -1
+        var partyAbsoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) {
+                "A native block length exceeds the remaining payload."
+            }
+            val blockStart = cursor.position
+            val replacement = when (key) {
+                0x47E1CEABL -> pastures.also {
+                    require(type == 4 && length == it.size.toLong()) {
+                        "The native Legends: Arceus pasture object has the wrong type or size."
+                    }
+                    pasturesAbsoluteOffset = blockStart
+                }
+                0x2985FE5DL -> party.also {
+                    require(type == 4 && length == it.size.toLong()) {
+                        "The native Legends: Arceus party object has the wrong type or size."
+                    }
+                    partyAbsoluteOffset = blockStart
+                }
+                else -> null
+            }
+            if (replacement != null) repeat(replacement.size) { byteIndex ->
+                payload[blockStart + byteIndex] =
+                    (replacement[byteIndex].toInt() xor stream.next()).toByte()
+            }
+            cursor.skip(length.toInt())
+        }
+        require(pasturesAbsoluteOffset >= 0 && partyAbsoluteOffset >= 0) {
+            "The native Legends: Arceus Pokémon storage objects are missing."
+        }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        val reopened = readPokemonBlocks(edited)
+        require(reopened.pastures.contentEquals(pastures) && reopened.party.contentEquals(party)) {
+            "The rebuilt native Legends: Arceus Pokémon storage objects did not reopen exactly."
+        }
+        LegendsArceusStorageReadOnly.read(edited)
+        return LegendsArceusPokemonBlocksWriteResult(
+            edited, pasturesAbsoluteOffset, partyAbsoluteOffset
+        )
+    }
+
     private fun inspect(source: ByteArray, captured: MutableMap<Long, ByteArray>?, uintKeys: Set<Long> = emptySet(),
         objectSizes: Map<Long, Int> = emptyMap(), byteDataSizes: Map<Long, Int> = emptyMap()): LegendsArceusValidation {
         if (source.size !in knownSizes) return LegendsArceusValidation.Unrecognized
@@ -627,4 +725,5 @@ object LegendsArceusSaveValidation {
     private fun decodeHex(hex: String): ByteArray =
         hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 }
+
 

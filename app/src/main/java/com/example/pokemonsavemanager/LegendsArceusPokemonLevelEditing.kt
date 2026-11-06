@@ -147,6 +147,72 @@ object LegendsArceusPokemonLevelEditing {
     fun maximumExperience(pokemon: LegendsArceusPokemonRead): Long =
         minimumExperience(100, resolveGrowth(pokemon))
 
+    /** Builds the native party-only cache while preserving a pasture PA8's exact 360-byte stored core. */
+    internal fun partyRecordFromStored(record: ByteArray): ByteArray {
+        require(record.size == LegendsArceusPokemonReadOnly.STORED_SIZE) {
+            "A complete 360-byte native stored PA8 is required."
+        }
+        val pokemon = (LegendsArceusPokemonReadOnly.read(record) as? LegendsArceusSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The selected native stored PA8 is not checksum-valid.")
+        require(!pokemon.isEgg && !pokemon.isNoble) {
+            "Egg and Noble PA8 records cannot be converted to a native party record."
+        }
+        require(pokemon.statNature in 0..24) {
+            "The PA8 stat nature is invalid, so native party stats cannot be built safely."
+        }
+        val level = levelForExperience(pokemon.experience, resolveGrowth(pokemon))
+        val candidates = LegendsArceusPersonalCatalogue.profiles(pokemon.species, pokemon.form)
+            .distinctBy {
+                listOf(it.hp, it.attack, it.defense, it.speed, it.specialAttack,
+                    it.specialDefense, it.growth)
+            }
+        val personal = candidates.singleOrNull() ?: throw IllegalArgumentException(
+            "PSE could not verify one native Legends: Arceus stat profile for this PA8 species/form."
+        )
+        val values = calculateParty(pokemon, personal, level)
+        require(values.currentHp == pokemon.currentHp) {
+            "The stored current HP exceeds this PA8's verified native party maximum."
+        }
+        val plain = decryptAndUnshuffle(record).copyOf(LegendsArceusPokemonReadOnly.PARTY_SIZE)
+        plain[LEVEL] = level.toByte()
+        writeU16(plain, MAXIMUM_HP, requireNotNull(values.maximumHp))
+        requireNotNull(values.cachedStats).forEachIndexed { index, value ->
+            writeU16(plain, PARTY_STATS + index * 2, value)
+        }
+        val partyRecord = shuffleAndEncrypt(plain)
+        require(partyRecord.copyOfRange(0, record.size).contentEquals(record)) {
+            "Building the native party cache changed the exact stored PA8 core."
+        }
+        val reopened = (LegendsArceusPokemonReadOnly.read(partyRecord)
+            as? LegendsArceusSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The converted native party PA8 did not reopen.")
+        require(reopened.copy(cachedLevel = null, maximumHp = null, cachedStats = null) == pokemon) {
+            "The converted native party PA8 changed stored Pokémon data."
+        }
+        return partyRecord
+    }
+
+    /** Verifies that an existing party PA8's native Level, HP, and battle-stat cache matches its stored data. */
+    internal fun verifyPartyRecord(record: ByteArray): LegendsArceusPokemonRead {
+        require(record.size == LegendsArceusPokemonReadOnly.PARTY_SIZE) {
+            "A complete 376-byte native party PA8 is required."
+        }
+        val pokemon = (LegendsArceusPokemonReadOnly.read(record) as? LegendsArceusSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The selected native party PA8 is not checksum-valid.")
+        require(pokemon.statNature in 0..24) {
+            "The party PA8 stat nature is invalid."
+        }
+        val level = levelForExperience(pokemon.experience, resolveGrowth(pokemon))
+        require(pokemon.cachedLevel == level) {
+            "The party PA8 cached Level does not match its verified EXP growth curve."
+        }
+        val personal = resolvePartyPersonal(pokemon, level)
+        require(matchesCachedValues(pokemon, calculateParty(pokemon, personal, level))) {
+            "The party PA8 cached HP or battle stats do not match its verified native profile."
+        }
+        return pokemon
+    }
+
     fun stage(
         source: ByteArray,
         expectedSha256: String,
@@ -2700,3 +2766,4 @@ class LegendsArceusLevelCopyPlan internal constructor(
         }
     }
 }
+

@@ -3401,6 +3401,26 @@ class SwitchReadOnlyActivity : Activity() {
                 }
             })
         }
+        if (nativeTarget != null && !p.isEgg && !p.isNoble) content.addView(Button(this).apply {
+            text = if (nativeTarget.first == LegendsArceusPokemonArea.PASTURE)
+                "Move to Party" else "Move to PC Box"
+            isAllCaps = false
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && source != null) startActivity(
+                    Intent(
+                        this@SwitchReadOnlyActivity,
+                        SwitchLegendsArceusPokemonPartyMoveActivity::class.java
+                    )
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                        .putExtra("pse.switch.pokemon.pasture", nativeTarget.second)
+                        .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
+        })
         if (nativeTarget != null) content.addView(bank)
         val scroll = ScrollView(this).apply { addView(content) }
         val dialog = AlertDialog.Builder(this).setTitle("$location • Legends: Arceus")
