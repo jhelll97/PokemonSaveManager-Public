@@ -41,6 +41,11 @@ data class LegendsZaHpStatExpValues(
     val maximumHp: Int
 )
 
+data class LegendsZaAttackStatExpValues(
+    val attackEv: Int,
+    val attack: Int
+)
+
 /** Rebuilds one PA9's native level-dependent values in a reviewed new Legends: Z-A save copy. */
 object LegendsZaPokemonLevelEditing {
     private const val STORED_END = 0x148
@@ -58,6 +63,7 @@ object LegendsZaPokemonLevelEditing {
     private const val SPECIAL_DEFENSE_IV_MASK = 31L shl SPECIAL_DEFENSE_IV_SHIFT
     private const val SPECIAL_IV_MASK = SPECIAL_ATTACK_IV_MASK or SPECIAL_DEFENSE_IV_MASK
     private const val HP_EV = 0x26
+    private const val ATTACK_EV = 0x27
     private const val CURRENT_HP = 0x8A
     private const val LEVEL = 0x148
     private const val MAXIMUM_HP = 0x14A
@@ -341,6 +347,52 @@ object LegendsZaPokemonLevelEditing {
         } else LegendsZaSaveValidation.writePartyRecord(original, position, afterRecord)
         verifyHpStatExp(original, written.bytes, area, box, position, written.absoluteOffset, after)
         return LegendsZaHpStatExpCopyPlan(
+            original, written.bytes, area, box, position, written.absoluteOffset, before, after
+        )
+    }
+
+    internal fun stageAttackStatExp(
+        source: ByteArray,
+        expectedSha256: String,
+        area: LegendsZaPokemonArea,
+        box: Int,
+        position: Int,
+        requestedAttackEv: Int
+    ): LegendsZaAttackStatExpCopyPlan {
+        val original = source.copyOf()
+        require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        require(requestedAttackEv in 0..252) { "Attack EV must be between 0 and 252." }
+        val blocks = LegendsZaSaveValidation.readPokemonBlocks(original)
+        val target = targetRecord(blocks, area, box, position)
+        val before = (LegendsZaPokemonReadOnly.read(target) as? LegendsZaSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The selected native PA9 is not checksum-valid.")
+        require(!before.isEgg) { "Egg Attack Stat Exp / EV editing is not supported for Legends: Z-A." }
+        require(requestedAttackEv != before.evs[1]) { "Enter a different Attack EV before review." }
+        require(requestedAttackEv + before.evs.filterIndexed { index, _ -> index != 1 }.sum() <= 510) {
+            "The requested Attack EV would exceed Legends: Z-A's native 510 total EV limit."
+        }
+        require(before.cachedLevel in 1..100 && before.statNature in 0..24) {
+            "The PA9 Level or stat nature is invalid, so derived stats cannot be rebuilt safely."
+        }
+        val personal = resolvePersonal(before)
+        require(levelForExperience(before.experience, personal.growth) == before.cachedLevel) {
+            "The saved Level and EXP do not agree with this Pokémon's verified growth group."
+        }
+        require(matchesCachedValues(before,
+            calculate(before, personal, before.cachedLevel, before.experience))) {
+            "The saved battle values do not match this PA9's verified species/form profile."
+        }
+        val requestedEvs = before.evs.toMutableList().also { it[1] = requestedAttackEv }
+        val recalculated = calculate(
+            before.copy(evs = requestedEvs), personal, before.cachedLevel, before.experience
+        )
+        val after = LegendsZaAttackStatExpValues(requestedAttackEv, recalculated.attack)
+        val afterRecord = editAttackStatExpRecord(target, after)
+        val written = if (area == LegendsZaPokemonArea.BOX) {
+            LegendsZaSaveValidation.writeBoxRecord(original, box, position, afterRecord)
+        } else LegendsZaSaveValidation.writePartyRecord(original, position, afterRecord)
+        verifyAttackStatExp(original, written.bytes, area, box, position, written.absoluteOffset, after)
+        return LegendsZaAttackStatExpCopyPlan(
             original, written.bytes, area, box, position, written.absoluteOffset, before, after
         )
     }
@@ -771,6 +823,64 @@ object LegendsZaPokemonLevelEditing {
         }) { "An unrelated encrypted container byte changed." }
     }
 
+    internal fun verifyAttackStatExp(
+        original: ByteArray,
+        edited: ByteArray,
+        area: LegendsZaPokemonArea,
+        box: Int,
+        position: Int,
+        absoluteOffset: Int,
+        expected: LegendsZaAttackStatExpValues
+    ) {
+        val beforeBlocks = LegendsZaSaveValidation.readPokemonBlocks(original)
+        val afterBlocks = LegendsZaSaveValidation.readPokemonBlocks(edited)
+        require(beforeBlocks.version == afterBlocks.version && beforeBlocks.revision == afterBlocks.revision &&
+            original.size == edited.size) {
+            "The Attack Stat Exp edit changed native title identity, revision, or save size."
+        }
+        val beforeRecord = targetRecord(beforeBlocks, area, box, position)
+        val afterRecord = targetRecord(afterBlocks, area, box, position)
+        val before = (LegendsZaPokemonReadOnly.read(beforeRecord) as? LegendsZaSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The original PA9 no longer reopens as a Pokémon.")
+        val after = (LegendsZaPokemonReadOnly.read(afterRecord) as? LegendsZaSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The edited PA9 did not reopen as a Pokémon.")
+        require(after.evs[1] == expected.attackEv &&
+            after.evs.indices.filter { it != 1 }.all { after.evs[it] == before.evs[it] } &&
+            after.cachedStats[0] == expected.attack &&
+            after.cachedStats.indices.filter { it != 0 }.all { after.cachedStats[it] == before.cachedStats[it] } &&
+            after.copy(evs = before.evs, cachedStats = before.cachedStats) == before) {
+            "The persisted PA9 changed outside Attack EV and its derived Attack value."
+        }
+
+        val relativeOffset = if (area == LegendsZaPokemonArea.BOX)
+            ((box - 1) * 30 + position - 1) * LegendsZaStorageReadOnly.BOX_STRIDE
+        else (position - 1) * LegendsZaStorageReadOnly.PARTY_STRIDE
+        val beforeTargetBlock = if (area == LegendsZaPokemonArea.BOX) beforeBlocks.boxes else beforeBlocks.party
+        val afterTargetBlock = if (area == LegendsZaPokemonArea.BOX) afterBlocks.boxes else afterBlocks.party
+        val beforeOtherBlock = if (area == LegendsZaPokemonArea.BOX) beforeBlocks.party else beforeBlocks.boxes
+        val afterOtherBlock = if (area == LegendsZaPokemonArea.BOX) afterBlocks.party else afterBlocks.boxes
+        require(beforeOtherBlock.contentEquals(afterOtherBlock)) {
+            "The unselected native Pokémon storage object changed."
+        }
+        require(beforeTargetBlock.indices.all { index ->
+            index in relativeOffset until relativeOffset + LegendsZaPokemonReadOnly.RECORD_SIZE ||
+                beforeTargetBlock[index] == afterTargetBlock[index]
+        }) { "Another native Pokémon slot or the target slot footer changed." }
+
+        val beforePlain = decryptAndUnshuffle(beforeRecord)
+        val afterPlain = decryptAndUnshuffle(afterRecord)
+        require(beforePlain.indices.all { offset ->
+            offset in 6..7 || offset == ATTACK_EV ||
+                offset in 0x14C until 0x14E || beforePlain[offset] == afterPlain[offset]
+        }) { "The PA9 edit exceeded Attack EV, derived Attack, and checksum fields." }
+
+        val hashOffset = original.size - 32
+        require(original.indices.all { index ->
+            index in absoluteOffset until absoluteOffset + LegendsZaPokemonReadOnly.RECORD_SIZE ||
+                index in hashOffset until original.size || original[index] == edited[index]
+        }) { "An unrelated encrypted container byte changed." }
+    }
+
     private fun resolvePersonal(pokemon: LegendsZaPokemonRead): LegendsZaPersonalData =
         LegendsZaPersonalCatalogue.profile(pokemon.species, pokemon.form)
             ?: throw IllegalArgumentException(
@@ -968,6 +1078,19 @@ object LegendsZaPokemonLevelEditing {
         return shuffleAndEncrypt(plain)
     }
 
+    private fun editAttackStatExpRecord(
+        record: ByteArray,
+        values: LegendsZaAttackStatExpValues
+    ): ByteArray {
+        val plain = decryptAndUnshuffle(record)
+        plain[ATTACK_EV] = values.attackEv.toByte()
+        writeU16(plain, 0x14C, values.attack)
+        var checksum = 0
+        for (offset in 8 until STORED_END step 2) checksum += u16(plain, offset)
+        writeU16(plain, 6, checksum and 0xFFFF)
+        return shuffleAndEncrypt(plain)
+    }
+
     private fun decryptAndUnshuffle(record: ByteArray): ByteArray {
         require(record.size == LegendsZaPokemonReadOnly.RECORD_SIZE) {
             "Expected one complete native PA9 record."
@@ -1134,6 +1257,25 @@ object LegendsZaPokemonHpStatExpEditing {
         requestedHpEv: Int
     ): LegendsZaHpStatExpCopyPlan = LegendsZaPokemonLevelEditing.stageHpStatExp(
         source, expectedSha256, area, box, position, requestedHpEv
+    )
+}
+
+/** Gen 1 Attack Stat Exp mapped to Legends: Z-A's native Attack EV. */
+object LegendsZaPokemonAttackStatExpEditing {
+    fun readDocumentBytes(input: java.io.InputStream): ByteArray =
+        LegendsZaPokemonLevelEditing.readDocumentBytes(input)
+
+    fun sha256(bytes: ByteArray): String = LegendsZaPokemonLevelEditing.sha256(bytes)
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        area: LegendsZaPokemonArea,
+        box: Int,
+        position: Int,
+        requestedAttackEv: Int
+    ): LegendsZaAttackStatExpCopyPlan = LegendsZaPokemonLevelEditing.stageAttackStatExp(
+        source, expectedSha256, area, box, position, requestedAttackEv
     )
 }
 
@@ -1449,6 +1591,70 @@ class LegendsZaHpStatExpCopyPlan internal constructor(
             val removed = started && runCatching { discardDestination() }.getOrDefault(false)
             throw IllegalStateException(
                 (failure.message ?: "HP Stat Exp copy verification failed.") +
+                    if (removed) " The failed new copy was removed; the recovery backup is retained."
+                    else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
+                failure
+            )
+        }
+    }
+}
+
+class LegendsZaAttackStatExpCopyPlan internal constructor(
+    original: ByteArray,
+    edited: ByteArray,
+    val area: LegendsZaPokemonArea,
+    val box: Int,
+    val position: Int,
+    val absoluteOffset: Int,
+    val before: LegendsZaPokemonRead,
+    val after: LegendsZaAttackStatExpValues
+) {
+    private val original = original.copyOf()
+    private val edited = edited.copyOf()
+    val sourceSha256 = LegendsZaPokemonAttackStatExpEditing.sha256(this.original)
+    val editedSha256 = LegendsZaPokemonAttackStatExpEditing.sha256(this.edited)
+    private var consumed = false
+    val location: String
+        get() = if (area == LegendsZaPokemonArea.BOX) "Box $box • Slot $position" else "Party $position"
+
+    @Synchronized
+    fun saveNewCopy(
+        readSource: () -> ByteArray,
+        retainBackup: (ByteArray) -> ByteArray,
+        readDestination: () -> ByteArray,
+        writeDestination: (ByteArray) -> Unit,
+        discardDestination: () -> Boolean
+    ) {
+        check(!consumed) { "This Attack Stat Exp review was already used. Reopen Pokémon Boxes." }
+        consumed = true
+        fun requireSource() = require(readSource().contentEquals(original)) {
+            "The selected source changed. Reopen it from PSE."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "Choose a new empty document; existing files cannot be replaced." }
+        val backup = retainBackup(original.copyOf())
+        require(backup.contentEquals(original)) { "The recovery backup did not verify. Nothing was written." }
+        requireSource()
+        require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
+        var started = false
+        try {
+            LegendsZaPokemonLevelEditing.verifyAttackStatExp(
+                original, edited, area, box, position, absoluteOffset, after
+            )
+            started = true
+            writeDestination(edited.copyOf())
+            val persisted = readDestination()
+            require(persisted.contentEquals(edited)) {
+                "The saved copy differs from the reviewed Attack Stat Exp edit."
+            }
+            LegendsZaPokemonLevelEditing.verifyAttackStatExp(
+                original, persisted, area, box, position, absoluteOffset, after
+            )
+            requireSource()
+        } catch (failure: Exception) {
+            val removed = started && runCatching { discardDestination() }.getOrDefault(false)
+            throw IllegalStateException(
+                (failure.message ?: "Attack Stat Exp copy verification failed.") +
                     if (removed) " The failed new copy was removed; the recovery backup is retained."
                     else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
                 failure
