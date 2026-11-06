@@ -54,10 +54,18 @@ data class LegendsArceusLevelValues(
     val cachedStats: List<Int>?
 )
 
+data class LegendsArceusAttackDvValues(
+    val attackIv: Int,
+    val attack: Int?
+)
+
 /** Rebuilds one PA8's native level-dependent values in a reviewed new Legends: Arceus save copy. */
 object LegendsArceusPokemonLevelEditing {
     private const val STORED_END = 0x168
     private const val EXPERIENCE = 0x10
+    private const val IV32 = 0x94
+    private const val ATTACK_IV_SHIFT = 5
+    private const val ATTACK_IV_MASK = 31L shl ATTACK_IV_SHIFT
     private const val CURRENT_HP = 0x92
     private const val LEVEL = 0x168
     private const val MAXIMUM_HP = 0x16A
@@ -128,6 +136,52 @@ object LegendsArceusPokemonLevelEditing {
         return LegendsArceusLevelCopyPlan(
             original, written.bytes, area, pasture, position, written.absoluteOffset,
             before, beforeLevel, after
+        )
+    }
+
+    internal fun stageAttackDv(
+        source: ByteArray,
+        expectedSha256: String,
+        area: LegendsArceusPokemonArea,
+        pasture: Int,
+        position: Int,
+        requestedAttackIv: Int
+    ): LegendsArceusAttackDvCopyPlan {
+        val original = source.copyOf()
+        require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        require(LegendsArceusSaveValidation.inspect(original) is LegendsArceusValidation.Verified) {
+            "A validated native Legends: Arceus save is required."
+        }
+        require(requestedAttackIv in 0..31) { "Attack IV must be between 0 and 31." }
+        val blocks = LegendsArceusSaveValidation.readPokemonBlocks(original)
+        val target = targetRecord(blocks, area, pasture, position)
+        val before = (LegendsArceusPokemonReadOnly.read(target) as? LegendsArceusSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The selected native PA8 is not checksum-valid.")
+        require(!before.isEgg) { "Egg Attack DV / IV editing is not supported for Legends: Arceus." }
+        require(requestedAttackIv != before.ivs[1]) { "Enter a different Attack IV before review." }
+        val attack = if (area == LegendsArceusPokemonArea.PARTY) {
+            val growth = resolveGrowth(before)
+            val beforeLevel = levelForExperience(before.experience, growth)
+            require(before.cachedLevel == beforeLevel && before.statNature in 0..24) {
+                "The party PA8 Level, EXP, or stat nature is invalid, so Attack cannot be rebuilt safely."
+            }
+            val personal = resolvePartyPersonal(before, beforeLevel)
+            require(matchesCachedValues(before, calculateParty(before, personal, beforeLevel))) {
+                "The saved battle values do not match this PA8's verified species/form profile."
+            }
+            val requestedIvs = before.ivs.toMutableList().also { it[1] = requestedAttackIv }
+            requireNotNull(calculateParty(
+                before.copy(ivs = requestedIvs), personal, beforeLevel
+            ).cachedStats)[0]
+        } else null
+        val after = LegendsArceusAttackDvValues(requestedAttackIv, attack)
+        val afterRecord = editAttackDvRecord(target, after)
+        val written = if (area == LegendsArceusPokemonArea.PASTURE) {
+            LegendsArceusSaveValidation.writePastureRecord(original, pasture, position, afterRecord)
+        } else LegendsArceusSaveValidation.writePartyRecord(original, position, afterRecord)
+        verifyAttackDv(original, written.bytes, area, pasture, position, written.absoluteOffset, after)
+        return LegendsArceusAttackDvCopyPlan(
+            original, written.bytes, area, pasture, position, written.absoluteOffset, before, after
         )
     }
 
@@ -238,6 +292,75 @@ object LegendsArceusPokemonLevelEditing {
                     (offset == LEVEL || offset in MAXIMUM_HP until PARTY_END)) ||
                 beforePlain[offset] == afterPlain[offset]
         }) { "The PA8 edit exceeded EXP, Level, current HP, cached battle stats, and checksum." }
+
+        val hashOffset = original.size - 32
+        require(original.indices.all { index ->
+            index in absoluteOffset until absoluteOffset + recordSize ||
+                index in hashOffset until original.size || original[index] == edited[index]
+        }) { "An unrelated encrypted container byte changed." }
+    }
+
+    internal fun verifyAttackDv(
+        original: ByteArray,
+        edited: ByteArray,
+        area: LegendsArceusPokemonArea,
+        pasture: Int,
+        position: Int,
+        absoluteOffset: Int,
+        expected: LegendsArceusAttackDvValues
+    ) {
+        val beforeBlocks = LegendsArceusSaveValidation.readPokemonBlocks(original)
+        val afterBlocks = LegendsArceusSaveValidation.readPokemonBlocks(edited)
+        require(beforeBlocks.version == afterBlocks.version && original.size == edited.size) {
+            "The Attack DV / IV edit changed native title identity or save size."
+        }
+        val beforeRecord = targetRecord(beforeBlocks, area, pasture, position)
+        val afterRecord = targetRecord(afterBlocks, area, pasture, position)
+        val before = (LegendsArceusPokemonReadOnly.read(beforeRecord) as? LegendsArceusSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The original PA8 no longer reopens as a Pokémon.")
+        val after = (LegendsArceusPokemonReadOnly.read(afterRecord) as? LegendsArceusSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The edited PA8 did not reopen as a Pokémon.")
+        val beforeStats = before.cachedStats
+        val afterStats = after.cachedStats
+        val cachedAttackMatches = if (expected.attack == null) {
+            beforeStats == null && afterStats == null
+        } else {
+            beforeStats != null && afterStats != null && afterStats[0] == expected.attack &&
+                (1..4).all { afterStats[it] == beforeStats[it] }
+        }
+        require(after.ivs[1] == expected.attackIv && cachedAttackMatches &&
+            after.ivs.indices.filter { it != 1 }.all { after.ivs[it] == before.ivs[it] } &&
+            after.copy(ivs = before.ivs, cachedStats = before.cachedStats) == before) {
+            "The persisted PA8 changed outside Attack IV and its optional derived Attack value."
+        }
+
+        val recordSize = recordSize(area)
+        val relativeOffset = if (area == LegendsArceusPokemonArea.PASTURE)
+            ((pasture - 1) * 30 + position - 1) * recordSize else (position - 1) * recordSize
+        val beforeTargetBlock = if (area == LegendsArceusPokemonArea.PASTURE) beforeBlocks.pastures else beforeBlocks.party
+        val afterTargetBlock = if (area == LegendsArceusPokemonArea.PASTURE) afterBlocks.pastures else afterBlocks.party
+        val beforeOtherBlock = if (area == LegendsArceusPokemonArea.PASTURE) beforeBlocks.party else beforeBlocks.pastures
+        val afterOtherBlock = if (area == LegendsArceusPokemonArea.PASTURE) afterBlocks.party else afterBlocks.pastures
+        require(beforeOtherBlock.contentEquals(afterOtherBlock)) {
+            "The unselected native Pokémon storage object changed."
+        }
+        require(beforeTargetBlock.indices.all { index ->
+            index in relativeOffset until relativeOffset + recordSize ||
+                beforeTargetBlock[index] == afterTargetBlock[index]
+        }) { "Another native Pokémon slot changed." }
+
+        val beforePlain = decryptAndUnshuffle(beforeRecord)
+        val afterPlain = decryptAndUnshuffle(afterRecord)
+        val preserveIvMask = 0xFFFFFFFFL xor ATTACK_IV_MASK
+        require((u32(beforePlain, IV32) and preserveIvMask) ==
+            (u32(afterPlain, IV32) and preserveIvMask)) {
+            "A non-Attack IV or PA8 identity bit changed."
+        }
+        require(beforePlain.indices.all { offset ->
+            offset in 6..7 || offset in IV32 until IV32 + 4 ||
+                (area == LegendsArceusPokemonArea.PARTY && offset in PARTY_STATS until PARTY_STATS + 2) ||
+                beforePlain[offset] == afterPlain[offset]
+        }) { "The PA8 edit exceeded Attack IV, optional derived Attack, and checksum fields." }
 
         val hashOffset = original.size - 32
         require(original.indices.all { index ->
@@ -406,6 +529,23 @@ object LegendsArceusPokemonLevelEditing {
         return shuffleAndEncrypt(plain)
     }
 
+    private fun editAttackDvRecord(record: ByteArray, values: LegendsArceusAttackDvValues): ByteArray {
+        val plain = decryptAndUnshuffle(record)
+        val iv32 = (u32(plain, IV32) and (0xFFFFFFFFL xor ATTACK_IV_MASK)) or
+            (values.attackIv.toLong() shl ATTACK_IV_SHIFT)
+        writeU32(plain, IV32, iv32)
+        values.attack?.let {
+            require(record.size == LegendsArceusPokemonReadOnly.PARTY_SIZE) {
+                "Only a party PA8 can store a cached Attack stat."
+            }
+            writeU16(plain, PARTY_STATS, it)
+        }
+        var checksum = 0
+        for (offset in 8 until STORED_END step 2) checksum += u16(plain, offset)
+        writeU16(plain, 6, checksum and 0xFFFF)
+        return shuffleAndEncrypt(plain)
+    }
+
     private fun decryptAndUnshuffle(record: ByteArray): ByteArray {
         require(record.size == LegendsArceusPokemonReadOnly.STORED_SIZE ||
             record.size == LegendsArceusPokemonReadOnly.PARTY_SIZE) {
@@ -482,6 +622,93 @@ object LegendsArceusPokemonExperienceEditing {
     ): LegendsArceusExperienceCopyPlan = LegendsArceusPokemonLevelEditing.stageExperience(
         source, expectedSha256, area, pasture, position, requestedExperience
     )
+}
+
+/** Gen 1-ordered Attack DV action mapped to Legends: Arceus's native Attack IV. */
+object LegendsArceusPokemonAttackDvEditing {
+    fun readDocumentBytes(input: java.io.InputStream): ByteArray =
+        LegendsArceusPokemonLevelEditing.readDocumentBytes(input)
+
+    fun sha256(bytes: ByteArray): String = LegendsArceusPokemonLevelEditing.sha256(bytes)
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        area: LegendsArceusPokemonArea,
+        pasture: Int,
+        position: Int,
+        requestedAttackIv: Int
+    ): LegendsArceusAttackDvCopyPlan = LegendsArceusPokemonLevelEditing.stageAttackDv(
+        source, expectedSha256, area, pasture, position, requestedAttackIv
+    )
+}
+
+class LegendsArceusAttackDvCopyPlan internal constructor(
+    original: ByteArray,
+    edited: ByteArray,
+    val area: LegendsArceusPokemonArea,
+    val pasture: Int,
+    val position: Int,
+    val absoluteOffset: Int,
+    val before: LegendsArceusPokemonRead,
+    val after: LegendsArceusAttackDvValues
+) {
+    private val original = original.copyOf()
+    private val edited = edited.copyOf()
+    val sourceSha256 = LegendsArceusPokemonAttackDvEditing.sha256(this.original)
+    val editedSha256 = LegendsArceusPokemonAttackDvEditing.sha256(this.edited)
+    private var consumed = false
+    val location: String
+        get() = if (area == LegendsArceusPokemonArea.PASTURE)
+            "Pasture $pasture • Slot $position" else "Party $position"
+    val recordSize: Int
+        get() = if (area == LegendsArceusPokemonArea.PASTURE)
+            LegendsArceusPokemonReadOnly.STORED_SIZE else LegendsArceusPokemonReadOnly.PARTY_SIZE
+
+    @Synchronized
+    fun saveNewCopy(
+        readSource: () -> ByteArray,
+        retainBackup: (ByteArray) -> ByteArray,
+        readDestination: () -> ByteArray,
+        writeDestination: (ByteArray) -> Unit,
+        discardDestination: () -> Boolean
+    ) {
+        check(!consumed) { "This Attack DV / IV review was already used. Reopen Pokémon Boxes." }
+        consumed = true
+        fun requireSource() = require(readSource().contentEquals(original)) {
+            "The selected source changed. Reopen it from PSE."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "Choose a new empty document; existing files cannot be replaced." }
+        val backup = retainBackup(original.copyOf())
+        require(backup.contentEquals(original)) { "The recovery backup did not verify. Nothing was written." }
+        requireSource()
+        require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
+        var started = false
+        try {
+            LegendsArceusPokemonLevelEditing.verifyAttackDv(
+                original, edited, area, pasture, position, absoluteOffset, after
+            )
+            started = true
+            writeDestination(edited.copyOf())
+            val persisted = readDestination()
+            require(persisted.contentEquals(edited)) {
+                "The saved copy differs from the reviewed Attack DV / IV edit."
+            }
+            LegendsArceusPokemonLevelEditing.verifyAttackDv(
+                original, persisted, area, pasture, position, absoluteOffset, after
+            )
+            requireSource()
+        } catch (failure: Exception) {
+            val removed = started && runCatching { discardDestination() }.getOrDefault(false)
+            throw IllegalStateException(
+                (failure.message ?: "Attack DV / IV copy verification failed.") +
+                    if (removed) " The failed new copy was removed; the recovery backup is retained."
+                    else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
+                failure
+            )
+        }
+    }
 }
 
 class LegendsArceusExperienceCopyPlan internal constructor(
