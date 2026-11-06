@@ -827,9 +827,9 @@ object SwordShieldSaveValidation {
         val blocks = readPokemonBlocks(source)
         require(box in 1..32 && position in 1..30) { "The native Sword/Shield box slot is outside PC storage." }
         require(record.size == SwordShieldPokemonReadOnly.RECORD_SIZE) { "A complete 344-byte native PK8 is required." }
-        require(SwordShieldPokemonReadOnly.read(record) is SwordShieldSlotRead.Pokemon) {
-            "The supplied native PK8 did not pass its stored-data checksum."
-        }
+        require(SwordShieldPokemonReadOnly.read(record).let {
+            it is SwordShieldSlotRead.Pokemon || it is SwordShieldSlotRead.Empty
+        }) { "The supplied native PK8 is neither checksum-valid nor the native empty record." }
         require(blocks.boxes.size == 0x50A00) { "The native Sword/Shield PC storage object has the wrong size." }
         val relativeOffset = ((box - 1) * 30 + position - 1) * SwordShieldPokemonReadOnly.RECORD_SIZE
         val end = source.size - 32

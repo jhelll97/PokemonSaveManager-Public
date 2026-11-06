@@ -70,6 +70,7 @@
         <activity android:name=".SwitchSwordShieldPokemonDuplicateActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokemonSwapActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokemonPartyMoveActivity" android:exported="false"/>
+        <activity android:name=".SwitchSwordShieldPokemonDeleteActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldEventActivity" android:exported="false"/>
