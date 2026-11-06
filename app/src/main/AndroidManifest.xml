@@ -40,6 +40,7 @@
         <activity android:name=".SwitchSwordShieldPokemonTrainerIdActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokemonMove1Activity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokemonMove2Activity" android:exported="false"/>
+        <activity android:name=".SwitchSwordShieldPokemonMove3Activity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldEventActivity" android:exported="false"/>
