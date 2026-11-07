@@ -86,6 +86,7 @@
         <activity android:name=".SwitchSwordShieldRestrictedSparringActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoAdventureStartActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspTimestampsActivity" android:exported="false"/>
+        <activity android:name=".SwitchBdspPoffinActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldEventActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspItemActivity" android:exported="false"/>

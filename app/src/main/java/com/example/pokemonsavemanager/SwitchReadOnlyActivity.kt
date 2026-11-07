@@ -276,7 +276,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(battleTowerButton)
         poffinsButton = Button(this).apply {
-            text = "Poffin Case • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Poffin Case • Edit"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspPoffins(it, 0, false) } }
         }
         root.addView(poffinsButton)
@@ -1044,7 +1044,7 @@ class SwitchReadOnlyActivity : Activity() {
             val target = targets.getValue(entry.section)
             root.addView(Button(this).apply {
                 text = entry.label + if (entry.enabled && target.isEnabled)
-                    (if (entry.section == "timestamps") " • Edit" else " • Read-only")
+                    (if (entry.section == "timestamps" || entry.section == "poffins") " • Edit" else " • Read-only")
                 else " • Unavailable for this save"
                 isAllCaps = false; isEnabled = entry.enabled && target.isEnabled
                 setOnClickListener { if (session === bound && !dashboardBusy && target.isEnabled) target.performClick() }
@@ -5678,7 +5678,7 @@ class SwitchReadOnlyActivity : Activity() {
         val contestIndex = if (bound.bdspContest != null) labels.size + (if (undergroundIndex >= 0) 1 else 0) + (if (poffinIndex >= 0) 1 else 0) + (if (sealIndex >= 0) 1 else 0) + (if (capsuleIndex >= 0) 1 else 0) else -1
         val menu = labels + listOfNotNull(
             bound.bdspUnderground?.let { "Grand Underground • Read-only" },
-            bound.bdspPoffins?.let { "Poffin Case • Read-only" },
+            bound.bdspPoffins?.let { "Poffin Case • Edit" },
             bound.bdspSealStickers?.let { "Seal Stickers • Read-only" },
             bound.bdspBallCapsules?.let { "Ball Capsules • Read-only" },
             bound.bdspContest?.let { "Contest Records • Read-only" })
@@ -6267,10 +6267,10 @@ class SwitchReadOnlyActivity : Activity() {
         val page = requestedPage.coerceIn(0, lastPage)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16) }
         root.addView(TextView(this).apply {
-            text = "${bound.displayName} • Poffin Case • Read-only\n\n" +
+            text = "${bound.displayName} • Poffin Case • Edit\n\n" +
                 "${poffins.knownPoffinCount} known Poffins • ${poffins.unknownTypeCount} unknown records • ${poffins.emptyCount} empty slots\n" +
                 "Saved cooking count: ${poffins.cookingCount}\n\n" +
-                "${if (includeEmpty) "All slots" else "Non-empty records"} in saved slot order. Select a slot for its flavours and raw details."
+                "${if (includeEmpty) "All slots" else "Non-empty records"} in saved slot order. Select a slot to review its native fields and edit one record in a verified new copy."
             textSize = 16f; setTextIsSelectable(true)
         })
         root.addView(Button(this).apply {
@@ -6287,7 +6287,7 @@ class SwitchReadOnlyActivity : Activity() {
                 (if (entry.isNew) " • New" else "")
             setOnClickListener { showBdspPoffin(bound, entry.index) }
         })
-        val builder = AlertDialog.Builder(this).setTitle("Poffin Case ${page + 1}/${lastPage + 1} • Read-only")
+        val builder = AlertDialog.Builder(this).setTitle("Poffin Case ${page + 1}/${lastPage + 1} • Edit")
             .setView(ScrollView(this).apply { addView(root) }).setPositiveButton("Close", null)
         if (page > 0) builder.setNegativeButton("Previous") { _, _ -> if (session === bound) showBdspPoffins(bound, page - 1, includeEmpty) }
         if (page < lastPage) builder.setNeutralButton("Next") { _, _ -> if (session === bound) showBdspPoffins(bound, page + 1, includeEmpty) }
@@ -6297,16 +6297,33 @@ class SwitchReadOnlyActivity : Activity() {
     private fun showBdspPoffin(bound: SwitchReadSession, index: Int) {
         if (session !== bound) return
         val entry = bound.bdspPoffins?.slot(index) ?: return
-        val detail = "Slot ${entry.position} • ${entry.name} • Read-only\n\n" +
+        val detail = "Slot ${entry.position} • ${entry.name}\n\n" +
             "Saved type ID: ${entry.typeId}\nEmpty marker: ${entry.isEmpty}\nSaved level: ${entry.level}\nSaved smoothness/feel: ${entry.smoothness}\n" +
             "Saved flavours (Spicy / Dry / Sweet / Bitter / Sour):\n${entry.flavors.joinToString(" / ")}\n\n" +
             "New: ${entry.isNew}\nRaw new word: ${entry.rawNewFlag}\nCanonical new word: ${entry.hasCanonicalNewFlag}\n\n" +
             "Raw slot (16 bytes):\n${entry.rawBytes.joinToString(" ") { "%02X".format(it) }}\n\n" +
-            "Only type 255 marks an empty slot. Empty slots may retain other saved data. Unknown types, unusual flags and padding are preserved. Type, level and flavours are not recalculated or used to modify Pokémon contest stats."
-        val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
-            text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
-        }) }
-        AlertDialog.Builder(this).setTitle("Poffin slot ${entry.position} • Read-only").setView(scroll).setPositiveButton("Close", null).show()
+            "Only type 255 marks an empty slot. Empty slots may retain other saved data. Unknown types and unusual flags remain preservable when untouched. Editing changes only selected documented fields and the native whole-file MD5; reserved bytes remain exact."
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Poffin Slot ${entry.position}"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchBdspPoffinActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.poffin.slot", index)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Poffin slot ${entry.position}")
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
     private fun showBdspPoffinMetadata(bound: SwitchReadSession) {
@@ -6315,7 +6332,7 @@ class SwitchReadOnlyActivity : Activity() {
         val detail = "Save layout ${poffins.revision.displayName} • Read-only\n\n" +
             "Saved cooking count (signed): ${poffins.cookingCount}\nRaw cooking word: ${poffins.rawCookingCount}\n\n" +
             "Raw Poffin case (1,604 bytes):\n" + poffins.rawBytes.chunked(16).joinToString("\n") { row -> row.joinToString(" ") { "%02X".format(it) } } +
-            "\n\nAll 100 slots stay in native order. No sorting, feeding, cleanup or save writing is available."
+            "\n\nAll 100 slots stay in native order. This metadata view does not change the cooking count, sort records, feed a Pokémon, or clean up slot data."
         val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
             text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
         }) }
