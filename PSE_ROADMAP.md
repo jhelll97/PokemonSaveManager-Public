@@ -1,3 +1,11 @@
+# Active priority — bidirectional Generation 1–7 transfers
+
+CURRENT USER PRIORITY — 7 November 2026 (supersedes ALL earlier generation-priority and Switch-feature directives below):
+Pause Switch feature development. Work on usable PSE Bank transfers between adjacent generations in BOTH directions, in this order: Gen 1 ↔ Gen 2, Gen 2 ↔ Gen 3, Gen 3 ↔ Gen 4, Gen 4 ↔ Gen 5, Gen 5 ↔ Gen 6, Gen 6 ↔ Gen 7. Gen 7 means Sun/Moon/Ultra Sun/Ultra Moon here; Switch work remains paused. Inspect existing transfer adapters and UI first; reuse working routes rather than duplicating them. Complete both directions for each pair before advancing. Provide connected source selection, Bank record selection, destination selection, conversion preview, and native persisted-save writing; parser-only changes or misleading enabled buttons do not count. Distinguish PSE conversion from official game trading: custom backward conversion is permitted when the destination can represent the Pokémon, and must be labelled as PSE conversion rather than official provenance. Preserve originals and verified recovery backups. Never silently discard unsupported species, forms, moves, held items, abilities, or other data. Show exact incompatibilities and proposed losses; offer an explicit Legalise/conversion choice only where a documented destination-valid mapping exists, otherwise block with a clear reason. Explain and review unavoidable differences such as IV/DV and stat-system conversion, and never promise lossless round trips. Preserve native checksums, source binding, reviewed new copies, and persisted reopen validation. Keep the user's feature-first/no-added-tests-or-extra-checks policy and existing required automatic Android compile. APK signing stays private and on request. Keep the existing Slack event trigger, deduplication, no replay/polling, one-commit-per-validated-event and protected-branch policies below. Do not resume Switch work without a new user instruction.
+
+
+## Previous roadmap — Switch development paused
+
 # PSE Development Roadmap
 
 ## Current priority — Gen 1 feature parity across Switch games (Generations 7–9)
