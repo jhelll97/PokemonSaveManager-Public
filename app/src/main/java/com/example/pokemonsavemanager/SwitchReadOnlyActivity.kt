@@ -648,7 +648,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldCrownTundraProgress(bound) }
         })
         if (bound.swordShieldStarTournament != null) dashboardRoot.addView(Button(this).apply {
-            text = "Galarian Star Tournament • Read-only"; isAllCaps = false; isEnabled = !busy
+            text = "Galarian Star Tournament • Edit"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldStarTournament(bound) }
         })
         if (bound.swordShieldSwordsOfJustice != null) dashboardRoot.addView(Button(this).apply {
@@ -3289,21 +3289,34 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound || dashboardBusy) return
         val read = bound.swordShieldStarTournament ?: return
         val detail = buildString {
-            append("${read.version.displayName} • Galarian Star Tournament • Read-only\n\n")
+            append("${read.version.displayName} • Galarian Star Tournament\n\n")
             append("Total victories: ${read.totalVictories}\n\n")
             append("Victories by partner\n")
             read.partners.forEach { append("${it.name}: ${it.victories}\n") }
             append("\nThe complete native container hash and all 21 exact UInt32 scalar layouts passed before display. ")
             append("PSE presents each native total exactly and does not infer partner availability, tournament unlocks, or reward eligibility. ")
-            append("No victory, partner, tournament, reward, unlock, reset, repair, export, or save-writing action is available here.")
+            append("Editing changes only selected victory counters and does not alter partner availability or tournament state.")
         }
-        val scroll = ScrollView(this).apply {
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Galarian Star Tournament"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchSwordShieldStarTournamentActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
         }
-        AlertDialog.Builder(this).setTitle("Galarian Star Tournament • Read-only")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        AlertDialog.Builder(this).setTitle("Galarian Star Tournament")
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
     private fun showSwordShieldSwordsOfJustice(bound: SwitchReadSession) {

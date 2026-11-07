@@ -109,6 +109,7 @@ internal data class SwordShieldStarTournamentBlocks(
     val totalVictories: ByteArray,
     val partnerVictories: List<ByteArray>
 )
+internal data class SwordShieldStarTournamentWriteResult(val bytes: ByteArray, val offsets: List<Int>)
 internal data class SwordShieldSwordsOfJusticeBlocks(
     val version: SwordShieldVersion,
     val questStatus: ByteArray,
@@ -753,6 +754,85 @@ object SwordShieldSaveValidation {
             block(totalKey),
             partnerKeys.map(::block)
         )
+    }
+
+    /** Replaces the 21 documented Galarian Star Tournament UInt32 records and rebuilds the native footer. */
+    internal fun writeStarTournamentRecords(source: ByteArray, replacement: List<Long>): SwordShieldStarTournamentWriteResult {
+        readStarTournamentBlocks(source)
+        val keys = listOf(
+            0x9D6727F6L,
+            0x3934BEC0L,
+            0xE9131991L,
+            0x7742B542L,
+            0x9A535FA0L,
+            0xFEE68CE1L,
+            0x2D0520CDL,
+            0xFB5133BCL,
+            0x24B9E3CCL,
+            0xB19386DEL,
+            0x3576EE34L,
+            0xB95B1BB9L,
+            0x343E6FC1L,
+            0x6371183BL,
+            0xA2C094C7L,
+            0x9E32AE34L,
+            0x06C0FBC8L,
+            0xE3ED8F16L,
+            0xC0D49E2DL,
+            0xEB07C276L,
+            0xDBE374D7L
+        )
+        require(replacement.size == keys.size && replacement.all { it in 0L..0xFFFF_FFFFL }) {
+            "Galarian Star Tournament records must fit their 21 native unsigned 32-bit fields."
+        }
+        val values = keys.zip(replacement).toMap()
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val offsets = mutableMapOf<Long, Int>()
+        val cursor = Cursor(payload)
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            values[key]?.let { value ->
+                require(type == 14 && length == 4L) {
+                    "A Sword/Shield Galarian Star Tournament record has the wrong native type or size."
+                }
+                repeat(4) { byteIndex ->
+                    val decoded = ((value ushr (byteIndex * 8)) and 0xFF).toInt()
+                    payload[blockStart + byteIndex] = (decoded xor stream.next()).toByte()
+                }
+                offsets[key] = blockStart
+            }
+            cursor.skip(length.toInt())
+        }
+        require(offsets.keys == values.keys) { "A required Sword/Shield tournament record is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readStarTournamentBlocks(edited)
+        return SwordShieldStarTournamentWriteResult(edited, keys.map { offsets.getValue(it) })
     }
 
     /** Reads PKHeX's documented Crown Tundra Swords of Justice quest records after the complete container gate passes. */
