@@ -140,6 +140,7 @@
         <activity android:name=".SwitchLegendsArceusPokemonNobleActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokemonShinyActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokemonSizeActivity" android:exported="false"/>
+        <activity android:name=".SwitchLegendsArceusPokemonMoveShopActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokemonNicknameActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokemonSpeciesActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokemonLevelActivity" android:exported="false"/>
