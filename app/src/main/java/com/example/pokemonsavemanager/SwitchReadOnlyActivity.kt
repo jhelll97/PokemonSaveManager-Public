@@ -351,7 +351,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(undergroundReturnButton)
         sealStickersButton = Button(this).apply {
-            text = "Seal Stickers • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Seal Stickers • Edit"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspSealStickerFilters(it) } }
         }
         root.addView(sealStickersButton)
@@ -5679,7 +5679,7 @@ class SwitchReadOnlyActivity : Activity() {
         val menu = labels + listOfNotNull(
             bound.bdspUnderground?.let { "Grand Underground • Read-only" },
             bound.bdspPoffins?.let { "Poffin Case • Edit" },
-            bound.bdspSealStickers?.let { "Seal Stickers • Read-only" },
+            bound.bdspSealStickers?.let { "Seal Stickers • Edit" },
             bound.bdspBallCapsules?.let { "Ball Capsules • Read-only" },
             bound.bdspContest?.let { "Contest Records • Read-only" })
         AlertDialog.Builder(this).setTitle("${bound.displayName} • Items")
@@ -6992,7 +6992,7 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound) return
         val seals = bound.bdspSealStickers ?: return
         val filters = BdspSealStickerFilter.values()
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Seal stickers • Read-only")
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Seal stickers • Edit")
             .setItems(filters.map { "${it.displayName} • ${seals.filtered(it).size}" }.toTypedArray()) { _, index ->
                 if (session === bound) filters.getOrNull(index)?.let { showBdspSealStickerPage(bound, it, 0) }
             }.setNegativeButton("Close", null).show()
@@ -7014,7 +7014,7 @@ class SwitchReadOnlyActivity : Activity() {
             text = "ID ${entry.index} • ${entry.nativeLabel ?: "Unlisted seal"}\nCount ${entry.count} • Total ${entry.totalCount} • Obtained: ${bdspSealObtainedFlag(entry.rawObtainedWord)}"
             setOnClickListener { if (session === bound) showBdspSealStickerDetail(bound, entry.index, filter, page) }
         }) }
-        val builder = AlertDialog.Builder(this).setTitle("Seal stickers • ${page + 1}/${lastPage + 1} • Read-only")
+        val builder = AlertDialog.Builder(this).setTitle("Seal stickers • ${page + 1}/${lastPage + 1} • Edit")
             .setView(ScrollView(this).apply { addView(root) })
             .setPositiveButton("Filters") { _, _ -> if (session === bound) showBdspSealStickerFilters(bound) }
         if (page > 0) builder.setNegativeButton("Previous") { _, _ -> if (session === bound) showBdspSealStickerPage(bound, filter, page - 1) }
@@ -7031,11 +7031,27 @@ class SwitchReadOnlyActivity : Activity() {
             "Signed Count: ${entry.count}\nSigned TotalCount: ${entry.totalCount}\nSaved obtained flag: ${bdspSealObtainedFlag(entry.rawObtainedWord)}\n" +
             "Raw obtained word: ${entry.rawObtainedWord} (hex ${entry.rawObtainedWord.toString(16).uppercase().padStart(8, '0')})\nNative boolean read: ${entry.isGet}\n\n" +
             "Raw native record (12 bytes):\n" + entry.rawBytes.joinToString(" ") { "%02X".format(it) } +
-            "\n\nNative obtained is true only when the complete four-byte word equals 1. Unknown words, zero/negative counts, counts above the reference maximum of 99 and unlisted IDs remain unchanged. No guessed unlock, capsule placement or remaining-use claims. No granting all, clearing, count editing, repair, export or save writing is available."
-        val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
-            text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
-        }) }
-        AlertDialog.Builder(this).setTitle("Seal ID $index • Read-only").setView(scroll)
+            "\n\nNative obtained is true only when the complete four-byte word equals 1. Unknown words, zero/negative counts, counts above the reference maximum of 99 and unlisted IDs remain preservable when untouched. Editing changes only selected fields in this record and the native whole-file MD5."
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Seal Sticker ID $index"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchBdspSealStickerActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.seal.index", index)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Seal ID $index • Edit").setView(ScrollView(this).apply { addView(body) })
             .setPositiveButton("Entries") { _, _ -> if (session === bound) showBdspSealStickerPage(bound, filter, page) }
             .setNegativeButton("Close", null).show()
     }
