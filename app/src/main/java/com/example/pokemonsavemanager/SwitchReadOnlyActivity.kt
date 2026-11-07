@@ -660,7 +660,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldAdventureSteps(bound) }
         })
         if (bound.swordShieldHallOfFameTime != null) dashboardRoot.addView(Button(this).apply {
-            text = "Hall of Fame Time • Read-only"; isAllCaps = false; isEnabled = !busy
+            text = "Hall of Fame Time • Edit"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldHallOfFameTime(bound) }
         })
         if (bound.swordShieldPokedexViewState != null) dashboardRoot.addView(Button(this).apply {
@@ -3396,21 +3396,34 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound || dashboardBusy) return
         val read = bound.swordShieldHallOfFameTime ?: return
         val detail = buildString {
-            append("${read.version.displayName} • Hall of Fame Time • Read-only\n\n")
+            append("${read.version.displayName} • Hall of Fame Time\n\n")
             append("Unix timestamp seconds: ${read.epochSeconds}\n")
             append("Raw Int64 bits: 0x${read.rawHex}\n")
             append("UTC date and time: ${read.utcTimestamp ?: "Outside java.time.Instant's supported range"}\n\n")
             append("The complete native container hash and exact eight-byte scalar layout passed before display. ")
             append("PKHeX documents this signed Int64 as the UTC Unix timestamp for entering the Hall of Fame; the saved value and raw bits remain exact. ")
-            append("No timestamp, Hall of Fame, reset, repair, export, or save-writing action is available here.")
+            append("Editing changes only the documented Int64 timestamp; PSE does not infer Hall of Fame history, rewards, or other progression.")
         }
-        val scroll = ScrollView(this).apply {
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Hall of Fame Time"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchSwordShieldHallOfFameTimeActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
         }
-        AlertDialog.Builder(this).setTitle("Hall of Fame Time • Read-only")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        AlertDialog.Builder(this).setTitle("Hall of Fame Time")
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
     private fun showSwordShieldPokedexViewState(bound: SwitchReadSession) {

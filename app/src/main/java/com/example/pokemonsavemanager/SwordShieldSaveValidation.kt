@@ -129,6 +129,7 @@ internal data class SwordShieldAdventureStepBlocks(
 )
 internal data class SwordShieldAdventureStepWriteResult(val bytes: ByteArray, val offsets: List<Int>)
 internal data class SwordShieldHallOfFameTimeBlock(val version: SwordShieldVersion, val value: ByteArray)
+internal data class SwordShieldHallOfFameTimeWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldPlayTimeBlock(val version: SwordShieldVersion, val value: ByteArray)
 internal data class SwordShieldPokedexViewStateBlocks(
     val version: SwordShieldVersion,
@@ -1051,6 +1052,59 @@ object SwordShieldSaveValidation {
         val value = captured.getValue(key)
         require(value.size == 8) { "The native Sword/Shield Hall of Fame timestamp is missing or has the wrong native type." }
         return SwordShieldHallOfFameTimeBlock(checked.version, value)
+    }
+
+    /** Replaces PKHeX's documented Hall of Fame Int64 Unix timestamp and rebuilds the native footer. */
+    internal fun writeHallOfFameTime(source: ByteArray, replacement: Long): SwordShieldHallOfFameTimeWriteResult {
+        readHallOfFameTimeBlock(source)
+        val key = 0xE2F6E456L
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        var absoluteOffset = -1
+        val cursor = Cursor(payload)
+        while (cursor.remaining > 0) {
+            val currentKey = cursor.uint32()
+            val stream = KeyStream(currentKey)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            if (currentKey == key) {
+                require(type == 15 && length == 8L) {
+                    "The Sword/Shield Hall of Fame timestamp has the wrong native type or size."
+                }
+                repeat(8) { byteIndex ->
+                    val decoded = ((replacement ushr (byteIndex * 8)) and 0xFF).toInt()
+                    payload[blockStart + byteIndex] = (decoded xor stream.next()).toByte()
+                }
+                absoluteOffset = blockStart
+            }
+            cursor.skip(length.toInt())
+        }
+        require(absoluteOffset >= 0) { "The required Sword/Shield Hall of Fame timestamp is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readHallOfFameTimeBlock(edited)
+        return SwordShieldHallOfFameTimeWriteResult(edited, absoluteOffset)
     }
 
     /** Reads PKHeX's documented regional Pokédex selector and last-viewed species IDs after the complete container gate passes. */
