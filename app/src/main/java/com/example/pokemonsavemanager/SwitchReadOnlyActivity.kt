@@ -346,7 +346,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(npcRecordsButton)
         undergroundReturnButton = Button(this).apply {
-            text = "Underground Return Data • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Underground Return Data • Edit"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspUndergroundReturn(it) } }
         }
         root.addView(undergroundReturnButton)
@@ -6093,7 +6093,7 @@ class SwitchReadOnlyActivity : Activity() {
         val menu = labels + listOfNotNull(bound.bdspUndergroundActivity?.let { "Activity records • Read-only" },
             bound.bdspSecretBase?.let { "Secret Base • Edit" },
             bound.bdspUndergroundNpc?.let { "NPC interaction records • Edit" },
-            bound.bdspUndergroundReturn?.let { "Saved return data • Read-only" })
+            bound.bdspUndergroundReturn?.let { "Saved return data • Edit" })
         AlertDialog.Builder(this).setTitle("${bound.displayName} • Grand Underground • Item Edit")
             .setItems(menu.toTypedArray()) { _, index ->
                 if (session === bound) {
@@ -7069,11 +7069,28 @@ class SwitchReadOnlyActivity : Activity() {
             "Zenmetsu position Y: ${bdspReturnFloat(saved.rawZenmetsuYBits)}\nZenmetsu position Z: ${bdspReturnFloat(saved.rawZenmetsuZBits)}\n" +
             "Saved Zenmetsu direction: ${saved.zenmetsuDirection}\nSaved Underground return zone ID: ${saved.returnUgZoneId}\n\n" +
             "All integer fields remain signed and exact. Float32 display retains raw bits, including signed zero, subnormal values, infinities and NaN payloads. Raw hex is authoritative for NaN payloads. Non-finite values are shown without normalization.\n\n" +
-            "These are saved return-location fields, not a current-location map. Zone names, coordinate systems, direction names, spawn validity and teleport destinations are not inferred. No teleporting, movement, location editing, repair or save writing is available."
-        val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
-            text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
-        }) }
-        AlertDialog.Builder(this).setTitle("Underground return data • Read-only").setView(scroll)
+            "These are saved return-location fields, not a current-location map. Zone names, coordinate systems, direction names, spawn validity and teleport destinations are not inferred. Editing changes exact native values and does not perform teleporting, movement or repair."
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail + "\n\nUse Edit return data to review exact field changes and write a verified new copy."
+                textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit return data"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchBdspUndergroundReturnActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Underground return data • Edit")
+            .setView(ScrollView(this).apply { addView(body) })
             .setPositiveButton("Raw fields") { _, _ -> if (session === bound) showBdspUndergroundReturnRaw(bound) }
             .setNegativeButton("Close", null).show()
     }
