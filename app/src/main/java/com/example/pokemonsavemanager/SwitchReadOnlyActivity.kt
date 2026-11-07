@@ -4013,9 +4013,12 @@ class SwitchReadOnlyActivity : Activity() {
             append("OT friendship: ${p.originalTrainerFriendship}\nHandling-trainer friendship: ${p.handlingTrainerFriendship}\n")
             val handler = when (p.currentHandler) { 0 -> "Original trainer"; 1 -> "Handling trainer"; else -> "Unknown (${p.currentHandler})" }
             append("Current handler: $handler\n")
-            append("Saved original Tera type ID: ${p.teraTypeOriginal}\nSaved Tera override ID: ${p.teraTypeOverride}\n")
+            val effectiveTera = ScarletVioletTeraTypes.effective(p.teraTypeOriginal, p.teraTypeOverride)
+            append("Original Tera Type: ${ScarletVioletTeraTypes.name(p.teraTypeOriginal)} (${p.teraTypeOriginal})\n")
+            append("Saved Tera override: ${p.teraTypeOverride}\n")
+            append("Effective Tera Type: ${ScarletVioletTeraTypes.name(effectiveTera)}\n")
             append("Scale: ${p.scale}\nObedience level: ${p.obedienceLevel}\n")
-            append("Tera fields are raw saved values; battle/form effects are not evaluated.\n\n")
+            append("Effective Tera Type follows native override semantics; battle/form effects and encounter legality are not evaluated.\n\n")
             append("Original trainer: ${p.originalTrainer}\nTID16: ${p.tid}\nSID16: ${p.sid}\n")
             append("PID: ${p.pid.toString(16).uppercase()}\nEncryption constant: ${p.encryptionConstant.toString(16).uppercase()}\n\nMoves\n")
             p.moves.forEachIndexed { i, move -> append("${i + 1}. Move #${move.id} • PP ${move.pp} • PP Ups ${move.ppUps}\n") }
@@ -4046,6 +4049,29 @@ class SwitchReadOnlyActivity : Activity() {
                     val source = selectedSourceUri
                     if (session === bound && source != null) startActivity(
                         Intent(this@SwitchReadOnlyActivity, SwitchScarletVioletPokemonEvolutionActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                            .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                            .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        if (nativeTarget != null && !p.isEgg && p.species != 1017 && p.species != 1024 &&
+            ScarletVioletTeraTypes.isOriginalValid(p.teraTypeOriginal) &&
+            ScarletVioletTeraTypes.isOverrideValid(p.teraTypeOverride)) {
+            content.addView(Button(this).apply {
+                text = "Edit Tera Type"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(
+                            this@SwitchReadOnlyActivity,
+                            SwitchScarletVioletPokemonTeraTypeActivity::class.java
+                        )
                             .setData(source)
                             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
                             .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
