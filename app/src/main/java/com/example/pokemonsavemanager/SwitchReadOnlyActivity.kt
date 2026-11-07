@@ -4039,6 +4039,7 @@ class SwitchReadOnlyActivity : Activity() {
                 append("Handling Trainer gender: ${ScarletVioletPokemonHandlingTrainerGenderEditing.name(p.handlingTrainerGender)}\n")
                 append("Handling Trainer language: ${ScarletVioletPokemonHandlingTrainerLanguageEditing.name(p.handlingTrainerLanguage)}\n")
             }
+            append("Pokémon language: ${ScarletVioletPokemonLanguageEditing.name(p.language)}\n")
             append("TID16: ${p.tid}\nSID16: ${p.sid}\n")
             append("PID: ${p.pid.toString(16).uppercase()}\nEncryption constant: ${p.encryptionConstant.toString(16).uppercase()}\n\nMoves\n")
             p.moves.forEachIndexed { i, move -> append("${i + 1}. Move #${move.id} • PP ${move.pp} • PP Ups ${move.ppUps}\n") }
@@ -4395,6 +4396,28 @@ class SwitchReadOnlyActivity : Activity() {
                         Intent(
                             this@SwitchReadOnlyActivity,
                             SwitchScarletVioletPokemonCurrentHandlerActivity::class.java
+                        )
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                            .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                            .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        if (nativeTarget != null && !p.fatefulEncounter &&
+            p.language in ScarletVioletPokemonLanguageEditing.values()) {
+            content.addView(Button(this).apply {
+                text = "Edit Pokémon language"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(
+                            this@SwitchReadOnlyActivity,
+                            SwitchScarletVioletPokemonLanguageActivity::class.java
                         )
                             .setData(source)
                             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
