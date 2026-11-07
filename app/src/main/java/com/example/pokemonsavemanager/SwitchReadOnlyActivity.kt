@@ -3564,9 +3564,9 @@ class SwitchReadOnlyActivity : Activity() {
             append("Saved relearn move IDs: ${p.relearnMoves.joinToString(" / ")}\n\n")
             append("IVs (HP/Atk/Def/Speed/SpA/SpD): ${p.ivs.joinToString(" / ")}\n")
             append("Saved Ganbaru values (same order): ${p.ganbaruValues.joinToString(" / ")}\n")
-            append("These are raw saved training increments; derived effort levels and recalculated stats are not evaluated.\n\n")
+            append("These are raw saved training increments; Effort Levels use their IV-based native bias, and cached party stats are not recalculated.\n\n")
             append("PA8 stored-data checksum passed. Cached party stats are outside that checksum and may be stale. ")
-            append("Native nickname, Alpha-status, Noble-status, Shiny-status, size, Move Shop, Alpha Move and capture Ball editing are available for party and pasture records; legality and game-presence checks are not evaluated.")
+            append("Native nickname, Alpha-status, Noble-status, Shiny-status, size, Move Shop, Alpha Move, capture Ball and Effort Level editing are available for party and pasture records; legality and game-presence checks are not evaluated.")
         }
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(TextView(this).apply {
@@ -3717,6 +3717,27 @@ class SwitchReadOnlyActivity : Activity() {
                         Intent(
                             this@SwitchReadOnlyActivity,
                             SwitchLegendsArceusPokemonBallActivity::class.java
+                        )
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                            .putExtra("pse.switch.pokemon.pasture", nativeTarget.second)
+                            .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        if (nativeTarget != null && LegendsArceusPokemonEffortEditing.hasEditableStat(p)) {
+            content.addView(Button(this).apply {
+                text = "Edit Effort Levels"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(
+                            this@SwitchReadOnlyActivity,
+                            SwitchLegendsArceusPokemonEffortActivity::class.java
                         )
                             .setData(source)
                             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
