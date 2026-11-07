@@ -5581,6 +5581,13 @@ class SwitchReadOnlyActivity : Activity() {
                     if (session === bound) launchLegendsArceusResearchCounterEditor(bound, number)
                 }
             })
+            if (!entry.solitudeComplete) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "Mark Path of Solitude complete • New copy"
+                isAllCaps = false
+                setOnClickListener {
+                    if (session === bound) launchLegendsArceusSolitudeEditor(bound, number)
+                }
+            })
         }
         val scroll = ScrollView(this).apply { addView(content) }
         val builder = AlertDialog.Builder(this).setTitle("Hisui research • ${LegendsArceusSpeciesNames.name(entry.speciesId)}")
@@ -5589,6 +5596,21 @@ class SwitchReadOnlyActivity : Activity() {
             if (session === bound) launchLegendsArceusPokedexEditor(bound, number)
         }
         builder.show()
+    }
+
+    private fun launchLegendsArceusSolitudeEditor(
+        bound: SwitchReadSession,
+        number: Int
+    ) {
+        val source = selectedSourceUri ?: return
+        if (session !== bound) return
+        startActivity(
+            Intent(this, SwitchLegendsArceusSolitudeActivity::class.java)
+                .setData(source)
+                .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                .putExtra("pse.switch.dex.number", number)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        )
     }
 
     private fun launchLegendsArceusResearchCounterEditor(
