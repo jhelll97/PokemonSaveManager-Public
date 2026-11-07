@@ -165,7 +165,7 @@ class SwitchBdspPoffinActivity : Activity() {
                     inspectCopy.visibility = android.view.View.GONE
                     try {
                         startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                            type = "application/octet-stream"; addCategory(Intent.CATEGORY_OPENABLE)
+                            this.type = "application/octet-stream"; addCategory(Intent.CATEGORY_OPENABLE)
                             putExtra(Intent.EXTRA_TITLE, "SaveData.bin")
                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
                         }, createCopyRequest)
