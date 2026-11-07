@@ -341,7 +341,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(secretBaseButton)
         npcRecordsButton = Button(this).apply {
-            text = "Underground NPC Records • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Underground NPC Records • Edit"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspUndergroundNpcFilters(it) } }
         }
         root.addView(npcRecordsButton)
@@ -6092,7 +6092,7 @@ class SwitchReadOnlyActivity : Activity() {
         val returnDataIndex = if (bound.bdspUndergroundReturn != null) labels.size + (if (activityIndex >= 0) 1 else 0) + (if (secretBaseIndex >= 0) 1 else 0) + (if (npcIndex >= 0) 1 else 0) else -1
         val menu = labels + listOfNotNull(bound.bdspUndergroundActivity?.let { "Activity records • Read-only" },
             bound.bdspSecretBase?.let { "Secret Base • Edit" },
-            bound.bdspUndergroundNpc?.let { "NPC interaction records • Read-only" },
+            bound.bdspUndergroundNpc?.let { "NPC interaction records • Edit" },
             bound.bdspUndergroundReturn?.let { "Saved return data • Read-only" })
         AlertDialog.Builder(this).setTitle("${bound.displayName} • Grand Underground • Item Edit")
             .setItems(menu.toTypedArray()) { _, index ->
@@ -6994,7 +6994,7 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound) return
         val records = bound.bdspUndergroundNpc ?: return
         val filters = BdspUndergroundNpcFilter.values()
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • NPC records • Read-only")
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • NPC records • Edit")
             .setItems(filters.map { "${it.displayName} • ${records.filtered(it).size}" }.toTypedArray()) { _, index ->
                 if (session === bound) filters.getOrNull(index)?.let { showBdspUndergroundNpcPage(bound, it, 0) }
             }.setNegativeButton("Close", null).show()
@@ -7032,11 +7032,28 @@ class SwitchReadOnlyActivity : Activity() {
         val detail = "Saved interaction index $index\nExact unsigned byte: ${entry.value}\nHex: ${entry.value.toString(16).uppercase().padStart(2, '0')}\n" +
             "Contributes to the native nonzero-entry count: ${entry.value != 0}\n\n" +
             "Full saved NPC section (100 bytes, native order):\n" + records.rawNpcBytes.chunked(20).joinToString("\n") { row -> row.joinToString(" ") { "%02X".format(it) } } +
-            "\n\nRepeated values are retained and each nonzero entry counts separately. No guessed NPC name, unique-interaction count, Spiritomb eligibility or quest state. No marking seen, filling, clearing, resetting, editing or save writing is available."
-        val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
-            text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
-        }) }
-        AlertDialog.Builder(this).setTitle("NPC record index $index • Read-only").setView(scroll)
+            "\n\nRepeated values are retained and each nonzero entry counts separately. No guessed NPC name, unique-interaction count, Spiritomb eligibility or quest state."
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail + "\n\nUse Edit record to review this exact saved byte and write a verified new copy. The other 99 entries remain exact."
+                textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit NPC record $index"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchBdspUndergroundNpcActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.underground.npc.index", index)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        AlertDialog.Builder(this).setTitle("NPC record index $index • Edit").setView(ScrollView(this).apply { addView(body) })
             .setPositiveButton("Entries") { _, _ -> if (session === bound) showBdspUndergroundNpcPage(bound, filter, page) }
             .setNegativeButton("Close", null).show()
     }
