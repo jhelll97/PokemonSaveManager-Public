@@ -103,6 +103,7 @@ internal data class SwordShieldCrownTundraProgressBlocks(
     val disconnectStreak: ByteArray,
     val peoniaSpeciesHint: ByteArray
 )
+internal data class SwordShieldCrownTundraProgressWriteResult(val bytes: ByteArray, val offsets: List<Int>)
 internal data class SwordShieldStarTournamentBlocks(
     val version: SwordShieldVersion,
     val totalVictories: ByteArray,
@@ -643,6 +644,74 @@ object SwordShieldSaveValidation {
             block(disconnectStreakKey),
             block(peoniaSpeciesHintKey)
         )
+    }
+
+    /** Replaces ten documented Crown Tundra UInt32 records and rebuilds the native footer. */
+    internal fun writeCrownTundraProgress(source: ByteArray, replacement: List<Long>): SwordShieldCrownTundraProgressWriteResult {
+        readCrownTundraProgressBlocks(source)
+        val keys = listOf(
+            0xCF90B39AL,
+            0x4D50B655L,
+            0x771E4C88L,
+            0xAD67A297L,
+            0x6F669A35L,
+            0x6F66951CL,
+            0x6F6696CFL,
+            0x7F4B4B10L,
+            0x8EAEB8FFL,
+            0xF26B9151L
+        )
+        require(replacement.size == keys.size && replacement.all { it in 0L..0xFFFF_FFFFL }) {
+            "Crown Tundra progress records must fit their ten native unsigned 32-bit fields."
+        }
+        val values = keys.zip(replacement).toMap()
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val offsets = mutableMapOf<Long, Int>()
+        val cursor = Cursor(payload)
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            values[key]?.let { value ->
+                require(type == 14 && length == 4L) {
+                    "A Sword/Shield Crown Tundra record has the wrong native type or size."
+                }
+                repeat(4) { byteIndex ->
+                    val decoded = ((value ushr (byteIndex * 8)) and 0xFF).toInt()
+                    payload[blockStart + byteIndex] = (decoded xor stream.next()).toByte()
+                }
+                offsets[key] = blockStart
+            }
+            cursor.skip(length.toInt())
+        }
+        require(offsets.keys == values.keys) { "A required Sword/Shield Crown Tundra record is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readCrownTundraProgressBlocks(edited)
+        return SwordShieldCrownTundraProgressWriteResult(edited, keys.map { offsets.getValue(it) })
     }
 
     /** Reads PKHeX's documented Galarian Star Tournament victory records after the complete container gate passes. */

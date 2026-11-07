@@ -644,7 +644,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldIsleOfArmorProgress(bound) }
         })
         if (bound.swordShieldCrownTundraProgress != null) dashboardRoot.addView(Button(this).apply {
-            text = "Crown Tundra Progress • Read-only"; isAllCaps = false; isEnabled = !busy
+            text = "Crown Tundra Progress • Edit"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldCrownTundraProgress(bound) }
         })
         if (bound.swordShieldStarTournament != null) dashboardRoot.addView(Button(this).apply {
@@ -3248,7 +3248,7 @@ class SwitchReadOnlyActivity : Activity() {
         fun species(value: Long): String = if (value in 1L..898L)
             "$value • ${SwordShieldSpeciesNames.name(value.toInt())}" else value.toString()
         val detail = buildString {
-            append("${read.version.displayName} • Crown Tundra Progress • Read-only\n\n")
+            append("${read.version.displayName} • Crown Tundra Progress\n\n")
             append("Split-Decision Ruins pattern: ${read.regiPattern} • ${read.regiPatternStatus}\n\n")
             append("Swords of Justice footprints\n")
             append("Cobalion: ${read.cobalionFootprints} • ${read.footprintStatus(read.cobalionFootprints)}\n")
@@ -3261,15 +3261,28 @@ class SwitchReadOnlyActivity : Activity() {
             append("Peonia species hint: ${species(read.peoniaSpeciesHint)}\n\n")
             append("The complete native container hash and all ten exact UInt32 scalar layouts passed before display. ")
             append("Only PKHeX's documented Regi pattern, footprint ranges, and disconnect fee threshold are interpreted; every native value remains exact. ")
-            append("No pattern, footprint, Max Lair, encounter, fee, reward, unlock, repair, export, or save-writing action is available here.")
+            append("Editing changes only selected progress scalars; PSE does not infer encounter, fee, reward, or unlock side effects.")
         }
-        val scroll = ScrollView(this).apply {
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Crown Tundra Progress"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchSwordShieldCrownTundraProgressActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
         }
-        AlertDialog.Builder(this).setTitle("Crown Tundra Progress • Read-only")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        AlertDialog.Builder(this).setTitle("Crown Tundra Progress")
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
     private fun showSwordShieldStarTournament(bound: SwitchReadSession) {
