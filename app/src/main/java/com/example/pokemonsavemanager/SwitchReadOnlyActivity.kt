@@ -301,7 +301,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(gameOptionsButton)
         undergroundActivityButton = Button(this).apply {
-            text = "Underground Activity • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Underground Activity • Edit"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspUndergroundActivity(it) } }
         }
         root.addView(undergroundActivityButton)
@@ -6090,7 +6090,7 @@ class SwitchReadOnlyActivity : Activity() {
         val secretBaseIndex = if (bound.bdspSecretBase != null) labels.size + (if (activityIndex >= 0) 1 else 0) else -1
         val npcIndex = if (bound.bdspUndergroundNpc != null) labels.size + (if (activityIndex >= 0) 1 else 0) + (if (secretBaseIndex >= 0) 1 else 0) else -1
         val returnDataIndex = if (bound.bdspUndergroundReturn != null) labels.size + (if (activityIndex >= 0) 1 else 0) + (if (secretBaseIndex >= 0) 1 else 0) + (if (npcIndex >= 0) 1 else 0) else -1
-        val menu = labels + listOfNotNull(bound.bdspUndergroundActivity?.let { "Activity records • Read-only" },
+        val menu = labels + listOfNotNull(bound.bdspUndergroundActivity?.let { "Activity records • Edit" },
             bound.bdspSecretBase?.let { "Secret Base • Edit" },
             bound.bdspUndergroundNpc?.let { "NPC interaction records • Edit" },
             bound.bdspUndergroundReturn?.let { "Saved return data • Edit" })
@@ -6492,7 +6492,7 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound) return
         val activity = bound.bdspUndergroundActivity ?: return
         val detail = "${bound.displayName} • Save layout ${activity.revision.displayName}\n\n" +
-            "Grand Underground activity • Read-only\n" +
+            "Grand Underground activity • Edit\n" +
             "Fossil digging plays: ${activity.fossilDiggingPlayCount}\n" +
             "Statue TV broadcasts: ${activity.statueTvBroadcastCount}\n" +
             "Likes on Secret Base TV broadcasts: ${activity.secretBaseTvLikeCount}\n" +
@@ -6501,12 +6501,28 @@ class SwitchReadOnlyActivity : Activity() {
             "Reserved word 1: ${activity.reserved1} (hex ${java.lang.Long.toHexString(activity.reserved1).uppercase().padStart(16, '0')})\n" +
             "Reserved word 2: ${activity.reserved2} (hex ${java.lang.Long.toHexString(activity.reserved2).uppercase().padStart(16, '0')})\n\n" +
             "Raw native activity record (32 bytes):\n" + activity.rawRecordBytes.chunked(16).joinToString("\n") { row -> row.joinToString(" ") { "%02X".format(it) } } +
-            "\n\nCounters are shown exactly as saved, including negative values. Zero is a saved value. These records do not establish inventory quantities, Secret Base placement, active statue effects, rewards or online ownership. Reserved words have no inferred meaning. No counter reset, repair or save writing is available."
-        val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
-            text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
-        }) }
-        AlertDialog.Builder(this).setTitle("Grand Underground activity • Read-only")
-            .setView(scroll).setPositiveButton("Close", null).show()
+            "\n\nCounters are shown exactly as saved, including negative values. Zero is a saved value. These records do not establish inventory quantities, Secret Base placement, active statue effects, rewards or online ownership. Reserved words have no inferred meaning and remain exact during editing."
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail + "\n\nUse Edit activity counters to review exact field changes and write a verified new copy."
+                textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit activity counters"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchBdspUndergroundActivityEditActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Grand Underground activity • Edit")
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
 
