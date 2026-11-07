@@ -2735,7 +2735,8 @@ class SwitchReadOnlyActivity : Activity() {
             append("Nature ID: ${p.nature}\nStat nature ID: ${p.statNature}\n")
             append("Cached HP: ${p.currentHp}/${p.maximumHp}\n")
             append("Cached Atk/Def/Speed/SpA/SpD: ${p.cachedStats.joinToString(" / ")}\n")
-            append("Shiny: ${if (p.shiny) "Yes" else "No"}\nHeld item ID: ${p.heldItem}\nAbility ID: ${p.ability}\n")
+            append("Shiny: ${if (p.shiny) "Yes" else "No"}\n")
+            append("Held Item: ${ScarletVioletPokemonHeldItemEditing.name(p.heldItem)}\nAbility ID: ${p.ability}\n")
             append("OT friendship: ${p.originalTrainerFriendship}\nHandling-trainer friendship: ${p.handlingTrainerFriendship}\n")
             val handler = when (p.currentHandler) { 0 -> "Original trainer"; 1 -> "Handling trainer"; else -> "Unknown (${p.currentHandler})" }
             append("Current handler: $handler\n")
@@ -4440,6 +4441,28 @@ class SwitchReadOnlyActivity : Activity() {
                         Intent(
                             this@SwitchReadOnlyActivity,
                             SwitchScarletVioletPokemonAffixedTitleActivity::class.java
+                        )
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                            .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                            .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        if (nativeTarget != null && !p.isEgg && !p.fatefulEncounter &&
+            ScarletVioletPokemonHeldItemEditing.isValid(p)) {
+            content.addView(Button(this).apply {
+                text = "Edit Held Item"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(
+                            this@SwitchReadOnlyActivity,
+                            SwitchScarletVioletPokemonHeldItemActivity::class.java
                         )
                             .setData(source)
                             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
