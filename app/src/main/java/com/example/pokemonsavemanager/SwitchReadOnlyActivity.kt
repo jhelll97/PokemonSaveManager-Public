@@ -336,7 +336,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(berryPlotsButton)
         secretBaseButton = Button(this).apply {
-            text = "Secret Base • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Secret Base • Edit"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspSecretBase(it) } }
         }
         root.addView(secretBaseButton)
@@ -6091,7 +6091,7 @@ class SwitchReadOnlyActivity : Activity() {
         val npcIndex = if (bound.bdspUndergroundNpc != null) labels.size + (if (activityIndex >= 0) 1 else 0) + (if (secretBaseIndex >= 0) 1 else 0) else -1
         val returnDataIndex = if (bound.bdspUndergroundReturn != null) labels.size + (if (activityIndex >= 0) 1 else 0) + (if (secretBaseIndex >= 0) 1 else 0) + (if (npcIndex >= 0) 1 else 0) else -1
         val menu = labels + listOfNotNull(bound.bdspUndergroundActivity?.let { "Activity records • Read-only" },
-            bound.bdspSecretBase?.let { "Secret Base • Read-only" },
+            bound.bdspSecretBase?.let { "Secret Base • Edit" },
             bound.bdspUndergroundNpc?.let { "NPC interaction records • Read-only" },
             bound.bdspUndergroundReturn?.let { "Saved return data • Read-only" })
         AlertDialog.Builder(this).setTitle("${bound.displayName} • Grand Underground • Item Edit")
@@ -6927,14 +6927,14 @@ class SwitchReadOnlyActivity : Activity() {
             text = "${bound.displayName} • Save layout ${base.revision.displayName}\n\nSaved talk-player data ID: ${base.talkPlayerDataId}\nSaved talk-player count: ${base.talkPlayerCount}\n" +
                 "Base zone ID (signed): ${base.zoneId}\nSaved position X/Y (signed): ${base.x}, ${base.y}\nDirection byte: ${base.direction}\nExpansion-status byte: ${base.expansionStatus}\nSaved good count (signed): ${base.goodCount}\n" +
                 "Raw enable/alignment bytes: " + base.rawEnableBytes.joinToString(" ") { "%02X".format(it) } +
-                "\n\nAll 30 saved statue records remain in native order, regardless of the saved count. Zero or negative IDs are not used to infer empty slots. Names, effects, unlocks and layout legality are not inferred. Enable-byte semantics are not decoded."
+                "\n\nAll 30 saved statue records remain in native order, regardless of the saved count. Zero or negative IDs are not used to infer empty slots. Names, effects, unlocks and layout legality are not inferred. Enable-byte semantics are not decoded. Select a statue to review native header and record edits."
             textSize = 16f; setPadding(0, 0, 0, 16); setTextIsSelectable(true)
         })
         base.statues.drop(page * 10).take(10).forEach { statue -> root.addView(Button(this).apply {
             text = "Statue index ${statue.index} • ID ${statue.statueId} • Pedestal ${statue.pedestalId}\nX/Y: ${statue.x}, ${statue.y} • Direction: ${statue.direction}"
             setOnClickListener { if (session === bound) showBdspStatueDetail(bound, statue.index, page) }
         }) }
-        val builder = AlertDialog.Builder(this).setTitle("Secret Base • ${page + 1}/${lastPage + 1} • Read-only")
+        val builder = AlertDialog.Builder(this).setTitle("Secret Base • ${page + 1}/${lastPage + 1} • Edit")
             .setView(ScrollView(this).apply { addView(root) })
             .setPositiveButton("Raw record") { _, _ -> if (session === bound) showBdspSecretBaseRaw(bound, page) }
         if (page > 0) builder.setNegativeButton("Previous") { _, _ -> if (session === bound) showBdspSecretBase(bound, page - 1) }
@@ -6950,11 +6950,28 @@ class SwitchReadOnlyActivity : Activity() {
         val detail = "Saved statue index $index\nStatue ID (signed): ${statue.statueId}\nPedestal ID (signed): ${statue.pedestalId}\n" +
             "Saved X/Y (signed): ${statue.x}, ${statue.y}\nSaved direction (signed): ${statue.direction}\n\nRaw native record (20 bytes):\n" +
             statue.rawBytes.joinToString(" ") { "%02X".format(it) } +
-            "\n\nAll values remain exact, including negative or unknown IDs, positions and directions. No guessed statue/pedestal names, type effects, unlocks, occupied state, placement validity or base legality. No placing, moving, deleting, resetting, editing or save writing is available."
-        val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
-            text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
-        }) }
-        AlertDialog.Builder(this).setTitle("Statue index $index • Read-only").setView(scroll)
+            "\n\nAll values remain exact, including negative or unknown IDs, positions and directions. No guessed statue/pedestal names, type effects, unlocks, occupied state, placement validity or base legality."
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail + "\n\nUse Edit statue to review documented Secret Base header and selected-record changes saved to a new copy. The enable/alignment word and the other 29 records remain exact."
+                textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit statue index $index"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchBdspSecretBaseActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.secretbase.statue.index", index)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Statue index $index • Edit").setView(ScrollView(this).apply { addView(body) })
             .setPositiveButton("Base") { _, _ -> if (session === bound) showBdspSecretBase(bound, page) }
             .setNegativeButton("Close", null).show()
     }
