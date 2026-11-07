@@ -4034,7 +4034,8 @@ class SwitchReadOnlyActivity : Activity() {
             append("Effective Tera Type follows native override semantics; battle/form effects and encounter legality are not evaluated.\n\n")
             append("Original trainer: ${p.originalTrainer}\n")
             append("Original Trainer gender: ${ScarletVioletPokemonOriginalTrainerGenderEditing.name(p.originalTrainerGender)}\n")
-            if (p.currentHandler == 1) {
+            if (p.handlingTrainer.isNotBlank()) {
+                append("Handling Trainer: ${p.handlingTrainer.ifBlank { "Not set" }}\n")
                 append("Handling Trainer gender: ${ScarletVioletPokemonHandlingTrainerGenderEditing.name(p.handlingTrainerGender)}\n")
                 append("Handling Trainer language: ${ScarletVioletPokemonHandlingTrainerLanguageEditing.name(p.handlingTrainerLanguage)}\n")
             }
@@ -4349,6 +4350,28 @@ class SwitchReadOnlyActivity : Activity() {
                         Intent(
                             this@SwitchReadOnlyActivity,
                             SwitchScarletVioletPokemonHandlingTrainerLanguageActivity::class.java
+                        )
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                            .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                            .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        if (nativeTarget != null && !p.isEgg && !p.fatefulEncounter &&
+            ScarletVioletPokemonCurrentHandlerEditing.canSwitch(p)) {
+            content.addView(Button(this).apply {
+                text = "Edit Current Handler"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(
+                            this@SwitchReadOnlyActivity,
+                            SwitchScarletVioletPokemonCurrentHandlerActivity::class.java
                         )
                             .setData(source)
                             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)

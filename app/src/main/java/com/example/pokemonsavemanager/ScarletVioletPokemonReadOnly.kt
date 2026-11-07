@@ -6,7 +6,7 @@ data class ScarletVioletMoveRead(val id: Int, val pp: Int, val ppUps: Int)
 data class ScarletVioletPokemonRead(
     val species: Int, val nickname: String, val form: Int, val gender: Int,
     val cachedLevel: Int, val experience: Long, val nature: Int, val statNature: Int,
-    val currentHp: Int, val maximumHp: Int, val originalTrainer: String,
+    val currentHp: Int, val maximumHp: Int, val originalTrainer: String, val handlingTrainer: String,
     val tid: Int, val sid: Int, val pid: Long, val encryptionConstant: Long,
     val shiny: Boolean, val isEgg: Boolean, val fatefulEncounter: Boolean,
     val heldItem: Int, val ability: Int,
@@ -64,7 +64,7 @@ object ScarletVioletPokemonReadOnly {
         return ScarletVioletSlotRead.Pokemon(ScarletVioletPokemonRead(
             species, text(plain, 0x58), byte(plain, 0x24), (byte(plain, 0x22) ushr 1) and 3,
             byte(plain, 0x148), u32(plain, 0x10), byte(plain, 0x20), byte(plain, 0x21),
-            u16(plain, 0x8A), u16(plain, 0x14A), text(plain, 0xF8), tid, sid, pid, ec,
+            u16(plain, 0x8A), u16(plain, 0x14A), text(plain, 0xF8), text(plain, 0xA8), tid, sid, pid, ec,
             shiny, iv32 and 0x40000000L != 0L, byte(plain, 0x22) and 1 != 0,
             u16(plain, 0x0A), u16(plain, 0x14),
             byte(plain, 0x112), byte(plain, 0xC8), byte(plain, 0xC2), byte(plain, 0xC3), byte(plain, 0xC4),
