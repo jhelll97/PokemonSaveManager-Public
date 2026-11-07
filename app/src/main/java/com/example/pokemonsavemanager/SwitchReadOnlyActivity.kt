@@ -311,7 +311,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(recordStatisticsButton)
         additionalRecordsButton = Button(this).apply {
-            text = "Additional Record Trainers • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Additional Record Trainers • Edit"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspAdditionalRecords(it) } }
         }
         root.addView(additionalRecordsButton)
@@ -6621,7 +6621,7 @@ class SwitchReadOnlyActivity : Activity() {
             val name = it.name?.let { value -> if (value.isEmpty()) "Empty name" else "\"$value\"" } ?: "Name unavailable"
             "Slot ${it.index} • $name${if (!it.hasNonzeroRecordBytes) " • all-zero record" else ""}"
         }
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Additional record trainers • Read-only")
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Additional record trainers • Edit")
             .setItems(labels.toTypedArray()) { _, index -> if (session === bound && index in records.records.indices) showBdspAdditionalRecord(bound, index) }
             .setPositiveButton("Raw ranking data") { _, _ -> if (session === bound) showBdspAdditionalRanking(bound) }
             .setNegativeButton("Close", null).show()
@@ -6633,17 +6633,34 @@ class SwitchReadOnlyActivity : Activity() {
         if (!records.hasBlock || index !in records.records.indices) return
         val entry = records.record(index)
         val language = BdspGameOptionNames.language(entry.languageId) ?: "Unknown"
-        val detail = "${bound.displayName} • Save layout ${records.revision.displayName}\n\nSlot $index • Read-only\n" +
+        val detail = "${bound.displayName} • Save layout ${records.revision.displayName}\n\nSlot $index • Edit\n" +
             "Saved name: ${entry.name?.let { "\"$it\"" } ?: "Unavailable"}\nName issue: ${entry.nameIssue ?: "None"}\n" +
             "NULL terminator in name field: ${entry.hasNameTerminator}\n" +
             "Language: $language (ID ${entry.languageId})\nSaved gender byte: ${entry.genderByte}\nSaved body-type ID: ${entry.bodyTypeId}\n" +
             "Raw ID32: ${entry.id32}\nTID16: ${entry.tid16}\nSID16: ${entry.sid16}\n\n" +
             "Raw native record (48 bytes):\n" + entry.rawRecordBytes.chunked(16).joinToString("\n") { row -> row.joinToString(" ") { "%02X".format(it) } } +
-            "\n\nNames follow the saved UTF-16LE field up to its first NULL or all 13 code units. Malformed names do not hide numeric fields or other slots. Original name/trash, padding and reserved bytes stay intact. Empty or all-zero records do not prove an associated trainer exists. Gender/body IDs, ranking associations, ownership and chronology are not inferred. No name replacement, editing or save writing is available."
-        val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
-            text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
-        }) }
-        AlertDialog.Builder(this).setTitle("Additional trainer slot $index • Read-only").setView(scroll)
+            "\n\nNames follow the saved UTF-16LE field up to its first NULL or all 13 code units. Malformed names do not hide numeric fields or other slots. Unchanged name/trash, padding and reserved bytes stay intact. Empty or all-zero records do not prove an associated trainer exists. Gender/body IDs, ranking associations, ownership and chronology are not inferred. The documented OT, language, gender, body type and ID32 fields can be edited in a verified new copy."
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit additional trainer slot $index"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchBdspAdditionalTrainerActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.bdsp.additional.record.index", index)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Additional trainer slot $index • Edit")
+            .setView(ScrollView(this).apply { addView(body) })
             .setPositiveButton("Slots") { _, _ -> if (session === bound) showBdspAdditionalRecords(bound) }.setNegativeButton("Close", null).show()
     }
 
