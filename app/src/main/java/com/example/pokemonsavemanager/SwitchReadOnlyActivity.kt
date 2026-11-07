@@ -356,7 +356,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(sealStickersButton)
         ballCapsulesButton = Button(this).apply {
-            text = "Ball Capsules • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Ball Capsules • Affix Edit"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspBallCapsules(it, 0, false) } }
         }
         root.addView(ballCapsulesButton)
@@ -5680,7 +5680,7 @@ class SwitchReadOnlyActivity : Activity() {
             bound.bdspUnderground?.let { "Grand Underground • Read-only" },
             bound.bdspPoffins?.let { "Poffin Case • Edit" },
             bound.bdspSealStickers?.let { "Seal Stickers • Edit" },
-            bound.bdspBallCapsules?.let { "Ball Capsules • Read-only" },
+            bound.bdspBallCapsules?.let { "Ball Capsules • Affix Edit" },
             bound.bdspContest?.let { "Contest Records • Read-only" })
         AlertDialog.Builder(this).setTitle("${bound.displayName} • Items")
             .setItems(menu.toTypedArray()) { _, index ->
@@ -7075,7 +7075,7 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Capsule ${capsule.index + 1} • Saved index ${capsule.index}\nSpecies ID ${capsule.speciesId} • EC ${capsule.encryptionConstant.toString(16).uppercase().padStart(8, '0')}\n20 saved affix records"
             setOnClickListener { if (session === bound) showBdspBallCapsuleDetail(bound, capsule.index, page, nonzeroOnly) }
         }) }
-        val builder = AlertDialog.Builder(this).setTitle("${bound.displayName} • Ball Capsules • ${page + 1}/${lastPage + 1} • Read-only")
+        val builder = AlertDialog.Builder(this).setTitle("${bound.displayName} • Ball Capsules • ${page + 1}/${lastPage + 1} • Affix Edit")
             .setView(ScrollView(this).apply { addView(root) })
             .setPositiveButton(if (nonzeroOnly) "Show all" else "Nonzero records") { _, _ -> if (session === bound) showBdspBallCapsules(bound, 0, !nonzeroOnly) }
         if (page > 0) builder.setNegativeButton("Previous") { _, _ -> if (session === bound) showBdspBallCapsules(bound, page - 1, nonzeroOnly) }
@@ -7097,7 +7097,7 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Affix ${seal.index + 1} • ID ${seal.sealId} • ${seal.nativeLabel ?: "Unlisted ID"}\nSigned X ${seal.x} • Y ${seal.y} • Z ${seal.z}"
             setOnClickListener { if (session === bound) showBdspAffixedSealDetail(bound, index, seal.index, page, nonzeroOnly) }
         }) }
-        AlertDialog.Builder(this).setTitle("Capsule ${index + 1} • Read-only").setView(ScrollView(this).apply { addView(root) })
+        AlertDialog.Builder(this).setTitle("Capsule ${index + 1} • Affix Edit").setView(ScrollView(this).apply { addView(root) })
             .setPositiveButton("Capsules") { _, _ -> if (session === bound) showBdspBallCapsules(bound, page, nonzeroOnly) }
             .setNeutralButton("Raw record") { _, _ -> if (session === bound) showBdspBallCapsuleRaw(bound, index, page, nonzeroOnly) }
             .setNegativeButton("Close", null).show()
@@ -7109,11 +7109,31 @@ class SwitchReadOnlyActivity : Activity() {
         if (index !in read.capsules.indices || sealIndex !in 0 until 20) return
         val seal = read.capsule(index).seal(sealIndex)
         val detail = "Saved capsule index $index • Affix index $sealIndex\nUnsigned seal ID: ${seal.sealId}\nNative key: ${seal.nativeLabel ?: "Unlisted ID"}\nSigned Int16 X: ${seal.x}\nSigned Int16 Y: ${seal.y}\nSigned Int16 Z: ${seal.z}\n\nRaw eight-byte affix record:\n" +
-            seal.rawBytes.joinToString(" ") { "%02X".format(it) } + "\n\nCoordinates and unknown IDs remain exact. No editing, placement normalization, unlock, repair, export or save writing."
-        AlertDialog.Builder(this).setTitle("Affix ${sealIndex + 1} • Read-only")
-            .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
+            seal.rawBytes.joinToString(" ") { "%02X".format(it) } +
+            "\n\nCoordinates and unknown IDs remain preservable when untouched. Editing changes only selected fields in this affix record and the native whole-file MD5; capsule identity words and all other affixes remain exact."
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
-            }) }).setPositiveButton("Capsule") { _, _ -> if (session === bound) showBdspBallCapsuleDetail(bound, index, page, nonzeroOnly) }
+            })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Affix ${sealIndex + 1}"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchBdspBallCapsuleAffixActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.capsule.index", index)
+                            .putExtra("pse.switch.capsule.affix", sealIndex)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Affix ${sealIndex + 1} • Edit")
+            .setView(ScrollView(this).apply { addView(body) })
+            .setPositiveButton("Capsule") { _, _ -> if (session === bound) showBdspBallCapsuleDetail(bound, index, page, nonzeroOnly) }
             .setNegativeButton("Close", null).show()
     }
 
