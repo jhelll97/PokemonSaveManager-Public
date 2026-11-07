@@ -668,7 +668,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldPokedexViewState(bound) }
         })
         if (bound.swordShieldRestrictedSparring != null) dashboardRoot.addView(Button(this).apply {
-            text = "Restricted Sparring Streaks • Read-only"; isAllCaps = false; isEnabled = !busy
+            text = "Restricted Sparring Streaks • Edit"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldRestrictedSparring(bound) }
         })
         if (bound.letsGoCaptureRecords != null) dashboardRoot.addView(Button(this).apply {
@@ -3452,19 +3452,32 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound || dashboardBusy) return
         val read = bound.swordShieldRestrictedSparring ?: return
         val detail = buildString {
-            append("${read.version.displayName} • Restricted Sparring Streaks • Read-only\n\n")
+            append("${read.version.displayName} • Restricted Sparring Streaks\n\n")
             read.types.forEach { append("${it.typeName}: ${it.bestStreak}\n") }
             append("\nThe complete native container hash and all 18 exact UInt32 scalar layouts passed before display. ")
             append("PSE presents each saved best streak exactly and does not infer type availability, stored teams, completion, or reward eligibility. ")
-            append("No streak, team, sparring, reward, unlock, reset, repair, export, or save-writing action is available here.")
+            append("Editing changes only selected best-streak counters and does not alter stored teams, availability, completion, rewards, or unlock state.")
         }
-        val scroll = ScrollView(this).apply {
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Restricted Sparring Streaks"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchSwordShieldRestrictedSparringActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
         }
-        AlertDialog.Builder(this).setTitle("Restricted Sparring Streaks • Read-only")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        AlertDialog.Builder(this).setTitle("Restricted Sparring Streaks")
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
     private fun legendsArceusLabel(read: LegendsArceusSlotRead): String = when (read) {

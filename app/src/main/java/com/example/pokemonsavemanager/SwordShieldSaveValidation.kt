@@ -142,6 +142,7 @@ internal data class SwordShieldRestrictedSparringBlocks(
     val version: SwordShieldVersion,
     val streaks: List<ByteArray>
 )
+internal data class SwordShieldRestrictedSparringWriteResult(val bytes: ByteArray, val offsets: List<Int>)
 
 internal data class SwordShieldDexBlocks(val version: SwordShieldVersion, val galar: ByteArray,
     val armor: ByteArray?, val crown: ByteArray?)
@@ -1168,6 +1169,85 @@ object SwordShieldSaveValidation {
                 require(it.size == 4) { "A documented Sword/Shield Restricted Sparring streak is missing or has the wrong native type." }
             } }
         )
+    }
+
+    /** Replaces the 18 documented type-specific Restricted Sparring UInt32 best streaks and rebuilds the native footer. */
+    internal fun writeRestrictedSparringRecords(
+        source: ByteArray,
+        replacement: List<Long>
+    ): SwordShieldRestrictedSparringWriteResult {
+        val keys = listOf(
+            0xDB5E16CBL,
+            0xD25E08A0L,
+            0xD55BCEC2L,
+            0xD35BCB9CL,
+            0xD65BD055L,
+            0xD15BC876L,
+            0xDA5E1538L,
+            0xDC5E185EL,
+            0xDF5E1D17L,
+            0xDD5E19F1L,
+            0xD45BCD2FL,
+            0xE15E203DL,
+            0xDE5E1B84L,
+            0xE05E1EAAL,
+            0xD25BCA09L,
+            0xCF5BC550L,
+            0xD35E0A33L,
+            0xD05BC6E3L
+        )
+        readRestrictedSparringBlocks(source)
+        require(replacement.size == keys.size && replacement.all { it in 0L..0xFFFF_FFFFL }) {
+            "Each Restricted Sparring best streak must fit its native unsigned 32-bit field."
+        }
+        val values = keys.zip(replacement).toMap()
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val offsets = mutableMapOf<Long, Int>()
+        val cursor = Cursor(payload)
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            values[key]?.let { value ->
+                require(type == 14 && length == 4L) {
+                    "A Sword/Shield Restricted Sparring streak has the wrong native type or size."
+                }
+                repeat(4) { byteIndex ->
+                    val decoded = ((value ushr (byteIndex * 8)) and 0xFF).toInt()
+                    payload[blockStart + byteIndex] = (decoded xor stream.next()).toByte()
+                }
+                offsets[key] = blockStart
+            }
+            cursor.skip(length.toInt())
+        }
+        require(offsets.keys == values.keys) { "A required Sword/Shield Restricted Sparring streak is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readRestrictedSparringBlocks(edited)
+        return SwordShieldRestrictedSparringWriteResult(edited, keys.map(offsets::getValue))
     }
 
     /** Optional region type/length rules affect dex extraction only, never existing readers. */
