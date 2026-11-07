@@ -135,6 +135,7 @@
         <activity android:name=".SwitchLegendsArceusPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusEventActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletItemActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletPokemonEvolutionActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonNicknameActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonSpeciesActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonLevelActivity" android:exported="false"/>
