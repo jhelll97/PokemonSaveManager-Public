@@ -243,7 +243,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(inventoryButton)
         undergroundButton = Button(this).apply {
-            text = "Grand Underground • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Grand Underground • Edit"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspUndergroundSections(it) } }
         }
         root.addView(undergroundButton)
@@ -1044,7 +1044,7 @@ class SwitchReadOnlyActivity : Activity() {
             val target = targets.getValue(entry.section)
             root.addView(Button(this).apply {
                 text = entry.label + if (entry.enabled && target.isEnabled)
-                    (if (entry.section == "timestamps" || entry.section == "poffins") " • Edit" else " • Read-only")
+                    (if (entry.section in setOf("timestamps", "poffins", "stickers", "capsules", "underground")) " • Edit" else " • Read-only")
                 else " • Unavailable for this save"
                 isAllCaps = false; isEnabled = entry.enabled && target.isEnabled
                 setOnClickListener { if (session === bound && !dashboardBusy && target.isEnabled) target.performClick() }
@@ -5677,7 +5677,7 @@ class SwitchReadOnlyActivity : Activity() {
         val capsuleIndex = if (bound.bdspBallCapsules != null) labels.size + (if (undergroundIndex >= 0) 1 else 0) + (if (poffinIndex >= 0) 1 else 0) + (if (sealIndex >= 0) 1 else 0) else -1
         val contestIndex = if (bound.bdspContest != null) labels.size + (if (undergroundIndex >= 0) 1 else 0) + (if (poffinIndex >= 0) 1 else 0) + (if (sealIndex >= 0) 1 else 0) + (if (capsuleIndex >= 0) 1 else 0) else -1
         val menu = labels + listOfNotNull(
-            bound.bdspUnderground?.let { "Grand Underground • Read-only" },
+            bound.bdspUnderground?.let { "Grand Underground • Edit" },
             bound.bdspPoffins?.let { "Poffin Case • Edit" },
             bound.bdspSealStickers?.let { "Seal Stickers • Edit" },
             bound.bdspBallCapsules?.let { "Ball Capsules • Affix Edit" },
@@ -6094,7 +6094,7 @@ class SwitchReadOnlyActivity : Activity() {
             bound.bdspSecretBase?.let { "Secret Base • Read-only" },
             bound.bdspUndergroundNpc?.let { "NPC interaction records • Read-only" },
             bound.bdspUndergroundReturn?.let { "Saved return data • Read-only" })
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Grand Underground • Read-only")
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Grand Underground • Item Edit")
             .setItems(menu.toTypedArray()) { _, index ->
                 if (session === bound) {
                     if (index == returnDataIndex) showBdspUndergroundReturn(bound)
@@ -6142,17 +6142,38 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound) return
         val entry = bound.bdspUnderground?.slot(undergroundId) ?: return
         val definition = entry.catalogue
-        val detail = "${entry.name} • Read-only\nUnderground ID: ${entry.undergroundId}\n" +
+        val detail = "${entry.name} • Item Edit\nUnderground ID: ${entry.undergroundId}\n" +
             "${entry.kind?.displayName ?: "Unlisted index"}\n\nSaved signed quantity: ${entry.count}\nRaw quantity word: ${entry.rawCount}\n" +
             "New: ${entry.isNew}\nFavorite: ${entry.isFavorite}\nRaw hide-new word: ${entry.rawHideNewFlag}\nRaw favorite word: ${entry.rawFavoriteFlag}\n" +
             (definition?.let { "${it.kind.referenceLabel}: ${it.nativeReferenceId}\n" } ?: "No catalogue mapping\n") +
             "Reference maximum: ${entry.referenceMaxCount?.toString() ?: "Unknown"}\n\n" +
             "Underground IDs differ from normal bag IDs. All 999 entries remain in the snapshot, including zero quantities, unknown indices and nonstandard flag words. Catalogue mappings and maxima are descriptive; they do not prove ownership or legality. Statue inventory does not describe Secret Base placement or active effects."
-        val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
-            text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
-        }) }
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • ${entry.name}")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail + if (entry.catalogue != null && entry.referenceMaxCount != null)
+                    "\n\nUse Edit item to review quantity, New-state, or Favorite changes saved to a new copy."
+                else "\n\nThis unlisted record remains locked because no verified editing limit is available."
+                textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+            if (source != null && entry.catalogue != null && entry.referenceMaxCount != null) {
+                addView(Button(this@SwitchReadOnlyActivity).apply {
+                    text = "✏  Edit Underground item"; isAllCaps = false
+                    setOnClickListener {
+                        if (session === bound && !dashboardBusy) startActivity(
+                            Intent(this@SwitchReadOnlyActivity, SwitchBdspUndergroundItemActivity::class.java)
+                                .setData(source)
+                                .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                                .putExtra("pse.switch.underground.id", undergroundId)
+                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        )
+                    }
+                })
+            }
+        }
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • ${entry.name} • Edit")
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
 
