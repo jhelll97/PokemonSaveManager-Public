@@ -3448,6 +3448,28 @@ class SwitchReadOnlyActivity : Activity() {
             partyMatch != null -> Triple(LegendsArceusPokemonArea.PARTY, 0, partyMatch.groupValues[1].toInt())
             else -> null
         }
+        if (nativeTarget != null && !p.isEgg && !p.isNoble && p.form == 0 &&
+            LegendsArceusPokemonEvolutionEditing.choices(p.species).isNotEmpty()) {
+            content.addView(Button(this).apply {
+                text = "Evolve Pokémon"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(
+                            this@SwitchReadOnlyActivity,
+                            SwitchLegendsArceusPokemonEvolutionActivity::class.java
+                        )
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                            .putExtra("pse.switch.pokemon.pasture", nativeTarget.second)
+                            .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
         if (nativeTarget != null) content.addView(Button(this).apply {
             text = "Edit Pokémon"
             isAllCaps = false
