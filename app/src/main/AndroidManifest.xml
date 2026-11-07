@@ -76,6 +76,7 @@
         <activity android:name=".SwitchSwordShieldTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldBattleTowerActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldRallyDiggingActivity" android:exported="false"/>
+        <activity android:name=".SwitchSwordShieldStarterChoiceActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldEventActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspItemActivity" android:exported="false"/>

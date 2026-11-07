@@ -632,7 +632,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldRallyDigging(bound) }
         })
         if (bound.swordShieldStarterChoice != null) dashboardRoot.addView(Button(this).apply {
-            text = "Starter Choice • Read-only"; isAllCaps = false; isEnabled = !busy
+            text = "Starter Choice • Edit"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldStarterChoice(bound) }
         })
         if (bound.swordShieldLeagueCard != null) dashboardRoot.addView(Button(this).apply {
@@ -3123,7 +3123,7 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound || dashboardBusy) return
         val read = bound.swordShieldStarterChoice ?: return
         val detail = buildString {
-            append("${read.version.displayName} • Starter Choice • Read-only\n\n")
+            append("${read.version.displayName} • Starter Choice\n\n")
             append("Saved starter: ${read.starterName ?: "Unknown native value"}\n")
             append("Raw UInt32: ${read.rawValue}\n")
             append("Raw hex: ${read.rawValue.toString(16).uppercase().padStart(8, '0')}\n\n")
@@ -3132,15 +3132,28 @@ class SwitchReadOnlyActivity : Activity() {
             }
             append("Documented mapping: 0 Grookey, 1 Scorbunny, 2 Sobble. ")
             append("The complete native container hash and exact four-byte scalar layout passed before display. ")
-            append("No starter replacement, gift replay, party change, export, repair, or save writing is available here.")
+            append("Editing this historical record does not replace a Pokémon, replay a gift, or change the party.")
         }
-        val scroll = ScrollView(this).apply {
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Starter Choice"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchSwordShieldStarterChoiceActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
         }
-        AlertDialog.Builder(this).setTitle("Starter Choice • Read-only")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        AlertDialog.Builder(this).setTitle("Starter Choice")
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
     private fun showSwordShieldLeagueCard(bound: SwitchReadSession) {

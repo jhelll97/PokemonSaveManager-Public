@@ -72,6 +72,7 @@ internal data class SwordShieldRallyDiggingWriteResult(
     val diggingPaWattsOffset: Int
 )
 internal data class SwordShieldStarterChoiceBlock(val version: SwordShieldVersion, val value: ByteArray)
+internal data class SwordShieldStarterChoiceWriteResult(val bytes: ByteArray, val absoluteOffset: Int)
 internal data class SwordShieldLeagueCardBlock(val version: SwordShieldVersion, val data: ByteArray)
 internal data class SwordShieldIsleOfArmorProgressBlocks(
     val version: SwordShieldVersion,
@@ -420,6 +421,60 @@ object SwordShieldSaveValidation {
         val value = captured.getValue(key)
         require(value.size == 4) { "The native Sword/Shield starter-choice record is missing or has the wrong native type." }
         return SwordShieldStarterChoiceBlock(checked.version, value)
+    }
+
+    /** Replaces the documented starter-choice UInt32 and rebuilds encryption and the native footer. */
+    internal fun writeStarterChoice(source: ByteArray, starter: Long): SwordShieldStarterChoiceWriteResult {
+        readStarterChoiceBlock(source)
+        require(starter in 0L..2L) { "Starter choice must be Grookey, Scorbunny, or Sobble." }
+        val key = 0x3677602DL
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        var offset: Int? = null
+        val cursor = Cursor(payload)
+        while (cursor.remaining > 0) {
+            val blockKey = cursor.uint32()
+            val stream = KeyStream(blockKey)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            if (blockKey == key) {
+                require(type == 14 && length == 4L) {
+                    "The Sword/Shield starter-choice record has the wrong native type or size."
+                }
+                repeat(4) { byteIndex ->
+                    val decoded = ((starter ushr (byteIndex * 8)) and 0xFF).toInt()
+                    payload[blockStart + byteIndex] = (decoded xor stream.next()).toByte()
+                }
+                offset = blockStart
+            }
+            cursor.skip(length.toInt())
+        }
+        val exactOffset = offset ?: error("The Sword/Shield starter-choice record is missing.")
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readStarterChoiceBlock(edited)
+        return SwordShieldStarterChoiceWriteResult(edited, exactOffset)
     }
 
     /** Reads PKHeX's documented native League Card object after the complete container gate passes. */
