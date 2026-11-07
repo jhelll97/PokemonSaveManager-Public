@@ -20,11 +20,22 @@ data class LegendsArceusPokemonMoveShopValues(
     val offerings: List<LegendsArceusMoveShopOffering>
 )
 
+data class LegendsArceusPokemonAlphaMoveValues(
+    val pokemon: LegendsArceusPokemonRead,
+    val alphaMoveId: Int,
+    val offerings: List<LegendsArceusMoveShopOffering>
+) {
+    val alphaMoveName: String
+        get() = if (alphaMoveId == 0) "None"
+        else offerings.singleOrNull { it.moveId == alphaMoveId }?.moveName ?: "Unknown move #$alphaMoveId"
+}
+
 /** Purchases one species/form-permitted native PLA move-shop move and reviews its mastery flag. */
 object LegendsArceusPokemonMoveShopEditing {
     private const val STORED_END = 0x168
     private const val PURCHASED_FLAGS = 0x155
     private const val MASTERED_FLAGS = 0x15D
+    private const val ALPHA_MOVE = 0x3E
     private const val BLOCK_SIZE = 88
     private const val SPECIES_COUNT = 906
     private const val ENTRY_COUNT = 1276
@@ -94,6 +105,52 @@ object LegendsArceusPokemonMoveShopEditing {
         return LegendsArceusPokemonMoveShopCopyPlan(
             original, written.bytes, area, pasture, position, written.absoluteOffset,
             requestedIndex, before, after
+        )
+    }
+
+
+    fun readAlphaMove(
+        source: ByteArray,
+        area: LegendsArceusPokemonArea,
+        pasture: Int,
+        position: Int
+    ): LegendsArceusPokemonAlphaMoveValues {
+        val blocks = LegendsArceusSaveValidation.readPokemonBlocks(source)
+        return inspectAlphaMove(targetRecord(blocks, area, pasture, position))
+    }
+
+    fun stageAlphaMove(
+        source: ByteArray,
+        expectedSha256: String,
+        area: LegendsArceusPokemonArea,
+        pasture: Int,
+        position: Int,
+        requestedMoveId: Int
+    ): LegendsArceusPokemonAlphaMoveCopyPlan {
+        val original = source.copyOf()
+        require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        val blocks = LegendsArceusSaveValidation.readPokemonBlocks(original)
+        val beforeRecord = targetRecord(blocks, area, pasture, position)
+        val before = inspectAlphaMove(beforeRecord)
+        require(!before.pokemon.isEgg) { "Egg PA8 records remain protected from Alpha Move editing." }
+        require(!before.pokemon.isNoble) { "Noble PA8 records remain protected from Alpha Move editing." }
+        require(before.pokemon.isAlpha) { "Only a PA8 already marked Alpha can receive an Alpha Move." }
+        val selected = before.offerings.singleOrNull { it.moveId == requestedMoveId }
+            ?: throw IllegalArgumentException(
+                "That move is not permitted by this PA8 species/form's pinned native move-shop table."
+            )
+        require(before.alphaMoveId != requestedMoveId) { "Choose a different Alpha Move before review." }
+        val afterRecord = editAlphaMoveRecord(beforeRecord, selected.index, requestedMoveId)
+        val written = if (area == LegendsArceusPokemonArea.PASTURE) {
+            LegendsArceusSaveValidation.writePastureRecord(original, pasture, position, afterRecord)
+        } else LegendsArceusSaveValidation.writePartyRecord(original, position, afterRecord)
+        val after = verifyAlphaMove(
+            original, written.bytes, area, pasture, position, written.absoluteOffset,
+            selected.index, requestedMoveId
+        )
+        return LegendsArceusPokemonAlphaMoveCopyPlan(
+            original, written.bytes, area, pasture, position, written.absoluteOffset,
+            selected.index, before, after
         )
     }
 
@@ -171,6 +228,84 @@ object LegendsArceusPokemonMoveShopEditing {
         return after
     }
 
+
+    internal fun verifyAlphaMove(
+        original: ByteArray,
+        edited: ByteArray,
+        area: LegendsArceusPokemonArea,
+        pasture: Int,
+        position: Int,
+        absoluteOffset: Int,
+        selectedIndex: Int,
+        requestedMoveId: Int
+    ): LegendsArceusPokemonAlphaMoveValues {
+        val beforeBlocks = LegendsArceusSaveValidation.readPokemonBlocks(original)
+        val afterBlocks = LegendsArceusSaveValidation.readPokemonBlocks(edited)
+        require(beforeBlocks.version == afterBlocks.version && original.size == edited.size) {
+            "The Alpha Move edit changed native title identity or save size."
+        }
+        val beforeRecord = targetRecord(beforeBlocks, area, pasture, position)
+        val afterRecord = targetRecord(afterBlocks, area, pasture, position)
+        val before = inspectAlphaMove(beforeRecord)
+        val after = inspectAlphaMove(afterRecord)
+        require(after.alphaMoveId == requestedMoveId && after.pokemon == before.pokemon) {
+            "The persisted PA8 changed outside its Alpha Move and required mastery flag."
+        }
+        val beforeSelected = before.offerings.singleOrNull { it.index == selectedIndex }
+            ?: error("The reviewed Alpha Move is no longer permitted.")
+        val afterSelected = after.offerings.singleOrNull { it.index == selectedIndex }
+            ?: error("The persisted Alpha Move is no longer permitted.")
+        require(afterSelected.moveId == requestedMoveId && afterSelected.mastered &&
+            afterSelected.copy(mastered = beforeSelected.mastered) == beforeSelected) {
+            "The persisted Alpha Move mastery flag does not match the reviewed change."
+        }
+        require(before.offerings.indices.all { index ->
+            before.offerings[index].index == selectedIndex ||
+                before.offerings[index] == after.offerings[index]
+        }) { "Another move-shop purchase or mastery flag changed." }
+
+        val recordSize = recordSize(area)
+        val relativeOffset = if (area == LegendsArceusPokemonArea.PASTURE)
+            ((pasture - 1) * 30 + position - 1) * recordSize else (position - 1) * recordSize
+        val beforeTarget = if (area == LegendsArceusPokemonArea.PASTURE) beforeBlocks.pastures else beforeBlocks.party
+        val afterTarget = if (area == LegendsArceusPokemonArea.PASTURE) afterBlocks.pastures else afterBlocks.party
+        val beforeOther = if (area == LegendsArceusPokemonArea.PASTURE) beforeBlocks.party else beforeBlocks.pastures
+        val afterOther = if (area == LegendsArceusPokemonArea.PASTURE) afterBlocks.party else afterBlocks.pastures
+        require(beforeOther.contentEquals(afterOther)) { "The unselected native Pokémon storage object changed." }
+        require(beforeTarget.indices.all { index ->
+            index in relativeOffset until relativeOffset + recordSize || beforeTarget[index] == afterTarget[index]
+        }) { "Another native Pokémon slot changed." }
+
+        val beforePlain = decryptAndUnshuffle(beforeRecord)
+        val afterPlain = decryptAndUnshuffle(afterRecord)
+        val masteredOffset = MASTERED_FLAGS + selectedIndex / 8
+        val mask = 1 shl (selectedIndex and 7)
+        require(u16(afterPlain, ALPHA_MOVE) == requestedMoveId &&
+            byte(afterPlain, masteredOffset) == (byte(beforePlain, masteredOffset) or mask)) {
+            "The native Alpha Move and required mastery flag were not changed exactly."
+        }
+        require(beforePlain.indices.all { offset ->
+            offset in 6..7 || offset in ALPHA_MOVE..ALPHA_MOVE + 1 ||
+                offset == masteredOffset || beforePlain[offset] == afterPlain[offset]
+        }) { "The PA8 edit exceeded the Alpha Move, one Mastered flag and checksum fields." }
+
+        val hashOffset = original.size - 32
+        require(original.indices.all { index ->
+            index in absoluteOffset until absoluteOffset + recordSize ||
+                index in hashOffset until original.size || original[index] == edited[index]
+        }) { "An unrelated encrypted container byte changed." }
+        return after
+    }
+
+    private fun inspectAlphaMove(record: ByteArray): LegendsArceusPokemonAlphaMoveValues {
+        val moveShop = inspect(record)
+        val alphaMoveId = u16(decryptAndUnshuffle(record), ALPHA_MOVE)
+        require(alphaMoveId == 0 || moveShop.offerings.any { it.moveId == alphaMoveId }) {
+            "The saved Alpha Move is outside this species/form's pinned native move-shop table."
+        }
+        return LegendsArceusPokemonAlphaMoveValues(moveShop.pokemon, alphaMoveId, moveShop.offerings)
+    }
+
     private fun inspect(record: ByteArray): LegendsArceusPokemonMoveShopValues {
         val pokemon = (LegendsArceusPokemonReadOnly.read(record) as? LegendsArceusSlotRead.Pokemon)?.value
             ?: throw IllegalArgumentException("The selected native PA8 is not checksum-valid.")
@@ -233,6 +368,17 @@ object LegendsArceusPokemonMoveShopEditing {
         val plain = decryptAndUnshuffle(record)
         setFlag(plain, PURCHASED_FLAGS, index, true)
         setFlag(plain, MASTERED_FLAGS, index, mastered)
+        var checksum = 0
+        for (offset in 8 until STORED_END step 2) checksum += u16(plain, offset)
+        writeU16(plain, 6, checksum and 0xFFFF)
+        return shuffleAndEncrypt(plain)
+    }
+
+
+    private fun editAlphaMoveRecord(record: ByteArray, selectedIndex: Int, moveId: Int): ByteArray {
+        val plain = decryptAndUnshuffle(record)
+        writeU16(plain, ALPHA_MOVE, moveId)
+        setFlag(plain, MASTERED_FLAGS, selectedIndex, true)
         var checksum = 0
         for (offset in 8 until STORED_END step 2) checksum += u16(plain, offset)
         writeU16(plain, 6, checksum and 0xFFFF)
@@ -361,6 +507,75 @@ class LegendsArceusPokemonMoveShopCopyPlan internal constructor(
             val removed = started && runCatching { discardDestination() }.getOrDefault(false)
             throw IllegalStateException(
                 (failure.message ?: "Move-shop copy verification failed.") +
+                    if (removed) " The failed new copy was removed; the recovery backup is retained."
+                    else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
+                failure
+            )
+        }
+    }
+}
+
+
+class LegendsArceusPokemonAlphaMoveCopyPlan internal constructor(
+    original: ByteArray,
+    edited: ByteArray,
+    val area: LegendsArceusPokemonArea,
+    val pasture: Int,
+    val position: Int,
+    val absoluteOffset: Int,
+    val selectedIndex: Int,
+    val before: LegendsArceusPokemonAlphaMoveValues,
+    val after: LegendsArceusPokemonAlphaMoveValues
+) {
+    private val original = original.copyOf()
+    private val edited = edited.copyOf()
+    val editedSha256: String = LegendsArceusPokemonMoveShopEditing.sha256(this.edited)
+    private var consumed = false
+
+    val beforeSelected: LegendsArceusMoveShopOffering
+        get() = before.offerings.single { it.index == selectedIndex }
+    val afterSelected: LegendsArceusMoveShopOffering
+        get() = after.offerings.single { it.index == selectedIndex }
+
+    @Synchronized
+    fun saveNewCopy(
+        readSource: () -> ByteArray,
+        retainBackup: (ByteArray) -> ByteArray,
+        readDestination: () -> ByteArray,
+        writeDestination: (ByteArray) -> Unit,
+        discardDestination: () -> Boolean
+    ) {
+        check(!consumed) { "This Alpha Move review was already used. Reopen Pokémon Details." }
+        consumed = true
+        fun requireSource() = require(readSource().contentEquals(original)) {
+            "The selected source changed. Reopen it from PSE."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "Choose a new empty document; existing files cannot be replaced." }
+        require(retainBackup(original.copyOf()).contentEquals(original)) {
+            "The recovery backup did not verify. Nothing was written."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
+        var started = false
+        try {
+            LegendsArceusPokemonMoveShopEditing.verifyAlphaMove(
+                original, edited, area, pasture, position, absoluteOffset,
+                selectedIndex, after.alphaMoveId
+            )
+            started = true
+            writeDestination(edited.copyOf())
+            val persisted = readDestination()
+            require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed Alpha Move edit." }
+            LegendsArceusPokemonMoveShopEditing.verifyAlphaMove(
+                original, persisted, area, pasture, position, absoluteOffset,
+                selectedIndex, after.alphaMoveId
+            )
+            requireSource()
+        } catch (failure: Exception) {
+            val removed = started && runCatching { discardDestination() }.getOrDefault(false)
+            throw IllegalStateException(
+                (failure.message ?: "Alpha Move copy verification failed.") +
                     if (removed) " The failed new copy was removed; the recovery backup is retained."
                     else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
                 failure
