@@ -1466,6 +1466,23 @@ class SwitchReadOnlyActivity : Activity() {
         content.addView(TextView(this).apply {
             text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
         })
+        if (!slot.partner && !p.isPartnerForm && !p.isEgg && p.form == 0 &&
+            LetsGoPokemonEvolutionEditing.choices(p.species).isNotEmpty()) {
+            content.addView(Button(this).apply {
+                text = "Evolve Pokémon"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchLetsGoPokemonEvolutionActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.index", slot.index)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
         val edit = Button(this).apply {
             text = "Edit Pokémon"
             isAllCaps = false
