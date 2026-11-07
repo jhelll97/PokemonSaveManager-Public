@@ -4006,7 +4006,8 @@ class SwitchReadOnlyActivity : Activity() {
             append("${ScarletVioletSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form}\n")
             append("Nickname: ${p.nickname.ifBlank { "None" }}\nGender: $gender\nEgg flag: ${p.isEgg}\n")
             append("Cached level: ${p.cachedLevel}\nEXP: ${p.experience}\n")
-            append("Nature ID: ${p.nature}\nStat nature ID: ${p.statNature}\n")
+            append("Nature: ${ScarletVioletPokemonNatureEditing.describe(p.nature)}\n")
+            append("Stat Nature: ${ScarletVioletPokemonNatureEditing.describe(p.statNature)}\n")
             append("Cached HP: ${p.currentHp}/${p.maximumHp}\n")
             append("Cached Atk/Def/Speed/SpA/SpD: ${p.cachedStats.joinToString(" / ")}\n")
             append("Shiny: ${if (p.shiny) "Yes" else "No"}\n")
@@ -4489,6 +4490,28 @@ class SwitchReadOnlyActivity : Activity() {
                         Intent(
                             this@SwitchReadOnlyActivity,
                             SwitchScarletVioletPokemonAbilityActivity::class.java
+                        )
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                            .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                            .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        if (nativeTarget != null && !p.isEgg && !p.fatefulEncounter &&
+            ScarletVioletPokemonNatureEditing.isValid(p)) {
+            content.addView(Button(this).apply {
+                text = "Edit Nature"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(
+                            this@SwitchReadOnlyActivity,
+                            SwitchScarletVioletPokemonNatureActivity::class.java
                         )
                             .setData(source)
                             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
