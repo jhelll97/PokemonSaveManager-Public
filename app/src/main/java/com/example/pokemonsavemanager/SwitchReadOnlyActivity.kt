@@ -361,7 +361,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(ballCapsulesButton)
         contestButton = Button(this).apply {
-            text = "Contest Records • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Contest Records • Edit rank points"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspContest(it) } }
         }
         root.addView(contestButton)
@@ -5681,7 +5681,7 @@ class SwitchReadOnlyActivity : Activity() {
             bound.bdspPoffins?.let { "Poffin Case • Edit" },
             bound.bdspSealStickers?.let { "Seal Stickers • Edit" },
             bound.bdspBallCapsules?.let { "Ball Capsules • Affix Edit" },
-            bound.bdspContest?.let { "Contest Records • Read-only" })
+            bound.bdspContest?.let { "Contest Records • Edit rank points" })
         AlertDialog.Builder(this).setTitle("${bound.displayName} • Items")
             .setItems(menu.toTypedArray()) { _, index ->
                 if (session === bound) {
@@ -7355,9 +7355,21 @@ class SwitchReadOnlyActivity : Activity() {
         val read = bound.bdspContest ?: return
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16) }
         root.addView(TextView(this).apply {
-            text = "Saved Contest rank points: ${read.rankPoints}\nFive saved photo records are retained as raw native data. The raw blocks do not prove photo contents, contest eligibility or awards. No editing, reset, repair, export, replacement or save writing is available." +
+            text = "Saved Contest rank points: ${read.rankPoints}\nNative UInt32 hex: ${read.rankPoints.toString(16).uppercase().padStart(8, '0')}\nFive saved photo records are retained as raw native data. The raw blocks do not prove photo contents, contest eligibility or awards. Rank points can be edited in a verified new copy; photo records remain read-only because their complete native editing semantics are not established." +
                 "\n\nSaved photo language IDs\n" + (bound.bdspContestPhotoLanguages?.entries?.joinToString("\n") { "${it.category.nativeName}: ${it.languageId}" } ?: "Photo language metadata unavailable for this preview.")
             textSize = 16f; setTextIsSelectable(true); setPadding(0, 0, 0, 16)
+        })
+        val source = selectedSourceUri
+        if (source != null) root.addView(Button(this).apply {
+            text = "✏  Edit Contest Rank Points"; isAllCaps = false
+            setOnClickListener {
+                if (session === bound && !dashboardBusy) startActivity(
+                    Intent(this@SwitchReadOnlyActivity, SwitchBdspContestRankPointActivity::class.java)
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
         })
         read.photos.forEach { photo -> root.addView(Button(this).apply {
             text = "Photo ${photo.index + 1} • ${photo.rawBytes.size} raw bytes"
@@ -7367,7 +7379,7 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Photo languages & raw data"
             setOnClickListener { if (session === bound) showBdspContestPhotoLanguages(bound) }
         })
-        AlertDialog.Builder(this).setTitle("Contest Records • Read-only").setView(ScrollView(this).apply { addView(root) }).setNegativeButton("Close", null).show()
+        AlertDialog.Builder(this).setTitle("Contest Records • Edit rank points").setView(ScrollView(this).apply { addView(root) }).setNegativeButton("Close", null).show()
     }
 
     private fun showBdspContestPhoto(bound: SwitchReadSession, index: Int) {
