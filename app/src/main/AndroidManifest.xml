@@ -136,6 +136,7 @@
         <activity android:name=".SwitchBdspEventActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusItemActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokemonEvolutionActivity" android:exported="false"/>
+        <activity android:name=".SwitchLegendsArceusPokemonAlphaActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokemonNicknameActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokemonSpeciesActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokemonLevelActivity" android:exported="false"/>
