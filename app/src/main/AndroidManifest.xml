@@ -77,6 +77,7 @@
         <activity android:name=".SwitchSwordShieldPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldEventActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspItemActivity" android:exported="false"/>
+        <activity android:name=".SwitchBdspPokemonEvolutionActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokemonNicknameActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokemonSpeciesActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokemonLevelActivity" android:exported="false"/>
