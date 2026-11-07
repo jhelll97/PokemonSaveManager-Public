@@ -61,6 +61,14 @@ internal data class LegendsArceusPastureNameWriteResult(
     val bytes: ByteArray,
     val absoluteOffset: Int
 )
+internal data class LegendsArceusPastureUnlockValue(
+    val version: LegendsArceusVersion,
+    val unlockedPastures: Int
+)
+internal data class LegendsArceusPastureUnlockWriteResult(
+    val bytes: ByteArray,
+    val absoluteOffset: Int
+)
 
 /** Independent read-only container gate; pinned format evidence is in SWITCH_READ_ONLY_FORMATS.md. */
 object LegendsArceusSaveValidation {
@@ -74,6 +82,7 @@ object LegendsArceusSaveValidation {
     private const val SATCHEL_UPGRADE_KEY = 0x75CE2CF6L
     private const val PASTURE_NAME_KEY = 0x19722C89L
     private const val PASTURE_NAME_OBJECT_SIZE = 0x440
+    private const val PASTURE_UNLOCK_KEY = 0x71825204L
     private val requiredObjects = mapOf(0x47E1CEABL to 0x54600,
         0x2985FE5DL to 0x8D4, 0x02168706L to 0x1E460, STATUS_KEY to 0x80)
     private val intro = decodeHex("9ec99cd70ed33c44fb9303dceb39b42a1947e9634ba2334416bf82a2ba6355b63d9df24b5f7b6ab2621dc21b68e5c8b53a059000e8a8103de2ecf00cb2ed4f6d")
@@ -125,6 +134,23 @@ object LegendsArceusSaveValidation {
         val data = captured.getValue(PLAY_TIME_KEY)
         require(data.size == 4) { "The native Legends: Arceus Play Time object is missing." }
         return LegendsArceusPlayTimeBlock(checked.version, data)
+    }
+
+    /** Native one-byte count of unlocked Pastures, detached only after container validation. */
+    internal fun readPastureUnlockCount(source: ByteArray): LegendsArceusPastureUnlockValue {
+        val captured = mutableMapOf(PASTURE_UNLOCK_KEY to ByteArray(0))
+        val checked = inspect(source, captured, u8Keys = setOf(PASTURE_UNLOCK_KEY))
+        require(checked is LegendsArceusValidation.Verified) {
+            (checked as? LegendsArceusValidation.Invalid)?.reason ?:
+                "A validated native Legends: Arceus save is required."
+        }
+        val data = captured.getValue(PASTURE_UNLOCK_KEY)
+        require(data.size == 1) {
+            "The native Legends: Arceus unlocked-Pasture value is missing."
+        }
+        return LegendsArceusPastureUnlockValue(
+            checked.version, data[0].toInt() and 255
+        )
     }
 
     /** Native 32-entry Pasture-name object, detached only after complete container validation. */
@@ -604,6 +630,65 @@ object LegendsArceusSaveValidation {
         return LegendsArceusDexWriteResult(edited, absoluteOffset)
     }
 
+    /** Replaces the native unlocked-Pasture U8 value and rebuilds native integrity. */
+    internal fun writePastureUnlockCount(
+        source: ByteArray,
+        replacement: Int
+    ): LegendsArceusPastureUnlockWriteResult {
+        readPastureUnlockCount(source)
+        require(replacement in 0..255) { "A native unsigned byte value is required." }
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var absoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) {
+                "A native block length exceeds the remaining payload."
+            }
+            val blockStart = cursor.position
+            if (key == PASTURE_UNLOCK_KEY) {
+                require(type == 8 && length == 1L) {
+                    "The native Legends: Arceus unlocked-Pasture value has the wrong type or size."
+                }
+                payload[blockStart] = (replacement xor stream.next()).toByte()
+                absoluteOffset = blockStart
+            }
+            cursor.skip(length.toInt())
+        }
+        require(absoluteOffset >= 0) {
+            "The native Legends: Arceus unlocked-Pasture value is missing."
+        }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        require(readPastureUnlockCount(edited).unlockedPastures == replacement) {
+            "The rebuilt native unlocked-Pasture value did not reopen exactly."
+        }
+        return LegendsArceusPastureUnlockWriteResult(edited, absoluteOffset)
+    }
+
     /** Replaces one 34-byte name in the decoded Pasture-name object and rebuilds native integrity. */
     internal fun writePastureName(
         source: ByteArray,
@@ -910,7 +995,8 @@ object LegendsArceusSaveValidation {
     }
 
     private fun inspect(source: ByteArray, captured: MutableMap<Long, ByteArray>?, uintKeys: Set<Long> = emptySet(),
-        objectSizes: Map<Long, Int> = emptyMap(), byteDataSizes: Map<Long, Int> = emptyMap()): LegendsArceusValidation {
+        objectSizes: Map<Long, Int> = emptyMap(), byteDataSizes: Map<Long, Int> = emptyMap(),
+        u8Keys: Set<Long> = emptySet()): LegendsArceusValidation {
         if (source.size !in knownSizes) return LegendsArceusValidation.Unrecognized
         val end = source.size - 32
         val digest = MessageDigest.getInstance("SHA-256")
@@ -920,12 +1006,13 @@ object LegendsArceusSaveValidation {
         // Only the detached payload is decrypted. The caller's bytes are never changed.
         val payload = source.copyOfRange(0, end)
         for (index in payload.indices) payload[index] = (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
-        return try { inspectBlocks(payload, captured, uintKeys, objectSizes, byteDataSizes) }
+        return try { inspectBlocks(payload, captured, uintKeys, objectSizes, byteDataSizes, u8Keys) }
         catch (e: IllegalArgumentException) { LegendsArceusValidation.Invalid(e.message ?: "Malformed Legends: Arceus blocks.") }
     }
 
     private fun inspectBlocks(bytes: ByteArray, captured: MutableMap<Long, ByteArray>?, uintKeys: Set<Long>,
-        objectSizes: Map<Long, Int>, byteDataSizes: Map<Long, Int>): LegendsArceusValidation {
+        objectSizes: Map<Long, Int>, byteDataSizes: Map<Long, Int>,
+        u8Keys: Set<Long>): LegendsArceusValidation {
         val cursor = Cursor(bytes)
         val found = mutableSetOf<Long>()
         var previous = -1L
@@ -958,6 +1045,9 @@ object LegendsArceusSaveValidation {
             }
             // Only trainer extraction requests these keys; identity/Pokémon gates retain their original behavior.
             if (key in uintKeys) require(type == 10 && length == 4L) { "A trainer counter must be a native UInt32." }
+            if (key in u8Keys) require(type == 8 && length == 1L) {
+                "A requested Legends: Arceus value must be a native UInt8."
+            }
             objectSizes[key]?.let { expectedSize ->
                 require(type == 4 && length == expectedSize.toLong()) {
                     "A requested Legends: Arceus object has the wrong native type or size."

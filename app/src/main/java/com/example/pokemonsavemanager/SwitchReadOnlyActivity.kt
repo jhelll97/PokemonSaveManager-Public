@@ -3511,10 +3511,26 @@ class SwitchReadOnlyActivity : Activity() {
         val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val scroll = ScrollView(this).apply { addView(list) }
         list.addView(TextView(this).apply {
-            text = "32 native pastures • 30 slots each • Native nickname and Pasture-name editing available\n" +
+            text = "32 native pastures • 30 slots each • Native nickname, Pasture-name and unlock-count editing available\n" +
                 "${storage.occupiedPastureSlots}/960 occupied slots (${storage.unreadablePastureSlots} unreadable). " +
-                "Custom names use the native 17-character field; unlock state is not read in this view."
+                "Custom names use the native 17-character field; unlock count uses the native 0–32 value."
             setPadding(16, 16, 16, 16)
+        })
+        list.addView(Button(this).apply {
+            text = "Edit unlocked Pastures"
+            isAllCaps = false
+            isEnabled = selectedSourceUri != null
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && source != null) startActivity(
+                    Intent(
+                        this@SwitchReadOnlyActivity,
+                        SwitchLegendsArceusPastureUnlockActivity::class.java
+                    ).setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
         })
         list.addView(Button(this).apply {
             text = "Edit Pasture ${pasture + 1} name"
