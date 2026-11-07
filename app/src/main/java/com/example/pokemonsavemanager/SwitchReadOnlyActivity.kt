@@ -656,7 +656,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldSwordsOfJustice(bound) }
         })
         if (bound.swordShieldAdventureSteps != null) dashboardRoot.addView(Button(this).apply {
-            text = "Adventure Step Counters • Read-only"; isAllCaps = false; isEnabled = !busy
+            text = "Adventure Step Counters • Edit"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldAdventureSteps(bound) }
         })
         if (bound.swordShieldHallOfFameTime != null) dashboardRoot.addView(Button(this).apply {
@@ -3360,7 +3360,7 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound || dashboardBusy) return
         val read = bound.swordShieldAdventureSteps ?: return
         val detail = buildString {
-            append("${read.version.displayName} • Adventure Step Counters • Read-only\n\n")
+            append("${read.version.displayName} • Adventure Step Counters\n\n")
             append("Bike boost charge steps: ${read.bikeBoostChargeSteps}\n")
             append("Bike boost charge limit: ${read.bikeBoostChargeLimit}\n")
             append("Bike boost status: ${read.bikeBoostStatus}\n\n")
@@ -3368,15 +3368,28 @@ class SwitchReadOnlyActivity : Activity() {
             append("Friendship walk steps: ${read.friendshipWalkSteps} • ${read.cycleStatus(read.friendshipWalkSteps)}\n\n")
             append("The complete native container hash and exact UInt32, UInt16, and UInt8 scalar layouts passed before display. ")
             append("Only the documented charge equality and 0–127 step ranges are interpreted; every native value remains exact. ")
-            append("No charge, upgrade, hatch, friendship, reset, repair, export, or save-writing action is available here.")
+            append("Editing changes only selected native counters; PSE does not infer charge, upgrade, hatch, friendship, reward, or timing side effects.")
         }
-        val scroll = ScrollView(this).apply {
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Adventure Step Counters"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchSwordShieldAdventureStepActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
         }
-        AlertDialog.Builder(this).setTitle("Adventure Step Counters • Read-only")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        AlertDialog.Builder(this).setTitle("Adventure Step Counters")
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
     private fun showSwordShieldHallOfFameTime(bound: SwitchReadSession) {

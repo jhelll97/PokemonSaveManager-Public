@@ -127,6 +127,7 @@ internal data class SwordShieldAdventureStepBlocks(
     val eggHatchCycleSteps: ByteArray,
     val friendshipWalkSteps: ByteArray
 )
+internal data class SwordShieldAdventureStepWriteResult(val bytes: ByteArray, val offsets: List<Int>)
 internal data class SwordShieldHallOfFameTimeBlock(val version: SwordShieldVersion, val value: ByteArray)
 internal data class SwordShieldPlayTimeBlock(val version: SwordShieldVersion, val value: ByteArray)
 internal data class SwordShieldPokedexViewStateBlocks(
@@ -964,6 +965,69 @@ object SwordShieldSaveValidation {
             block(eggStepsKey, 2),
             block(friendshipStepsKey, 1)
         )
+    }
+
+    /** Replaces four documented adventure-step scalars and rebuilds the native footer. */
+    internal fun writeAdventureStepRecords(
+        source: ByteArray,
+        replacement: List<Long>
+    ): SwordShieldAdventureStepWriteResult {
+        readAdventureStepBlocks(source)
+        val keys = listOf(0x57F29628L, 0xF64719D9L, 0x6C99F9A0L, 0xE2798DDEL)
+        val expectedTypes = listOf(14, 14, 13, 8)
+        val sizes = listOf(4, 4, 2, 1)
+        require(replacement.size == keys.size &&
+            replacement[0] in 0L..0xFFFF_FFFFL && replacement[1] in 0L..0xFFFF_FFFFL &&
+            replacement[2] in 0L..0xFFFFL && replacement[3] in 0L..0xFFL
+        ) { "Adventure counters must fit their native UInt32, UInt32, UInt16, and UInt8 fields." }
+        val records = keys.indices.associate { keys[it] to Triple(replacement[it], expectedTypes[it], sizes[it]) }
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val offsets = mutableMapOf<Long, Int>()
+        val cursor = Cursor(payload)
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            records[key]?.let { (value, expectedType, size) ->
+                require(type == expectedType && length == size.toLong()) {
+                    "A Sword/Shield adventure-step record has the wrong native type or size."
+                }
+                repeat(size) { byteIndex ->
+                    val decoded = ((value ushr (byteIndex * 8)) and 0xFF).toInt()
+                    payload[blockStart + byteIndex] = (decoded xor stream.next()).toByte()
+                }
+                offsets[key] = blockStart
+            }
+            cursor.skip(length.toInt())
+        }
+        require(offsets.keys == records.keys) { "A required Sword/Shield adventure-step record is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readAdventureStepBlocks(edited)
+        return SwordShieldAdventureStepWriteResult(edited, keys.map { offsets.getValue(it) })
     }
 
     /** Reads the documented four-byte Sword/Shield playtime counter after the complete container gate passes. */
