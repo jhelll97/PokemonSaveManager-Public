@@ -43,6 +43,13 @@ internal data class SwordShieldBattleTowerBlocks(
     val singlesStreak: ByteArray,
     val doublesStreak: ByteArray
 )
+internal data class SwordShieldBattleTowerWriteResult(
+    val bytes: ByteArray,
+    val singlesVictoriesOffset: Int,
+    val doublesVictoriesOffset: Int,
+    val singlesStreakOffset: Int,
+    val doublesStreakOffset: Int
+)
 internal data class SwordShieldDaycareBlock(val version: SwordShieldVersion, val data: ByteArray)
 internal data class SwordShieldBoxLayoutBlocks(
     val version: SwordShieldVersion,
@@ -181,6 +188,87 @@ object SwordShieldSaveValidation {
             block(doublesVictoriesKey, 4),
             block(singlesStreakKey, 2),
             block(doublesStreakKey, 2)
+        )
+    }
+
+    /** Replaces the four documented Battle Tower records, then rebuilds encryption and the SHA-256 footer. */
+    internal fun writeBattleTowerRecords(
+        source: ByteArray,
+        singlesVictories: Long,
+        doublesVictories: Long,
+        singlesStreak: Int,
+        doublesStreak: Int
+    ): SwordShieldBattleTowerWriteResult {
+        readBattleTowerBlocks(source)
+        require(singlesVictories in 0L..0xFFFF_FFFFL && doublesVictories in 0L..0xFFFF_FFFFL) {
+            "Battle Tower victories must fit their native unsigned 32-bit records."
+        }
+        require(singlesStreak in 0..0xFFFF && doublesStreak in 0..0xFFFF) {
+            "Battle Tower current streaks must fit their native unsigned 16-bit records."
+        }
+        val values = mapOf(
+            0x436CAF2BL to ByteArray(4) { index -> (singlesVictories ushr (index * 8)).toByte() },
+            0x0D477836L to ByteArray(4) { index -> (doublesVictories ushr (index * 8)).toByte() },
+            0x6226F5ADL to ByteArray(2) { index -> (singlesStreak ushr (index * 8)).toByte() },
+            0x5F74FCEEL to ByteArray(2) { index -> (doublesStreak ushr (index * 8)).toByte() }
+        )
+        val expectedTypes = mapOf(
+            0x436CAF2BL to 14,
+            0x0D477836L to 14,
+            0x6226F5ADL to 13,
+            0x5F74FCEEL to 13
+        )
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val offsets = mutableMapOf<Long, Int>()
+        val cursor = Cursor(payload)
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            values[key]?.let { decoded ->
+                require(type == expectedTypes.getValue(key) && length == decoded.size.toLong()) {
+                    "A Sword/Shield Battle Tower record has the wrong native type or size."
+                }
+                decoded.forEachIndexed { byteIndex, value ->
+                    payload[blockStart + byteIndex] = ((value.toInt() and 255) xor stream.next()).toByte()
+                }
+                offsets[key] = blockStart
+            }
+            cursor.skip(length.toInt())
+        }
+        require(offsets.keys == values.keys) { "A required Sword/Shield Battle Tower record is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readBattleTowerBlocks(edited)
+        return SwordShieldBattleTowerWriteResult(
+            edited,
+            offsets.getValue(0x436CAF2BL),
+            offsets.getValue(0x0D477836L),
+            offsets.getValue(0x6226F5ADL),
+            offsets.getValue(0x5F74FCEEL)
         )
     }
 

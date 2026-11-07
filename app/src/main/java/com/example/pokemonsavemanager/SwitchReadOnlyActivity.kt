@@ -616,7 +616,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldPlayTime(bound) }
         })
         if (bound.swordShieldBattleTower != null) dashboardRoot.addView(Button(this).apply {
-            text = "Battle Tower Records • Read-only"; isAllCaps = false; isEnabled = !busy
+            text = "Battle Tower Records • Edit"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldBattleTower(bound) }
         })
         if (bound.swordShieldDaycare != null) dashboardRoot.addView(Button(this).apply {
@@ -2966,7 +2966,7 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound || dashboardBusy) return
         val read = bound.swordShieldBattleTower ?: return
         val detail = buildString {
-            append("${read.version.displayName} • Battle Tower Records • Read-only\n\n")
+            append("${read.version.displayName} • Battle Tower Records\n\n")
             append("Singles victories: ${read.singlesVictories}\n")
             append("Current singles streak: ${read.singlesStreak}\n\n")
             append("Doubles victories: ${read.doublesVictories}\n")
@@ -2976,15 +2976,28 @@ class SwitchReadOnlyActivity : Activity() {
                 append("At least one saved value is outside its documented cap; PSE displays it exactly without normalizing it. ")
             }
             append("The complete native container hash passed before display. ")
-            append("No record reset, edit, export, replacement, or save writing is available here.")
+            append("Edit opens a reviewed native writer for these four records; the selected source remains unchanged.")
         }
-        val scroll = ScrollView(this).apply {
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
+            val source = selectedSourceUri
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Battle Tower Records"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchSwordShieldBattleTowerActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
         }
-        AlertDialog.Builder(this).setTitle("Battle Tower Records • Read-only")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        AlertDialog.Builder(this).setTitle("Battle Tower Records")
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
     private fun showSwordShieldDaycare(bound: SwitchReadSession) {
