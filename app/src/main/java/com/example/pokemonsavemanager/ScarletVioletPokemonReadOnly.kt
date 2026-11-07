@@ -12,7 +12,7 @@ data class ScarletVioletPokemonRead(
     val heldItem: Int, val ability: Int,
     val originalTrainerFriendship: Int, val handlingTrainerFriendship: Int,
     val handlingTrainerGender: Int, val handlingTrainerLanguage: Int, val currentHandler: Int,
-    val language: Int,
+    val language: Int, val affixedRibbon: Int, val ribbonFlags: List<Boolean>,
     val moves: List<ScarletVioletMoveRead>, val ivs: List<Int>, val evs: List<Int>,
     val hyperTrainingFlags: Int,
     val relearnMoves: List<Int>, val cachedStats: List<Int>,
@@ -69,7 +69,8 @@ object ScarletVioletPokemonReadOnly {
             shiny, iv32 and 0x40000000L != 0L, byte(plain, 0x22) and 1 != 0,
             u16(plain, 0x0A), u16(plain, 0x14),
             byte(plain, 0x112), byte(plain, 0xC8), byte(plain, 0xC2), byte(plain, 0xC3), byte(plain, 0xC4),
-            byte(plain, 0xD5),
+            byte(plain, 0xD5), byte(plain, 0xD4).let { if (it == 0xFF) -1 else it },
+            immutable((0..110).map { ribbonFlag(plain, it) }),
             immutable((0..3).map { ScarletVioletMoveRead(u16(plain, 0x72 + it * 2), byte(plain, 0x7A + it), byte(plain, 0x7E + it)) }),
             immutable((0..5).map { ((iv32 ushr (it * 5)) and 31).toInt() }),
             immutable((0..5).map { byte(plain, 0x26 + it) }),
@@ -93,6 +94,12 @@ object ScarletVioletPokemonReadOnly {
             else 0x4B + ((index - 200) ushr 3)
         val bit = if (index < 200) index and 7 else (index - 200) and 7
         return byte(plain, byteOffset) and (1 shl bit) != 0
+    }
+
+    private fun ribbonFlag(plain: ByteArray, index: Int): Boolean {
+        val byteOffset = if (index < 64) 0x34 + (index ushr 3)
+            else 0x40 + ((index - 64) ushr 3)
+        return byte(plain, byteOffset) and (1 shl (index and 7)) != 0
     }
 
 
