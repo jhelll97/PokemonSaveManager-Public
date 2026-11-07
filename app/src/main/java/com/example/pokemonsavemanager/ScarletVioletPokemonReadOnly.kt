@@ -16,6 +16,7 @@ data class ScarletVioletPokemonRead(
     val relearnMoves: List<Int>, val cachedStats: List<Int>,
     val teraTypeOriginal: Int, val teraTypeOverride: Int, val scale: Int, val obedienceLevel: Int,
     val ball: Int = 0, val metLevel: Int = 0,
+    val metYear: Int = 0, val metMonth: Int = 0, val metDay: Int = 0, val metLocation: Int = 0,
     val technicalMachineFlags: List<Boolean> = emptyList()
 )
 
@@ -73,6 +74,7 @@ object ScarletVioletPokemonReadOnly {
             immutable((0..4).map { u16(plain, 0x14C + it * 2) }),
             byte(plain, 0x94), byte(plain, 0x95), byte(plain, 0x4A), byte(plain, 0x11F),
             byte(plain, 0x124), byte(plain, 0x125) and 0x7F,
+            byte(plain, 0x11C), byte(plain, 0x11D), byte(plain, 0x11E), u16(plain, 0x122),
             immutable((0 until 230).map { technicalMachineFlag(plain, it) })
         ))
     }
