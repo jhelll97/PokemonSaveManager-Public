@@ -4318,6 +4318,29 @@ class SwitchReadOnlyActivity : Activity() {
             })
         }
         if (nativeTarget != null && !p.fatefulEncounter && p.currentHandler == 1 &&
+            p.handlingTrainerGender in 0..1 &&
+            p.handlingTrainerLanguage in ScarletVioletPokemonHandlingTrainerLanguageEditing.values()) {
+            content.addView(Button(this).apply {
+                text = "Edit Handling Trainer name"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(
+                            this@SwitchReadOnlyActivity,
+                            SwitchScarletVioletPokemonHandlingTrainerActivity::class.java
+                        )
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                            .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                            .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        if (nativeTarget != null && !p.fatefulEncounter && p.currentHandler == 1 &&
             p.handlingTrainerGender in 0..1) {
             content.addView(Button(this).apply {
                 text = "Edit Handling Trainer gender"
