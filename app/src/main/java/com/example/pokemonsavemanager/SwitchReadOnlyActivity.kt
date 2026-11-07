@@ -326,7 +326,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(honeyTreesButton)
         encounterButton = Button(this).apply {
-            text = "Encounters • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Encounters • Overview Edit"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspEncounterMenu(it) } }
         }
         root.addView(encounterButton)
@@ -1044,7 +1044,7 @@ class SwitchReadOnlyActivity : Activity() {
             val target = targets.getValue(entry.section)
             root.addView(Button(this).apply {
                 text = entry.label + if (entry.enabled && target.isEnabled)
-                    (if (entry.section in setOf("timestamps", "poffins", "stickers", "capsules", "underground")) " • Edit" else " • Read-only")
+                    (if (entry.section in setOf("timestamps", "poffins", "stickers", "capsules", "underground", "encounters")) " • Edit" else " • Read-only")
                 else " • Unavailable for this save"
                 isAllCaps = false; isEnabled = entry.enabled && target.isEnabled
                 setOnClickListener { if (session === bound && !dashboardBusy && target.isEnabled) target.performClick() }
@@ -4941,7 +4941,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound) showBdspHoneyTrees(bound) }
         })
         if (bound.bdspEncounter != null) body.addView(Button(this).apply {
-            text = "Encounters • Read-only"
+            text = "Encounters • Overview Edit"
             setOnClickListener { if (session === bound) showBdspEncounterMenu(bound) }
         })
         if (bound.bdspBerryPlots != null) body.addView(Button(this).apply {
@@ -6736,8 +6736,8 @@ class SwitchReadOnlyActivity : Activity() {
     private fun showBdspEncounterMenu(bound: SwitchReadSession) {
         if (session !== bound) return
         if (bound.bdspEncounter == null) return
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Encounters • Read-only")
-            .setItems(arrayOf("Saved encounter overview", "Saved radar records", "Saved roamers", "Raw encounter section")) { _, index ->
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Encounters • Overview Edit")
+            .setItems(arrayOf("Saved encounter overview • Edit", "Saved radar records • Read-only", "Saved roamers • Read-only", "Raw encounter section • Read-only")) { _, index ->
                 if (session === bound) when (index) {
                     0 -> showBdspEncounterOverview(bound)
                     1 -> showBdspRadarRecords(bound)
@@ -6758,7 +6758,29 @@ class SwitchReadOnlyActivity : Activity() {
             "Generate-valid flag: ${bdspEncounterFlag(encounter.rawGenerateValidWord)}\nRaw generate-valid word: ${encounter.rawGenerateValidWord}\nNative boolean: ${encounter.isGenerateValid}\n" +
             "Saved spray count (signed): ${encounter.sprayCount}\nSpray type ID: ${encounter.sprayType}\nVs. Seeker charge: ${encounter.vsSeekerCharge}\nPoké Radar charge: ${encounter.radarCharge}\nFlute type ID: ${encounter.fluteType}\n\n" +
             "These are saved values. Negative counts, unknown IDs and charge values are retained. Native booleans are true only when the complete four-byte word equals 1. No spawn eligibility, map names, encounter outcomes or RNG predictions are inferred."
-        showBdspEncounterText(bound, "Encounter overview • Read-only", detail)
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail + "\n\nUse Edit overview to review isolated scalar changes saved to a new copy. Honey trees, radar records, roamers, padding, and unrelated bytes remain exact."
+                textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit encounter overview"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchBdspEncounterOverviewActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Encounter overview • Edit")
+            .setView(ScrollView(this).apply { addView(body) })
+            .setPositiveButton("Encounters") { _, _ -> if (session === bound) showBdspEncounterMenu(bound) }
+            .setNegativeButton("Close", null).show()
     }
 
     private fun showBdspRadarRecords(bound: SwitchReadSession) {
