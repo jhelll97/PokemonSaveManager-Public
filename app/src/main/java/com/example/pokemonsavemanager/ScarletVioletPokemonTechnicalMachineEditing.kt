@@ -52,7 +52,7 @@ object ScarletVioletPokemonTechnicalMachineEditing {
     fun choices(pokemon: ScarletVioletPokemonRead): List<ScarletVioletTechnicalMachineChoice> {
         if (pokemon.isEgg || pokemon.technicalMachineFlags.size != USED_RECORD_COUNT) return emptyList()
         val currentMoves = pokemon.moves.map { it.id }.filter { it > 0 }.toSet()
-        return machineMoves.mapIndexedNotNull { index, moveId ->
+        return machineMoves.withIndex().mapNotNull { (index, moveId) ->
             val move = movesById[moveId]
             if (move != null && moveId in currentMoves && !pokemon.technicalMachineFlags[index])
                 ScarletVioletTechnicalMachineChoice(index, move)
@@ -63,7 +63,7 @@ object ScarletVioletPokemonTechnicalMachineEditing {
     fun recordedCurrentMoves(pokemon: ScarletVioletPokemonRead): String {
         if (pokemon.technicalMachineFlags.size != USED_RECORD_COUNT) return "Unavailable"
         val currentMoves = pokemon.moves.map { it.id }.filter { it > 0 }.toSet()
-        val recorded = machineMoves.mapIndexedNotNull { index, moveId ->
+        val recorded = machineMoves.withIndex().mapNotNull { (index, moveId) ->
             if (moveId in currentMoves && pokemon.technicalMachineFlags[index])
                 movesById[moveId]?.name ?: "Move #$moveId"
             else null
