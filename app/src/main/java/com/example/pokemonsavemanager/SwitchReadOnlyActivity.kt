@@ -3566,7 +3566,7 @@ class SwitchReadOnlyActivity : Activity() {
             append("Saved Ganbaru values (same order): ${p.ganbaruValues.joinToString(" / ")}\n")
             append("These are raw saved training increments; derived effort levels and recalculated stats are not evaluated.\n\n")
             append("PA8 stored-data checksum passed. Cached party stats are outside that checksum and may be stale. ")
-            append("Native nickname and Alpha-status editing are available for party and pasture records; legality and game-presence checks are not evaluated.")
+            append("Native nickname, Alpha-status and Noble-status editing are available for party and pasture records; legality and game-presence checks are not evaluated.")
         }
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(TextView(this).apply {
@@ -3590,6 +3590,27 @@ class SwitchReadOnlyActivity : Activity() {
                         Intent(
                             this@SwitchReadOnlyActivity,
                             SwitchLegendsArceusPokemonAlphaActivity::class.java
+                        )
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                            .putExtra("pse.switch.pokemon.pasture", nativeTarget.second)
+                            .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        if (nativeTarget != null && !p.isEgg) {
+            content.addView(Button(this).apply {
+                text = "Edit Noble status"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(
+                            this@SwitchReadOnlyActivity,
+                            SwitchLegendsArceusPokemonNobleActivity::class.java
                         )
                             .setData(source)
                             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
@@ -7590,4 +7611,5 @@ class SwitchReadOnlyActivity : Activity() {
         super.onDestroy()
     }
 }
+
 
