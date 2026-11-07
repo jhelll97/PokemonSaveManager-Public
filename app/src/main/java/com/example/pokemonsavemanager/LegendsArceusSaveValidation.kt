@@ -630,6 +630,89 @@ object LegendsArceusSaveValidation {
         return LegendsArceusDexWriteResult(edited, absoluteOffset)
     }
 
+    /** Replaces one UInt16 counter in a validated native Hisui research record. */
+    internal fun writeDexResearchCounter(
+        source: ByteArray,
+        speciesId: Int,
+        counterIndex: Int,
+        value: Int
+    ): LegendsArceusDexWriteResult {
+        readDexBlock(source)
+        require(speciesId in 1..905) {
+            "The selected species is outside the supported Legends: Arceus table."
+        }
+        require(counterIndex in 0 until 29) {
+            "The native research-counter slot must be 1 through 29."
+        }
+        require(value in 0..60_000) {
+            "The research counter must be between 0 and 60,000."
+        }
+        val keyValue = 0x02168706L
+        val counterRelativeOffset = when (counterIndex) {
+            in 0..3 -> 0x10 + counterIndex * 2
+            in 4..6 -> 0x18 + (counterIndex - 4) * 2
+            else -> 0x1E + (counterIndex - 7) * 2
+        }
+        val relativeOffset = 0x70 + speciesId * 0x58 + counterRelativeOffset
+        val blockSize = requiredObjects.getValue(keyValue)
+        require(relativeOffset in 0..blockSize - 2) {
+            "The native research counter is outside the Pokédex block."
+        }
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var absoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) {
+                "A native block length exceeds the remaining payload."
+            }
+            val blockStart = cursor.position
+            if (key == keyValue) {
+                require(type == 4 && length == blockSize.toLong()) {
+                    "The Legends: Arceus Pokédex block has the wrong native type or size."
+                }
+                repeat(relativeOffset) { stream.next() }
+                val decoded = byteArrayOf(value.toByte(), (value ushr 8).toByte())
+                repeat(decoded.size) { byteIndex ->
+                    payload[blockStart + relativeOffset + byteIndex] =
+                        (decoded[byteIndex].toInt() xor stream.next()).toByte()
+                }
+                absoluteOffset = blockStart + relativeOffset
+            }
+            cursor.skip(length.toInt())
+        }
+        require(absoluteOffset >= 0) {
+            "The Legends: Arceus Pokédex block is missing."
+        }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readDexBlock(edited)
+        return LegendsArceusDexWriteResult(edited, absoluteOffset)
+    }
+
     /** Replaces the native unlocked-Pasture U8 value and rebuilds native integrity. */
     internal fun writePastureUnlockCount(
         source: ByteArray,

@@ -175,6 +175,7 @@
         <activity android:name=".SwitchLegendsArceusExpeditionRankActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusSatchelUpgradeActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokedexActivity" android:exported="false"/>
+        <activity android:name=".SwitchLegendsArceusResearchCounterActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusEventActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletItemActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonEvolutionActivity" android:exported="false"/>

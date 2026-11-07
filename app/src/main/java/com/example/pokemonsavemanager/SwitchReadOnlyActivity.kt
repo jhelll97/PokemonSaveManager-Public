@@ -5569,15 +5569,41 @@ class SwitchReadOnlyActivity : Activity() {
             append("Move/type slots do not identify tasks; some counters do not apply to every species. Selected display flags do not establish seen/caught forms. ")
             append("Saved contradictions and unknown bits are preserved. If this species has not been obtained, PSE can add only the native obtained-count registration to a reviewed new copy; research progress and flags remain unchanged.")
         }
-        val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
-            text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
-        }) }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+            addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "Edit one research counter • New copy"
+                isAllCaps = false
+                setOnClickListener {
+                    if (session === bound) launchLegendsArceusResearchCounterEditor(bound, number)
+                }
+            })
+        }
+        val scroll = ScrollView(this).apply { addView(content) }
         val builder = AlertDialog.Builder(this).setTitle("Hisui research • ${LegendsArceusSpeciesNames.name(entry.speciesId)}")
             .setView(scroll).setNegativeButton("Close", null)
         if (!entry.obtained) builder.setPositiveButton("Add obtained registration • New copy") { _, _ ->
             if (session === bound) launchLegendsArceusPokedexEditor(bound, number)
         }
         builder.show()
+    }
+
+    private fun launchLegendsArceusResearchCounterEditor(
+        bound: SwitchReadSession,
+        number: Int
+    ) {
+        val source = selectedSourceUri ?: return
+        if (session !== bound) return
+        startActivity(
+            Intent(this, SwitchLegendsArceusResearchCounterActivity::class.java)
+                .setData(source)
+                .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                .putExtra("pse.switch.dex.number", number)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        )
     }
 
     private fun launchLegendsArceusPokedexEditor(bound: SwitchReadSession, number: Int) {
