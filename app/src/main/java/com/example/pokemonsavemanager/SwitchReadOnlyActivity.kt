@@ -316,7 +316,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(additionalRecordsButton)
         battleTrainerStatusButton = Button(this).apply {
-            text = "Battle Trainer Status • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Battle Trainer Status • Edit"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspBattleTrainerFilters(it) } }
         }
         root.addView(battleTrainerStatusButton)
@@ -6688,7 +6688,7 @@ class SwitchReadOnlyActivity : Activity() {
         val status = bound.bdspBattleTrainerStatus ?: return
         val filters = BdspBattleTrainerFilter.values()
         val labels = filters.map { "${it.displayName} • ${status.filtered(it).size}" }
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Battle-trainer status • Read-only")
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Battle-trainer status • Edit")
             .setItems(labels.toTypedArray()) { _, index -> if (session === bound) filters.getOrNull(index)?.let { showBdspBattleTrainerPage(bound, it, 0) } }
             .setNegativeButton("Close", null).show()
     }
@@ -6728,11 +6728,28 @@ class SwitchReadOnlyActivity : Activity() {
             "Raw battle-searcher word: ${entry.rawBattleSearcherWord} (hex ${entry.rawBattleSearcherWord.toString(16).uppercase().padStart(8, '0')})\n" +
             "Native boolean reads • Win: ${entry.isWin}; battle-searcher: ${entry.isBattleSearcher}\n\n" +
             "Raw native entry (8 bytes):\n" + entry.rawBytes.joinToString(" ") { "%02X".format(it) } +
-            "\n\nNative booleans are true only when the complete four-byte word equals 1. Unknown words remain exact and are not changed to zero or one. Trainer names, encounters, rematch eligibility and story progress are not inferred. No defeat-all, rebattle-all, reset, editing or save writing is available."
-        val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
-            text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
-        }) }
-        AlertDialog.Builder(this).setTitle("Trainer index $index • Read-only").setView(scroll)
+            "\n\nNative booleans are true only when the complete four-byte word equals 1. A changed word must be 0 clear or 1 set; an unknown existing word remains exact when untouched. Trainer names, encounters, rematch eligibility and story progress are not inferred. PSE edits only this selected entry and does not provide defeat-all, rebattle-all or reset actions."
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit trainer index $index"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchBdspBattleTrainerStatusActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.bdsp.battle.trainer.index", index)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Trainer index $index • Edit")
+            .setView(ScrollView(this).apply { addView(body) })
             .setPositiveButton("Entries") { _, _ -> if (session === bound) showBdspBattleTrainerPage(bound, filter, page) }
             .setNegativeButton("Close", null).show()
     }
