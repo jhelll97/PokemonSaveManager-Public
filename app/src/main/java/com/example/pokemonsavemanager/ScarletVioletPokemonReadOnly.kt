@@ -15,7 +15,8 @@ data class ScarletVioletPokemonRead(
     val hyperTrainingFlags: Int,
     val relearnMoves: List<Int>, val cachedStats: List<Int>,
     val teraTypeOriginal: Int, val teraTypeOverride: Int, val scale: Int, val obedienceLevel: Int,
-    val ball: Int = 0, val metLevel: Int = 0
+    val ball: Int = 0, val metLevel: Int = 0,
+    val technicalMachineFlags: List<Boolean> = emptyList()
 )
 
 sealed class ScarletVioletSlotRead {
@@ -71,13 +72,22 @@ object ScarletVioletPokemonReadOnly {
             immutable((0..3).map { u16(plain, 0x82 + it * 2) }),
             immutable((0..4).map { u16(plain, 0x14C + it * 2) }),
             byte(plain, 0x94), byte(plain, 0x95), byte(plain, 0x4A), byte(plain, 0x11F),
-            byte(plain, 0x124), byte(plain, 0x125) and 0x7F
+            byte(plain, 0x124), byte(plain, 0x125) and 0x7F,
+            immutable((0 until 230).map { technicalMachineFlag(plain, it) })
         ))
     }
 
     private val nationalIds = intArrayOf(982, 917, 918, 919, 920, 953, 954, 971, 972, 955, 956, 981, 960, 961, 977, 976, 963, 964, 928, 929, 930, 951, 952, 938, 939, 965, 966, 968, 924, 925, 974, 975, 996, 997, 998, 978, 967, 921, 922, 923, 940, 941, 962, 931, 973, 950, 932, 933, 934, 969, 970, 944, 945, 926, 927, 942, 943, 946, 947, 999, 1000, 984, 986, 1009, 989, 985, 987, 988, 1005, 990, 1010, 994, 992, 993, 995, 991, 1006, 1003, 1002, 1001, 1004, 1007, 1008, 957, 958, 959, 935, 936, 937, 948, 949, 983, 980, 979, 1017, 1011, 1019, 1014, 1015, 1016, 1020, 1021, 1023, 1022, 1024, 1025, 1018, 1012, 1013)
 
     internal fun nationalSpecies(raw: Int): Int = nationalIds.getOrNull(raw - 917) ?: raw
+
+    private fun technicalMachineFlag(plain: ByteArray, index: Int): Boolean {
+        val byteOffset = if (index < 200) 0x12F + (index ushr 3)
+            else 0x4B + ((index - 200) ushr 3)
+        val bit = if (index < 200) index and 7 else (index - 200) and 7
+        return byte(plain, byteOffset) and (1 shl bit) != 0
+    }
+
 
     private fun xorWords(bytes: ByteArray, from: Int, end: Int, seed: Long) {
         var state = seed
