@@ -6,6 +6,8 @@ All transfers must be initiated and completed through PSE Bank using the Gen 1 B
 
 Keep the source unchanged. Explain exact generation differences and unsupported data before transfer; never silently discard fields. Offer an explicit conversion/Legalise choice only when a documented destination-valid mapping exists; otherwise block with a clear explanation. Preserve the feature-first approach: implement usable features in the route sequence, without adding or running tests, lint, static analysis, smoke tests, QA, or check-only commits. Keep the existing automatic Android compile. Signing remains private and on request.
 
+Gen 3 → Gen 4 is now connected through PSE Bank. With a validated Diamond, Pearl, Platinum, HeartGold or SoulSilver destination loaded, a selected PK3 receives an explicit conversion preview, first-empty or exact box/slot selection, and a native PK4 write with Pokédex registration, block CRC rebuilding, a retained verified recovery backup, exact-byte scope enforcement, persisted reopen validation and coupled save/Bank rollback. The conversion preserves every destination-representable identity, training, move, PP Up, Pokérus, Ball and origin field, and explicitly reviews the required Pal Park location/date migration difference. Eggs, held items, Deoxys, unsupported text/language or Ball/origin values, PID/ability mismatches, and species with ambiguous historical abilities are blocked instead of guessed or silently altered. Complete Gen 4 → Gen 3 before advancing to Gen 4 ↔ Gen 5.
+
 ## Previous Switch roadmap (paused)
 
 
