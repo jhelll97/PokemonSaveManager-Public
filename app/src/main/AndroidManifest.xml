@@ -48,6 +48,7 @@
         <activity android:name=".SwitchLetsGoEventWorkExportActivity" android:exported="false"/>
         <activity android:name=".SwitchLetsGoMysteryGiftActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldItemActivity" android:exported="false"/>
+        <activity android:name=".SwitchSwordShieldPokemonEvolutionActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokemonNicknameActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokemonSpeciesActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokemonLevelActivity" android:exported="false"/>
