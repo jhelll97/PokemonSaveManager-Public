@@ -4982,7 +4982,7 @@ class SwitchReadOnlyActivity : Activity() {
             append("Total Merit Points earned: ${saved(trainer.meritTotal)}\n")
             append("Galaxy Expedition Team rank: ${saved(trainer.expeditionRank)}\nSatchel upgrades: ${saved(trainer.satchelUpgrades)}\n\n")
             append("Absent counters stay marked Not present. Merit totals, research progress and story consistency are not evaluated.\n\n")
-            append("Native container integrity passed before reading. Trainer Name, Trainer ID and Money open in the shared reviewed editor. Current and total Merit Points open in their title-specific reviewed editor when their native records are present; rank and satchel upgrades remain read-only.")
+            append("Native container integrity passed before reading. Trainer Name, Trainer ID and Money open in the shared reviewed editor. Current and total Merit Points and Galaxy Expedition Team rank open in title-specific reviewed editors when their native records are present; satchel upgrades remain read-only.")
         }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -5007,6 +5007,19 @@ class SwitchReadOnlyActivity : Activity() {
                     setOnClickListener {
                         if (session === bound && !dashboardBusy) startActivity(
                             Intent(this@SwitchReadOnlyActivity, SwitchLegendsArceusMeritPointActivity::class.java)
+                                .setData(source)
+                                .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        )
+                    }
+                })
+            }
+            if (source != null && trainer.expeditionRank != null) {
+                addView(Button(this@SwitchReadOnlyActivity).apply {
+                    text = "✏  Edit Galaxy Expedition Team rank"; isAllCaps = false
+                    setOnClickListener {
+                        if (session === bound && !dashboardBusy) startActivity(
+                            Intent(this@SwitchReadOnlyActivity, SwitchLegendsArceusExpeditionRankActivity::class.java)
                                 .setData(source)
                                 .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
                                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

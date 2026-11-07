@@ -29,7 +29,6 @@ object LegendsArceusTrainerReadOnly {
             ?: throw IllegalArgumentException("The saved trainer language is not supported by Legends: Arceus.")
         blocks.money?.let { require(it <= 9999999L) { "The saved Arceus money exceeds the native maximum." } }
         blocks.satchelUpgrades?.let { require(it <= 39L) { "The saved satchel-upgrade count exceeds 39." } }
-        blocks.expeditionRank?.let { require(it <= 10L) { "The saved expedition rank exceeds ten." } }
         return LegendsArceusTrainerRead(blocks.version, name(status), gender, language, languageName,
             u32(status, 0x10), u16(status, 0x10), u16(status, 0x12), blocks.money,
             blocks.meritCurrent, blocks.meritTotal, blocks.satchelUpgrades, blocks.expeditionRank)
@@ -54,3 +53,4 @@ object LegendsArceusTrainerReadOnly {
     private fun u16(bytes: ByteArray, offset: Int): Int = byte(bytes, offset) or (byte(bytes, offset + 1) shl 8)
     private fun u32(bytes: ByteArray, offset: Int): Long = u16(bytes, offset).toLong() or (u16(bytes, offset + 2).toLong() shl 16)
 }
+

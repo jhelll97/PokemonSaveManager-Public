@@ -162,6 +162,7 @@
         <activity android:name=".SwitchLegendsArceusPokemonDeleteActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusMeritPointActivity" android:exported="false"/>
+        <activity android:name=".SwitchLegendsArceusExpeditionRankActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsArceusEventActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletItemActivity" android:exported="false"/>

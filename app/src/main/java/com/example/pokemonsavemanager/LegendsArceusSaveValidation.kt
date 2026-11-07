@@ -44,6 +44,10 @@ internal data class LegendsArceusMeritWriteResult(
     val currentOffset: Int,
     val totalOffset: Int
 )
+internal data class LegendsArceusExpeditionRankWriteResult(
+    val bytes: ByteArray,
+    val rankOffset: Int
+)
 
 /** Independent read-only container gate; pinned format evidence is in SWITCH_READ_ONLY_FORMATS.md. */
 object LegendsArceusSaveValidation {
@@ -53,6 +57,7 @@ object LegendsArceusSaveValidation {
     private const val PLAY_TIME_KEY = 0xC4FA7C8CL
     private const val MERIT_CURRENT_KEY = 0x9D5D1CA5L
     private const val MERIT_TOTAL_KEY = 0xC25B0D5AL
+    private const val EXPEDITION_RANK_KEY = 0x50FE632AL
     private val requiredObjects = mapOf(0x47E1CEABL to 0x54600,
         0x2985FE5DL to 0x8D4, 0x02168706L to 0x1E460, STATUS_KEY to 0x80)
     private val intro = decodeHex("9ec99cd70ed33c44fb9303dceb39b42a1947e9634ba2334416bf82a2ba6355b63d9df24b5f7b6ab2621dc21b68e5c8b53a059000e8a8103de2ecf00cb2ed4f6d")
@@ -319,6 +324,64 @@ object LegendsArceusSaveValidation {
         digest.digest().copyInto(edited, end)
         readTrainerBlocks(edited)
         return LegendsArceusMeritWriteResult(edited, currentOffset, totalOffset)
+    }
+
+    /** Replaces the decoded Galaxy Expedition Team rank UInt32 and rebuilds container integrity. */
+    internal fun writeExpeditionRank(
+        source: ByteArray,
+        rank: Long
+    ): LegendsArceusExpeditionRankWriteResult {
+        val before = readTrainerBlocks(source)
+        require(before.expeditionRank != null) { "This save does not contain the Expedition Team rank." }
+        require(rank in 0L..10L) { "Changed Expedition Team rank must be between 0 and 10." }
+
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var rankOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            if (key == EXPEDITION_RANK_KEY) {
+                require(type == 10 && length == 4L) {
+                    "The Legends: Arceus Expedition Team rank has the wrong native type or size."
+                }
+                repeat(4) { byteIndex ->
+                    val decoded = ((rank ushr (byteIndex * 8)).toInt() and 255)
+                    payload[blockStart + byteIndex] = (decoded xor stream.next()).toByte()
+                }
+                rankOffset = blockStart
+            }
+            cursor.skip(length.toInt())
+        }
+        require(rankOffset >= 0) { "The Expedition Team rank record is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readTrainerBlocks(edited)
+        return LegendsArceusExpeditionRankWriteResult(edited, rankOffset)
     }
 
     /** Replaces one decoded four-byte inventory record and rebuilds native container integrity. */
