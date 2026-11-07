@@ -331,7 +331,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(encounterButton)
         berryPlotsButton = Button(this).apply {
-            text = "Berry Plot Records • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Berry Plot Records • Edit timing"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspBerryPlots(it) } }
         }
         root.addView(berryPlotsButton)
@@ -4945,7 +4945,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound) showBdspEncounterMenu(bound) }
         })
         if (bound.bdspBerryPlots != null) body.addView(Button(this).apply {
-            text = "Berry Plot Records • Read-only"
+            text = "Berry Plot Records • Edit timing"
             setOnClickListener { if (session === bound) showBdspBerryPlots(bound) }
         })
         if (bound.bdspUnionRoom != null) body.addView(Button(this).apply {
@@ -6860,14 +6860,26 @@ class SwitchReadOnlyActivity : Activity() {
         val page = requestedPage.coerceIn(0, lastPage)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16) }
         root.addView(TextView(this).apply {
-            text = "${bound.displayName} • Save layout ${berries.revision.displayName}\n\nSaved update minutes: ${berries.lastUpdateMinutes}\n\nAll 128 saved plots remain in native order, including zero-filled records. Plot fields are shown as saved bytes; berry type, growth state, yield and location are not decoded. Update minutes are not converted to a date."
+            text = "${bound.displayName} • Save layout ${berries.revision.displayName}\n\nSaved update minutes: ${berries.lastUpdateMinutes}\n\nAll 128 saved plots remain in native order, including zero-filled records. Plot fields are shown as saved bytes; berry type, growth state, yield and location are not decoded. Update minutes are not converted to a date. The documented signed timing field can be edited while every plot record remains exact."
             textSize = 16f; setPadding(0, 0, 0, 16); setTextIsSelectable(true)
+        })
+        val source = selectedSourceUri
+        if (source != null) root.addView(Button(this).apply {
+            text = "✏  Edit saved update minutes"; isAllCaps = false
+            setOnClickListener {
+                if (session === bound && !dashboardBusy) startActivity(
+                    Intent(this@SwitchReadOnlyActivity, SwitchBdspBerryPlotTimingActivity::class.java)
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
         })
         berries.plots.drop(page * 16).take(16).forEach { plot -> root.addView(Button(this).apply {
             text = "Plot index ${plot.index}\n" + plot.rawBytes.joinToString(" ") { "%02X".format(it) }
             setOnClickListener { if (session === bound) showBdspBerryPlotDetail(bound, plot.index, page) }
         }) }
-        val builder = AlertDialog.Builder(this).setTitle("Berry plot records • ${page + 1}/${lastPage + 1} • Read-only")
+        val builder = AlertDialog.Builder(this).setTitle("Berry plot records • ${page + 1}/${lastPage + 1} • Edit timing")
             .setView(ScrollView(this).apply { addView(root) })
             .setPositiveButton("Raw section") { _, _ -> if (session === bound) showBdspBerryRaw(bound, page) }
         if (page > 0) builder.setNegativeButton("Previous") { _, _ -> if (session === bound) showBdspBerryPlots(bound, page - 1) }
