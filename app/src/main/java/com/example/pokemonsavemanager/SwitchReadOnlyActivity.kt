@@ -628,7 +628,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldBoxLayout(bound) }
         })
         if (bound.swordShieldRallyDigging != null) dashboardRoot.addView(Button(this).apply {
-            text = "Rally & Digging Records • Read-only"; isAllCaps = false; isEnabled = !busy
+            text = "Rally & Digging Records • Edit"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldRallyDigging(bound) }
         })
         if (bound.swordShieldStarterChoice != null) dashboardRoot.addView(Button(this).apply {
@@ -3085,7 +3085,7 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound || dashboardBusy) return
         val read = bound.swordShieldRallyDigging ?: return
         val detail = buildString {
-            append("${read.version.displayName} • Rally & Digging Records • Read-only\n\n")
+            append("${read.version.displayName} • Rally & Digging Records\n\n")
             append("Roto Rally best score: ${read.rotoRallyScore}\n")
             if (!read.rotoRallyWithinDocumentedRange) {
                 append("Saved Roto Rally score is above the documented 99,999 cap and remains exact.\n")
@@ -3095,15 +3095,28 @@ class SwitchReadOnlyActivity : Activity() {
             append("Digging Pa • Most Watts dug up: ${read.diggingPaWatts}\n\n")
             append("The complete native container hash and all four UInt32 scalar layouts passed before display. ")
             append("PSE does not infer undisclosed caps for the digging records. ")
-            append("No score reset, record edit, reward action, export, replacement, or save writing is available here.")
+            append("Edit opens a reviewed native writer for these four records; the selected source remains unchanged.")
         }
-        val scroll = ScrollView(this).apply {
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
+            val source = selectedSourceUri
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Rally & Digging Records"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchSwordShieldRallyDiggingActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
         }
-        AlertDialog.Builder(this).setTitle("Rally & Digging Records • Read-only")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        AlertDialog.Builder(this).setTitle("Rally & Digging Records")
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
     private fun showSwordShieldStarterChoice(bound: SwitchReadSession) {

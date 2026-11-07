@@ -64,6 +64,13 @@ internal data class SwordShieldRallyDiggingBlocks(
     val diggingDuoStaminaStreak: ByteArray,
     val diggingPaWatts: ByteArray
 )
+internal data class SwordShieldRallyDiggingWriteResult(
+    val bytes: ByteArray,
+    val rotoRallyScoreOffset: Int,
+    val diggingDuoSkillStreakOffset: Int,
+    val diggingDuoStaminaStreakOffset: Int,
+    val diggingPaWattsOffset: Int
+)
 internal data class SwordShieldStarterChoiceBlock(val version: SwordShieldVersion, val value: ByteArray)
 internal data class SwordShieldLeagueCardBlock(val version: SwordShieldVersion, val data: ByteArray)
 internal data class SwordShieldIsleOfArmorProgressBlocks(
@@ -326,6 +333,79 @@ object SwordShieldSaveValidation {
             block(skillKey),
             block(staminaKey),
             block(diggingPaKey)
+        )
+    }
+
+    /** Replaces the four documented rally and digging UInt32 records and rebuilds the native footer. */
+    internal fun writeRallyDiggingRecords(
+        source: ByteArray,
+        rotoRallyScore: Long,
+        diggingDuoSkillStreak: Long,
+        diggingDuoStaminaStreak: Long,
+        diggingPaWatts: Long
+    ): SwordShieldRallyDiggingWriteResult {
+        readRallyDiggingBlocks(source)
+        val values = mapOf(
+            0x38548020L to rotoRallyScore,
+            0xA0F49CFBL to diggingDuoSkillStreak,
+            0x066F38F5L to diggingDuoStaminaStreak,
+            0x68BBA8B1L to diggingPaWatts
+        )
+        require(values.values.all { it in 0L..0xFFFF_FFFFL }) {
+            "Rally and digging records must fit their native unsigned 32-bit fields."
+        }
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val offsets = mutableMapOf<Long, Int>()
+        val cursor = Cursor(payload)
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            values[key]?.let { value ->
+                require(type == 14 && length == 4L) {
+                    "A Sword/Shield rally or digging record has the wrong native type or size."
+                }
+                repeat(4) { byteIndex ->
+                    val decoded = ((value ushr (byteIndex * 8)) and 0xFF).toInt()
+                    payload[blockStart + byteIndex] = (decoded xor stream.next()).toByte()
+                }
+                offsets[key] = blockStart
+            }
+            cursor.skip(length.toInt())
+        }
+        require(offsets.keys == values.keys) { "A required Sword/Shield rally or digging record is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readRallyDiggingBlocks(edited)
+        return SwordShieldRallyDiggingWriteResult(
+            edited,
+            offsets.getValue(0x38548020L),
+            offsets.getValue(0xA0F49CFBL),
+            offsets.getValue(0x066F38F5L),
+            offsets.getValue(0x68BBA8B1L)
         )
     }
 
