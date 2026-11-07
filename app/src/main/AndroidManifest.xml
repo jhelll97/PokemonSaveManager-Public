@@ -200,6 +200,7 @@
         <activity android:name=".SwitchScarletVioletPokemonSpeedStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonSpecialStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonTeraTypeActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletPokemonScaleActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPseBankRestoreActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonDuplicateActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonSwapActivity" android:exported="false"/>
