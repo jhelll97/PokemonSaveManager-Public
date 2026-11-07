@@ -1,10 +1,13 @@
-# Active priority — bidirectional Generation 1–7 transfers
+# Active priority — bidirectional PSE Bank transfers across Generations 1–7
 
-CURRENT USER PRIORITY — 7 November 2026 (supersedes ALL earlier generation-priority and Switch-feature directives below):
-Pause Switch feature development. Work on usable PSE Bank transfers between adjacent generations in BOTH directions, in this order: Gen 1 ↔ Gen 2, Gen 2 ↔ Gen 3, Gen 3 ↔ Gen 4, Gen 4 ↔ Gen 5, Gen 5 ↔ Gen 6, Gen 6 ↔ Gen 7. Gen 7 means Sun/Moon/Ultra Sun/Ultra Moon here; Switch work remains paused. Inspect existing transfer adapters and UI first; reuse working routes rather than duplicating them. Complete both directions for each pair before advancing. Provide connected source selection, Bank record selection, destination selection, conversion preview, and native persisted-save writing; parser-only changes or misleading enabled buttons do not count. Distinguish PSE conversion from official game trading: custom backward conversion is permitted when the destination can represent the Pokémon, and must be labelled as PSE conversion rather than official provenance. Preserve originals and verified recovery backups. Never silently discard unsupported species, forms, moves, held items, abilities, or other data. Show exact incompatibilities and proposed losses; offer an explicit Legalise/conversion choice only where a documented destination-valid mapping exists, otherwise block with a clear reason. Explain and review unavoidable differences such as IV/DV and stat-system conversion, and never promise lossless round trips. Preserve native checksums, source binding, reviewed new copies, and persisted reopen validation. Keep the user's feature-first/no-added-tests-or-extra-checks policy and existing required automatic Android compile. APK signing stays private and on request. Keep the existing Slack event trigger, deduplication, no replay/polling, one-commit-per-validated-event and protected-branch policies below. Do not resume Switch work without a new user instruction.
+**Switch feature work is paused.** Gen 1 ↔ Gen 2 and Gen 2 ↔ Gen 3 transfers are already working; preserve them and do not redo them. The next route is **Gen 3 ↔ Gen 4**, followed by Gen 4 ↔ Gen 5, Gen 5 ↔ Gen 6, and Gen 6 ↔ Gen 7. Complete both directions of a pair before advancing. Here Gen 7 means Sun, Moon, Ultra Sun, and Ultra Moon.
 
+All transfers must be initiated and completed through PSE Bank using the Gen 1 Bank experience as the layout and interaction reference: choose connected source and destination saves, select Bank records, review a conversion preview, then write the destination's native save. Reuse existing adapters and working routes. Converter/parser work alone does not complete a route. Backward transfers are PSE conversions and must not be presented as official game transfers or provenance.
 
-## Previous roadmap — Switch development paused
+Keep the source unchanged. Explain exact generation differences and unsupported data before transfer; never silently discard fields. Offer an explicit conversion/Legalise choice only when a documented destination-valid mapping exists; otherwise block with a clear explanation. Preserve the feature-first approach: implement usable features in the route sequence, without adding or running tests, lint, static analysis, smoke tests, QA, or check-only commits. Keep the existing automatic Android compile. Signing remains private and on request.
+
+## Previous Switch roadmap (paused)
+
 
 # PSE Development Roadmap
 
