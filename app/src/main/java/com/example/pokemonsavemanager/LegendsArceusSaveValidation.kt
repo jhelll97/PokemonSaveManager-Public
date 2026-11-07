@@ -53,6 +53,15 @@ internal data class LegendsArceusSatchelUpgradeWriteResult(
     val upgradeOffset: Int
 )
 
+internal data class LegendsArceusPastureNameBlock(
+    val version: LegendsArceusVersion,
+    val data: ByteArray
+)
+internal data class LegendsArceusPastureNameWriteResult(
+    val bytes: ByteArray,
+    val absoluteOffset: Int
+)
+
 /** Independent read-only container gate; pinned format evidence is in SWITCH_READ_ONLY_FORMATS.md. */
 object LegendsArceusSaveValidation {
     private val knownSizes = setOf(0x136DDE, 0x13AD06)
@@ -63,6 +72,8 @@ object LegendsArceusSaveValidation {
     private const val MERIT_TOTAL_KEY = 0xC25B0D5AL
     private const val EXPEDITION_RANK_KEY = 0x50FE632AL
     private const val SATCHEL_UPGRADE_KEY = 0x75CE2CF6L
+    private const val PASTURE_NAME_KEY = 0x19722C89L
+    private const val PASTURE_NAME_OBJECT_SIZE = 0x440
     private val requiredObjects = mapOf(0x47E1CEABL to 0x54600,
         0x2985FE5DL to 0x8D4, 0x02168706L to 0x1E460, STATUS_KEY to 0x80)
     private val intro = decodeHex("9ec99cd70ed33c44fb9303dceb39b42a1947e9634ba2334416bf82a2ba6355b63d9df24b5f7b6ab2621dc21b68e5c8b53a059000e8a8103de2ecf00cb2ed4f6d")
@@ -114,6 +125,25 @@ object LegendsArceusSaveValidation {
         val data = captured.getValue(PLAY_TIME_KEY)
         require(data.size == 4) { "The native Legends: Arceus Play Time object is missing." }
         return LegendsArceusPlayTimeBlock(checked.version, data)
+    }
+
+    /** Native 32-entry Pasture-name object, detached only after complete container validation. */
+    internal fun readPastureNameBlock(source: ByteArray): LegendsArceusPastureNameBlock {
+        val captured = mutableMapOf(PASTURE_NAME_KEY to ByteArray(0))
+        val checked = inspect(
+            source,
+            captured,
+            objectSizes = mapOf(PASTURE_NAME_KEY to PASTURE_NAME_OBJECT_SIZE)
+        )
+        require(checked is LegendsArceusValidation.Verified) {
+            (checked as? LegendsArceusValidation.Invalid)?.reason ?:
+                "A validated native Legends: Arceus save is required."
+        }
+        val data = captured.getValue(PASTURE_NAME_KEY)
+        require(data.size == PASTURE_NAME_OBJECT_SIZE) {
+            "The native Legends: Arceus Pasture-name object is missing."
+        }
+        return LegendsArceusPastureNameBlock(checked.version, data)
     }
 
     /** Inventory-specific shapes add checks without changing existing reader gates. */
@@ -572,6 +602,77 @@ object LegendsArceusSaveValidation {
         digest.digest().copyInto(edited, end)
         readDexBlock(edited)
         return LegendsArceusDexWriteResult(edited, absoluteOffset)
+    }
+
+    /** Replaces one 34-byte name in the decoded Pasture-name object and rebuilds native integrity. */
+    internal fun writePastureName(
+        source: ByteArray,
+        pasture: Int,
+        encodedName: ByteArray
+    ): LegendsArceusPastureNameWriteResult {
+        val before = readPastureNameBlock(source)
+        require(pasture in 1..32) { "Pasture must be between 1 and 32." }
+        require(encodedName.size == 0x22) { "A complete 34-byte native Pasture name is required." }
+        require(before.data.size == PASTURE_NAME_OBJECT_SIZE) {
+            "The native Legends: Arceus Pasture-name object has the wrong size."
+        }
+        val relativeOffset = (pasture - 1) * 0x22
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val cursor = Cursor(payload)
+        var absoluteOffset = -1
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) {
+                "A native block length exceeds the remaining payload."
+            }
+            val blockStart = cursor.position
+            if (key == PASTURE_NAME_KEY) {
+                require(type == 4 && length == PASTURE_NAME_OBJECT_SIZE.toLong()) {
+                    "The native Legends: Arceus Pasture-name object has the wrong type or size."
+                }
+                repeat(relativeOffset) { stream.next() }
+                repeat(encodedName.size) { byteIndex ->
+                    payload[blockStart + relativeOffset + byteIndex] =
+                        (encodedName[byteIndex].toInt() xor stream.next()).toByte()
+                }
+                absoluteOffset = blockStart + relativeOffset
+            }
+            cursor.skip(length.toInt())
+        }
+        require(absoluteOffset >= 0) {
+            "The native Legends: Arceus Pasture-name object is missing."
+        }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        val reopened = readPastureNameBlock(edited)
+        require(
+            reopened.data.copyOfRange(relativeOffset, relativeOffset + encodedName.size)
+                .contentEquals(encodedName)
+        ) { "The rebuilt native Pasture name did not reopen exactly." }
+        return LegendsArceusPastureNameWriteResult(edited, absoluteOffset)
     }
 
     /** Replaces one decoded native pasture PA8 slot, then rebuilds encryption and the SHA-256 footer. */
