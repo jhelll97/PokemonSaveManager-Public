@@ -102,6 +102,7 @@
         <activity android:name=".SwitchBdspBattleTrainerStatusActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspContestRankPointActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspUnionRoomActivity" android:exported="false"/>
+        <activity android:name=".SwitchBdspRandomGroupActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldEventActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspItemActivity" android:exported="false"/>

@@ -371,7 +371,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(unionRoomButton)
         randomGroupsButton = Button(this).apply {
-            text = "Random Group Records • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Random Group Records • Edit"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspRandomGroups(it) } }
         }
         root.addView(randomGroupsButton)
@@ -4953,7 +4953,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound) showBdspUnionRoom(bound) }
         })
         if (bound.bdspRandomGroups != null) body.addView(Button(this).apply {
-            text = "Random group records • Read-only"
+            text = "Random group records • Edit"
             setOnClickListener { if (session === bound) showBdspRandomGroups(bound) }
         })
         if (bound.bdspMenuSelection != null) body.addView(Button(this).apply {
@@ -7456,7 +7456,7 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Record ${record.index + 1} • ${bdspRandomGroupName(record.groupName)}\nSaved player: ${bdspRandomGroupName(record.playerName)}"
             setOnClickListener { if (session === bound) showBdspRandomGroup(bound, record.index) }
         }) }
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Random groups • Read-only")
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Random groups • Edit")
             .setView(ScrollView(this).apply { addView(root) }).setNegativeButton("Close", null).show()
     }
 
@@ -7471,11 +7471,29 @@ class SwitchReadOnlyActivity : Activity() {
             "\nRegion code (signed): ${record.regionCode}\nUser ID (signed): ${record.userId}\nSeed (UInt64): ${record.seed}\nSeed hex: ${record.seed.toString(16).uppercase().padStart(16, '0')}\n" +
             "Random (UInt64): ${record.random}\nRandom hex: ${record.random.toString(16).uppercase().padStart(16, '0')}\nSaved ticks (Int64): ${record.ticks}\nTick bits: ${record.ticks.toULong().toString(16).uppercase().padStart(16, '0')}\n\n" +
             "Raw record (132 bytes, including both complete name buffers):\n" + record.rawBytes.chunked(16).joinToString("\n") { row -> row.joinToString(" ") { "%02X".format(it) } } +
-            "\n\nMalformed names are isolated individually. No identity lookup, online access, group joining, name repair, RNG advance, timestamp conversion, editing, export or save writing."
-        AlertDialog.Builder(this).setTitle("Random-group record ${index + 1} • Read-only")
-            .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
+            "\n\nMalformed names are isolated individually and remain exact unless explicitly replaced. The documented fields can be edited in a verified new copy. PSE does not perform identity lookup, online access, group joining, RNG advance or timestamp conversion."
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
-            }) }).setPositiveButton("Records") { _, _ -> if (session === bound) showBdspRandomGroups(bound) }
+            })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit random-group record ${index + 1}"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchBdspRandomGroupActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.bdsp.random.group.index", index)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Random-group record ${index + 1} • Edit")
+            .setView(ScrollView(this).apply { addView(body) })
+            .setPositiveButton("Records") { _, _ -> if (session === bound) showBdspRandomGroups(bound) }
             .setNegativeButton("Close", null).show()
     }
 
