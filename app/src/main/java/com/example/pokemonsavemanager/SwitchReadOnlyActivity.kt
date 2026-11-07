@@ -640,7 +640,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldLeagueCard(bound) }
         })
         if (bound.swordShieldIsleOfArmorProgress != null) dashboardRoot.addView(Button(this).apply {
-            text = "Isle of Armor Progress • Read-only"; isAllCaps = false; isEnabled = !busy
+            text = "Isle of Armor Progress • Edit"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldIsleOfArmorProgress(bound) }
         })
         if (bound.swordShieldCrownTundraProgress != null) dashboardRoot.addView(Button(this).apply {
@@ -3209,7 +3209,7 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound || dashboardBusy) return
         val read = bound.swordShieldIsleOfArmorProgress ?: return
         val detail = buildString {
-            append("${read.version.displayName} • Isle of Armor Progress • Read-only\n\n")
+            append("${read.version.displayName} • Isle of Armor Progress\n\n")
             append("Alolan Diglett found: ${read.alolanDiglettFound}\n")
             append("Master Dojo Watt donation stage: ${read.dojoDonationProgress}")
             append(" • ${read.dojoDonationStatus}\n")
@@ -3218,15 +3218,28 @@ class SwitchReadOnlyActivity : Activity() {
             append("Restricted Sparring types cleared: ${read.restrictedSparringTypesCleared}\n\n")
             append("The complete native container hash and all five exact UInt32 scalar layouts passed before display. ")
             append("Only the documented 0–15 Master Dojo donation stage is interpreted; every native value remains exact. ")
-            append("No Diglett, donation, Cram-o-matic, sparring, reward, unlock, repair, export, or save-writing action is available here.")
+            append("Editing changes only selected progress scalars; PSE does not infer rewards or unlock side effects.")
         }
-        val scroll = ScrollView(this).apply {
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Isle of Armor Progress"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchSwordShieldIsleOfArmorProgressActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
         }
-        AlertDialog.Builder(this).setTitle("Isle of Armor Progress • Read-only")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        AlertDialog.Builder(this).setTitle("Isle of Armor Progress")
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
     private fun showSwordShieldCrownTundraProgress(bound: SwitchReadSession) {

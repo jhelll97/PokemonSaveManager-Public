@@ -82,6 +82,14 @@ internal data class SwordShieldIsleOfArmorProgressBlocks(
     val cramOMaticUses: ByteArray,
     val restrictedSparringTypesCleared: ByteArray
 )
+internal data class SwordShieldIsleOfArmorProgressWriteResult(
+    val bytes: ByteArray,
+    val alolanDiglettFoundOffset: Int,
+    val dojoDonationProgressOffset: Int,
+    val dojoDonationTotalOffset: Int,
+    val cramOMaticUsesOffset: Int,
+    val restrictedSparringTypesClearedOffset: Int
+)
 internal data class SwordShieldCrownTundraProgressBlocks(
     val version: SwordShieldVersion,
     val regiPattern: ByteArray,
@@ -511,6 +519,82 @@ object SwordShieldSaveValidation {
             block(donationTotalKey),
             block(cramOMaticKey),
             block(sparringTypesKey)
+        )
+    }
+
+    /** Replaces the five documented Isle of Armor UInt32 records and rebuilds the native footer. */
+    internal fun writeIsleOfArmorProgress(
+        source: ByteArray,
+        alolanDiglettFound: Long,
+        dojoDonationProgress: Long,
+        dojoDonationTotal: Long,
+        cramOMaticUses: Long,
+        restrictedSparringTypesCleared: Long
+    ): SwordShieldIsleOfArmorProgressWriteResult {
+        readIsleOfArmorProgressBlocks(source)
+        val values = mapOf(
+            0x4AEA5A7EL to alolanDiglettFound,
+            0x0CBEB855L to dojoDonationProgress,
+            0xC7161487L to dojoDonationTotal,
+            0xB9C0ECFCL to cramOMaticUses,
+            0xBB1DE8EFL to restrictedSparringTypesCleared
+        )
+        require(values.values.all { it in 0L..0xFFFF_FFFFL }) {
+            "Isle of Armor progress records must fit their native unsigned 32-bit fields."
+        }
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val offsets = mutableMapOf<Long, Int>()
+        val cursor = Cursor(payload)
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            values[key]?.let { value ->
+                require(type == 14 && length == 4L) {
+                    "A Sword/Shield Isle of Armor record has the wrong native type or size."
+                }
+                repeat(4) { byteIndex ->
+                    val decoded = ((value ushr (byteIndex * 8)) and 0xFF).toInt()
+                    payload[blockStart + byteIndex] = (decoded xor stream.next()).toByte()
+                }
+                offsets[key] = blockStart
+            }
+            cursor.skip(length.toInt())
+        }
+        require(offsets.keys == values.keys) { "A required Sword/Shield Isle of Armor record is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readIsleOfArmorProgressBlocks(edited)
+        return SwordShieldIsleOfArmorProgressWriteResult(
+            edited,
+            offsets.getValue(0x4AEA5A7EL),
+            offsets.getValue(0x0CBEB855L),
+            offsets.getValue(0xC7161487L),
+            offsets.getValue(0xB9C0ECFCL),
+            offsets.getValue(0xBB1DE8EFL)
         )
     }
 
