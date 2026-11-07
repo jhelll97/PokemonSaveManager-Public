@@ -11,7 +11,8 @@ object ScarletVioletPokemonNatureEditing {
         "Modest", "Mild", "Quiet", "Bashful", "Rash",
         "Calm", "Gentle", "Sassy", "Careful", "Quirky"
     )
-    private val stats = arrayOf("Attack", "Defense", "Speed", "Sp. Atk", "Sp. Def")
+    // PKHeX NatureAmp internal order: Attack, Defense, Sp. Attack, Sp. Defense, Speed.
+    private val stats = arrayOf("Attack", "Defense", "Sp. Atk", "Sp. Def", "Speed")
     private val orders = listOf("0123", "0132", "0213", "0312", "0231", "0321",
         "1023", "1032", "2013", "3012", "2031", "3021", "1203", "1302",
         "2103", "3102", "2301", "3201", "1230", "1320", "2130", "3120", "2310", "3210")

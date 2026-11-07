@@ -1243,6 +1243,36 @@ object ScarletVioletPokemonLevelEditing {
         )
     }
 
+    internal fun verifiedValuesForStatNature(
+        pokemon: ScarletVioletPokemonRead,
+        requestedStatNature: Int
+    ): ScarletVioletLevelValues {
+        require(pokemon.statNature in 0..24 && requestedStatNature in 0..24) {
+            "Both saved and requested Stat Nature must use the native 0 through 24 range."
+        }
+        require(pokemon.cachedLevel in 1..100) {
+            "The cached Level is outside the supported 1 through 100 range."
+        }
+        val personal = resolvePersonal(pokemon)
+        val maximumExperience = minimumExperience(100, personal.growth)
+        require(pokemon.experience in 0L..maximumExperience &&
+            levelForExperience(pokemon.experience, personal.growth) == pokemon.cachedLevel) {
+            "The saved Level and EXP do not agree with this Pokémon's verified growth group."
+        }
+        val beforeValues = calculate(
+            pokemon, personal, pokemon.cachedLevel, pokemon.experience
+        )
+        require(matchesCachedValues(pokemon, beforeValues)) {
+            "The existing cached battle values do not match the verified native data."
+        }
+        return calculate(
+            pokemon.copy(statNature = requestedStatNature),
+            personal,
+            pokemon.cachedLevel,
+            pokemon.experience
+        )
+    }
+
     private fun resolvePersonal(pokemon: ScarletVioletPokemonRead): ScarletVioletPersonalData =
         ScarletVioletPersonalCatalogue.profile(pokemon.species, pokemon.form)
             ?: throw IllegalArgumentException(
