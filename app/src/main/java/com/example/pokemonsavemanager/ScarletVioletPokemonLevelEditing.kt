@@ -1213,6 +1213,36 @@ object ScarletVioletPokemonLevelEditing {
         }) { "An unrelated encrypted container byte changed." }
     }
 
+    internal fun verifiedValuesForHyperTraining(
+        pokemon: ScarletVioletPokemonRead,
+        requestedFlags: Int
+    ): ScarletVioletLevelValues {
+        require(requestedFlags in 0..0x3F) {
+            "Only the six documented PK9 Hyper Training flags are supported."
+        }
+        require(pokemon.cachedLevel in 50..100) {
+            "Scarlet/Violet Hyper Training requires Level 50 or higher."
+        }
+        val personal = resolvePersonal(pokemon)
+        val maximumExperience = minimumExperience(100, personal.growth)
+        require(pokemon.experience in 0L..maximumExperience &&
+            levelForExperience(pokemon.experience, personal.growth) == pokemon.cachedLevel) {
+            "The saved Level and EXP do not agree with this Pokémon's verified growth group."
+        }
+        val beforeValues = calculate(
+            pokemon, personal, pokemon.cachedLevel, pokemon.experience
+        )
+        require(matchesCachedValues(pokemon, beforeValues)) {
+            "The existing cached battle values do not match the verified native data."
+        }
+        return calculate(
+            pokemon.copy(hyperTrainingFlags = requestedFlags),
+            personal,
+            pokemon.cachedLevel,
+            pokemon.experience
+        )
+    }
+
     private fun resolvePersonal(pokemon: ScarletVioletPokemonRead): ScarletVioletPersonalData =
         ScarletVioletPersonalCatalogue.profile(pokemon.species, pokemon.form)
             ?: throw IllegalArgumentException(

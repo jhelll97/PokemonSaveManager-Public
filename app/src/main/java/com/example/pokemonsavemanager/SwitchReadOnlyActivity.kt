@@ -4021,6 +4021,7 @@ class SwitchReadOnlyActivity : Activity() {
             append("Obedience Level: ${p.obedienceLevel}\n")
             append("Capture Ball: ${ScarletVioletPokemonBallEditing.name(p.ball)} (#${p.ball})\n")
             append("Met Level: ${p.metLevel}\n")
+            append("Hyper Training: ${ScarletVioletPokemonHyperTrainingEditing.summary(p.hyperTrainingFlags)}\n")
             append("Effective Tera Type follows native override semantics; battle/form effects and encounter legality are not evaluated.\n\n")
             append("Original trainer: ${p.originalTrainer}\nTID16: ${p.tid}\nSID16: ${p.sid}\n")
             append("PID: ${p.pid.toString(16).uppercase()}\nEncryption constant: ${p.encryptionConstant.toString(16).uppercase()}\n\nMoves\n")
@@ -4159,6 +4160,28 @@ class SwitchReadOnlyActivity : Activity() {
                         Intent(
                             this@SwitchReadOnlyActivity,
                             SwitchScarletVioletPokemonMetLevelActivity::class.java
+                        )
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                            .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                            .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        if (nativeTarget != null &&
+            ScarletVioletPokemonHyperTrainingEditing.eligibleStats(p).isNotEmpty()) {
+            content.addView(Button(this).apply {
+                text = "Hyper Train a stat"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(
+                            this@SwitchReadOnlyActivity,
+                            SwitchScarletVioletPokemonHyperTrainingActivity::class.java
                         )
                             .setData(source)
                             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
