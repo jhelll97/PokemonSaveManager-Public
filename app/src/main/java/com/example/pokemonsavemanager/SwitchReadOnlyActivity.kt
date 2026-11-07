@@ -321,7 +321,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(battleTrainerStatusButton)
         honeyTreesButton = Button(this).apply {
-            text = "Honey Trees • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Honey Trees • Edit"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspHoneyTrees(it) } }
         }
         root.addView(honeyTreesButton)
@@ -1044,7 +1044,7 @@ class SwitchReadOnlyActivity : Activity() {
             val target = targets.getValue(entry.section)
             root.addView(Button(this).apply {
                 text = entry.label + if (entry.enabled && target.isEnabled)
-                    (if (entry.section in setOf("timestamps", "poffins", "stickers", "capsules", "underground", "encounters")) " • Edit" else " • Read-only")
+                    (if (entry.section in setOf("timestamps", "poffins", "stickers", "capsules", "underground", "encounters", "honey")) " • Edit" else " • Read-only")
                 else " • Unavailable for this save"
                 isAllCaps = false; isEnabled = entry.enabled && target.isEnabled
                 setOnClickListener { if (session === bound && !dashboardBusy && target.isEnabled) target.performClick() }
@@ -4937,7 +4937,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound) showBdspBattleTrainerFilters(bound) }
         })
         if (bound.bdspHoneyTrees != null) body.addView(Button(this).apply {
-            text = "Honey Trees • Read-only"
+            text = "Honey Trees • Edit"
             setOnClickListener { if (session === bound) showBdspHoneyTrees(bound) }
         })
         if (bound.bdspEncounter != null) body.addView(Button(this).apply {
@@ -6693,7 +6693,7 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Tree index ${entry.index} • Spread: ${bdspHoneySpreadFlag(entry.rawSpreadWord)} • Minutes: ${entry.minutes}"
             setOnClickListener { if (session === bound) showBdspHoneyTreeDetail(bound, entry.index) }
         }) }
-        AlertDialog.Builder(this).setTitle("Honey Trees • Read-only")
+        AlertDialog.Builder(this).setTitle("Honey Trees • Edit")
             .setView(ScrollView(this).apply { addView(root) })
             .setPositiveButton("Raw section") { _, _ -> if (session === bound) showBdspHoneyRaw(bound) }
             .setNegativeButton("Close", null).show()
@@ -6709,11 +6709,29 @@ class SwitchReadOnlyActivity : Activity() {
             "Native boolean read: ${entry.isSpread}\nSigned saved minutes: ${entry.minutes}\n" +
             "Saved encounter-table ID: ${entry.tableId}\nSaved rarity ID: ${entry.rarityId}\nSaved shake ID: ${entry.shakeId}\n\n" +
             "Raw native entry (12 bytes, including alignment):\n" + entry.rawBytes.joinToString(" ") { "%02X".format(it) } +
-            "\n\nSpread is true only when the complete four-byte word equals 1. Unknown words and all minute/ID values are retained. These fields do not establish timer readiness, location or encounter species. No tree editing, timer advancement, repair or save writing is available."
-        val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
-            text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
-        }) }
-        AlertDialog.Builder(this).setTitle("Tree index $index • Read-only").setView(scroll)
+            "\n\nSpread is true only when the complete four-byte word equals 1. Unknown words and all minute/ID values remain preservable when untouched. These fields do not establish timer readiness, location or encounter species; editing does not advance timers or repair inferred state."
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail + "\n\nUse Edit tree to review header and selected-record changes saved to a new copy. The other 20 records and retained padding remain exact."
+                textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit tree index $index"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchBdspHoneyTreeActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.honey.index", index)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Tree index $index • Edit")
+            .setView(ScrollView(this).apply { addView(body) })
             .setPositiveButton("Trees") { _, _ -> if (session === bound) showBdspHoneyTrees(bound) }
             .setNegativeButton("Close", null).show()
     }
