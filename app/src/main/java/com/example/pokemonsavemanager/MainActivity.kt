@@ -10166,15 +10166,130 @@ class MainActivity : Activity() {
         val currentGen=importedFile?.let{generationForSize(it.length().toInt())}?:0
         val b=AlertDialog.Builder(this).setTitle("${p.nickname.ifBlank{"Pokémon #${p.species}"}} • Gen 4 Bank")
             .setMessage(when(currentGen){
+                3 -> "Original 136-byte PK4 preserved. Review a PSE conversion back into the loaded Gen 3 save. This is not an official reverse migration."
                 4 -> "Original 136-byte PK4 preserved. Withdraw it into an empty Gen 4 PC slot."
                 7 -> "Original 136-byte PK4 preserved. Transfer it forward into the loaded Gen 7 save. PSE keeps the Bank entry until the converted PK7 and Gen 7 save checksums verify."
-                else -> "Original 136-byte PK4 preserved. Load a Gen 4 save to withdraw it, or a Gen 7 save to transfer it forward."
+                else -> "Original 136-byte PK4 preserved. Load a Gen 3 save for a reviewed PSE conversion, a Gen 4 save to withdraw it, or a Gen 7 save to transfer it forward."
             })
             .setNegativeButton("Close",null)
             .setNeutralButton("Delete"){_,_->AlertDialog.Builder(this).setTitle("Delete Bank entry?").setMessage("This permanently removes the preserved Gen 4 PK4 copy.").setNegativeButton("Cancel",null).setPositiveButton("Delete"){_,_->if(bankFile.delete()){Toast.makeText(this,"Bank entry deleted",Toast.LENGTH_SHORT).show();showBank()}else showDialog("PSE Bank","The Bank entry could not be deleted.")}.show()}
+        if(currentGen==3)b.setPositiveButton("PSE Convert to Gen 3"){_,_->prepareGen4ToGen3Transfer(bankFile,p)}
         if(currentGen==4)b.setPositiveButton("Withdraw to Gen 4"){_,_->chooseGen4BankWithdrawDestination(bankFile,p)}
         if(currentGen==7)b.setPositiveButton("Transfer to Gen 7"){_,_->prepareGen4ForwardTransfer(bankFile,p)}
         b.show()
+    }
+
+    private data class Gen4ToGen3Plan(val meta:Gen3ToGen4Meta,val metLocation:Int=0)
+    private data class Gen4Gen3Prepared(
+        val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry,val destination:ByteArray,
+        val plan:Gen4ToGen3Plan,val pk3:ByteArray,val converted:PokemonEntry,val destinationFile:File,
+        val sourceUri:Uri?,val sourceLabel:String?
+    )
+
+    private fun gen3TextSupported(text:String):Boolean=text.all{c->
+        c in 'A'..'Z'||c in 'a'..'z'||c in '0'..'9'||c in charArrayOf(' ','!','?','.',',','/','-','\'','♂','♀')
+    }
+
+    private fun gen4ToGen3PreflightRejection(p:PokemonEntry):String?=when{
+        !p.checksumValid->"The source PK4 checksum is invalid."
+        p.species !in 1..386->"Species #${p.species} did not exist in Generation 3."
+        p.species==386->"Deoxys form is title-dependent in Generation 3. PSE will not guess a destination form."
+        p.form!=0->"Form ${p.form} has no verified native PK3 representation."
+        p.isEgg->"Egg state has no verified reverse PK4 to PK3 mapping."
+        p.heldItem!=0->"Held item #${p.heldItem} cannot be mapped safely because Gen 3 and Gen 4 item IDs are not interchangeable."
+        p.moves.any{it !in 0..354}->"A move is outside the Generation 3 move catalogue."
+        p.language!=2->"Language ID ${p.language} cannot be verified by the current native PK3 text writer."
+        p.nickname.length>10||!gen3TextSupported(p.nickname)->"The nickname cannot be represented exactly in native Gen 3 text."
+        p.otName.length>7||!gen3TextSupported(p.otName)->"The Original Trainer name cannot be represented exactly in native Gen 3 text."
+        p.evs.any{it !in 0..255}||p.evs.sum()>510->"The EV data is not destination-valid for Generation 3."
+        p.ivs.any{it !in 0..31}->"The IV data is invalid."
+        p.ball !in 1..12->"Ball ID ${p.ball} has no verified direct Gen 4 to Gen 3 mapping."
+        p.originGame !in 1..5->"Origin game ID ${p.originGame} is not a Gen 3 title. PSE will not invent Gen 3 provenance for a Gen 4-origin Pokémon."
+        p.metLocation!=55->"Only Gen 3-origin Pal Park records (Gen 4 met location #55) have a documented reverse PSE conversion."
+        p.eggLocation!=0->"The PK4 contains Egg location data that PK3 cannot preserve safely."
+        p.fatefulEncounter->"Fateful-encounter provenance cannot be represented without changing its meaning."
+        p.markingValue !in 0..15->"Gen 4 marking value ${p.markingValue} is not representable by the four native Gen 3 markings."
+        p.abilityNumber !in 1..2->"The PK4 ability slot is not representable in Generation 3."
+        ((p.pid.toInt() and 1)+1)!=p.abilityNumber->"The PK4 ability slot does not match PID parity."
+        p.metLevel !in 1..100->"The PK4 met level is not valid for Generation 3."
+        else->null
+    }
+
+    private fun buildGen4ToGen3Pk3(raw:ByteArray,p:PokemonEntry,destination:ByteArray,plan:Gen4ToGen3Plan):ByteArray{
+        require(raw.size==136){"The preserved Gen 4 Bank record has an unexpected size."}
+        require(generationForSize(destination.size)==3&&gen3SaveValid(destination)){"A valid Generation 3 destination save is required."}
+        gen4ToGen3PreflightRejection(p)?.let{error(it)}
+        require(plan.metLocation==0){"The prepared PK3 met-location mapping is invalid."}
+        require(plan.meta.abilityId==p.ability){"The PK4 ability does not match the verified Generation 3 ability for slot ${p.abilityNumber}."}
+        require(gen3TransferGender(p,plan.meta.genderRate)==p.gender){"PID-derived gender does not match the PK4 gender field."}
+        val ups=gen4Pk4PpUps(raw);require(ups.all{it in 0..3}){"PK4 PP Ups could not be verified."}
+        val out=ByteArray(80);writeU32LE(out,0,p.pid);writeU16LE(out,4,p.tid);writeU16LE(out,6,p.sid)
+        val defaultName=canonicalGen3SpeciesName(p.species)?:plan.meta.speciesName
+        writeGen3Text(out,8,10,p.nickname.ifBlank{defaultName});out[0x12]=p.language.toByte();writeGen3Text(out,0x14,7,p.otName);out[0x1B]=p.markingValue.toByte()
+        val blocks=hashMapOf<Char,ByteArray>('G' to ByteArray(12),'A' to ByteArray(12),'E' to ByteArray(12),'M' to ByteArray(12))
+        val g=blocks['G']!!;val a=blocks['A']!!;val e=blocks['E']!!;val m=blocks['M']!!
+        writeU16LE(g,0,p.species);writeU16LE(g,2,0);writeU32LE(g,4,p.experience)
+        var ppBonuses=0;for(i in 0..3){writeU16LE(a,i*2,p.moves[i]);a[8+i]=(if(p.moves[i]==0)0 else p.movePP[i].coerceIn(0,63)).toByte();ppBonuses=ppBonuses or ((if(p.moves[i]==0)0 else ups[i]) shl (i*2))}
+        g[8]=ppBonuses.toByte();g[9]=p.friendship.coerceIn(0,255).toByte();for(i in 0..5)e[i]=p.evs[i].toByte()
+        m[0]=(((p.pokerusStrain and 0xF) shl 4) or (p.pokerusDays and 0xF)).toByte();m[1]=plan.metLocation.toByte()
+        writeU16LE(m,2,(p.metLevel and 0x7F) or ((p.originGame and 0xF) shl 7) or ((p.ball and 0xF) shl 11) or ((p.otGender and 1) shl 15))
+        var ivWord=0L;for(i in 0..5)ivWord=ivWord or ((p.ivs[i].toLong() and 31L) shl(i*5));if(p.abilityNumber==2)ivWord=ivWord or 0x80000000L;writeU32LE(m,4,ivWord)
+        val order=gen3Orders[(p.pid%24L).toInt()];val plain=ByteArray(48);for(i in 0..3)(blocks[order[i]]!!).copyInto(plain,i*12)
+        var sum=0;for(i in 0 until 48 step 2)sum=(sum+readU16LE(plain,i)) and 0xFFFF;writeU16LE(out,0x1C,sum)
+        val key=(p.pid xor (((p.sid.toLong() and 0xFFFFL) shl 16) or (p.tid.toLong() and 0xFFFFL))).toInt();var x=0
+        while(x<48){writeU32LE(plain,x,(readU32LE(plain,x).toInt() xor key).toLong() and 0xFFFFFFFFL);x+=4};plain.copyInto(out,0x20)
+        val q=parsePk3(out,0,false)?:error("The converted PK3 could not be parsed.")
+        require(q.checksumValid&&q.pid==p.pid&&q.species==p.species&&q.tid==p.tid&&q.sid==p.sid&&q.nickname==p.nickname.ifBlank{defaultName}&&q.otName==p.otName&&q.experience==p.experience&&q.nature==p.nature&&q.shiny==p.shiny&&q.heldItem==0&&q.friendship==p.friendship&&q.language==p.language&&q.markingValue==p.markingValue&&q.abilityNumber==p.abilityNumber&&q.originGame==p.originGame&&q.ball==p.ball&&q.metLevel==p.metLevel&&q.metLocation==0&&q.otGender==p.otGender&&q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(IntArray(4){if(p.moves[it]==0)0 else p.movePP[it].coerceIn(0,63)})&&gen3MovePpUps(out).contentEquals(ups)&&q.evs.contentEquals(p.evs)&&q.ivs.contentEquals(p.ivs)&&q.pokerusDays==(p.pokerusDays and 0xF)&&q.pokerusStrain==(p.pokerusStrain and 0xF)){"The converted PK3 did not preserve every destination-representable field."}
+        return out
+    }
+
+    private fun sameGen4ToGen3Pk3(a:PokemonEntry,b:PokemonEntry):Boolean=
+        a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.otName==b.otName&&a.experience==b.experience&&a.nature==b.nature&&a.shiny==b.shiny&&a.originGame==b.originGame&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.metLocation==b.metLocation&&a.language==b.language&&a.markingValue==b.markingValue&&a.abilityNumber==b.abilityNumber&&a.heldItem==b.heldItem&&a.friendship==b.friendship&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)
+
+    private fun prepareGen4ToGen3Transfer(bankFile:File,shown:PokemonEntry){
+        val file=importedFile?:return showDialog("Gen 4 → Gen 3","Load a valid Generation 3 destination save first.");val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val destination=runCatching{file.readBytes()}.getOrNull()?:return showDialog("Gen 4 → Gen 3","The destination save could not be read.")
+        if(!bound()||generationForSize(destination.size)!=3||!gen3SaveValid(destination))return showDialog("Gen 4 → Gen 3","The loaded destination is not a valid bound Generation 3 save.")
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return;val selected=runCatching{bankFile.canonicalFile}.getOrNull()?:return
+        if(selected.parentFile!=root||!selected.extension.equals("pk4",true))return showDialog("Gen 4 → Gen 3","The selected record is outside the Generation 4 PSE Bank.")
+        val bank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Gen 4 → Gen 3","The Bank record could not be read.")
+        val source=if(bank.size==136)parsePk4(bank,false)else null
+        if(source==null||source.pid!=shown.pid||source.species!=shown.species)return showDialog("Gen 4 → Gen 3","The selected Bank record changed. Nothing was changed.")
+        gen4ToGen3PreflightRejection(source)?.let{return showDialog("Gen 4 → Gen 3 blocked","$it\n\nThe Bank record and destination were left unchanged.")}
+        fun snapshotsMatch()=bound()&&runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false)
+        val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 4 → Gen 3").setMessage("Verifying the historical ability slot and native PK3 mapping…").setCancelable(false).create();loading.show()
+        loadGen3ToGen4MetaAsync(source){meta,reason->loading.dismiss();if(!snapshotsMatch())return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 3","The destination or Bank record changed during preparation.");if(meta==null)return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 3 blocked",(reason?:"Conversion metadata could not be verified.")+"\n\nNothing was changed.")
+            val plan=Gen4ToGen3Plan(meta);val pk3=try{buildGen4ToGen3Pk3(bank,source,destination,plan)}catch(e:Exception){return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 3 blocked",(e.message?:"No safe mapping is available.")+"\n\nNothing was changed.")};val converted=parsePk3(pk3,0,false)?:return@loadGen3ToGen4MetaAsync
+            val prepared=Gen4Gen3Prepared(selected,bank,source,destination,plan,pk3,converted,file,openedUri,openedLabel)
+            val preview="PSE conversion, not an official reverse migration.\n\nPreserved: species, PID, OT/TID/SID, nickname, EXP/nature/shiny state, ability slot, IVs, EVs, moves, PP/PP Ups, friendship, Pokérus, Ball, met level, Gen 3 origin title and markings.\n\nRequired format difference: Gen 4 Pal Park location #55 and its migration date cannot reconstruct the original Gen 3 encounter. PSE writes native PK3 met location 0 (unspecified); PK3 has no date fields. No held item, form, Egg, fateful marker or Gen 4-origin provenance will be discarded because records containing them are blocked.\n\nThe original PK4 Bank record remains exact until the native destination save, Pokédex mirrors and section checksums persist and reopen successfully."
+            AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{meta.speciesName}} • Gen 4 → Gen 3").setMessage(preview).setNegativeButton("Cancel",null).setPositiveButton("Review destination"){_,_->if(snapshotsMatch())chooseGen4ToGen3Destination(prepared)else showDialog("Gen 4 → Gen 3","The destination or Bank record changed after review.")}.show()
+        }
+    }
+
+    private fun gen4ToGen3StillBound(p:Gen4Gen3Prepared)=importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&runCatching{p.destinationFile.readBytes().contentEquals(p.destination)&&p.bankFile.readBytes().contentEquals(p.bankBytes)}.getOrDefault(false)
+    private fun chooseGen4ToGen3Destination(p:Gen4Gen3Prepared){
+        if(!gen4ToGen3StillBound(p))return showDialog("Gen 4 → Gen 3","The prepared snapshots changed. Reopen PSE Bank.");val pc=gen3PcBuffer(p.destination)?:return showDialog("Gen 4 → Gen 3","PSE could not reconstruct Gen 3 PC storage.");val empty=(0 until 420).filter{parsePk3(pc,4+it*80,false)==null};if(empty.isEmpty())return showDialog("Gen 4 → Gen 3","No empty Gen 3 PC slot is available.");val first=empty.first()
+        AlertDialog.Builder(this).setTitle("Choose native Gen 3 destination").setMessage("The reviewed PSE conversion will be written to one empty native PK3 slot.").setNegativeButton("Cancel",null).setPositiveButton("First Empty (Box ${first/30+1} / Slot ${first%30+1})"){_,_->transferGen4BankToGen3(p,first)}.setNeutralButton("Choose Box / Slot"){_,_->showGen4ToGen3BoxPicker(p,pc)}.show()
+    }
+    private fun showGen4ToGen3BoxPicker(p:Gen4Gen3Prepared,pc:ByteArray){
+        if(!gen4ToGen3StillBound(p))return showDialog("Gen 4 → Gen 3","The prepared snapshots changed. Reopen PSE Bank.");val boxes=(0 until 14).filter{b->(0 until 30).any{s->parsePk3(pc,4+(b*30+s)*80,false)==null}}
+        AlertDialog.Builder(this).setTitle("Choose Gen 3 destination box").setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,w->val b=boxes[w];val empties=(0 until 30).filter{s->parsePk3(pc,4+(b*30+s)*80,false)==null};AlertDialog.Builder(this).setTitle("Box ${b+1} • choose slot").setItems(empties.map{"Slot ${it+1}"}.toTypedArray()){_,sw->transferGen4BankToGen3(p,b*30+empties[sw])}.setNegativeButton("Cancel",null).show()}.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun transferGen4BankToGen3(p:Gen4Gen3Prepared,target:Int){
+        if(!gen4ToGen3StillBound(p))return showDialog("Gen 4 → Gen 3","The prepared snapshots changed. Reopen PSE Bank.");val file=p.destinationFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;var writeStarted=false;var deleteAttempted=false;var backup:File?=null
+        try{
+            require(fresh.contentEquals(p.destination)&&generationForSize(fresh.size)==3&&gen3SaveValid(fresh)){"The Gen 3 destination changed or failed validation."};require(target in 0 until 420){"The destination slot is invalid."};val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The PK4 Bank record changed."};val source=parsePk4(bank,false)?:error("The PK4 Bank record is invalid.");require(source.pid==p.source.pid&&source.species==p.source.species){"The selected Pokémon changed."}
+            val pk3=buildGen4ToGen3Pk3(bank,source,fresh,p.plan);val converted=parsePk3(pk3,0,false)?:error("The refreshed PK3 could not be parsed.");require(pk3.contentEquals(p.pk3)&&sameGen4ToGen3Pk3(converted,p.converted)){"The prepared conversion changed before writing."}
+            val save=fresh.copyOf();val pc=gen3PcBuffer(save)?:error("Could not reconstruct Gen 3 PC storage.");val beforePc=pc.copyOf();val off=4+target*80;require(parsePk3(pc,off,false)==null){"The destination slot is no longer empty."};pk3.copyInto(pc,off);val staged=parsePk3(pc,off,false)?:error("The staged PK3 could not be parsed.");require(sameGen4ToGen3Pk3(staged,converted)){"The staged PK3 changed."};require(pc.indices.all{it in off until off+80||pc[it]==beforePc[it]}){"Unrelated Gen 3 PC data changed."}
+            writeGen1ToGen3PcAndDexFrozen(save,pc,converted.species);require(gen3SaveValid(save)&&gen2ToGen3DexRegistered(save,converted.species)){"The staged Gen 3 checksums or Pokédex mirrors failed verification."}
+            val map=gen3ActiveSectionMap(fresh)?:error("Could not map the original Gen 3 sections.");val allowed=HashSet<Int>();var cursor=0;for(id in 5..13){val base=map[id];val len=gen3SectionLengths[id];val a=maxOf(off,cursor);val z=minOf(off+80,cursor+len);for(i in a until z)allowed.add(base+i-cursor);allowed.add(base+0xFF6);allowed.add(base+0xFF7);cursor+=len};val layout=gen3PokedexLayout(fresh)?:error("Could not map Gen 3 Pokédex mirrors.");val dexByte=(converted.species-1)/8;for(base in layout.mirrors)allowed.add(base+dexByte);for(base in intArrayOf(layout.section0,layout.section1,layout.seenSection)){allowed.add(base+0xFF6);allowed.add(base+0xFF7)};require(save.indices.all{it in allowed||save[it]==fresh[it]}){"The conversion changed data outside the selected PK3, Pokédex mirrors and required section checksums."}
+            val recovery=File.createTempFile(backupGameName(file)+"_PreGen4ToGen3_",".backup",backupsDir());backup=recovery;recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The recovery backup did not verify."};retainGen2ToGen3SafetyBackup(recovery,fresh);require(isBackupKept(recovery)&&gen4ToGen3StillBound(p)){"The retained backup, destination identity or Bank record changed before writing."}
+            writeStarted=true;file.writeBytes(save);val written=file.readBytes();require(written.contentEquals(save)&&gen3SaveValid(written)&&gen2ToGen3DexRegistered(written,converted.species)){"The persisted Gen 3 save failed verification."};require(written.indices.all{it in allowed||written[it]==fresh[it]}){"The reopened save changed outside the reviewed scope."};val vpc=gen3PcBuffer(written)?:error("Could not reopen Gen 3 PC storage.");val actual=vpc.copyOfRange(off,off+80);val q=parsePk3(actual,0,false)?:error("The persisted PK3 could not be parsed.");require(actual.contentEquals(pk3)&&sameGen4ToGen3Pk3(q,staged)){"The exact native PK3 did not persist."}
+            require(p.bankFile.readBytes().contentEquals(p.bankBytes)){"The PK4 Bank record changed before cleanup."};deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The PK4 Bank record could not be removed after destination verification."}
+        }catch(e:Exception){val bankRestored=runCatching{if(deleteAttempted&&!p.bankFile.exists())p.bankFile.writeBytes(p.bankBytes);p.bankFile.readBytes().contentEquals(p.bankBytes)}.getOrDefault(false);val saveRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh);file.readBytes().contentEquals(fresh)&&gen3SaveValid(fresh)}.getOrDefault(false));val recovery=if(bankRestored&&saveRestored)"The exact destination and PK4 Bank record were restored or kept and verified." else "Automatic recovery could not be verified. Keep the recovery backup and remaining files for review.";showDialog("Gen 4 → Gen 3 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:""));return}
+        Toast.makeText(this,"PSE converted Gen 4 → Gen 3 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show();showBank()
     }
 
     private fun buildGen4ToGen7Pk7(raw:ByteArray,p:PokemonEntry,destinationSave:ByteArray,trainer:TrainerData):ByteArray{
@@ -18503,10 +18618,10 @@ class MainActivity : Activity() {
         var x=0
         while(x<48){val v=readU32LE(dec,x).toInt() xor key;writeU32LE(dec,x,v.toLong() and 0xFFFFFFFFL);x+=4}
         val order=gen3Orders[(pid%24L).toInt()]
-        val ai=order.indexOf('A')
-        if(ai<0)return IntArray(4)
-        val a=dec.copyOfRange(ai*12,ai*12+12)
-        return IntArray(4){(a[8+it].toInt() ushr 6) and 3}
+        val gi=order.indexOf('G')
+        if(gi<0)return IntArray(4)
+        val packed=dec[gi*12+8].toInt() and 0xFF
+        return IntArray(4){(packed ushr (it*2)) and 3}
     }
 
     private fun buildGen3ToGen7Pk7(raw:ByteArray,p:PokemonEntry,destinationSave:ByteArray,trainer:TrainerData,meta:Gen3ToGen7TransferMeta):ByteArray{
