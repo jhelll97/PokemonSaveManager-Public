@@ -1,0 +1,266 @@
+package com.example.pokemonsavemanager
+
+import java.io.InputStream
+
+/** Changes one PA8's shiny state through its PID high word in a reviewed new save copy. */
+object LegendsArceusPokemonShinyEditing {
+    private const val STORED_END = 0x168
+    private const val TID = 0x0C
+    private const val SID = 0x0E
+    private const val PID_LOW = 0x1C
+    private const val PID_HIGH = 0x1E
+    private const val BLOCK_SIZE = 88
+    private val orders = listOf("0123", "0132", "0213", "0312", "0231", "0321",
+        "1023", "1032", "2013", "3012", "2031", "3021", "1203", "1302",
+        "2103", "3102", "2301", "3201", "1230", "1320", "2130", "3120", "2310", "3210")
+
+    fun readDocumentBytes(input: InputStream): ByteArray =
+        LegendsArceusPokemonNicknameEditing.readDocumentBytes(input)
+
+    fun sha256(bytes: ByteArray): String = LegendsArceusPokemonNicknameEditing.sha256(bytes)
+
+    fun read(
+        source: ByteArray,
+        area: LegendsArceusPokemonArea,
+        pasture: Int,
+        position: Int
+    ): LegendsArceusPokemonRead {
+        val blocks = LegendsArceusSaveValidation.readPokemonBlocks(source)
+        return inspect(targetRecord(blocks, area, pasture, position))
+    }
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        area: LegendsArceusPokemonArea,
+        pasture: Int,
+        position: Int,
+        requestedShiny: Boolean
+    ): LegendsArceusPokemonShinyCopyPlan {
+        val original = source.copyOf()
+        require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        val blocks = LegendsArceusSaveValidation.readPokemonBlocks(original)
+        val beforeRecord = targetRecord(blocks, area, pasture, position)
+        val before = inspect(beforeRecord)
+        require(before.shiny != requestedShiny) { "Choose a different Shiny status before review." }
+        val afterRecord = editRecord(beforeRecord, requestedShiny)
+        val written = if (area == LegendsArceusPokemonArea.PASTURE) {
+            LegendsArceusSaveValidation.writePastureRecord(original, pasture, position, afterRecord)
+        } else LegendsArceusSaveValidation.writePartyRecord(original, position, afterRecord)
+        val after = verify(
+            original, written.bytes, area, pasture, position, written.absoluteOffset, requestedShiny
+        )
+        return LegendsArceusPokemonShinyCopyPlan(
+            original, written.bytes, area, pasture, position, written.absoluteOffset, before, after
+        )
+    }
+
+    internal fun verify(
+        original: ByteArray,
+        edited: ByteArray,
+        area: LegendsArceusPokemonArea,
+        pasture: Int,
+        position: Int,
+        absoluteOffset: Int,
+        requestedShiny: Boolean
+    ): LegendsArceusPokemonRead {
+        val beforeBlocks = LegendsArceusSaveValidation.readPokemonBlocks(original)
+        val afterBlocks = LegendsArceusSaveValidation.readPokemonBlocks(edited)
+        require(beforeBlocks.version == afterBlocks.version && original.size == edited.size) {
+            "The Shiny edit changed native title identity or save size."
+        }
+        val beforeRecord = targetRecord(beforeBlocks, area, pasture, position)
+        val afterRecord = targetRecord(afterBlocks, area, pasture, position)
+        val before = inspect(beforeRecord)
+        val after = inspect(afterRecord)
+        require(after.shiny == requestedShiny &&
+            after.copy(pid = before.pid, shiny = before.shiny) == before) {
+            "The persisted PA8 changed more than its reviewed PID high word."
+        }
+
+        val recordSize = recordSize(area)
+        val relativeOffset = if (area == LegendsArceusPokemonArea.PASTURE)
+            ((pasture - 1) * 30 + position - 1) * recordSize else (position - 1) * recordSize
+        val beforeTarget = if (area == LegendsArceusPokemonArea.PASTURE) beforeBlocks.pastures else beforeBlocks.party
+        val afterTarget = if (area == LegendsArceusPokemonArea.PASTURE) afterBlocks.pastures else afterBlocks.party
+        val beforeOther = if (area == LegendsArceusPokemonArea.PASTURE) beforeBlocks.party else beforeBlocks.pastures
+        val afterOther = if (area == LegendsArceusPokemonArea.PASTURE) afterBlocks.party else afterBlocks.pastures
+        require(beforeOther.contentEquals(afterOther)) { "The unselected native Pokémon storage object changed." }
+        require(beforeTarget.indices.all { index ->
+            index in relativeOffset until relativeOffset + recordSize || beforeTarget[index] == afterTarget[index]
+        }) { "Another native Pokémon slot changed." }
+
+        val beforePlain = decryptAndUnshuffle(beforeRecord)
+        val afterPlain = decryptAndUnshuffle(afterRecord)
+        val targetXor = if (requestedShiny) 0 else 16
+        val expectedHigh = u16(beforePlain, TID) xor u16(beforePlain, SID) xor
+            u16(beforePlain, PID_LOW) xor targetXor
+        require(u16(afterPlain, PID_HIGH) == expectedHigh &&
+            u16(afterPlain, PID_LOW) == u16(beforePlain, PID_LOW)) {
+            "The native PID was not changed to the reviewed Shiny state exactly."
+        }
+        require(beforePlain.indices.all { offset ->
+            offset in 6..7 || offset in PID_HIGH..PID_HIGH + 1 ||
+                beforePlain[offset] == afterPlain[offset]
+        }) { "The PA8 edit exceeded the PID high word and checksum fields." }
+
+        val hashOffset = original.size - 32
+        require(original.indices.all { index ->
+            index in absoluteOffset until absoluteOffset + recordSize ||
+                index in hashOffset until original.size || original[index] == edited[index]
+        }) { "An unrelated encrypted container byte changed." }
+        return after
+    }
+
+    private fun inspect(record: ByteArray): LegendsArceusPokemonRead {
+        val pokemon = (LegendsArceusPokemonReadOnly.read(record) as? LegendsArceusSlotRead.Pokemon)?.value
+            ?: throw IllegalArgumentException("The selected native PA8 is not checksum-valid.")
+        require(!pokemon.isEgg) { "Egg PA8 records remain protected from Shiny editing." }
+        require(!pokemon.isNoble) { "Noble PA8 records remain protected from Shiny editing." }
+        return pokemon
+    }
+
+    private fun targetRecord(
+        blocks: LegendsArceusPokemonBlocks,
+        area: LegendsArceusPokemonArea,
+        pasture: Int,
+        position: Int
+    ): ByteArray {
+        val size = recordSize(area)
+        if (area == LegendsArceusPokemonArea.PASTURE) {
+            require(pasture in 1..32 && position in 1..30) { "The selected native pasture slot is outside storage." }
+            val offset = ((pasture - 1) * 30 + position - 1) * size
+            return blocks.pastures.copyOfRange(offset, offset + size)
+        }
+        require(position in 1..6) { "The selected native party slot is outside the six-slot party." }
+        val count = blocks.party[6 * size].toInt() and 255
+        require(position <= count) { "The selected native party slot is not occupied." }
+        val offset = (position - 1) * size
+        return blocks.party.copyOfRange(offset, offset + size)
+    }
+
+    private fun recordSize(area: LegendsArceusPokemonArea): Int =
+        if (area == LegendsArceusPokemonArea.PASTURE) LegendsArceusPokemonReadOnly.STORED_SIZE
+        else LegendsArceusPokemonReadOnly.PARTY_SIZE
+
+    private fun editRecord(record: ByteArray, requestedShiny: Boolean): ByteArray {
+        val plain = decryptAndUnshuffle(record)
+        val targetXor = if (requestedShiny) 0 else 16
+        val pidHigh = u16(plain, TID) xor u16(plain, SID) xor
+            u16(plain, PID_LOW) xor targetXor
+        writeU16(plain, PID_HIGH, pidHigh)
+        var checksum = 0
+        for (offset in 8 until STORED_END step 2) checksum += u16(plain, offset)
+        writeU16(plain, 6, checksum and 0xFFFF)
+        return shuffleAndEncrypt(plain)
+    }
+
+    private fun decryptAndUnshuffle(record: ByteArray): ByteArray {
+        require(record.size == LegendsArceusPokemonReadOnly.STORED_SIZE ||
+            record.size == LegendsArceusPokemonReadOnly.PARTY_SIZE) {
+            "Expected one complete native stored or party PA8 record."
+        }
+        val ec = u32(record, 0)
+        val decoded = record.copyOf()
+        xorWords(decoded, 8, STORED_END, ec)
+        if (record.size == LegendsArceusPokemonReadOnly.PARTY_SIZE)
+            xorWords(decoded, STORED_END, LegendsArceusPokemonReadOnly.PARTY_SIZE, ec)
+        val order = orders[((ec ushr 13).toInt() and 31) % 24]
+        val plain = decoded.copyOf()
+        for (block in 0..3) {
+            val from = 8 + (order[block] - '0') * BLOCK_SIZE
+            decoded.copyInto(plain, 8 + block * BLOCK_SIZE, from, from + BLOCK_SIZE)
+        }
+        return plain
+    }
+
+    private fun shuffleAndEncrypt(plain: ByteArray): ByteArray {
+        val ec = u32(plain, 0)
+        val order = orders[((ec ushr 13).toInt() and 31) % 24]
+        val shuffled = plain.copyOf()
+        for (block in 0..3) {
+            val destination = 8 + (order[block] - '0') * BLOCK_SIZE
+            plain.copyInto(shuffled, destination, 8 + block * BLOCK_SIZE, 8 + (block + 1) * BLOCK_SIZE)
+        }
+        xorWords(shuffled, 8, STORED_END, ec)
+        if (plain.size == LegendsArceusPokemonReadOnly.PARTY_SIZE)
+            xorWords(shuffled, STORED_END, LegendsArceusPokemonReadOnly.PARTY_SIZE, ec)
+        return shuffled
+    }
+
+    private fun xorWords(bytes: ByteArray, from: Int, end: Int, seed: Long) {
+        var state = seed
+        for (offset in from until end step 2) {
+            state = (state * 0x41C64E6DL + 0x6073L) and 0xFFFFFFFFL
+            writeU16(bytes, offset, u16(bytes, offset) xor (state ushr 16).toInt())
+        }
+    }
+
+    private fun byte(bytes: ByteArray, offset: Int): Int = bytes[offset].toInt() and 255
+    private fun u16(bytes: ByteArray, offset: Int): Int = byte(bytes, offset) or (byte(bytes, offset + 1) shl 8)
+    private fun u32(bytes: ByteArray, offset: Int): Long =
+        u16(bytes, offset).toLong() or (u16(bytes, offset + 2).toLong() shl 16)
+    private fun writeU16(bytes: ByteArray, offset: Int, value: Int) {
+        bytes[offset] = value.toByte(); bytes[offset + 1] = (value ushr 8).toByte()
+    }
+}
+
+class LegendsArceusPokemonShinyCopyPlan internal constructor(
+    original: ByteArray,
+    edited: ByteArray,
+    val area: LegendsArceusPokemonArea,
+    val pasture: Int,
+    val position: Int,
+    val absoluteOffset: Int,
+    val before: LegendsArceusPokemonRead,
+    val after: LegendsArceusPokemonRead
+) {
+    private val original = original.copyOf()
+    private val edited = edited.copyOf()
+    val editedSha256: String = LegendsArceusPokemonShinyEditing.sha256(this.edited)
+    private var consumed = false
+
+    @Synchronized
+    fun saveNewCopy(
+        readSource: () -> ByteArray,
+        retainBackup: (ByteArray) -> ByteArray,
+        readDestination: () -> ByteArray,
+        writeDestination: (ByteArray) -> Unit,
+        discardDestination: () -> Boolean
+    ) {
+        check(!consumed) { "This Shiny-status review was already used. Reopen Pokémon Details." }
+        consumed = true
+        fun requireSource() = require(readSource().contentEquals(original)) {
+            "The selected source changed. Reopen it from PSE."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "Choose a new empty document; existing files cannot be replaced." }
+        require(retainBackup(original.copyOf()).contentEquals(original)) {
+            "The recovery backup did not verify. Nothing was written."
+        }
+        requireSource()
+        require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
+        var started = false
+        try {
+            LegendsArceusPokemonShinyEditing.verify(
+                original, edited, area, pasture, position, absoluteOffset, after.shiny
+            )
+            started = true
+            writeDestination(edited.copyOf())
+            val persisted = readDestination()
+            require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed Shiny edit." }
+            LegendsArceusPokemonShinyEditing.verify(
+                original, persisted, area, pasture, position, absoluteOffset, after.shiny
+            )
+            requireSource()
+        } catch (failure: Exception) {
+            val removed = started && runCatching { discardDestination() }.getOrDefault(false)
+            throw IllegalStateException(
+                (failure.message ?: "Shiny-status copy verification failed.") +
+                    if (removed) " The failed new copy was removed; the recovery backup is retained."
+                    else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
+                failure
+            )
+        }
+    }
+}
