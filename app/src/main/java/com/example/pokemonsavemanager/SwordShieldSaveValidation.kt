@@ -119,6 +119,7 @@ internal data class SwordShieldSwordsOfJusticeBlocks(
     val virizionProgress: ByteArray,
     val keldeoProgress: ByteArray
 )
+internal data class SwordShieldSwordsOfJusticeWriteResult(val bytes: ByteArray, val offsets: List<Int>)
 internal data class SwordShieldAdventureStepBlocks(
     val version: SwordShieldVersion,
     val bikeBoostChargeSteps: ByteArray,
@@ -868,6 +869,73 @@ object SwordShieldSaveValidation {
             block(virizionProgressKey),
             block(keldeoProgressKey)
         )
+    }
+
+    /** Replaces the six documented Swords of Justice quest UInt32 records and rebuilds the native footer. */
+    internal fun writeSwordsOfJusticeRecords(
+        source: ByteArray,
+        replacement: List<Long>
+    ): SwordShieldSwordsOfJusticeWriteResult {
+        readSwordsOfJusticeBlocks(source)
+        val keys = listOf(
+            0x4DBB9B79L,
+            0xCB135C68L,
+            0xC35F6291L,
+            0x03C69A96L,
+            0xB98F962BL,
+            0x9A39C8FCL
+        )
+        require(replacement.size == keys.size && replacement.all { it in 0L..0xFFFF_FFFFL }) {
+            "Swords of Justice quest records must fit their six native unsigned 32-bit fields."
+        }
+        val values = keys.zip(replacement).toMap()
+        val end = source.size - 32
+        val payload = source.copyOfRange(0, end)
+        for (index in payload.indices) payload[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+
+        val offsets = mutableMapOf<Long, Int>()
+        val cursor = Cursor(payload)
+        while (cursor.remaining > 0) {
+            val key = cursor.uint32()
+            val stream = KeyStream(key)
+            val type = cursor.byte() xor stream.next()
+            val length = when (type) {
+                1, 2, 3 -> 0L
+                4 -> cursor.uint32() xor stream.next32()
+                5 -> {
+                    val elements = cursor.uint32() xor stream.next32()
+                    val subType = cursor.byte() xor stream.next()
+                    elements * elementSize(subType).toLong()
+                }
+                else -> elementSize(type).toLong()
+            }
+            require(length <= cursor.remaining.toLong()) { "A native block length exceeds the remaining payload." }
+            val blockStart = cursor.position
+            values[key]?.let { value ->
+                require(type == 14 && length == 4L) {
+                    "A Sword/Shield Swords of Justice quest record has the wrong native type or size."
+                }
+                repeat(4) { byteIndex ->
+                    val decoded = ((value ushr (byteIndex * 8)) and 0xFF).toInt()
+                    payload[blockStart + byteIndex] = (decoded xor stream.next()).toByte()
+                }
+                offsets[key] = blockStart
+            }
+            cursor.skip(length.toInt())
+        }
+        require(offsets.keys == values.keys) { "A required Sword/Shield Swords of Justice quest record is missing." }
+
+        val edited = source.copyOf()
+        for (index in payload.indices) edited[index] =
+            (payload[index].toInt() xor pad[index % pad.size].toInt()).toByte()
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(intro)
+        digest.update(edited, 0, end)
+        digest.update(outro)
+        digest.digest().copyInto(edited, end)
+        readSwordsOfJusticeBlocks(edited)
+        return SwordShieldSwordsOfJusticeWriteResult(edited, keys.map { offsets.getValue(it) })
     }
 
     /** Reads PKHeX's documented bike, Egg-cycle, and friendship step records after the complete container gate passes. */

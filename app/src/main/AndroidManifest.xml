@@ -80,6 +80,7 @@
         <activity android:name=".SwitchSwordShieldIsleOfArmorProgressActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldCrownTundraProgressActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldStarTournamentActivity" android:exported="false"/>
+        <activity android:name=".SwitchSwordShieldSwordsOfJusticeActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldEventActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspItemActivity" android:exported="false"/>

@@ -652,7 +652,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldStarTournament(bound) }
         })
         if (bound.swordShieldSwordsOfJustice != null) dashboardRoot.addView(Button(this).apply {
-            text = "Swords of Justice Quest • Read-only"; isAllCaps = false; isEnabled = !busy
+            text = "Swords of Justice Quest • Edit"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showSwordShieldSwordsOfJustice(bound) }
         })
         if (bound.swordShieldAdventureSteps != null) dashboardRoot.addView(Button(this).apply {
@@ -3323,7 +3323,7 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound || dashboardBusy) return
         val read = bound.swordShieldSwordsOfJustice ?: return
         val detail = buildString {
-            append("${read.version.displayName} • Swords of Justice Quest • Read-only\n\n")
+            append("${read.version.displayName} • Swords of Justice Quest\n\n")
             append("Quest status: ${read.questStatus} • ${read.questStatusLabel}\n")
             append("Overall progress: ${read.questProgress} • ${read.questProgressLabel}\n\n")
             append("Cobalion: ${read.cobalionProgress} • ${read.swordsMemberLabel(read.cobalionProgress)}\n")
@@ -3332,15 +3332,28 @@ class SwitchReadOnlyActivity : Activity() {
             append("Keldeo: ${read.keldeoProgress} • ${read.keldeoProgressLabel}\n\n")
             append("The complete native container hash and all six exact UInt32 scalar layouts passed before display. ")
             append("Only PKHeX's documented quest values are interpreted; every native value remains exact. ")
-            append("No footprint, location, encounter, capture, report, quest, reward, unlock, repair, export, or save-writing action is available here.")
+            append("Editing changes only selected quest-state scalars and does not infer encounter, capture, report, reward, or unlock side effects.")
         }
-        val scroll = ScrollView(this).apply {
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
             })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Swords of Justice Quest"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchSwordShieldSwordsOfJusticeActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
         }
-        AlertDialog.Builder(this).setTitle("Swords of Justice Quest • Read-only")
-            .setView(scroll).setPositiveButton("Close", null).show()
+        AlertDialog.Builder(this).setTitle("Swords of Justice Quest")
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
     private fun showSwordShieldAdventureSteps(bound: SwitchReadSession) {
