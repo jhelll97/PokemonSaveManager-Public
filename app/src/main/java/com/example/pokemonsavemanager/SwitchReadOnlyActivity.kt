@@ -306,7 +306,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(undergroundActivityButton)
         recordStatisticsButton = Button(this).apply {
-            text = "Record Statistics • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Record Statistics • Edit head"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspRecords(it) } }
         }
         root.addView(recordStatisticsButton)
@@ -6530,7 +6530,7 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound) return
         val records = bound.bdspRecordStatistics ?: return
         val labels = records.sets.map { "Set ${it.index}${if (it.index == 0) " • reference head" else " • saved set"} • 30 records" }
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Record statistics • Read-only")
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Record statistics • Edit head")
             .setItems(labels.toTypedArray()) { _, index -> if (session === bound && index in records.sets.indices) showBdspRecordSet(bound, index) }
             .setPositiveButton("Trainer records") { _, _ -> if (session === bound) showBdspAdditionalRecords(bound) }
             .setNegativeButton("Close", null).show()
@@ -6542,7 +6542,9 @@ class SwitchReadOnlyActivity : Activity() {
         if (setIndex !in records.sets.indices) return
         val set = records.set(setIndex)
         val labels = set.entries.map { "#${it.recordId} ${it.displayName}: ${it.signedValue}" }
-        AlertDialog.Builder(this).setTitle("Record set $setIndex • Read-only")
+        AlertDialog.Builder(this).setTitle(
+            if (setIndex == 0) "Record set 0 • Edit head" else "Record set $setIndex • Read-only"
+        )
             .setItems(labels.toTypedArray()) { _, id -> if (session === bound && id in set.entries.indices) showBdspRecord(bound, setIndex, id) }
             .setPositiveButton("Sets") { _, _ -> if (session === bound) showBdspRecords(bound) }
             .setNeutralButton("Raw set") { _, _ -> if (session === bound) showBdspRecordRaw(bound, setIndex) }
@@ -6559,10 +6561,34 @@ class SwitchReadOnlyActivity : Activity() {
             "Saved signed value: ${entry.signedValue}\nRaw unsigned word: ${entry.rawValue}\nRaw hex: ${entry.rawValue.toString(16).uppercase().padStart(8, '0')}\n" +
             "Reference limit (descriptive): ${entry.referenceLimit}\n\n" +
             "Saved values are never clamped to reference limits. Negative values and original bits remain intact. Set 0 is the set read by the reference head getter. Other sets have no inferred dates, chronology or ownership. Clear-time units, rate units and ribbon bit meanings are not inferred. These records do not establish rewards, progress validity or consistency with other save sections. No editing, reset or save writing is available."
-        val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
-            text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
-        }) }
-        AlertDialog.Builder(this).setTitle("Record #$recordId • Read-only").setView(scroll)
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = if (setIndex == 0) {
+                    detail.replace(
+                        "No editing, reset or save writing is available.",
+                        "The head value can be edited within its documented 0 through ${entry.referenceLimit} range; unusual existing values remain preservable when untouched."
+                    )
+                } else detail
+                textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+            if (setIndex == 0 && source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit head record #$recordId"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchBdspRecordStatisticActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.bdsp.record.id", recordId)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        AlertDialog.Builder(this).setTitle(
+            if (setIndex == 0) "Head record #$recordId • Edit" else "Record #$recordId • Read-only"
+        ).setView(ScrollView(this).apply { addView(body) })
             .setPositiveButton("Set") { _, _ -> if (session === bound) showBdspRecordSet(bound, setIndex) }.setNegativeButton("Close", null).show()
     }
 
