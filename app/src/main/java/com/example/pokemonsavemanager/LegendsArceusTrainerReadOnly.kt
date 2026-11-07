@@ -28,7 +28,6 @@ object LegendsArceusTrainerReadOnly {
         val languageName = languages[language]
             ?: throw IllegalArgumentException("The saved trainer language is not supported by Legends: Arceus.")
         blocks.money?.let { require(it <= 9999999L) { "The saved Arceus money exceeds the native maximum." } }
-        blocks.satchelUpgrades?.let { require(it <= 39L) { "The saved satchel-upgrade count exceeds 39." } }
         return LegendsArceusTrainerRead(blocks.version, name(status), gender, language, languageName,
             u32(status, 0x10), u16(status, 0x10), u16(status, 0x12), blocks.money,
             blocks.meritCurrent, blocks.meritTotal, blocks.satchelUpgrades, blocks.expeditionRank)
