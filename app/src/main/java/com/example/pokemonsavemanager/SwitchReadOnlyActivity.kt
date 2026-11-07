@@ -366,7 +366,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(contestButton)
         unionRoomButton = Button(this).apply {
-            text = "Union Room Saved Data • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Union Room Saved Data • Edit"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspUnionRoom(it) } }
         }
         root.addView(unionRoomButton)
@@ -4949,7 +4949,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound) showBdspBerryPlots(bound) }
         })
         if (bound.bdspUnionRoom != null) body.addView(Button(this).apply {
-            text = "Union Room saved data • Read-only"
+            text = "Union Room saved data • Edit"
             setOnClickListener { if (session === bound) showBdspUnionRoom(bound) }
         })
         if (bound.bdspRandomGroups != null) body.addView(Button(this).apply {
@@ -7418,11 +7418,27 @@ class SwitchReadOnlyActivity : Activity() {
             "Native PenaltyTime label (Float32): ${read.penaltyTime}\nRaw time bits: ${read.rawPenaltyTimeBits} (hex ${hex(read.rawPenaltyTimeBits)})\n\n" +
             "Field meanings are provisional; raw values remain authoritative. No time units, remaining penalty, expiry, online access or unlock status are inferred. Negative counts, unknown flags, signed zero, infinities and NaN payload words are retained. A VM may quiet a signaling NaN when displaying Float32; the raw word stays exact.\n\n" +
             "Raw native Union Room record (12 bytes):\n" + read.rawBytes.joinToString(" ") { "%02X".format(it) } +
-            "\n\nRead-only. No penalty clearing, resets, normalization, editing, repair, export, replacement or save writing."
-        AlertDialog.Builder(this).setTitle("${bound.displayName} • Union Room saved data • Read-only")
-            .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
+            "\n\nThe three documented native fields can be edited in a verified new copy. A changed initial-talk flag must be 0 or 1; unusual untouched words remain exact. PenaltyTime editing uses its exact hexadecimal Float32 word. PSE does not provide inferred penalty clearing, expiry, online access or unlock actions."
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
-            }) }).setPositiveButton("Close", null).show()
+            })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Union Room data"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchBdspUnionRoomActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        AlertDialog.Builder(this).setTitle("${bound.displayName} • Union Room saved data • Edit")
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
     private fun bdspRandomGroupName(name: BdspRandomGroupNameRead): String =
