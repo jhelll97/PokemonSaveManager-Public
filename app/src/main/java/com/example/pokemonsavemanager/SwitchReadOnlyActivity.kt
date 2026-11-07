@@ -286,7 +286,7 @@ class SwitchReadOnlyActivity : Activity() {
         }
         root.addView(appearanceButton)
         timestampsButton = Button(this).apply {
-            text = "Saved Timestamps • Read-only"; isEnabled = false; visibility = android.view.View.GONE
+            text = "Saved Timestamps • Edit"; isEnabled = false; visibility = android.view.View.GONE
             setOnClickListener { session?.let { showBdspTimestamps(it) } }
         }
         root.addView(timestampsButton)
@@ -565,7 +565,7 @@ class SwitchReadOnlyActivity : Activity() {
                 }, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) })
             }
             if (pair.size == 1 && detailGroups.isNotEmpty()) row.addView(Button(this).apply {
-                text = "Game Details\nRead-only"; textSize = 16f; isAllCaps = false; minHeight = dp(100)
+                text = "Game Details\nView and edit"; textSize = 16f; isAllCaps = false; minHeight = dp(100)
                 setTextColor(Color.WHITE); background = cardBackground(Color.rgb(12, 35, 51))
                 isEnabled = !busy && detailGroups.any { group -> group.entries.any { it.enabled } }
                 alpha = if (isEnabled) 1f else 0.5f
@@ -988,7 +988,7 @@ class SwitchReadOnlyActivity : Activity() {
                 }
             })
         }
-        dashboardRoot.addView(label("Only BDSP options listed in Edit BDSP options can be edited to a new copy. Other editing, transfers, conversion and source replacement remain locked.", 14f))
+        dashboardRoot.addView(label("Only controls explicitly marked Edit can write to a verified new copy. Other source replacement remains locked.", 14f))
         dashboardRoot.addView(Button(this).apply {
             text = "Close save preview"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy && clearButton.isEnabled) clearButton.performClick() }
@@ -1014,7 +1014,7 @@ class SwitchReadOnlyActivity : Activity() {
         val targets = bdspGameDetailTargets()
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 16, 24, 16) }
         root.addView(TextView(this).apply {
-            text = "Browse saved game details by topic. Each section is read-only and keeps its own validation checks."
+            text = "Browse saved game details by topic. Sections remain read-only unless explicitly marked Edit, and each keeps its own validation checks."
             textSize = 16f; setPadding(0, 0, 0, 16)
         })
         lateinit var dialog: AlertDialog
@@ -1043,12 +1043,14 @@ class SwitchReadOnlyActivity : Activity() {
         for (entry in group.entries) {
             val target = targets.getValue(entry.section)
             root.addView(Button(this).apply {
-                text = entry.label + if (entry.enabled && target.isEnabled) " • Read-only" else " • Unavailable for this save"
+                text = entry.label + if (entry.enabled && target.isEnabled)
+                    (if (entry.section == "timestamps") " • Edit" else " • Read-only")
+                else " • Unavailable for this save"
                 isAllCaps = false; isEnabled = entry.enabled && target.isEnabled
                 setOnClickListener { if (session === bound && !dashboardBusy && target.isEnabled) target.performClick() }
             })
         }
-        AlertDialog.Builder(this).setTitle(group.label + " • Read-only")
+        AlertDialog.Builder(this).setTitle(group.label)
             .setView(ScrollView(this).apply { addView(root) })
             .setPositiveButton("All sections") { _, _ -> if (session === bound && !dashboardBusy) showBdspGameDetailGroups(bound) }
             .setNegativeButton("Close", null).show()
@@ -6351,7 +6353,7 @@ class SwitchReadOnlyActivity : Activity() {
 
 
     private fun bdspTimestampSummary(timestamps: BdspTimestampsRead): String = buildString {
-        append("Saved timestamps • UTC • Read-only\n")
+        append("Saved timestamps • UTC • Edit\n")
         for (entry in timestamps.entries) {
             append("${entry.kind.displayName}: ${entry.utcTimestamp ?: "Outside supported FILETIME range"}\n")
             append("Saved count: ${entry.count}; raw FILETIME ticks: ${entry.fileTimeTicks}\n")
@@ -6366,12 +6368,27 @@ class SwitchReadOnlyActivity : Activity() {
             bdspTimestampSummary(timestamps) + "\nRaw FILETIME words (hex):\n" +
             timestamps.entries.joinToString("\n") { "${it.kind.displayName}: ${java.lang.Long.toHexString(it.fileTimeTicks).uppercase().padStart(16, '0')}" } +
             "\n\nRaw native system data (312 bytes):\n" + timestamps.rawSystemBytes.chunked(16).joinToString("\n") { row -> row.joinToString(" ") { "%02X".format(it) } } +
-            "\n\nDates use UTC and retain 100-nanosecond precision. Out-of-range values keep their signed ticks and exact raw words without hiding other dates. Counts are saved counters with no inferred duration. Clock snapshot, alignment and reserved bytes are retained without interpretation. No clock changes, timer reset, editing or save writing is available."
-        val scroll = ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
-            text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
-        }) }
-        AlertDialog.Builder(this).setTitle("Saved timestamps • UTC • Read-only")
-            .setView(scroll).setPositiveButton("Close", null).show()
+            "\n\nDates use UTC and retain 100-nanosecond precision. Out-of-range values keep their signed ticks and exact raw words without hiding other dates. Counts are saved counters with no inferred duration. Clock snapshot, alignment and reserved bytes are retained without interpretation. Editing changes only selected FILETIME ticks and the native whole-file MD5."
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail; textSize = 16f; setPadding(24, 16, 24, 16); setTextIsSelectable(true)
+            })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Saved Timestamps"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchBdspTimestampsActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Saved timestamps • UTC")
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
 
