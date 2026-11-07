@@ -202,6 +202,7 @@
         <activity android:name=".SwitchScarletVioletPokemonTeraTypeActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonScaleActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonObedienceActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletPokemonBallActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPseBankRestoreActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonDuplicateActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonSwapActivity" android:exported="false"/>

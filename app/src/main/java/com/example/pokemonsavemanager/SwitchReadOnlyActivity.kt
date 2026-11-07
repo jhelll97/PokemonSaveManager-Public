@@ -4019,6 +4019,7 @@ class SwitchReadOnlyActivity : Activity() {
             append("Effective Tera Type: ${ScarletVioletTeraTypes.name(effectiveTera)}\n")
             append("Native size: ${ScarletVioletPokemonScaleEditing.label(p.scale)}\n")
             append("Obedience Level: ${p.obedienceLevel}\n")
+            append("Capture Ball: ${ScarletVioletPokemonBallEditing.name(p.ball)} (#${p.ball})\n")
             append("Effective Tera Type follows native override semantics; battle/form effects and encounter legality are not evaluated.\n\n")
             append("Original trainer: ${p.originalTrainer}\nTID16: ${p.tid}\nSID16: ${p.sid}\n")
             append("PID: ${p.pid.toString(16).uppercase()}\nEncryption constant: ${p.encryptionConstant.toString(16).uppercase()}\n\nMoves\n")
@@ -4114,6 +4115,28 @@ class SwitchReadOnlyActivity : Activity() {
                         Intent(
                             this@SwitchReadOnlyActivity,
                             SwitchScarletVioletPokemonObedienceActivity::class.java
+                        )
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                            .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                            .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        if (nativeTarget != null && !p.isEgg && !p.fatefulEncounter &&
+            ScarletVioletPokemonBallEditing.choices.any { it.id == p.ball }) {
+            content.addView(Button(this).apply {
+                text = "Edit Capture Ball"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(
+                            this@SwitchReadOnlyActivity,
+                            SwitchScarletVioletPokemonBallActivity::class.java
                         )
                             .setData(source)
                             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)

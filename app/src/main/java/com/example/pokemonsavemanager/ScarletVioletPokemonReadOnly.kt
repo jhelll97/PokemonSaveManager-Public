@@ -14,7 +14,8 @@ data class ScarletVioletPokemonRead(
     val moves: List<ScarletVioletMoveRead>, val ivs: List<Int>, val evs: List<Int>,
     val hyperTrainingFlags: Int,
     val relearnMoves: List<Int>, val cachedStats: List<Int>,
-    val teraTypeOriginal: Int, val teraTypeOverride: Int, val scale: Int, val obedienceLevel: Int
+    val teraTypeOriginal: Int, val teraTypeOverride: Int, val scale: Int, val obedienceLevel: Int,
+    val ball: Int = 0
 )
 
 sealed class ScarletVioletSlotRead {
@@ -69,7 +70,8 @@ object ScarletVioletPokemonReadOnly {
             byte(plain, 0x126),
             immutable((0..3).map { u16(plain, 0x82 + it * 2) }),
             immutable((0..4).map { u16(plain, 0x14C + it * 2) }),
-            byte(plain, 0x94), byte(plain, 0x95), byte(plain, 0x4A), byte(plain, 0x11F)
+            byte(plain, 0x94), byte(plain, 0x95), byte(plain, 0x4A), byte(plain, 0x11F),
+            byte(plain, 0x124)
         ))
     }
 
