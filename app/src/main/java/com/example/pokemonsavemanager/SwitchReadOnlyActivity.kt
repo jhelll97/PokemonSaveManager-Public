@@ -688,7 +688,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoPlayerLocation(bound) }
         })
         if (bound.letsGoAdventureBegin != null) dashboardRoot.addView(Button(this).apply {
-            text = "Adventure Start • Read-only"; isAllCaps = false; isEnabled = !busy
+            text = "Adventure Start • Edit"; isAllCaps = false; isEnabled = !busy
             setOnClickListener { if (session === bound && !dashboardBusy) showLetsGoAdventureBegin(bound) }
         })
         if (bound.letsGoSecureValues != null) dashboardRoot.addView(Button(this).apply {
@@ -4432,19 +4432,35 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound || dashboardBusy) return
         val read = bound.letsGoAdventureBegin ?: return
         val detail = buildString {
-            append("${read.version.displayName} • Adventure Start • Read-only\n\n")
+            append("${read.version.displayName} • Adventure Start\n\n")
             append("Seconds since 1970-01-01 00:00:00 UTC: ${read.secondsSinceEpoch}\n")
             append("Unsigned hex: 0x${read.secondsSinceEpoch.toString(16).uppercase().padStart(16, '0')}\n")
             append("Raw bytes: ${read.rawBytes.joinToString(" ") { "%02X".format(it) }}\n\n")
             if (read.utcTimestamp != null) append("UTC timestamp: ${read.utcTimestamp}\n\n")
             else append("UTC timestamp unavailable: ${read.unavailableReason}\n\n")
             append("This is the native eight-byte unsigned epoch value from PlayerGeoLocation block 7. ")
-            append("All 21 native block CRCs passed before reading. No local-time conversion, date correction, export, replacement or save writing.")
+            append("All 21 native block CRCs passed before reading. Editing changes only this exact UInt64 and block 7's CRC; no local-time conversion is applied.")
         }
-        AlertDialog.Builder(this).setTitle("Adventure Start • Read-only")
-            .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
+        val source = selectedSourceUri
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
                 text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
-            }) }).setPositiveButton("Close", null).show()
+            })
+            if (source != null) addView(Button(this@SwitchReadOnlyActivity).apply {
+                text = "✏  Edit Adventure Start"; isAllCaps = false
+                setOnClickListener {
+                    if (session === bound && !dashboardBusy) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchLetsGoAdventureStartActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        AlertDialog.Builder(this).setTitle("Adventure Start")
+            .setView(ScrollView(this).apply { addView(body) }).setPositiveButton("Close", null).show()
     }
 
     private fun showLetsGoSecureValues(bound: SwitchReadSession) {

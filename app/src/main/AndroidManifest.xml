@@ -84,6 +84,7 @@
         <activity android:name=".SwitchSwordShieldAdventureStepActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldHallOfFameTimeActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldRestrictedSparringActivity" android:exported="false"/>
+        <activity android:name=".SwitchLetsGoAdventureStartActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokedexActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldEventActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspItemActivity" android:exported="false"/>
