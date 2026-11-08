@@ -65,7 +65,7 @@ class SwitchScarletVioletPokemonSecretIdActivity : Activity() {
             textSize = 20f
         })
         root.addView(TextView(this).apply {
-            text = "$location\nChange the next Gen 1 Pokémon editor field in one native PK9. " +
+            text = "$location\nChange the native Secret ID field in one PK9. " +
                 "Review the before/after value, then save a verified new copy."
             textSize = 16f
         })
@@ -96,7 +96,7 @@ class SwitchScarletVioletPokemonSecretIdActivity : Activity() {
         }
         root.addView(inspectCopy)
         root.addView(Button(this).apply {
-            text = "Back to Pokémon"
+            text = "Back to Pokémon Details"
             setOnClickListener { if (!busy) finish() }
         })
         setContentView(ScrollView(this).apply { addView(root) })
@@ -198,8 +198,7 @@ class SwitchScarletVioletPokemonSecretIdActivity : Activity() {
                     "0x${plan.absoluteOffset.toString(16).uppercase()} and the native SHA-256 footer. " +
                     "Inside the PK9, only the 16-bit Secret ID and checksum may change. " +
                     "Shiny status is derived from Trainer ID, Secret ID, and PID, so its reviewed " +
-                    "result may change without another stored-field write. Original Trainer name, " +
-                    "Secret ID, PID, species, form, nickname, moves, stats, Tera types, scale, " +
+                    "result may change without another stored-field write. Original Trainer name, Trainer ID, PID, species, form, nickname, moves, stats, Tera types, scale, " +
                     "friendship, every other party and PC-box slot, the dedicated ride Pokémon, " +
                     "and all unrelated bytes remain exact. PSE verifies a recovery backup and " +
                     "reopens the persisted copy. Choose a NEW empty document."
