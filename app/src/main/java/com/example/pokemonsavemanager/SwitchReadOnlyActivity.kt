@@ -4045,6 +4045,7 @@ class SwitchReadOnlyActivity : Activity() {
             append("Pokémon language: ${ScarletVioletPokemonLanguageEditing.name(p.language)}\n")
             append("Active Title: ${ScarletVioletPokemonAffixedTitleEditing.name(p.affixedRibbon)}\n")
             append("Pokérus: ${ScarletVioletPokemonPokerusEditing.describe(p.pokerusStrain, p.pokerusDays)}\n")
+            append("Contest Condition: ${ScarletVioletPokemonContestConditionEditing.describe(p.contestStats)}\n")
             append("TID16: ${p.tid}\nSID16: ${p.sid}\n")
             append("PID: ${p.pid.toString(16).uppercase()}\nEncryption constant: ${p.encryptionConstant.toString(16).uppercase()}\n\nMoves\n")
             p.moves.forEachIndexed { i, move -> append("${i + 1}. Move #${move.id} • PP ${move.pp} • PP Ups ${move.ppUps}\n") }
@@ -4485,6 +4486,28 @@ class SwitchReadOnlyActivity : Activity() {
                         Intent(
                             this@SwitchReadOnlyActivity,
                             SwitchScarletVioletPokemonPokerusActivity::class.java
+                        )
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                            .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                            .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        if (nativeTarget != null && !p.isEgg && !p.fatefulEncounter &&
+            ScarletVioletPokemonContestConditionEditing.isValid(p)) {
+            content.addView(Button(this).apply {
+                text = "Edit Contest Condition"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(
+                            this@SwitchReadOnlyActivity,
+                            SwitchScarletVioletPokemonContestConditionActivity::class.java
                         )
                             .setData(source)
                             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
