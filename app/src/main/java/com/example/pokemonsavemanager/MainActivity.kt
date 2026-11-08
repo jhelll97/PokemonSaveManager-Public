@@ -29327,6 +29327,8 @@ class MainActivity : Activity() {
     }
     private fun buildGen1ToGen4Pk4(bankBytes:ByteArray,p:Gen1Pokemon,destination:ByteArray,meta:Gen1ToGen4Meta):ByteArray{
         require(bankBytes.size==GEN1_BANK_FILE_SIZE){"The preserved Gen 1 Bank record has an unexpected size."}
+        require(p.movePpUps.all{it in 0..3}){"The Gen 1 PP-Up values could not be represented safely."}
+        require((0..3).all{i->p.moves[i]!=0||(p.movePP[i]==0&&p.movePpUps[i]==0)}){"An empty Gen 1 move slot contains PP or PP-Up data that cannot be preserved."}
         val profile=detectGen4Profile(destination)?:error("A valid Generation 4 destination save is required.")
         val dex=gen1DexFromInternalIndex(p.species)?:error("The Gen 1 species could not be mapped to the National Pokédex.")
         val out=ByteArray(136);val sid=0;val nature=(p.experience%25L).toInt()
@@ -29335,12 +29337,21 @@ class MainActivity : Activity() {
         val pid=gen4PidForNatureShiny(seed,p.tid,sid,nature,shiny)
         writeU32LE(out,0,pid);writeU16LE(out,0x08,dex);writeU16LE(out,0x0A,0);writeU16LE(out,0x0C,p.tid);writeU16LE(out,0x0E,sid);writeU32LE(out,0x10,p.experience)
         out[0x14]=meta.baseFriendship.toByte();out[0x15]=meta.abilityId.toByte();out[0x17]=2
-        val ev=intArrayOf((p.statExp[0]/257).coerceIn(0,255),(p.statExp[1]/257).coerceIn(0,255),(p.statExp[2]/257).coerceIn(0,255),(p.statExp[3]/257).coerceIn(0,255),(p.statExp[4]/257).coerceIn(0,255),(p.statExp[4]/257).coerceIn(0,255));var total=ev.sum();while(total>510){val i=ev.indices.maxByOrNull{ev[it]}?:0;if(ev[i]==0)break;ev[i]--;total--};for(i in 0..5)out[0x18+i]=ev[i].toByte()
-        for(i in 0..3){writeU16LE(out,0x28+i*2,p.moves[i].coerceIn(0,467));out[0x30+i]=bankBytes[GEN1_BANK_HEADER_SIZE+29+i]}
-        val iv=intArrayOf(p.dvs[0],p.dvs[1],p.dvs[2],p.dvs[3],p.dvs[4],p.dvs[4]).map{(it*2).coerceIn(0,31)};var ivw=0L;for(i in 0..5)ivw=ivw or ((iv[i].toLong() and 31L) shl(i*5));writeU32LE(out,0x38,ivw)
-        writeGen4String(out,0x48,22,p.nickname.ifBlank{GEN1_NATIONAL_NAMES.getOrElse(dex-1){"Pokemon"}});out[0x5F]=when(profile.family){"Platinum"->12;"HeartGold / SoulSilver"->7;else->10}.toByte();writeGen4String(out,0x68,16,p.otName);out[0x83]=4;out[0x84]=p.level.coerceIn(1,100).toByte()
+        val ev=intArrayOf((p.statExp[0]/257).coerceIn(0,255),(p.statExp[1]/257).coerceIn(0,255),(p.statExp[2]/257).coerceIn(0,255),(p.statExp[3]/257).coerceIn(0,255),(p.statExp[4]/257).coerceIn(0,255),(p.statExp[4]/257).coerceIn(0,255))
+        var total=ev.sum();while(total>510){val i=ev.indices.maxByOrNull{ev[it]}?:0;if(ev[i]==0)break;ev[i]--;total--}
+        for(i in 0..5)out[0x18+i]=ev[i].toByte()
+        for(i in 0..3){
+            writeU16LE(out,0x28+i*2,p.moves[i].coerceIn(0,467))
+            out[0x30+i]=p.movePP[i].coerceIn(0,63).toByte()
+            out[0x34+i]=p.movePpUps[i].toByte()
+        }
+        val iv=intArrayOf(p.dvs[0],p.dvs[1],p.dvs[2],p.dvs[3],p.dvs[4],p.dvs[4]).map{(it*2).coerceIn(0,31)}.toIntArray()
+        var ivw=0L;for(i in 0..5)ivw=ivw or ((iv[i].toLong() and 31L) shl(i*5));writeU32LE(out,0x38,ivw)
+        val nickname=p.nickname.ifBlank{GEN1_NATIONAL_NAMES.getOrElse(dex-1){"Pokemon"}}
+        val originGame=when(profile.family){"Platinum"->12;"HeartGold / SoulSilver"->7;else->10}
+        writeGen4String(out,0x48,22,nickname);out[0x5F]=originGame.toByte();writeGen4String(out,0x68,16,p.otName);out[0x83]=4;out[0x84]=p.level.coerceIn(1,100).toByte()
         val encrypted=encryptPk4(out);val q=parsePk4(encrypted,false)?:error("The converted PK4 could not be parsed.")
-        require(q.checksumValid&&q.species==dex&&q.tid==p.tid&&q.sid==0&&q.nickname==p.nickname.ifBlank{GEN1_NATIONAL_NAMES.getOrElse(dex-1){"Pokemon"}}&&q.otName==p.otName&&q.experience==p.experience&&q.nature==nature&&q.shiny==shiny&&q.ability==meta.abilityId&&q.ball==4){"The converted PK4 failed identity or legality-field verification."}
+        require(q.checksumValid&&q.species==dex&&q.tid==p.tid&&q.sid==0&&q.nickname==nickname&&q.otName==p.otName&&q.experience==p.experience&&q.nature==nature&&q.shiny==shiny&&q.ability==meta.abilityId&&q.friendship==meta.baseFriendship&&q.language==2&&q.heldItem==0&&q.ball==4&&q.metLevel==p.level.coerceIn(1,100)&&q.originGame==originGame&&q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(p.movePP)&&gen4Pk4PpUps(encrypted).contentEquals(p.movePpUps)&&q.evs.contentEquals(ev)&&q.ivs.contentEquals(iv)){"The converted PK4 failed identity or converted-field verification."}
         return encrypted
     }
     private fun gen4PokedexBase(p:Gen4Profile):Int=when(p.family){"Diamond / Pearl"->0x12DC;"Platinum"->0x1328;"HeartGold / SoulSilver"->0x15FC;else->error("Unsupported Gen 4 Pokédex layout")}
@@ -29351,31 +29362,134 @@ class MainActivity : Activity() {
     }
     private fun gen1ToGen4DexRegistered(save:ByteArray,p:Gen4Profile,dex:Int):Boolean{val active=gen4ActiveBlock(save,0,p.generalSize);val base=active*0x40000+gen4PokedexBase(p);val bit=dex-1;val mask=1 shl(bit and 7);val byte=bit/8;return intArrayOf(base+0x04+byte,base+0x44+byte).all{it in save.indices&&(save[it].toInt() and mask)!=0}}
     private fun chooseGen1BankToGen4Destination(bankFile:File,p:Gen1Pokemon){
-        val file=importedFile?:return;val data=runCatching{file.readBytes()}.getOrNull()?:return;val profile=detectGen4Profile(data)?:return showDialog("Gen 1 → Gen 4","Load a valid Diamond, Pearl, Platinum, HeartGold or SoulSilver save first.")
-        val v=gen4Validation(data,profile);if(!v.generalChecksum||!v.storageChecksum||v.badPk4!=0)return showDialog("Gen 1 → Gen 4","The Gen 4 destination did not pass whole-save validation.")
-        val raw=runCatching{bankFile.readBytes()}.getOrNull()?:return showDialog("Gen 1 → Gen 4","The selected Bank record could not be read.");val source=parseGen1BankPayload(raw)?:return showDialog("Gen 1 → Gen 4","The selected Bank record is invalid.")
-        if(!sameGen1TransferRecord(source,p))return showDialog("Gen 1 → Gen 4","The selected Bank record changed. Nothing was changed.")
-        val dex=gen1DexFromInternalIndex(source.species)?:return showDialog("Gen 1 → Gen 4","The species could not be mapped.")
+        val file=importedFile?:return
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val data=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog("Gen 1 → Gen 4","The destination save could not be read.")
+        val profile=detectGen4Profile(data)
+            ?:return showDialog("Gen 1 → Gen 4","Load a valid Diamond, Pearl, Platinum, HeartGold or SoulSilver save first.")
+        val v=gen4Validation(data,profile)
+        if(!bound()||!v.generalChecksum||!v.storageChecksum||v.badPk4!=0)
+            return showDialog("Gen 1 → Gen 4","The Gen 4 destination did not pass whole-save validation.")
+        val raw=runCatching{bankFile.readBytes()}.getOrNull()
+            ?:return showDialog("Gen 1 → Gen 4","The selected Bank record could not be read.")
+        val source=parseGen1BankPayload(raw)
+            ?:return showDialog("Gen 1 → Gen 4","The selected Bank record is invalid.")
+        if(!sameGen1TransferRecord(source,p))
+            return showDialog("Gen 1 → Gen 4","The selected Bank record changed. Nothing was changed.")
+        if(source.movePpUps.any{it !in 0..3}||(0..3).any{source.moves[it]==0&&(source.movePP[it]!=0||source.movePpUps[it]!=0)})
+            return showDialog("Gen 1 → Gen 4 blocked","An empty move slot contains PP or PP-Up data that cannot be preserved. The Bank record and destination were left unchanged.")
+        val dex=gen1DexFromInternalIndex(source.species)
+            ?:return showDialog("Gen 1 → Gen 4","The species could not be mapped.")
+        fun snapshotsMatch()=bound()&&runCatching{file.readBytes().contentEquals(data)&&bankFile.readBytes().contentEquals(raw)}.getOrDefault(false)
         loadGen1ToGen4MetaAsync(dex){meta->
+            if(!snapshotsMatch())return@loadGen1ToGen4MetaAsync showDialog("Gen 1 → Gen 4","The destination or Bank record changed during preparation. Nothing was changed.")
             if(meta==null)return@loadGen1ToGen4MetaAsync showDialog("Gen 1 → Gen 4","PSE could not resolve a Generation 4 legal ability. The Bank record was kept.")
-            val pk4=try{buildGen1ToGen4Pk4(raw,source,data,meta)}catch(e:Exception){return@loadGen1ToGen4MetaAsync showDialog("Gen 1 → Gen 4",e.message?:"Conversion failed")};val converted=parsePk4(pk4,false)?:return@loadGen1ToGen4MetaAsync
-            val empties=gen4EmptyBoxSlots(data,profile);if(empties.isEmpty())return@loadGen1ToGen4MetaAsync showDialog("Gen 1 → Gen 4","No empty Gen 4 PC slot is available.");val first=empties.first()
-            AlertDialog.Builder(this).setTitle("Convert ${source.nickname.ifBlank{gen1SpeciesNameFromInternal(source.species)}} to Gen 4").setMessage("This is a PSE native PK4 conversion; Nintendo provided no direct Gen 1 → Gen 4 route. The Gen 1 Bank copy is removed only after the destination, Pokédex and checksums verify.").setPositiveButton("First Empty (Box ${first/30+1} / Slot ${first%30+1})"){_,_->transferGen1BankToGen4(bankFile,source,raw,pk4,converted,first)}.setNegativeButton("Cancel",null).show()
+            val pk4=try{buildGen1ToGen4Pk4(raw,source,data,meta)}catch(e:Exception){
+                return@loadGen1ToGen4MetaAsync showDialog("Gen 1 → Gen 4",e.message?:"Conversion failed")
+            }
+            val converted=parsePk4(pk4,false)
+                ?:return@loadGen1ToGen4MetaAsync showDialog("Gen 1 → Gen 4","The prepared native PK4 could not be reopened.")
+            val empties=gen4EmptyBoxSlots(data,profile)
+            if(empties.isEmpty())return@loadGen1ToGen4MetaAsync showDialog("Gen 1 → Gen 4","No empty Gen 4 PC slot is available.")
+            val first=empties.first()
+            val sourceShiny=source.dvs[2]==10&&source.dvs[3]==10&&source.dvs[4]==10&&source.dvs[1] in setOf(2,3,6,7,10,11,14,15)
+            val preview=buildString{
+                append("PSE Bank conversion preview\n\n")
+                append("Preserved: species, nickname, OT, TID, EXP, level, moves, current PP, PP Ups and shiny state (${sourceShiny}).\n")
+                append("PID: generated as ${"%08X".format(converted.pid)} to carry nature #${converted.nature} (EXP mod 25) and the reviewed shiny state; SID becomes 0.\n")
+                append("IVs: each Gen 1 DV is doubled; Special is copied to both Special Attack and Special Defense. Final HP/Atk/Def/Spe/SpA/SpD: ${converted.ivs.joinToString("/")}.\n")
+                append("EVs: each Stat Exp value is divided by 257; Special is copied to both special stats, then the highest values are trimmed only if needed to fit the Gen 4 total cap of 510. Final HP/Atk/Def/Spe/SpA/SpD: ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")
+                append("Ability: destination-valid ability #${converted.ability}. Required native defaults: base friendship ${converted.friendship}, English language, no held item, Poké Ball, met level ${source.level}, destination-compatible origin #${converted.originGame}, and empty met/egg dates and locations. The Gen 1 catch-rate byte and fields without a native PK4 representation are omitted.\n\n")
+                append("Nintendo provided no direct Gen 1 → Gen 4 route. This is a PSE native PK4 conversion, not an official migration or provenance claim. The source save stays unchanged. The exact Gen 1 Bank record remains until a retained recovery backup, the selected PK4, Pokédex, checksums and reopened destination all verify.")
+            }
+            AlertDialog.Builder(this)
+                .setTitle("PSE Convert ${source.nickname.ifBlank{gen1SpeciesNameFromInternal(source.species)}} to Gen 4")
+                .setMessage(preview)
+                .setPositiveButton("First Empty (Box ${first/30+1} / Slot ${first%30+1})"){_,_->
+                    if(!snapshotsMatch())showDialog("Gen 1 → Gen 4","The destination or Bank record changed after review. Nothing was changed.")
+                    else transferGen1BankToGen4(bankFile,source,raw,pk4,converted,first,file,openedUri,openedLabel)
+                }
+                .setNegativeButton("Cancel",null)
+                .show()
         }
     }
-    private fun transferGen1BankToGen4(bankFile:File,expected:Gen1Pokemon,openedBank:ByteArray,preparedPk4:ByteArray,prepared:PokemonEntry,target:Int){
-        val file=importedFile?:return;val original=runCatching{file.readBytes()}.getOrNull()?:return
+    private fun transferGen1BankToGen4(bankFile:File,expected:Gen1Pokemon,openedBank:ByteArray,preparedPk4:ByteArray,prepared:PokemonEntry,target:Int,openedFile:File,openedUri:Uri?,openedLabel:String?){
+        fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        if(!bound()){showDialog("Gen 1 → Gen 4","The destination identity changed. Reopen PSE Bank. Nothing was changed.");return}
+        val file=openedFile
+        val original=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog("Gen 1 → Gen 4","The destination save could not be read.")
+        var writeStarted=false
+        var bankDeleteAttempted=false
+        var safetyBackup:File?=null
         try{
-            require(target in 0 until 540){"Invalid Gen 4 PC slot."};val p=detectGen4Profile(original)?:error("The destination is no longer a valid Gen 4 save.");val before=gen4Validation(original,p);require(before.generalChecksum&&before.storageChecksum&&before.badPk4==0){"The fresh Gen 4 destination failed validation."}
-            val bank=bankFile.readBytes();val source=parseGen1BankPayload(bank)?:error("The selected Gen 1 Bank record is invalid.");require(bank.contentEquals(openedBank)&&sameGen1TransferRecord(source,expected)){"The selected Bank record changed before transfer. Nothing was changed."}
-            val off=gen4BoxSlotOffset(original,p,target);val old=original.copyOfRange(off,off+136);require(old.all{it==0.toByte()}||parsePk4(old,false)==null){"The destination slot is no longer empty."}
-            val freshPk4=buildGen1ToGen4Pk4(bank,source,original,Gen1ToGen4Meta(prepared.friendship,prepared.ability));require(freshPk4.contentEquals(preparedPk4)){"The prepared conversion changed before confirmation."}
-            val save=original.copyOf();freshPk4.copyInto(save,off);val staged=parsePk4(save.copyOfRange(off,off+136),false)?:error("The staged PK4 could not be parsed.");require(staged.checksumValid&&staged.pid==prepared.pid&&staged.species==prepared.species&&staged.tid==source.tid){"The staged PK4 did not preserve the prepared identity."}
-            registerGen1ToGen4Pokedex(save,p,staged.species);val storage=gen4ActiveBlock(save,p.storageStart,p.storageSize);updateGen4BlockChecksum(save,storage*0x40000+p.storageStart,p.storageSize,p);val stagedValidation=gen4Validation(save,p);require(stagedValidation.generalChecksum&&stagedValidation.storageChecksum&&stagedValidation.badPk4==0&&gen1ToGen4DexRegistered(save,p,staged.species)){"The staged Gen 4 save or Pokédex failed verification."}
-            file.writeBytes(save);val written=file.readBytes();require(written.contentEquals(save)){"The destination changed while it was being written."};val wp=detectGen4Profile(written)?:error("The persisted Gen 4 layout could not be re-read.");val after=gen4Validation(written,wp);require(after.generalChecksum&&after.storageChecksum&&after.badPk4==0&&gen1ToGen4DexRegistered(written,wp,staged.species)){"The persisted Gen 4 save failed verification."};val actual=written.copyOfRange(gen4BoxSlotOffset(written,wp,target),gen4BoxSlotOffset(written,wp,target)+136);require(actual.contentEquals(freshPk4)){"The exact converted PK4 bytes did not persist."}
-            val currentBank=bankFile.readBytes();require(currentBank.contentEquals(bank)&&parseGen1BankPayload(currentBank)?.let{sameGen1TransferRecord(it,source)}==true){"The Bank record changed before cleanup; the destination was restored."};if(!bankFile.delete()){file.writeBytes(original);error("The destination verified, but the Bank record could not be removed; the save was restored to avoid duplication.")}
-            Toast.makeText(this,"Transferred Gen 1 → Gen 4 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show();showBank()
-        }catch(e:Exception){runCatching{file.writeBytes(original)};showDialog("Gen 1 → Gen 4 failed","${e.message?:"Unknown error"}\n\nThe exact destination snapshot was restored and the Bank record was kept.")}
+            require(bound()){"The destination identity changed."}
+            require(target in 0 until 540){"Invalid Gen 4 PC slot."}
+            val p=detectGen4Profile(original)?:error("The destination is no longer a valid Gen 4 save.")
+            val before=gen4Validation(original,p)
+            require(before.generalChecksum&&before.storageChecksum&&before.badPk4==0){"The fresh Gen 4 destination failed validation."}
+            val bank=bankFile.readBytes()
+            val source=parseGen1BankPayload(bank)?:error("The selected Gen 1 Bank record is invalid.")
+            require(bank.contentEquals(openedBank)&&sameGen1TransferRecord(source,expected)){"The selected Bank record changed before transfer. Nothing was changed."}
+            val off=gen4BoxSlotOffset(original,p,target)
+            val old=original.copyOfRange(off,off+136)
+            require(old.all{it==0.toByte()}||parsePk4(old,false)==null){"The destination slot is no longer empty."}
+            val freshPk4=buildGen1ToGen4Pk4(bank,source,original,Gen1ToGen4Meta(prepared.friendship,prepared.ability))
+            require(freshPk4.contentEquals(preparedPk4)&&gen4Pk4PpUps(freshPk4).contentEquals(source.movePpUps)){"The prepared conversion changed before confirmation."}
+            val save=original.copyOf();freshPk4.copyInto(save,off)
+            val stagedBytes=save.copyOfRange(off,off+136)
+            val staged=parsePk4(stagedBytes,false)?:error("The staged PK4 could not be parsed.")
+            require(stagedBytes.contentEquals(freshPk4)&&staged.checksumValid&&staged.pid==prepared.pid&&staged.species==prepared.species&&staged.tid==source.tid&&staged.moves.contentEquals(source.moves)&&staged.movePP.contentEquals(source.movePP)&&gen4Pk4PpUps(stagedBytes).contentEquals(source.movePpUps)){"The staged PK4 did not preserve the reviewed converted fields."}
+            registerGen1ToGen4Pokedex(save,p,staged.species)
+            val storage=gen4ActiveBlock(save,p.storageStart,p.storageSize)
+            updateGen4BlockChecksum(save,storage*0x40000+p.storageStart,p.storageSize,p)
+            val stagedValidation=gen4Validation(save,p)
+            require(stagedValidation.generalChecksum&&stagedValidation.storageChecksum&&stagedValidation.badPk4==0&&gen1ToGen4DexRegistered(save,p,staged.species)){"The staged Gen 4 save or Pokédex failed verification."}
+            require(bound()&&file.readBytes().contentEquals(original)&&bankFile.readBytes().contentEquals(openedBank)){"The source or destination changed before backup."}
+            val recovery=File.createTempFile(backupGameName(file)+"_PreGen1ToGen4_",".backup",backupsDir());safetyBackup=recovery
+            recovery.writeBytes(original)
+            require(recovery.readBytes().contentEquals(original)){"The exact Gen 4 recovery backup did not verify."}
+            retainGen2ToGen4SafetyBackup(recovery,original)
+            require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&file.readBytes().contentEquals(original)&&bankFile.readBytes().contentEquals(openedBank)){"The destination, Bank record or retained recovery backup changed before writing."}
+            writeStarted=true
+            file.writeBytes(save)
+            val written=file.readBytes()
+            require(written.contentEquals(save)){"The destination changed while it was being written."}
+            val wp=detectGen4Profile(written)?:error("The persisted Gen 4 layout could not be re-read.")
+            val after=gen4Validation(written,wp)
+            require(after.generalChecksum&&after.storageChecksum&&after.badPk4==0&&gen1ToGen4DexRegistered(written,wp,staged.species)){"The persisted Gen 4 save failed verification."}
+            val actualOffset=gen4BoxSlotOffset(written,wp,target)
+            val actual=written.copyOfRange(actualOffset,actualOffset+136)
+            val reopened=parsePk4(actual,false)
+            require(actual.contentEquals(freshPk4)&&reopened!=null&&reopened.checksumValid&&reopened.pid==staged.pid&&reopened.species==staged.species&&reopened.moves.contentEquals(source.moves)&&reopened.movePP.contentEquals(source.movePP)&&gen4Pk4PpUps(actual).contentEquals(source.movePpUps)){"The exact converted PK4 did not persist after reopening."}
+            val currentBank=bankFile.readBytes()
+            require(bound()&&currentBank.contentEquals(openedBank)&&parseGen1BankPayload(currentBank)?.let{sameGen1TransferRecord(it,source)}==true&&file.readBytes().contentEquals(save)&&isBackupKept(recovery)){"The Bank record, destination identity or retained backup changed before cleanup."}
+            bankDeleteAttempted=true
+            require(bankFile.delete()&&!bankFile.exists()){"The Gen 1 Bank entry could not be removed after destination verification."}
+            require(file.readBytes().contentEquals(save)){"The verified Gen 4 destination changed after Bank cleanup."}
+        }catch(e:Exception){
+            val bankRestored=runCatching{
+                if(bankDeleteAttempted&&!bankFile.exists()){
+                    require(bankFile.createNewFile()){"The Bank recovery path could not be reserved."}
+                    bankFile.writeBytes(openedBank)
+                }
+                bankFile.readBytes().contentEquals(openedBank)
+            }.getOrDefault(false)
+            val saveRestored=!writeStarted||(bankRestored&&runCatching{
+                file.writeBytes(original)
+                val restored=file.readBytes();val profile=detectGen4Profile(restored);val validation=profile?.let{gen4Validation(restored,it)}
+                restored.contentEquals(original)&&validation?.generalChecksum==true&&validation.storageChecksum&&validation.badPk4==0
+            }.getOrDefault(false))
+            val recovery=if(bankRestored&&saveRestored)
+                "The exact Gen 4 destination and Gen 1 Bank record were restored or kept and verified."
+            else "Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
+            showDialog("Gen 1 → Gen 4 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""))
+            return
+        }
+        Toast.makeText(this,"PSE converted Gen 1 → Gen 4 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
+        showBank()
     }
 
     private data class Gen1Gen4BatchPrepared(val bankFile:File,val bankBytes:ByteArray,val source:Gen1Pokemon,val meta:Gen1ToGen4Meta,val pk4:ByteArray,val converted:PokemonEntry)
@@ -37147,7 +37261,7 @@ private data class Gen2ToGen5LegalisePlan(
             3 -> builder.setPositiveButton("PSE Convert to Gen 3") { _, _ ->
                 chooseGen1BankToGen3Destination(bankFile, p)
             }
-            4 -> builder.setPositiveButton("Convert to Gen 4") { _, _ ->
+            4 -> builder.setPositiveButton("PSE Convert to Gen 4") { _, _ ->
                 chooseGen1BankToGen4Destination(bankFile, p)
             }
             5 -> builder.setPositiveButton("Convert to Gen 5") { _, _ ->
