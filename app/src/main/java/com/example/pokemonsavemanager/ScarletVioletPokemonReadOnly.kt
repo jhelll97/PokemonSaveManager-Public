@@ -25,7 +25,8 @@ data class ScarletVioletPokemonRead(
     val contestStats: List<Int> = emptyList(),
     val markingValue: Int = 0, val markingColors: List<Int> = emptyList(),
     val sizeScalars: List<Int> = emptyList(),
-    val originGame: Int = 0
+    val originGame: Int = 0,
+    val battleVersion: Int = 0
 )
 
 sealed class ScarletVioletSlotRead {
@@ -91,7 +92,7 @@ object ScarletVioletPokemonReadOnly {
             immutable((0..5).map { byte(plain, 0x2C + it) }),
             u16(plain, 0x18), immutable((0..5).map { (u16(plain, 0x18) ushr (it * 2)) and 3 }),
             immutable(listOf(byte(plain, 0x48), byte(plain, 0x49))),
-            byte(plain, 0xCE)
+            byte(plain, 0xCE), byte(plain, 0xCF)
         ))
     }
 

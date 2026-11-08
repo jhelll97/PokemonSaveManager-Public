@@ -213,6 +213,7 @@
         <activity android:name=".SwitchScarletVioletPokemonScaleActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonObedienceActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonOriginGameActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletPokemonBattleVersionActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonBallActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonMetLevelActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonHyperTrainingActivity" android:exported="false"/>
