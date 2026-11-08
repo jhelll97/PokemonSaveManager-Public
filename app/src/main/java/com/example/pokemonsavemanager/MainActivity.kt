@@ -10189,7 +10189,7 @@ class MainActivity : Activity() {
         b.show()
     }
 
-    private data class Gen4ToGen3Plan(val meta:Gen3ToGen4Meta,val metLocation:Int=0)
+    private data class Gen4ToGen3Plan(val meta:Gen3ToGen4Meta,val originGame:Int,val originLegalised:Boolean=false,val metLocation:Int=0)
     private data class Gen4Gen3Prepared(
         val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry,val destination:ByteArray,
         val plan:Gen4ToGen3Plan,val pk3:ByteArray,val converted:PokemonEntry,val destinationFile:File,
@@ -10200,7 +10200,7 @@ class MainActivity : Activity() {
         c in 'A'..'Z'||c in 'a'..'z'||c in '0'..'9'||c in charArrayOf(' ','!','?','.',',','/','-','\'','♂','♀')
     }
 
-    private fun gen4ToGen3PreflightRejection(p:PokemonEntry):String?=when{
+    private fun gen4ToGen3PreflightRejection(p:PokemonEntry,allowOriginLegalise:Boolean=false):String?=when{
         !p.checksumValid->"The source PK4 checksum is invalid."
         p.species !in 1..386->"Species #${p.species} did not exist in Generation 3."
         p.species==386->"Deoxys form is title-dependent in Generation 3. PSE will not guess a destination form."
@@ -10214,8 +10214,8 @@ class MainActivity : Activity() {
         p.evs.any{it !in 0..255}||p.evs.sum()>510->"The EV data is not destination-valid for Generation 3."
         p.ivs.any{it !in 0..31}->"The IV data is invalid."
         p.ball !in 1..12->"Ball ID ${p.ball} has no verified direct Gen 4 to Gen 3 mapping."
-        p.originGame !in 1..5->"Origin game ID ${p.originGame} is not a Gen 3 title. PSE will not invent Gen 3 provenance for a Gen 4-origin Pokémon."
-        p.metLocation!=55->"Only Gen 3-origin Pal Park records (Gen 4 met location #55) have a documented reverse PSE conversion."
+        !allowOriginLegalise&&p.originGame !in 1..5->"Origin game ID ${p.originGame} is not a Gen 3 title. Choose an explicit Legalise origin to continue; PSE will not assign provenance silently."
+        !allowOriginLegalise&&p.metLocation!=55->"Only Gen 3-origin Pal Park records (Gen 4 met location #55) have a documented reverse PSE conversion unless you explicitly Legalise the origin."
         p.eggLocation!=0->"The PK4 contains Egg location data that PK3 cannot preserve safely."
         p.fatefulEncounter->"Fateful-encounter provenance cannot be represented without changing its meaning."
         p.markingValue !in 0..15->"Gen 4 marking value ${p.markingValue} is not representable by the four native Gen 3 markings."
@@ -10228,8 +10228,9 @@ class MainActivity : Activity() {
     private fun buildGen4ToGen3Pk3(raw:ByteArray,p:PokemonEntry,destination:ByteArray,plan:Gen4ToGen3Plan):ByteArray{
         require(raw.size==136){"The preserved Gen 4 Bank record has an unexpected size."}
         require(generationForSize(destination.size)==3&&gen3SaveValid(destination)){"A valid Generation 3 destination save is required."}
-        gen4ToGen3PreflightRejection(p)?.let{error(it)}
+        gen4ToGen3PreflightRejection(p,plan.originLegalised)?.let{error(it)}
         require(plan.metLocation==0){"The prepared PK3 met-location mapping is invalid."}
+        require(plan.originGame in 1..5){"Choose a valid Generation 3 origin title."}
         require(plan.meta.abilityId==p.ability){"The PK4 ability does not match the verified Generation 3 ability for slot ${p.abilityNumber}."}
         require(gen3TransferGender(p,plan.meta.genderRate)==p.gender){"PID-derived gender does not match the PK4 gender field."}
         val ups=gen4Pk4PpUps(raw);require(ups.all{it in 0..3}){"PK4 PP Ups could not be verified."}
@@ -10242,21 +10243,21 @@ class MainActivity : Activity() {
         var ppBonuses=0;for(i in 0..3){writeU16LE(a,i*2,p.moves[i]);a[8+i]=(if(p.moves[i]==0)0 else p.movePP[i].coerceIn(0,63)).toByte();ppBonuses=ppBonuses or ((if(p.moves[i]==0)0 else ups[i]) shl (i*2))}
         g[8]=ppBonuses.toByte();g[9]=p.friendship.coerceIn(0,255).toByte();for(i in 0..5)e[i]=p.evs[i].toByte()
         m[0]=(((p.pokerusStrain and 0xF) shl 4) or (p.pokerusDays and 0xF)).toByte();m[1]=plan.metLocation.toByte()
-        writeU16LE(m,2,(p.metLevel and 0x7F) or ((p.originGame and 0xF) shl 7) or ((p.ball and 0xF) shl 11) or ((p.otGender and 1) shl 15))
+        writeU16LE(m,2,(p.metLevel and 0x7F) or ((plan.originGame and 0xF) shl 7) or ((p.ball and 0xF) shl 11) or ((p.otGender and 1) shl 15))
         var ivWord=0L;for(i in 0..5)ivWord=ivWord or ((p.ivs[i].toLong() and 31L) shl(i*5));if(p.abilityNumber==2)ivWord=ivWord or 0x80000000L;writeU32LE(m,4,ivWord)
         val order=gen3Orders[(p.pid%24L).toInt()];val plain=ByteArray(48);for(i in 0..3)(blocks[order[i]]!!).copyInto(plain,i*12)
         var sum=0;for(i in 0 until 48 step 2)sum=(sum+readU16LE(plain,i)) and 0xFFFF;writeU16LE(out,0x1C,sum)
         val key=(p.pid xor (((p.sid.toLong() and 0xFFFFL) shl 16) or (p.tid.toLong() and 0xFFFFL))).toInt();var x=0
         while(x<48){writeU32LE(plain,x,(readU32LE(plain,x).toInt() xor key).toLong() and 0xFFFFFFFFL);x+=4};plain.copyInto(out,0x20)
         val q=parsePk3(out,0,false)?:error("The converted PK3 could not be parsed.")
-        require(q.checksumValid&&q.pid==p.pid&&q.species==p.species&&q.tid==p.tid&&q.sid==p.sid&&q.nickname==p.nickname.ifBlank{defaultName}&&q.otName==p.otName&&q.experience==p.experience&&q.nature==p.nature&&q.shiny==p.shiny&&q.heldItem==0&&q.friendship==p.friendship&&q.language==p.language&&q.markingValue==p.markingValue&&q.abilityNumber==p.abilityNumber&&q.originGame==p.originGame&&q.ball==p.ball&&q.metLevel==p.metLevel&&q.metLocation==0&&q.otGender==p.otGender&&q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(IntArray(4){if(p.moves[it]==0)0 else p.movePP[it].coerceIn(0,63)})&&gen3MovePpUps(out).contentEquals(ups)&&q.evs.contentEquals(p.evs)&&q.ivs.contentEquals(p.ivs)&&q.pokerusDays==(p.pokerusDays and 0xF)&&q.pokerusStrain==(p.pokerusStrain and 0xF)){"The converted PK3 did not preserve every destination-representable field."}
+        require(q.checksumValid&&q.pid==p.pid&&q.species==p.species&&q.tid==p.tid&&q.sid==p.sid&&q.nickname==p.nickname.ifBlank{defaultName}&&q.otName==p.otName&&q.experience==p.experience&&q.nature==p.nature&&q.shiny==p.shiny&&q.heldItem==0&&q.friendship==p.friendship&&q.language==p.language&&q.markingValue==p.markingValue&&q.abilityNumber==p.abilityNumber&&q.originGame==plan.originGame&&q.ball==p.ball&&q.metLevel==p.metLevel&&q.metLocation==0&&q.otGender==p.otGender&&q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(IntArray(4){if(p.moves[it]==0)0 else p.movePP[it].coerceIn(0,63)})&&gen3MovePpUps(out).contentEquals(ups)&&q.evs.contentEquals(p.evs)&&q.ivs.contentEquals(p.ivs)&&q.pokerusDays==(p.pokerusDays and 0xF)&&q.pokerusStrain==(p.pokerusStrain and 0xF)){"The converted PK3 did not preserve every destination-representable field."}
         return out
     }
 
     private fun sameGen4ToGen3Pk3(a:PokemonEntry,b:PokemonEntry):Boolean=
         a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.otName==b.otName&&a.experience==b.experience&&a.nature==b.nature&&a.shiny==b.shiny&&a.originGame==b.originGame&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.metLocation==b.metLocation&&a.language==b.language&&a.markingValue==b.markingValue&&a.abilityNumber==b.abilityNumber&&a.heldItem==b.heldItem&&a.friendship==b.friendship&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)
 
-    private fun prepareGen4ToGen3Transfer(bankFile:File,shown:PokemonEntry){
+    private fun prepareGen4ToGen3Transfer(bankFile:File,shown:PokemonEntry,legalisedOriginGame:Int?=null){
         val file=importedFile?:return showDialog("Gen 4 → Gen 3","Load a valid Generation 3 destination save first.");val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val destination=runCatching{file.readBytes()}.getOrNull()?:return showDialog("Gen 4 → Gen 3","The destination save could not be read.")
@@ -10266,13 +10267,25 @@ class MainActivity : Activity() {
         val bank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Gen 4 → Gen 3","The Bank record could not be read.")
         val source=if(bank.size==136)parsePk4(bank,false)else null
         if(source==null||source.pid!=shown.pid||source.species!=shown.species)return showDialog("Gen 4 → Gen 3","The selected Bank record changed. Nothing was changed.")
-        gen4ToGen3PreflightRejection(source)?.let{return showDialog("Gen 4 → Gen 3 blocked","$it\n\nThe Bank record and destination were left unchanged.")}
+        val needsOriginLegalise=source.originGame !in 1..5||source.metLocation!=55
+        if(needsOriginLegalise&&legalisedOriginGame==null){
+            val games=arrayOf("Pokémon Sapphire","Pokémon Ruby","Pokémon Emerald","Pokémon FireRed","Pokémon LeafGreen")
+            val ids=intArrayOf(1,2,3,4,5)
+            AlertDialog.Builder(this).setTitle("Legalise Gen 4 → Gen 3 origin")
+                .setMessage("This is not a documented Gen 3-origin Pal Park record. Choose a Gen 3 title to write as its origin. This changes provenance and does not verify history. The PK3 met location will be 0 (unspecified). Cancel leaves the Bank record and destination unchanged.")
+                .setItems(games){_,which->prepareGen4ToGen3Transfer(bankFile,shown,ids[which])}
+                .setNegativeButton("Cancel",null).show()
+            return
+        }
+        val originGame=legalisedOriginGame?:source.originGame
+        if(originGame !in 1..5)return showDialog("Gen 4 → Gen 3 blocked","A valid Gen 3 origin title is required. Nothing was changed.")
+        gen4ToGen3PreflightRejection(source,legalisedOriginGame!=null)?.let{return showDialog("Gen 4 → Gen 3 blocked","$it\n\nThe Bank record and destination were left unchanged.")}
         fun snapshotsMatch()=bound()&&runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false)
         val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 4 → Gen 3").setMessage("Verifying the historical ability slot and native PK3 mapping…").setCancelable(false).create();loading.show()
         loadGen3ToGen4MetaAsync(source,3,4){meta,reason->loading.dismiss();if(!snapshotsMatch())return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 3","The destination or Bank record changed during preparation.");if(meta==null)return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 3 blocked",(reason?:"Conversion metadata could not be verified.")+"\n\nNothing was changed.")
-            val plan=Gen4ToGen3Plan(meta);val pk3=try{buildGen4ToGen3Pk3(bank,source,destination,plan)}catch(e:Exception){return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 3 blocked",(e.message?:"No safe mapping is available.")+"\n\nNothing was changed.")};val converted=parsePk3(pk3,0,false)?:return@loadGen3ToGen4MetaAsync
+            val plan=Gen4ToGen3Plan(meta,originGame,legalisedOriginGame!=null);val pk3=try{buildGen4ToGen3Pk3(bank,source,destination,plan)}catch(e:Exception){return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 3 blocked",(e.message?:"No safe mapping is available.")+"\n\nNothing was changed.")};val converted=parsePk3(pk3,0,false)?:return@loadGen3ToGen4MetaAsync
             val prepared=Gen4Gen3Prepared(selected,bank,source,destination,plan,pk3,converted,file,openedUri,openedLabel)
-            val preview="PSE conversion, not an official reverse migration.\n\nPreserved: species, PID, OT/TID/SID, nickname, EXP/nature/shiny state, ability slot, IVs, EVs, moves, PP/PP Ups, friendship, Pokérus, Ball, met level, Gen 3 origin title and markings.\n\nRequired format difference: Gen 4 Pal Park location #55 and its migration date cannot reconstruct the original Gen 3 encounter. PSE writes native PK3 met location 0 (unspecified); PK3 has no date fields. No held item, form, Egg, fateful marker or Gen 4-origin provenance will be discarded because records containing them are blocked.\n\nThe original PK4 Bank record remains exact until the native destination save, Pokédex mirrors and section checksums persist and reopen successfully."
+            val preview="PSE conversion, not an official reverse migration.\n\nPreserved: species, PID, OT/TID/SID, nickname, EXP/nature/shiny state, ability slot, IVs, EVs, moves, PP/PP Ups, friendship, Pokérus, Ball, met level and markings.\n\n${plan.originLegalised?"Legalise applied: the user selected Gen 3 origin "+["Sapphire","Ruby","Emerald","FireRed","LeafGreen"][plan.originGame-1]+"; this changes provenance and does not verify history.":"Preserved Gen 3 origin: "+["Sapphire","Ruby","Emerald","FireRed","LeafGreen"][plan.originGame-1]+"."}\n\nRequired format difference: Gen 4 Pal Park location #55 and its migration date cannot reconstruct the original Gen 3 encounter. PSE writes native PK3 met location 0 (unspecified); PK3 has no date fields. No held item, form, Egg or fateful marker will be discarded because records containing them are blocked.\n\nThe original PK4 Bank record remains exact until the native destination save, Pokédex mirrors and section checksums persist and reopen successfully."
             AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{meta.speciesName}} • Gen 4 → Gen 3").setMessage(preview).setNegativeButton("Cancel",null).setPositiveButton("Review destination"){_,_->if(snapshotsMatch())chooseGen4ToGen3Destination(prepared)else showDialog("Gen 4 → Gen 3","The destination or Bank record changed after review.")}.show()
         }
     }
