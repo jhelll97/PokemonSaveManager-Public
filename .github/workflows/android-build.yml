@@ -36,10 +36,17 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.9"
+      - name: Install Gradle 8.9 with bounded retries
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/gradle-8.9-bin.zip"
+          curl --fail --location --retry 4 --retry-delay 10 --retry-all-errors \
+            --connect-timeout 15 --max-time 300 \
+            --output "$archive" \
+            https://downloads.gradle.org/distributions/gradle-8.9-bin.zip
+          unzip -q "$archive" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/gradle-8.9/bin" >> "$GITHUB_PATH"
 
       - name: Install Android SDK packages
         shell: bash
