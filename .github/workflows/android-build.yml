@@ -69,13 +69,13 @@ jobs:
             if [ "$status" -eq 0 ]; then
               exit 0
             fi
-            if ! grep -Fq "Received status code 429" "$log"; then
+            if ! grep -Eq "Received status code (429|504)" "$log"; then
               exit "$status"
             fi
             if [ "$attempt" -eq 3 ]; then
               exit "$status"
             fi
-            echo "Maven returned HTTP 429; retrying dependency resolution after a bounded backoff."
+            echo "Maven returned transient HTTP 429 or 504; retrying dependency resolution after a bounded backoff."
             sleep "$((attempt * 30))"
           done
 
