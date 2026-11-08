@@ -4033,6 +4033,11 @@ class SwitchReadOnlyActivity : Activity() {
             append(if (ScarletVioletPokemonHomeTrackerEditing.hasTracker(p))
                 "0x${ScarletVioletPokemonHomeTrackerEditing.trackerHex(p)}" else "None")
             append("\n")
+            append("Battle Status: ")
+            append(if (ScarletVioletPokemonStatusConditionEditing.hasStatus(p))
+                "Raw 0x${ScarletVioletPokemonStatusConditionEditing.statusHex(p)}"
+                else "Healthy (0x00000000)")
+            append("\n")
             append("Recorded current TM moves: ${ScarletVioletPokemonTechnicalMachineEditing.recordedCurrentMoves(p)}\n")
             if (p.currentHandler in 0..1) {
                 append("Friendship: ${ScarletVioletPokemonFriendshipEditing.currentFriendship(p)}")
@@ -4459,6 +4464,28 @@ class SwitchReadOnlyActivity : Activity() {
                         Intent(
                             this@SwitchReadOnlyActivity,
                             SwitchScarletVioletPokemonHomeTrackerActivity::class.java
+                        )
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                            .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                            .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        if (nativeTarget != null && !p.isEgg && !p.fatefulEncounter &&
+            ScarletVioletPokemonStatusConditionEditing.hasStatus(p)) {
+            content.addView(Button(this).apply {
+                text = "Clear Battle Status"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(
+                            this@SwitchReadOnlyActivity,
+                            SwitchScarletVioletPokemonStatusConditionActivity::class.java
                         )
                             .setData(source)
                             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)

@@ -29,7 +29,8 @@ data class ScarletVioletPokemonRead(
     val battleVersion: Int = 0,
     val formArgument: Long = 0,
     val homeTrackerLow: Long = 0,
-    val homeTrackerHigh: Long = 0
+    val homeTrackerHigh: Long = 0,
+    val statusCondition: Long = 0
 )
 
 sealed class ScarletVioletSlotRead {
@@ -96,7 +97,7 @@ object ScarletVioletPokemonReadOnly {
             u16(plain, 0x18), immutable((0..5).map { (u16(plain, 0x18) ushr (it * 2)) and 3 }),
             immutable(listOf(byte(plain, 0x48), byte(plain, 0x49))),
             byte(plain, 0xCE), byte(plain, 0xCF), u32(plain, 0xD0),
-            u32(plain, 0x127), u32(plain, 0x12B)
+            u32(plain, 0x127), u32(plain, 0x12B), u32(plain, 0x90)
         ))
     }
 
