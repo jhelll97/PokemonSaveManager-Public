@@ -33365,12 +33365,22 @@ class MainActivity : Activity() {
         val bankEntryUri=currentSourceUri;val bankEntryLabel=currentSourceLabel
         val bankEntryBytes=runCatching{bankFile.readBytes()}.getOrNull();var bankDeleteOffered=false
         val openedFile=importedFile;val loadedGen2=runCatching{openedFile?.readBytes()?.let{detectGen2Profile(it)}}.getOrNull()
+        val loadedGen=runCatching{openedFile?.readBytes()?.let{generationForSize(it.size)}}.getOrNull()
         val message=buildString {
             append("Lv.${mon.level} • OT ${mon.otName.ifBlank{"—"}} • TID ${mon.tid}")
             append(if(mon.shiny)" • Shiny ✨" else "")
             append("\n\nOriginal Gen 2 boxed record, OT and nickname are preserved exactly.")
-            if(loadedGen2!=null) append("\n\nA Gen 2 save is loaded. You can withdraw this Pokémon into any PC box with space.")
-            else append("\n\nLoad a Gold, Silver or Crystal save to withdraw this Pokémon.")
+            append("\n\n")
+            when {
+                loadedGen2!=null -> append("A Gen 2 save is loaded. You can withdraw this exact preserved boxed record into any native PC box with space; the Bank record remains until the destination write, checksums and reopened record verify.")
+                loadedGen==1 -> append("A Gen 1 save is loaded. You can review a backward PSE conversion into native Gen 1 PC storage. This is not an in-game trade, Time Capsule transfer or provenance claim; every incompatible or Legalise field is shown before confirmation.")
+                loadedGen==3 -> append("A Gen 3 save is loaded. You can review a PSE conversion into one native PK3 slot. No official Gen 2 → Gen 3 transfer route existed, and the preserved Bank record remains until the destination write and reopen verification succeed.")
+                loadedGen==4 -> append("A Gen 4 save is loaded. You can review a PSE conversion into one verified native PK4 slot, including every changed, Legalise or unsupported field.")
+                loadedGen==5 -> append("A Gen 5 save is loaded. You can review a PSE conversion into one verified native PK5 slot, including every changed, Legalise or unsupported field.")
+                loadedGen==6 -> append("A Gen 6 save is loaded. You can review a PSE conversion into one verified native PK6 slot, including every changed, Legalise or unsupported field.")
+                loadedGen==7 -> append("A Gen 7 save is loaded. You can review a Virtual Console-shaped PSE conversion into one verified native PK7 slot. PSE does not certify official migration provenance.")
+                else -> append("Load Gen 1 for a reviewed backward PSE conversion, Gen 2 for exact withdrawal, or Gen 3, Gen 4, Gen 5, Gen 6 or Gen 7 for a reviewed native-format PSE conversion.")
+            }
         }
         val b=AlertDialog.Builder(this).setTitle("${mon.nickname.ifBlank{"Pokémon #${mon.species}"}} • Gen 2 Bank").setMessage(message).setNegativeButton("Close",null)
             .setNeutralButton("Delete"){_,_->
@@ -33381,7 +33391,6 @@ class MainActivity : Activity() {
             if(importedFile?.absolutePath!=openedFile.absolutePath||currentSourceUri!=bankEntryUri||currentSourceLabel!=bankEntryLabel){showDialog("Gen 2 Bank withdrawal","The destination identity changed since this Bank entry opened. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton}
             withdrawGen2BankToBox(bankFile,mon,openedFile)
         }
-        val loadedGen = runCatching { importedFile?.readBytes()?.let { generationForSize(it.size) } }.getOrNull()
         if (loadedGen == 1 && loadedGen2 == null && openedFile != null) b.setPositiveButton("Transfer to Gen 1") { _, _ ->
             if(importedFile?.absolutePath!=openedFile.absolutePath||currentSourceUri!=bankEntryUri||currentSourceLabel!=bankEntryLabel){showDialog("Gen 2 → Gen 1","The destination identity changed since this Bank entry opened. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton}
             prepareGen2ToGen1Transfer(bankFile, mon, openedFile)
