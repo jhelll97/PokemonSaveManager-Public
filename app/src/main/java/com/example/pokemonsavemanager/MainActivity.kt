@@ -20332,6 +20332,7 @@ class MainActivity : Activity() {
             append("\n\n")
             when(currentGen){
                 3->append("A Gen 3 save is loaded. You can withdraw this original PK3 record back into an empty PC slot.")
+                2->append("A Gen 2 save is loaded. You can review a PSE conversion into an empty native Gen 2 PC slot.")
                 4->append("A Gen 4 save is loaded. You can review a PSE Bank conversion and place a verified native PK4 into Diamond, Pearl, Platinum, HeartGold or SoulSilver.")
                 7->append("A Gen 7 save is loaded. You can transfer this Gen 3 Pokémon forward into Sun, Moon, Ultra Sun or Ultra Moon. PSE keeps the Bank entry until the PK7 and Gen 7 save checksums verify.")
                 else->append("Load a Gen 3 save to withdraw it, a Gen 4 save for the next adjacent-generation PSE conversion, or a Gen 7 save for the existing forward route.")
@@ -20340,9 +20341,110 @@ class MainActivity : Activity() {
         val b=AlertDialog.Builder(this).setTitle("${p.nickname.ifBlank{canonicalGen3SpeciesName(p.species)?:"Pokémon #${p.species}"}} • Gen 3 Bank").setMessage(message).setNegativeButton("Close",null)
             .setNeutralButton("Delete"){_,_->AlertDialog.Builder(this).setTitle("Delete Bank entry?").setMessage("This permanently removes the preserved Gen 3 PK3 copy.").setNegativeButton("Cancel",null).setPositiveButton("Delete"){_,_->if(bankFile.delete()){Toast.makeText(this,"Bank entry deleted",Toast.LENGTH_SHORT).show();showBank()}else showDialog("PSE Bank","The Bank entry could not be deleted.")}.show()}
         if(currentGen==3)b.setPositiveButton("Withdraw to Gen 3"){_,_->chooseGen3BankWithdrawDestination(bankFile,p)}
+        if(currentGen==2)b.setPositiveButton("Convert to Gen 2"){_,_->prepareGen3ToGen2Transfer(bankFile,p)}
         if(currentGen==4)b.setPositiveButton("Convert to Gen 4"){_,_->prepareGen3ToGen4Transfer(bankFile,p)}
         if(currentGen==7)b.setPositiveButton("Transfer to Gen 7"){_,_->prepareGen3ForwardTransfer(bankFile,p)}
         b.show()
+    }
+
+    private fun gen3ToGen2Blocker(p:PokemonEntry):String?=when{
+        !p.checksumValid->"The source PK3 checksum is invalid."
+        p.species !in 1..251->"Species #${p.species} did not exist in Generation 2."
+        p.form!=0->"This form has no verified native Generation 2 representation."
+        p.isEgg->"Egg state cannot be represented safely by this conversion."
+        p.heldItem!=0->"Held item #${p.heldItem} uses a Generation 3 item ID and has no verified Generation 2 item mapping."
+        p.fatefulEncounter->"Fateful-event provenance cannot be represented in Generation 2."
+        p.moves.any{it !in 0..251}->"At least one move did not exist in Generation 2."
+        p.moves.indices.any{i->p.moves[i]==0&&(p.movePP[i]!=0)}->"An empty move slot contains PP data that Generation 2 cannot preserve."
+        p.moves.indices.any{i->p.moves[i]!=0&&(p.movePP[i] !in 0..63)}->"A move has invalid current PP."
+        p.language!=2->"Only English source text has a verified mapping to the native Generation 2 character table."
+        p.nickname.length>10||p.nickname.any{encodeGen1Char(it)==null}->"The nickname cannot be represented in native Generation 2 text."
+        p.otName.length>10||p.otName.any{encodeGen1Char(it)==null}->"The Original Trainer name cannot be represented in native Generation 2 text."
+        p.evs.size<6||p.evs.any{it !in 0..255}->"The EV data is outside the Generation 3 per-stat range."
+        p.ivs.size<6||p.ivs.any{it !in 0..31}->"The IV data is invalid."
+        p.experience !in 0..0xFFFFFFL->"Experience is outside the Generation 2 record range."
+        else->null
+    }
+
+    private fun buildGen3ToGen2Record(raw:ByteArray,p:PokemonEntry):Triple<ByteArray,ByteArray,ByteArray>{
+        require(raw.size==80&&parsePk3(raw,0,false)?.let{it.checksumValid&&it.pid==p.pid&&it.species==p.species}==true){"The preserved Gen 3 Bank record changed or failed checksum validation."}
+        gen3ToGen2Blocker(p)?.let{error(it)}
+        val growth=canonicalGen2Growth(p.species)?:error("The Generation 2 growth group is unavailable for this species.")
+        val level=gen2LevelForExperience(growth,p.experience).coerceIn(1,100)
+        val dvs=IntArray(5){i->(p.ivs[i]/2).coerceIn(0,15)}
+        val statExp=IntArray(5){i->
+            val ev=when(i){0->p.evs[0];1->p.evs[1];2->p.evs[2];3->p.evs[3];else->(p.evs[4]+p.evs[5])/2}
+            (ev*257).coerceIn(0,65535)
+        }
+        val ups=gen3MovePpUps(raw)
+        require(ups.all{it in 0..3}){"The source PP-Up values could not be read safely."}
+        require((0..3).all{i->p.moves[i]!=0||ups[i]==0}){"An empty move slot contains PP-Up data that Generation 2 cannot preserve."}
+        val mon=ByteArray(32);mon[0]=p.species.toByte();mon[1]=0
+        for(i in 0..3){mon[2+i]=p.moves[i].toByte();mon[23+i]=if(p.moves[i]==0)0 else (((ups[i] shl 6) or (p.movePP[i] and 0x3F))).toByte()}
+        writeU16BE(mon,6,p.tid);writeU24BE(mon,8,p.experience)
+        for(i in 0..4)writeU16BE(mon,11+i*2,statExp[i])
+        mon[21]=(((dvs[1] shl 4) or dvs[2]) and 0xFF).toByte();mon[22]=(((dvs[3] shl 4) or dvs[4]) and 0xFF).toByte()
+        mon[27]=p.friendship.coerceIn(0,255).toByte();mon[28]=(((p.pokerusStrain and 0xF) shl 4) or (p.pokerusDays and 0xF)).toByte();mon[29]=0;mon[30]=0;mon[31]=level.toByte()
+        val ot=ByteArray(11);val nick=ByteArray(11);writeGen1Text(ot,0,11,p.otName);writeGen1Text(nick,0,11,p.nickname)
+        return Triple(mon,ot,nick)
+    }
+
+    private fun prepareGen3ToGen2Transfer(bankFile:File,shown:PokemonEntry){
+        val file=importedFile?:return showDialog("Gen 3 → Gen 2","Load a valid Gold, Silver or Crystal destination save first.")
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val destination=runCatching{file.readBytes()}.getOrNull()?:return showDialog("Gen 3 → Gen 2","The destination save could not be read.")
+        val profile=detectGen2Profile(destination)?:return showDialog("Gen 3 → Gen 2","Load a valid Gold, Silver or Crystal destination save first.")
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return showDialog("Gen 3 → Gen 2","The PSE Bank folder could not be verified.")
+        val selected=runCatching{bankFile.canonicalFile}.getOrNull()?:return showDialog("Gen 3 → Gen 2","The selected Bank path could not be verified.")
+        if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk3",true))return showDialog("Gen 3 → Gen 2","The selected record is outside the Gen 3 PSE Bank.")
+        val bank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Gen 3 → Gen 2","The selected Bank record could not be read.")
+        val source=if(bank.size==80)parsePk3(bank,0,false)else null
+        if(source==null||source.pid!=shown.pid||source.species!=shown.species||source.tid!=shown.tid||source.sid!=shown.sid)return showDialog("Gen 3 → Gen 2","The selected Bank record changed or failed validation.")
+        gen3ToGen2Blocker(source)?.let{return showDialog("Gen 3 → Gen 2 blocked","$it\n\nThe Bank record and destination were left unchanged.")}
+        val conversion=try{buildGen3ToGen2Record(bank,source)}catch(e:Exception){return showDialog("Gen 3 → Gen 2 blocked",(e.message?:"No safe mapping is available.")+"\n\nThe Bank record and destination were left unchanged.")}
+        val (mon,ot,nick)=conversion
+        val sourceDvs=source.ivs.take(5).map{it/2};val hpDv=((sourceDvs[1]and 1)shl 3)or((sourceDvs[2]and 1)shl 2)or((sourceDvs[3]and 1)shl 1)or(sourceDvs[4]and 1)
+        val convertedDvs=intArrayOf(hpDv,sourceDvs[1],sourceDvs[2],sourceDvs[3],sourceDvs[4])
+        val convertedStatExp=IntArray(5){i->readU16BE(mon,11+i*2)}
+        val shinyResult=gen2Shiny(convertedDvs)
+        val losses=buildString{
+            append("PSE conversion, not an official reverse migration. The original PK3 remains in Bank until the native save is written and verified.\n\n")
+            append("Preserved: species, nickname, OT name/TID, EXP, current moves and PP, PP Ups, friendship and Pokérus. IVs → DVs (HP/Atk/Def/Speed/Special): ").append(source.ivs.joinToString("/" )).append(" → ").append(convertedDvs.joinToString("/" )).append(". HP DV is derived from the low bits of the other four DVs. EVs → Stat Exp (HP/Atk/Def/Speed/Special): ").append(source.evs.take(4).joinToString("/" )).append(" + SpA/SpD ").append(source.evs[4]).append("/").append(source.evs[5]).append(" → ").append(convertedStatExp.joinToString("/" )).append("; Special uses the average SpA/SpD EV.")
+            append("\n\nNot represented by Gen 2: PID, nature, ability, gender, met/egg locations and dates, Ball, ribbons, and Generation 3 origin metadata. The Gen 2 shiny result is ").append(if(shinyResult)"shiny" else "not shiny").append("; the source is ").append(if(source.shiny)"shiny" else "not shiny").append(". No held item, Egg, alternate form, fateful marker, unsupported move or unrepresentable text is allowed through this route.")
+            append("\n\nThe experience-based level will be ").append(mon[31].toInt() and 0xFF).append(" using the destination species growth group. Review the changes before choosing a Gen 2 PC Box.")
+        }
+        val targets=availableGen2BoxTargets(destination)
+        if(targets.isEmpty())return showDialog("Gen 3 → Gen 2","All 14 Gen 2 PC boxes are full or unavailable. Nothing was changed.")
+        val labels=targets.map{gen2BoxDestinationLabel(it.first,it.second,file,profile,openedUri,destination)}.toTypedArray();var used=false
+        AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 3 → Gen 2").setMessage(losses).setNegativeButton("Cancel",null).setPositiveButton("Choose Gen 2 Box"){_,_->
+            AlertDialog.Builder(this).setTitle("Choose Gen 2 PC Box").setItems(labels){_,which->if(used||which !in targets.indices){showDialog("Gen 3 → Gen 2","This destination choice was already handled. Reopen the Bank entry.");return@setItems};used=true;transferGen3BankToGen2(selected,source,bank,mon,ot,nick,targets[which].first,file,destination,openedUri,openedLabel,profile.key)}.setNegativeButton("Cancel",null).show()
+        }.show()
+    }
+
+    private fun transferGen3BankToGen2(bankFile:File,source:PokemonEntry,bankBytes:ByteArray,mon:ByteArray,ot:ByteArray,nick:ByteArray,targetBox:Int,file:File,openedDestination:ByteArray,openedUri:Uri?,openedLabel:String?,profileKey:String){
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null
+        try{
+            val fresh=file.readBytes();require(bound()&&fresh.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(fresh).first){"The destination save or source identity changed. Reopen PSE Bank."}
+            val profile=detectGen2Profile(fresh)?:error("The destination is no longer a valid Gen 2 save.");require(profile.key==profileKey&&targetBox in 1..14){"The selected Gen 2 profile or PC Box changed."}
+            val base=gen2BoxOffset(targetBox);val count=fresh[base].toInt()and 0xFF;require(count in 0..19){"The selected Gen 2 Box is full or structurally invalid."}
+            val before=gen2LocationPayloads(fresh,"Box $targetBox",profile);val currentBank=bankFile.readBytes();require(currentBank.contentEquals(bankBytes)){"The selected Gen 3 Bank record changed."};val current=parsePk3(currentBank,0,false)?:error("The Gen 3 Bank record is invalid.");require(current.pid==source.pid&&current.species==source.species&&current.tid==source.tid&&current.sid==source.sid){"The selected Gen 3 Pokémon changed."}
+            val refreshed=buildGen3ToGen2Record(currentBank,current);require(refreshed.first.contentEquals(mon)&&refreshed.second.contentEquals(ot)&&refreshed.third.contentEquals(nick)){"The prepared conversion changed."}
+            val work=fresh.copyOf();val slot=appendGen2BoxPokemon(work,targetBox,mon,ot,nick);markGen2PokedexOwnedSeen(work,profile,source.species);updateGen2PrimaryChecksum(work,profile)
+            val stagedProfile=detectGen2Profile(work)?:error("The staged Gen 2 save failed structural validation.");require(stagedProfile.key==profile.key&&verifyGen2SaveIntegrity(work).first&&gen2BoxRawCore(work,targetBox,slot).contentEquals(mon)&&gen2PokedexOwnedSeen(work,stagedProfile,source.species)){"The staged Gen 2 record, Pokédex or checksum did not verify."}
+            val b=File.createTempFile(backupGameName(file)+"_PreGen3ToGen2_",".backup",backupsDir());backup=b;b.writeBytes(fresh);require(b.readBytes().contentEquals(fresh)){"The recovery backup did not verify."};retainGen2SafetyBackup(b,fresh)
+            require(bound()&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(bankBytes)&&isBackupKept(b)){"The source, destination or kept recovery backup changed before writing."}
+            writeStarted=true;file.writeBytes(work);val written=file.readBytes();val wp=detectGen2Profile(written)?:error("The persisted Gen 2 save failed validation.");require(bound()&&written.contentEquals(work)&&wp.key==profileKey&&verifyGen2SaveIntegrity(written).first){"The persisted Gen 2 destination failed verification."}
+            val after=gen2LocationPayloads(written,"Box $targetBox",wp);require(after.size==before.size+1&&sameGen2PayloadList(after.take(before.size),before)&&gen2BoxRawCore(written,targetBox,slot).contentEquals(mon)&&gen2PokedexOwnedSeen(written,wp,source.species)){"The exact converted record, existing Box contents or Pokédex registration did not persist."}
+            require(bankFile.readBytes().contentEquals(bankBytes)&&bound()&&file.readBytes().contentEquals(written)){"The source or Bank record changed before cleanup."};bankDeleteAttempted=true;require(bankFile.delete()&&!bankFile.exists()){"The destination was written, but Bank cleanup could not be verified."}
+        }catch(e:Exception){
+            val bankRestored=!writeStarted||runCatching{if(bankDeleteAttempted&&!bankFile.exists()){require(bankFile.createNewFile()){"The Bank recovery path could not be reserved."};bankFile.writeBytes(bankBytes)};bankFile.readBytes().contentEquals(bankBytes)}.getOrDefault(false)
+            val restored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(openedDestination);file.readBytes().contentEquals(openedDestination)&&verifyGen2SaveIntegrity(openedDestination).first}.getOrDefault(false))
+            val recovery=if(!writeStarted)"Nothing was written and the Bank record remains." else if(restored)"The exact destination and original Bank record were restored or kept and verified." else "Automatic recovery could not be verified. Keep the save, Bank entry and recovery backup for review."
+            showDialog("Gen 3 → Gen 2 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:""));return
+        }
+        Toast.makeText(this,"PSE converted Gen 3 → Gen 2 in Box $targetBox and verified",Toast.LENGTH_LONG).show();showGen2PokemonViewer("boxes",targetBox)
     }
 
     private data class Gen3ToGen4Meta(
