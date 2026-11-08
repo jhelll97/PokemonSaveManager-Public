@@ -10177,16 +10177,104 @@ class MainActivity : Activity() {
                 3 -> "Original 136-byte PK4 preserved. Review a PSE conversion back into the loaded Gen 3 save. This is not an official reverse migration."
                 4 -> "Original 136-byte PK4 preserved. Withdraw it into an empty Gen 4 PC slot."
                 5 -> "Original 136-byte PK4 preserved. Review a PSE conversion into the loaded native Gen 5 save."
+                6 -> "Original 136-byte PK4 preserved. Review a direct PSE conversion into a chosen native Gen 6 slot, including the exact PID, ability and format changes."
                 7 -> "Original 136-byte PK4 preserved. Transfer it forward into the loaded Gen 7 save. PSE keeps the Bank entry until the converted PK7 and Gen 7 save checksums verify."
-                else -> "Original 136-byte PK4 preserved. Load Gen 3 for a reviewed reverse PSE conversion, Gen 4 to withdraw it, Gen 5 for a native forward conversion, or Gen 7 for the existing forward transfer."
+                else -> "Original 136-byte PK4 preserved. Load Gen 3 for a reviewed reverse PSE conversion, Gen 4 to withdraw it, or Gen 5, Gen 6 or Gen 7 for a reviewed forward conversion."
             })
             .setNegativeButton("Close",null)
             .setNeutralButton("Delete"){_,_->AlertDialog.Builder(this).setTitle("Delete Bank entry?").setMessage("This permanently removes the preserved Gen 4 PK4 copy.").setNegativeButton("Cancel",null).setPositiveButton("Delete"){_,_->if(bankFile.delete()){Toast.makeText(this,"Bank entry deleted",Toast.LENGTH_SHORT).show();showBank()}else showDialog("PSE Bank","The Bank entry could not be deleted.")}.show()}
         if(currentGen==3)b.setPositiveButton("PSE Convert to Gen 3"){_,_->prepareGen4ToGen3Transfer(bankFile,p)}
         if(currentGen==4)b.setPositiveButton("Withdraw to Gen 4"){_,_->chooseGen4BankWithdrawDestination(bankFile,p)}
         if(currentGen==5)b.setPositiveButton("Transfer to Gen 5"){_,_->prepareGen4ToGen5Transfer(bankFile,p)}
+        if(currentGen==6)b.setPositiveButton("Transfer to Gen 6"){_,_->prepareGen4ToGen6Transfer(bankFile,p)}
         if(currentGen==7)b.setPositiveButton("Transfer to Gen 7"){_,_->prepareGen4ForwardTransfer(bankFile,p)}
         b.show()
+    }
+
+    private fun prepareGen4ToGen6Transfer(bankFile:File,shown:PokemonEntry){
+        val file=importedFile?:return showDialog("Gen 4 → Gen 6","Load a valid Generation 6 destination save first.")
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()
+            ?:return showDialog("Gen 4 → Gen 6","The PSE Bank path could not be verified.")
+        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+            ?:return showDialog("Gen 4 → Gen 6","The selected Bank path could not be verified.")
+        if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk4",true))
+            return showDialog("Gen 4 → Gen 6","The selected record is outside the Generation 4 PSE Bank.")
+        val bank=runCatching{selected.readBytes()}.getOrNull()
+            ?:return showDialog("Gen 4 → Gen 6","The selected Bank record could not be read.")
+        val source=if(bank.size==136)parsePk4(bank,false)else null
+        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
+            source.tid!=shown.tid||source.sid!=shown.sid)
+            return showDialog("Gen 4 → Gen 6","The selected Bank record changed or failed its PK4 checksum.")
+        gen4ToGen5PreflightRejection(source)?.let{
+            return showDialog("Gen 4 → Gen 6 blocked","$it\n\nThe Bank record and destination were left unchanged.")
+        }
+        if(source.moves.indices.any{source.moves[it]==0&&source.movePP[it]!=0})
+            return showDialog("Gen 4 → Gen 6 blocked","An empty move slot contains PP data that cannot be preserved.\n\nNothing was changed.")
+        val sourceUps=gen4Pk4PpUps(bank)
+        if(sourceUps.any{it !in 0..3}||(0..3).any{source.moves[it]==0&&sourceUps[it]!=0})
+            return showDialog("Gen 4 → Gen 6 blocked","The PK4 contains PP-Up data that cannot be preserved exactly.\n\nNothing was changed.")
+        val destination=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog("Gen 4 → Gen 6","The destination save could not be read.")
+        if((destination.size!=SIZE_G6_XY&&destination.size!=SIZE_G6_ORAS)||!bound()||
+            !gen6BoxChecksumValid(destination)||!gen6BlockChecksumValid(destination,20))
+            return showDialog("Gen 4 → Gen 6","Load a checksum-clean Pokémon X, Y, Omega Ruby or Alpha Sapphire save first.")
+        val trainer=analyzeSave(file).trainer
+            ?:return showDialog("Gen 4 → Gen 6","PSE could not read the destination trainer identity.")
+        fun snapshotsMatch()=bound()&&runCatching{
+            file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)
+        }.getOrDefault(false)
+        val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 4 → Gen 6")
+            .setMessage("Resolving the exact Generation 5 ability mapping and preparing a verified native PK6…")
+            .setCancelable(false).create();loading.show()
+        loadGen3ToGen4MetaAsync(source,5,4){meta,reason->
+            if(loading.isShowing)loading.dismiss()
+            if(!snapshotsMatch())return@loadGen3ToGen4MetaAsync showDialog(
+                "Gen 4 → Gen 6","The destination or Bank record changed during preparation. Nothing was changed.")
+            if(meta==null)return@loadGen3ToGen4MetaAsync showDialog(
+                "Gen 4 → Gen 6 blocked",(reason?:"Generation 5 ability data could not be verified.")+"\n\nNothing was changed.")
+            val pk5=try{buildGen4ToGen5Pk5(bank,source,destination,meta,false)}catch(e:Exception){
+                return@loadGen3ToGen4MetaAsync showDialog(
+                    "Gen 4 → Gen 6 blocked",(e.message?:"The PK5 conversion bridge could not be prepared.")+"\n\nNothing was changed.")
+            }
+            val bridge=parsePk5(pk5,false)
+                ?:return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 6","The PK5 conversion bridge could not be reopened.")
+            if(!gen5Pk5PpUps(pk5).contentEquals(sourceUps))
+                return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 6 blocked","The PK5 bridge did not preserve every PP-Up value. Nothing was changed.")
+            val pk6=try{buildGen5ToGen6Pk6(pk5,bridge,destination,trainer)}catch(e:Exception){
+                return@loadGen3ToGen4MetaAsync showDialog(
+                    "Gen 4 → Gen 6 blocked",(e.message?:"No safe native PK6 mapping is available.")+"\n\nNothing was changed.")
+            }
+            val converted=parsePk6(pk6,0,PK6_STORED_SIZE,false,721)
+                ?:return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 6","The prepared PK6 could not be reopened.")
+            if(!snapshotsMatch())return@loadGen3ToGen4MetaAsync showDialog(
+                "Gen 4 → Gen 6","The destination or Bank record changed after conversion preparation. Nothing was changed.")
+            val prepared=Gen5Gen6Prepared(
+                sourceGeneration=4,bankFile=selected,bankBytes=bank,source=source,
+                destination=destination,trainer=trainer,pk6=pk6,converted=converted,
+                destinationFile=file,sourceUri=openedUri,sourceLabel=openedLabel,gen4Meta=meta
+            )
+            val oldPid="%08X".format(source.pid);val newPid="%08X".format(converted.pid)
+            val pidNote=if(source.pid==converted.pid)"PID remains $oldPid." else
+                "PID changes $oldPid → $newPid only as required to preserve the verified ability slot, nature, gender and shiny state across the native Gen 5 and Gen 6 formats."
+            val oldMet=if(source.metLocation==0)"none" else "#${source.metLocation}"
+            val oldEgg=if(source.eggLocation==0)"none" else "#${source.eggLocation}"
+            val preview=buildString{
+                append("PSE Bank conversion preview\n\n")
+                append("Preserved: species/form, TID/SID, nickname and OT, EXP, verified ability, nature, gender, shiny state, moves, current PP, PP Ups, IVs, EVs, friendship, Pokérus, Ball, language, source title, met level/date and fateful marker.\n")
+                append("$pidNote\n")
+                append("Ability: source ability #${source.ability} in slot ${source.abilityNumber} remains verified ability #${meta.abilityId}.\n")
+                append("Required format changes: Gen 4 met location $oldMet becomes native Gen 6 transfer marker 30001; Egg location $oldEgg becomes 0 because the location catalog is not interchangeable. Current handler becomes ${trainer.trainerName}; relearn moves and geographic fields start empty.\n\n")
+                append("Held items, Eggs and unsupported source values are blocked instead of discarded. This is a PSE conversion, not an in-game trade or a claim of official transfer provenance. The source save stays unchanged. The exact Gen 4 Bank record remains until a retained recovery backup, chosen PK6 slot, Pokédex update, checksums and reopened destination all verify.")
+            }
+            AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{meta.speciesName}} • Gen 4 → Gen 6")
+                .setMessage(preview).setNegativeButton("Cancel",null)
+                .setPositiveButton("Choose Gen 6 destination"){_,_->
+                    if(!snapshotsMatch())showDialog("Gen 4 → Gen 6","The destination or Bank record changed after review. Nothing was changed.")
+                    else chooseGen5ToGen6Destination(prepared)
+                }.show()
+        }
     }
 
     private data class Gen4ToGen3Plan(val meta:Gen3ToGen4Meta,val originGame:Int,val originLegalised:Boolean=false,val metLocation:Int=0)
@@ -10700,7 +10788,7 @@ class MainActivity : Activity() {
         val sourceGeneration:Int,val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry,
         val destination:ByteArray,val trainer:TrainerData,val pk6:ByteArray,
         val converted:PokemonEntry,val destinationFile:File,
-        val sourceUri:Uri?,val sourceLabel:String?
+        val sourceUri:Uri?,val sourceLabel:String?,val gen4Meta:Gen3ToGen4Meta?=null
     )
 
     private fun genToGen6Title(p:Gen5Gen6Prepared)="Gen ${p.sourceGeneration} → Gen 6"
@@ -10881,6 +10969,18 @@ class MainActivity : Activity() {
                     require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&
                         source.tid==p.source.tid&&source.sid==p.source.sid){"The selected PK3 no longer matches the reviewed Pokémon."}
                     sourcePpUps=gen3MovePpUps(bank);p.pk6
+                }
+                4->{
+                    val source=parsePk4(bank,false)?:error("The PK4 Bank record is invalid.")
+                    require(source.checksumValid&&sameGen4ToGen5Pk5(source,p.source)){
+                        "The selected PK4 no longer matches the reviewed Pokémon."
+                    }
+                    val meta=p.gen4Meta?:error("The reviewed Generation 5 ability mapping is unavailable.")
+                    val bridge=buildGen4ToGen5Pk5(bank,source,original,meta,false)
+                    val bridgeSource=parsePk5(bridge,false)
+                        ?:error("The verified PK5 conversion bridge could not be reopened.")
+                    sourcePpUps=gen4Pk4PpUps(bank)
+                    buildGen5ToGen6Pk6(bridge,bridgeSource,original,p.trainer)
                 }
                 5->{
                     val source=parsePk5(bank,false)?:error("The PK5 Bank record is invalid.")
