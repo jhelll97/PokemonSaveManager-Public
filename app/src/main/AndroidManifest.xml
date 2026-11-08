@@ -226,6 +226,7 @@
         <activity android:name=".SwitchScarletVioletPokemonCurrentHandlerActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonLanguageActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonAffixedTitleActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletPokemonRibbonMarkActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonHeldItemActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonAbilityActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonNatureActivity" android:exported="false"/>
