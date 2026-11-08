@@ -4025,6 +4025,7 @@ class SwitchReadOnlyActivity : Activity() {
             append("Obedience Level: ${p.obedienceLevel}\n")
             append("Origin Game: ${ScarletVioletPokemonOriginGameEditing.name(p.originGame)} (#${p.originGame})\n")
             append("Battle Version: ${ScarletVioletPokemonBattleVersionEditing.name(p.battleVersion)} (#${p.battleVersion})\n")
+            append("Form Argument: ${p.formArgument}\n")
             append("Capture Ball: ${ScarletVioletPokemonBallEditing.name(p.ball)} (#${p.ball})\n")
             append("Met Level: ${p.metLevel}\n")
             append("Hyper Training: ${ScarletVioletPokemonHyperTrainingEditing.summary(p.hyperTrainingFlags)}\n")
@@ -4213,6 +4214,29 @@ class SwitchReadOnlyActivity : Activity() {
                         Intent(
                             this@SwitchReadOnlyActivity,
                             SwitchScarletVioletPokemonBattleVersionActivity::class.java
+                        )
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                            .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                            .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        val formArgumentMaximum = ScarletVioletPokemonFormArgumentEditing.maximum(p)
+        if (nativeTarget != null && !p.isEgg && !p.fatefulEncounter &&
+            formArgumentMaximum != null && p.formArgument in 0..formArgumentMaximum.toLong()) {
+            content.addView(Button(this).apply {
+                text = "Edit Form Argument"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(
+                            this@SwitchReadOnlyActivity,
+                            SwitchScarletVioletPokemonFormArgumentActivity::class.java
                         )
                             .setData(source)
                             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
