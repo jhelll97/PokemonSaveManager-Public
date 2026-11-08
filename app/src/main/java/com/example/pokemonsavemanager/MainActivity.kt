@@ -9866,9 +9866,10 @@ class MainActivity : Activity() {
         val nature:Int,val shiny:Boolean,val moves:IntArray,val pp:IntArray,val ivs:IntArray,val evs:IntArray
     )
 
-    private fun gen4PidForNatureShiny(old:Long,tid:Int,sid:Int,nature:Int,shiny:Boolean):Long{
+    private fun gen4PidForNatureShiny(old:Long,tid:Int,sid:Int,nature:Int,shiny:Boolean,abilityNumber:Int?=null):Long{
+        require(abilityNumber==null||abilityNumber in 1..2){"The requested Generation 4 ability slot is invalid."}
         val oldLo=old.toInt() and 0xFFFF
-        val oldParity=old.toInt() and 1
+        val oldParity=abilityNumber?.minus(1)?: (old.toInt() and 1)
         if(shiny){
             for(delta in 0..65535){
                 val lo=(oldLo+delta) and 0xFFFF
@@ -10376,6 +10377,8 @@ class MainActivity : Activity() {
         require(gen3TransferGender(p,meta.genderRate)==p.gender){"The source gender does not match the verified species gender ratio."}
         val ups=gen4Pk4PpUps(raw);require(ups.all{it in 0..3}){"The source PP-Up values could not be read safely."}
         val out=decryptPk4(raw)?:error("The source PK4 could not be decrypted.")
+        val targetPid=gen5PidForAbilityAndShiny(p)
+        writeU32LE(out,0,targetPid)
         writeU16LE(out,0x08,p.species);writeU16LE(out,0x0A,0)
         writeU16LE(out,0x0C,p.tid);writeU16LE(out,0x0E,p.sid);writeU32LE(out,0x10,p.experience)
         out[0x14]=p.friendship.coerceIn(0,255).toByte();out[0x15]=p.ability.toByte()
@@ -10403,7 +10406,7 @@ class MainActivity : Activity() {
         writeU16LE(out,0x80,0)
         val encrypted=encryptPk5(out)
         val q=parsePk5(encrypted,false)?:error("The converted PK5 could not be parsed.")
-        require(q.checksumValid&&!q.isEgg&&q.pid==p.pid&&q.species==p.species&&q.tid==p.tid&&q.sid==p.sid&&
+        require(q.checksumValid&&!q.isEgg&&q.pid==targetPid&&q.species==p.species&&q.tid==p.tid&&q.sid==p.sid&&
             q.nickname==p.nickname&&q.isNicknamed==p.isNicknamed&&q.otName==p.otName&&q.experience==p.experience&&
             q.ability==p.ability&&q.abilityNumber==p.abilityNumber&&q.nature==p.nature&&q.gender==p.gender&&
             q.form==p.form&&q.fatefulEncounter==p.fatefulEncounter&&q.shiny==p.shiny&&q.heldItem==0&&
@@ -10463,7 +10466,8 @@ class MainActivity : Activity() {
             }
             val converted=parsePk5(pk5,false)?:return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 5","The prepared PK5 could not be re-read.")
             val prepared=Gen4Gen5Prepared(selected,bank,source,destination,meta,pk5,converted,file,openedUri,openedLabel)
-            val preview="PSE converts this preserved Gen 4 Bank record into a native Gen 5 PK5. It keeps species, PID, TID/SID, nickname, OT, experience, ability, nature, gender/form, shiny state, moves/PP/PP Ups, IVs, EVs, friendship, Pokérus, ball, met level, origin game and met date. The Gen 4 met-location number is set to 0 because Gen 4 and Gen 5 location catalogs differ; this is shown as unspecified location, not official migration provenance. Records with held items or unsupported fields remain blocked. The Gen 4 Bank copy stays available until the reviewed Gen 5 save is written."
+            val pidNotice=if(converted.pid==source.pid)"PID preserved." else "PID adjustment: ${source.pid.toString(16).uppercase().padStart(8,'0')} → ${converted.pid.toString(16).uppercase().padStart(8,'0')} so the Generation 5 ability slot agrees with its PID; TID/SID, ability, nature and shiny state are preserved. Review before continuing."
+            val preview="PSE converts this preserved Gen 4 Bank record into a native Gen 5 PK5. Species, TID/SID, nickname, OT, experience, ability, nature, gender/form, shiny state, moves/PP/PP Ups, IVs, EVs, friendship, Pokérus, ball, met level, origin game and met date are preserved. $pidNotice The Gen 4 met-location number is set to 0 because Gen 4 and Gen 5 location catalogs differ; this is shown as unspecified location, not official migration provenance. Records with held items or unsupported fields remain blocked. The Gen 4 Bank copy stays available until the reviewed Gen 5 save is written."
             AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 4 → Gen 5")
                 .setMessage(preview).setNegativeButton("Cancel",null)
                 .setPositiveButton("Choose Gen 5 destination"){_,_->chooseGen4ToGen5Destination(prepared)}
@@ -10876,7 +10880,7 @@ class MainActivity : Activity() {
         else->null
     }
 
-    private fun gen6ToGen5Pid(p:PokemonEntry):Long{
+    private fun gen5PidForAbilityAndShiny(p:PokemonEntry):Long{
         var pid=p.pid and 0xFFFFFFFFL
         val requiredParity=when(p.abilityNumber){1->0;2->1;else->-1}
         fun sv(v:Long)=p.tid xor p.sid xor (v.toInt() and 0xFFFF) xor ((v.toInt() ushr 16) and 0xFFFF)
@@ -10902,7 +10906,7 @@ class MainActivity : Activity() {
         require(!plan.legalised||p.originGame in 24..27){"Origin Legalise was requested for a record that does not need it."}
         val ups=gen6Pk6PpUps(raw);require(ups.all{it in 0..3}){"The PK6 PP-Up values could not be verified."};require((0..3).all{p.moves[it]!=0||(p.movePP[it]==0&&ups[it]==0)}){"An empty move slot contains PP or PP-Up data that PK5 cannot preserve safely."}
         val out=ByteArray(136);java.util.Arrays.fill(out,0x48,0x48+22,0xFF.toByte());java.util.Arrays.fill(out,0x68,0x68+16,0xFF.toByte())
-        val pid=gen6ToGen5Pid(p);writeU32LE(out,0,pid);writeU16LE(out,0x08,p.species);writeU16LE(out,0x0A,0);writeU16LE(out,0x0C,p.tid);writeU16LE(out,0x0E,p.sid);writeU32LE(out,0x10,p.experience)
+        val pid=gen5PidForAbilityAndShiny(p);writeU32LE(out,0,pid);writeU16LE(out,0x08,p.species);writeU16LE(out,0x0A,0);writeU16LE(out,0x0C,p.tid);writeU16LE(out,0x0E,p.sid);writeU32LE(out,0x10,p.experience)
         out[0x14]=p.friendship.toByte();out[0x15]=p.ability.toByte();out[0x16]=gen6ToGen5Markings(p.markingValue).toByte();out[0x17]=p.language.toByte()
         for(i in 0..5)out[0x18+i]=p.evs[i].toByte()
         for(i in 0..3){writeU16LE(out,0x28+i*2,p.moves[i]);out[0x30+i]=(if(p.moves[i]==0)0 else p.movePP[i]).toByte();out[0x34+i]=(if(p.moves[i]==0)0 else ups[i]).toByte()}
@@ -11233,8 +11237,8 @@ class MainActivity : Activity() {
         p.moves.any{it !in 0..467}->"A move is outside the Generation 4 move catalogue."
         p.ability !in 1..123->"Ability #${p.ability} did not exist in Generation 4."
         p.abilityNumber !in 1..2->"Hidden or unsupported ability slots cannot be represented in Generation 4."
-        ((p.pid.toInt() and 1)+1)!=p.abilityNumber->"The Generation 4 PID ability parity does not match the PK5 ability slot. PSE will not rewrite identity silently."
-        p.nature!=(p.pid%25L).toInt()->"The explicit Gen 5 nature does not match the PID-derived Gen 4 nature. PSE will not rewrite PID, nature or shiny identity silently."
+        p.nature !in 0..24->"The explicit Gen 5 nature is invalid for Generation 4."
+
         p.nickname.length>10||p.nickname.any{gen4EncodeChar(it)==null}->"The nickname cannot be represented exactly by the native Gen 4 text writer."
         p.otName.length>7||p.otName.any{gen4EncodeChar(it)==null}->"The Original Trainer name cannot be represented exactly by the native Gen 4 text writer."
         p.language !in 1..10->"Language ID ${p.language} is outside the supported Gen 4 range."
@@ -11257,13 +11261,14 @@ class MainActivity : Activity() {
         require(gen3TransferGender(p,meta.genderRate)==p.gender){"PID-derived gender does not match the PK5 gender field."}
         val ups=gen5Pk5PpUps(raw);require(ups.all{it in 0..3}){"The PK5 PP-Up values could not be verified."}
         val out=decryptPk5(raw)?:error("The source PK5 could not be decrypted.")
-        writeU16LE(out,0x0A,0);out[0x41]=0;out[0x42]=0
+        val targetPid=gen4PidForNatureShiny(p.pid,p.tid,p.sid,p.nature,p.shiny,p.abilityNumber)
+        writeU32LE(out,0,targetPid);writeU16LE(out,0x0A,0);out[0x41]=0;out[0x42]=0
         for(i in 0..3)out[0x34+i]=(if(p.moves[i]==0)0 else ups[i]).toByte()
         writeGen4String(out,0x48,22,p.nickname);writeGen4String(out,0x68,16,p.otName)
         writeU16LE(out,0x44,0);writeU16LE(out,0x46,0);writeU16LE(out,0x7E,0);writeU16LE(out,0x80,0)
         out[0x83]=p.ball.toByte();out[0x85]=0;out[0x86]=0;out[0x87]=0
         val encrypted=encryptPk4(out);val q=parsePk4(encrypted,false)?:error("The converted PK4 could not be parsed.")
-        require(q.checksumValid&&!q.isEgg&&q.pid==p.pid&&q.species==p.species&&q.tid==p.tid&&q.sid==p.sid&&
+        require(q.checksumValid&&!q.isEgg&&q.pid==targetPid&&q.species==p.species&&q.tid==p.tid&&q.sid==p.sid&&
             q.nickname==p.nickname&&q.isNicknamed==p.isNicknamed&&q.otName==p.otName&&q.experience==p.experience&&
             q.ability==p.ability&&q.abilityNumber==p.abilityNumber&&q.nature==p.nature&&q.gender==p.gender&&q.form==0&&
             q.fatefulEncounter==p.fatefulEncounter&&q.shiny==p.shiny&&q.heldItem==0&&q.friendship==p.friendship&&
@@ -11312,7 +11317,8 @@ class MainActivity : Activity() {
             val pk4=try{buildGen5ToGen4Pk4(bank,source,destination,meta)}catch(e:Exception){return@loadGen3ToGen4MetaAsync showDialog("Gen 5 → Gen 4 blocked",(e.message?:"No safe mapping is available.")+"\n\nNothing was changed.")}
             val converted=parsePk4(pk4,false)?:return@loadGen3ToGen4MetaAsync showDialog("Gen 5 → Gen 4","The prepared PK4 could not be re-read.")
             val prepared=Gen5Gen4Prepared(selected,bank,source,destination,meta,pk4,converted,file,openedUri,openedLabel)
-            val preview="PSE conversion, not an official backward transfer or provenance claim.\n\nPreserved: species, PID, OT/TID/SID, nickname, EXP and PID-derived nature/shiny state, verified non-hidden ability slot, gender, IVs, EVs, moves, PP/PP Ups, friendship, Pokérus, markings, Ball, met level, pre-Gen-5 origin title, encounter dates and fateful marker.\n\nRequired format difference: native PK4 has no explicit nature or hidden-ability field. PSE accepts only records whose PID already produces the same nature and normal ability slot. Gen 5 location IDs are not remapped; only the explicit unspecified location 0 produced by PSE's forward route is accepted and remains 0. Held items, Eggs, forms, Gen 5 species/moves/abilities/origins and all ambiguous fields are blocked instead of discarded.\n\nThe exact PK5 Bank record remains until the reviewed native PK4, Pokédex mirrors, block CRCs and persisted reopen all verify."
+            val pidNotice=if(converted.pid==source.pid)"PID preserved." else "PID adjustment: ${source.pid.toString(16).uppercase().padStart(8,'0')} → ${converted.pid.toString(16).uppercase().padStart(8,'0')} so Generation 4 PID-derived nature and ability slot remain valid; nature, ability, shiny state and TID/SID are preserved. Review before continuing."
+            val preview="PSE conversion, not an official backward transfer or provenance claim.\n\nPreserved: species, OT/TID/SID, nickname, EXP, nature, shiny state, verified non-hidden ability, gender, IVs, EVs, moves, PP/PP Ups, friendship, Pokérus, markings, Ball, met level, pre-Gen-5 origin title, encounter dates and fateful marker. $pidNotice\n\nRequired format difference: native PK4 has no explicit nature or hidden-ability field. Gen 5 location IDs are not remapped; only the explicit unspecified location 0 produced by PSE's forward route is accepted and remains 0. Held items, Eggs, forms, Gen 5 species/moves/abilities/origins and all ambiguous fields are blocked instead of discarded.\n\nThe exact PK5 Bank record remains until the reviewed native PK4, Pokédex mirrors, block CRCs and persisted reopen all verify."
             AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 5 → Gen 4").setMessage(preview)
                 .setNegativeButton("Cancel",null).setPositiveButton("Review destination"){_,_->if(snapshotsMatch())chooseGen5ToGen4Destination(prepared)else showDialog("Gen 5 → Gen 4","The destination or Bank record changed after review.")}.show()
         }
@@ -20480,6 +20486,7 @@ class MainActivity : Activity() {
                     val sourceAbilities=canonicalGen3SpeciesAbilities(p.species)
                         ?:error("Canonical Generation 3 ability-slot data is unavailable for species #${p.species}.")
                     val ability=sourceAbilities.getOrElse(wanted-1){0}.takeIf{it!=0}
+                        ?: (if(wanted==2)sourceAbilities.firstOrNull()?.takeIf{it!=0} else null)
                         ?:error("Species #${p.species} has no Generation 3 ability in source slot $wanted.")
                     require(ability==p.ability){
                         "The PK3 has ability #${p.ability} in slot $wanted, but canonical Generation 3 data assigns ability #$ability to that slot."
@@ -20495,6 +20502,7 @@ class MainActivity : Activity() {
                     val targetAbilities=canonicalGen3SpeciesAbilities(p.species)
                         ?:error("Canonical Generation 3 ability-slot data is unavailable for species #${p.species}.")
                     targetAbilities.getOrElse(wanted-1){0}.takeIf{it!=0}
+                        ?: (if(wanted==2)targetAbilities.firstOrNull()?.takeIf{it!=0} else null)
                         ?:error("Species #${p.species} has no Generation 3 ability in destination slot $wanted.")
                 }else{
                     val pokemon=fetchJsonObject("https://pokeapi.co/api/v2/pokemon/${p.species}")
@@ -20516,12 +20524,17 @@ class MainActivity : Activity() {
                     }
                     val abilities=historicalAbilities?:currentAbilities
                     var resolved=0
+                    val normalAbilityIds=LinkedHashSet<Int>()
                     for(i in 0 until abilities.length()){
                         val item=abilities.optJSONObject(i)?:continue
-                        if(item.optBoolean("is_hidden",false)||item.optInt("slot",0)!=wanted)continue
-                        resolved=parseIdFromPokeApiUrl(item.optJSONObject("ability")?.optString("url").orEmpty())?:0
-                        if(resolved!=0)break
+                        if(item.optBoolean("is_hidden",false))continue
+                        val id=parseIdFromPokeApiUrl(item.optJSONObject("ability")?.optString("url").orEmpty())?:0
+                        if(id in 1..164){
+                            normalAbilityIds.add(id)
+                            if(item.optInt("slot",0)==wanted)resolved=id
+                        }
                     }
+                    if(resolved==0&&normalAbilityIds.size==1)resolved=normalAbilityIds.first()
                     resolved
                 }
                 val maxAbility=if(targetGeneration<=4)123 else 164
