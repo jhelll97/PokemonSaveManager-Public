@@ -10268,7 +10268,7 @@ class MainActivity : Activity() {
         gen4ToGen3PreflightRejection(source)?.let{return showDialog("Gen 4 → Gen 3 blocked","$it\n\nThe Bank record and destination were left unchanged.")}
         fun snapshotsMatch()=bound()&&runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false)
         val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 4 → Gen 3").setMessage("Verifying the historical ability slot and native PK3 mapping…").setCancelable(false).create();loading.show()
-        loadGen3ToGen4MetaAsync(source,3){meta,reason->loading.dismiss();if(!snapshotsMatch())return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 3","The destination or Bank record changed during preparation.");if(meta==null)return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 3 blocked",(reason?:"Conversion metadata could not be verified.")+"\n\nNothing was changed.")
+        loadGen3ToGen4MetaAsync(source,3,4){meta,reason->loading.dismiss();if(!snapshotsMatch())return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 3","The destination or Bank record changed during preparation.");if(meta==null)return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 3 blocked",(reason?:"Conversion metadata could not be verified.")+"\n\nNothing was changed.")
             val plan=Gen4ToGen3Plan(meta);val pk3=try{buildGen4ToGen3Pk3(bank,source,destination,plan)}catch(e:Exception){return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 3 blocked",(e.message?:"No safe mapping is available.")+"\n\nNothing was changed.")};val converted=parsePk3(pk3,0,false)?:return@loadGen3ToGen4MetaAsync
             val prepared=Gen4Gen3Prepared(selected,bank,source,destination,plan,pk3,converted,file,openedUri,openedLabel)
             val preview="PSE conversion, not an official reverse migration.\n\nPreserved: species, PID, OT/TID/SID, nickname, EXP/nature/shiny state, ability slot, IVs, EVs, moves, PP/PP Ups, friendship, Pokérus, Ball, met level, Gen 3 origin title and markings.\n\nRequired format difference: Gen 4 Pal Park location #55 and its migration date cannot reconstruct the original Gen 3 encounter. PSE writes native PK3 met location 0 (unspecified); PK3 has no date fields. No held item, form, Egg, fateful marker or Gen 4-origin provenance will be discarded because records containing them are blocked.\n\nThe original PK4 Bank record remains exact until the native destination save, Pokédex mirrors and section checksums persist and reopen successfully."
@@ -10452,7 +10452,7 @@ class MainActivity : Activity() {
         val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 4 → Gen 5")
             .setMessage("Preparing the native PK5 conversion and destination preview…").setCancelable(false).create()
         loading.show()
-        loadGen3ToGen4MetaAsync(source,5){meta,reason->
+        loadGen3ToGen4MetaAsync(source,5,4){meta,reason->
             loading.dismiss()
             if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false))
                 return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 5","The destination or Bank record changed during preparation. Nothing was changed.")
@@ -11306,7 +11306,7 @@ class MainActivity : Activity() {
         gen5ToGen4PreflightRejection(source)?.let{return showDialog("Gen 5 → Gen 4 blocked","$it\n\nThe Bank record and destination were left unchanged.")}
         fun snapshotsMatch()=bound()&&runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false)
         val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 5 → Gen 4").setMessage("Verifying the historical ability, PID-derived fields and native PK4 mapping…").setCancelable(false).create();loading.show()
-        loadGen3ToGen4MetaAsync(source,4){meta,reason->
+        loadGen3ToGen4MetaAsync(source,4,5){meta,reason->
             loading.dismiss();if(!snapshotsMatch())return@loadGen3ToGen4MetaAsync showDialog("Gen 5 → Gen 4","The destination or Bank record changed during preparation.")
             if(meta==null)return@loadGen3ToGen4MetaAsync showDialog("Gen 5 → Gen 4 blocked",(reason?:"Generation 4 conversion data could not be verified.")+"\n\nNothing was changed.")
             val pk4=try{buildGen5ToGen4Pk4(bank,source,destination,meta)}catch(e:Exception){return@loadGen3ToGen4MetaAsync showDialog("Gen 5 → Gen 4 blocked",(e.message?:"No safe mapping is available.")+"\n\nNothing was changed.")}
@@ -20462,66 +20462,81 @@ class MainActivity : Activity() {
         val destinationFile:File,val sourceUri:Uri?,val sourceLabel:String?
     )
 
-    private fun loadGen3ToGen4MetaAsync(p:PokemonEntry,targetGeneration:Int=4,done:(Gen3ToGen4Meta?,String?)->Unit){
+    private fun loadGen3ToGen4MetaAsync(
+        p:PokemonEntry,targetGeneration:Int=4,sourceGeneration:Int=3,
+        done:(Gen3ToGen4Meta?,String?)->Unit
+    ){
         imageExecutor.execute{
             var reason:String?=null
             val result=try{
-                require(targetGeneration in 3..5){"This ability lookup supports Generation 3, 4 or 5."}
-                val wanted=p.abilityNumber
-                require(wanted in 1..2){"The PK3 ability slot is not representable in Generation 4."}
-                val sourceAbilities=canonicalGen3SpeciesAbilities(p.species)
-                    ?:error("Canonical Generation 3 ability-slot data is unavailable for species #${p.species}.")
-                val sourceAbility=sourceAbilities.getOrElse(wanted-1){0}.takeIf{it!=0}
-                    ?:error("Species #${p.species} has no Generation 3 ability in source slot $wanted.")
-                require(sourceAbility==p.ability){
-                    "The PK3 has ability #${p.ability} in slot $wanted, but canonical Generation 3 data assigns ability #$sourceAbility to that slot."
+                require(targetGeneration in 3..5&&sourceGeneration in 3..5){
+                    "This ability lookup supports Generations 3 through 5."
                 }
+                val wanted=p.abilityNumber
+                require(wanted in 1..2){
+                    "A hidden or unsupported ability slot cannot be mapped safely."
+                }
+                val sourceAbility=if(sourceGeneration==3){
+                    val sourceAbilities=canonicalGen3SpeciesAbilities(p.species)
+                        ?:error("Canonical Generation 3 ability-slot data is unavailable for species #${p.species}.")
+                    val ability=sourceAbilities.getOrElse(wanted-1){0}.takeIf{it!=0}
+                        ?:error("Species #${p.species} has no Generation 3 ability in source slot $wanted.")
+                    require(ability==p.ability){
+                        "The PK3 has ability #${p.ability} in slot $wanted, but canonical Generation 3 data assigns ability #$ability to that slot."
+                    }
+                    ability
+                }else p.ability
                 val species=fetchJsonObject("https://pokeapi.co/api/v2/pokemon-species/${p.species}")
                     ?:error("Species metadata could not be loaded.")
-                val pokemon=fetchJsonObject("https://pokeapi.co/api/v2/pokemon/${p.species}")
-                    ?:error("Ability metadata could not be loaded.")
                 fun generationNumber(name:String):Int=when(name.substringAfter("generation-","")){
                     "i"->1;"ii"->2;"iii"->3;"iv"->4;"v"->5;"vi"->6;"vii"->7;"viii"->8;"ix"->9;else->Int.MAX_VALUE
                 }
-                val currentAbilities=pokemon.optJSONArray("abilities")
-                    ?:error("The Generation $targetGeneration ability list is unavailable.")
-                var historicalGeneration=Int.MAX_VALUE
-                var historicalAbilities:org.json.JSONArray?=null
-                val past=pokemon.optJSONArray("past_abilities")
-                if(past!=null){
-                    for(i in 0 until past.length()){
-                        val row=past.optJSONObject(i)?:continue
-                        val generation=generationNumber(row.optJSONObject("generation")?.optString("name").orEmpty())
-                        if(generation>=targetGeneration&&generation<historicalGeneration){
-                            historicalGeneration=generation
-                            historicalAbilities=row.optJSONArray("abilities")
+                val ability=if(targetGeneration==3){
+                    val targetAbilities=canonicalGen3SpeciesAbilities(p.species)
+                        ?:error("Canonical Generation 3 ability-slot data is unavailable for species #${p.species}.")
+                    targetAbilities.getOrElse(wanted-1){0}.takeIf{it!=0}
+                        ?:error("Species #${p.species} has no Generation 3 ability in destination slot $wanted.")
+                }else{
+                    val pokemon=fetchJsonObject("https://pokeapi.co/api/v2/pokemon/${p.species}")
+                        ?:error("Ability metadata could not be loaded.")
+                    val currentAbilities=pokemon.optJSONArray("abilities")
+                        ?:error("The Generation $targetGeneration ability list is unavailable.")
+                    var historicalGeneration=Int.MAX_VALUE
+                    var historicalAbilities:org.json.JSONArray?=null
+                    val past=pokemon.optJSONArray("past_abilities")
+                    if(past!=null){
+                        for(i in 0 until past.length()){
+                            val row=past.optJSONObject(i)?:continue
+                            val generation=generationNumber(row.optJSONObject("generation")?.optString("name").orEmpty())
+                            if(generation>=targetGeneration&&generation<historicalGeneration){
+                                historicalGeneration=generation
+                                historicalAbilities=row.optJSONArray("abilities")
+                            }
                         }
                     }
-                }
-                val abilities=historicalAbilities?:currentAbilities
-                var ability=0
-                for(i in 0 until abilities.length()){
-                    val item=abilities.optJSONObject(i)?:continue
-                    if(item.optBoolean("is_hidden",false)||item.optInt("slot",0)!=wanted)continue
-                    ability=parseIdFromPokeApiUrl(item.optJSONObject("ability")?.optString("url").orEmpty())?:0
-                    if(ability!=0)break
+                    val abilities=historicalAbilities?:currentAbilities
+                    var resolved=0
+                    for(i in 0 until abilities.length()){
+                        val item=abilities.optJSONObject(i)?:continue
+                        if(item.optBoolean("is_hidden",false)||item.optInt("slot",0)!=wanted)continue
+                        resolved=parseIdFromPokeApiUrl(item.optJSONObject("ability")?.optString("url").orEmpty())?:0
+                        if(resolved!=0)break
+                    }
+                    resolved
                 }
                 val maxAbility=if(targetGeneration<=4)123 else 164
                 require(ability in 1..maxAbility){
                     "No exact non-hidden Generation $targetGeneration ability mapping exists for source ability slot $wanted."
                 }
-                require(ability==sourceAbility){
-                    "Generation $targetGeneration assigns ability #$ability to slot $wanted, but the Gen 3 source has canonical ability #$sourceAbility. PSE will not change its ability or PID silently."
-                }
-                require(ability==p.ability){
-                    "The Pokémon has ability #${p.ability} in slot $wanted, but Generation $targetGeneration assigns ability #$ability to that same PID-derived slot. PSE will not change its ability or PID silently."
+                require(ability==sourceAbility&&ability==p.ability){
+                    "The Pokémon has ability #${p.ability} in slot $wanted, but Generation $targetGeneration resolves to ability #$ability. PSE will not change its ability or PID silently."
                 }
                 Gen3ToGen4Meta(
                     prettyApiName(species.optString("name","Pokemon")),
                     species.optInt("base_happiness",70).coerceIn(0,255),
                     species.optInt("gender_rate",-1),ability
                 )
-            }catch(e:Exception){reason=e.message?:"Generation 4 conversion metadata could not be verified.";null}
+            }catch(e:Exception){reason=e.message?:"Ability conversion metadata could not be verified.";null}
             mainHandler.post{if(!isFinishing&&!isDestroyed)done(result,reason)}
         }
     }
