@@ -33391,27 +33391,27 @@ class MainActivity : Activity() {
             if(importedFile?.absolutePath!=openedFile.absolutePath||currentSourceUri!=bankEntryUri||currentSourceLabel!=bankEntryLabel){showDialog("Gen 2 Bank withdrawal","The destination identity changed since this Bank entry opened. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton}
             withdrawGen2BankToBox(bankFile,mon,openedFile)
         }
-        if (loadedGen == 1 && loadedGen2 == null && openedFile != null) b.setPositiveButton("Transfer to Gen 1") { _, _ ->
+        if (loadedGen == 1 && loadedGen2 == null && openedFile != null) b.setPositiveButton("PSE Convert to Gen 1") { _, _ ->
             if(importedFile?.absolutePath!=openedFile.absolutePath||currentSourceUri!=bankEntryUri||currentSourceLabel!=bankEntryLabel){showDialog("Gen 2 → Gen 1","The destination identity changed since this Bank entry opened. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton}
             prepareGen2ToGen1Transfer(bankFile, mon, openedFile)
         }
-        if (loadedGen == 3 && openedFile != null) b.setPositiveButton("Transfer to Gen 3") { _, _ ->
+        if (loadedGen == 3 && openedFile != null) b.setPositiveButton("PSE Convert to Gen 3") { _, _ ->
             if(importedFile?.absolutePath!=openedFile.absolutePath||currentSourceUri!=bankEntryUri||currentSourceLabel!=bankEntryLabel){showDialog("Gen 2 → Gen 3","The destination identity changed since this Bank entry opened. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton}
             prepareGen2ToGen3Transfer(bankFile, mon, openedFile)
         }
-        if (loadedGen == 4 && openedFile != null) b.setPositiveButton("Transfer to Gen 4") { _, _ ->
+        if (loadedGen == 4 && openedFile != null) b.setPositiveButton("PSE Convert to Gen 4") { _, _ ->
             if(importedFile?.absolutePath!=openedFile.absolutePath||currentSourceUri!=bankEntryUri||currentSourceLabel!=bankEntryLabel){showDialog("Gen 2 → Gen 4","The destination identity changed since this Bank entry opened. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton}
             prepareGen2ToGen4Transfer(bankFile, mon, openedFile)
         }
-        if (loadedGen == 5 && openedFile != null) b.setPositiveButton("Transfer to Gen 5") { _, _ ->
+        if (loadedGen == 5 && openedFile != null) b.setPositiveButton("PSE Convert to Gen 5") { _, _ ->
             if(importedFile?.absolutePath!=openedFile.absolutePath||currentSourceUri!=bankEntryUri||currentSourceLabel!=bankEntryLabel){showDialog("Gen 2 → Gen 5","The destination identity changed since this Bank entry opened. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton}
             prepareGen2ToGen5Transfer(bankFile, mon, openedFile)
         }
-        if (loadedGen == 6 && openedFile != null) b.setPositiveButton("Transfer to Gen 6") { _, _ ->
+        if (loadedGen == 6 && openedFile != null) b.setPositiveButton("PSE Convert to Gen 6") { _, _ ->
             if(importedFile?.absolutePath!=openedFile.absolutePath||currentSourceUri!=bankEntryUri||currentSourceLabel!=bankEntryLabel){showDialog("Gen 2 → Gen 6","The destination identity changed since this Bank entry opened. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton}
             prepareGen2ToGen6Transfer(bankFile, mon, openedFile)
         }
-        if (loadedGen == 7 && openedFile != null) b.setPositiveButton("Transfer to Gen 7") { _, _ ->
+        if (loadedGen == 7 && openedFile != null) b.setPositiveButton("PSE Convert to Gen 7") { _, _ ->
             if(importedFile?.absolutePath!=openedFile.absolutePath||currentSourceUri!=bankEntryUri||currentSourceLabel!=bankEntryLabel){showDialog("Gen 2 → Gen 7","The destination identity changed since this Bank entry opened. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton}
             prepareGen2ForwardTransfer(bankFile, mon, openedFile)
         }
