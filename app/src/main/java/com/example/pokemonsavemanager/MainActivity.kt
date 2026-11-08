@@ -10575,9 +10575,13 @@ class MainActivity : Activity() {
             require(actual.contentEquals(pk5)&&reopened!=null&&sameGen4ToGen5Pk5(reopened,p.converted)){
                 "The exact converted PK5 did not persist."
             }
-            require(gen4ToGen5StillBound(p)&&file.readBytes().contentEquals(save)){"The source, Bank record or destination identity changed before Bank cleanup."}
+            require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&file.readBytes().contentEquals(save)){
+                "The source identity, Gen 4 Bank record or verified Gen 5 destination changed before Bank cleanup."
+            }
             bankDeleteAttempted=true
             require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 4 Bank entry could not be removed after the Gen 5 destination was written."}
+            require(file.readBytes().contentEquals(save)){"The verified Gen 5 destination changed after Bank cleanup."}
         }catch(e:Exception){
             val bankRestored=runCatching{
                 if(bankDeleteAttempted&&!p.bankFile.exists()){require(p.bankFile.createNewFile()){"The Bank recovery path could not be reserved."};p.bankFile.writeBytes(p.bankBytes)}
@@ -11435,7 +11439,10 @@ class MainActivity : Activity() {
             require(after.generalChecksum&&after.storageChecksum&&after.badPk4==0&&gen1ToGen4DexRegistered(written,wp,staged.species)){"The persisted Gen 4 save failed checksum or Pokédex verification."}
             val actualOff=gen4BoxSlotOffset(written,wp,target);val actual=written.copyOfRange(actualOff,actualOff+136);val reopened=parsePk4(actual,false)?:error("The persisted PK4 could not be reopened.")
             require(actual.contentEquals(refreshedPk4)&&sameGen5ToGen4Pk4(reopened,staged)&&gen4Pk4PpUps(actual).contentEquals(gen5Pk5PpUps(bank))){"The exact reviewed PK4 did not persist."}
-            require(gen5ToGen4StillBound(p)&&file.readBytes().contentEquals(work)){"The verified destination changed before Bank cleanup."}
+            require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&file.readBytes().contentEquals(work)){
+                "The source identity, Gen 5 Bank record or verified Gen 4 destination changed before Bank cleanup."
+            }
             bankDeleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 5 Bank record could not be removed after destination verification."}
             require(file.readBytes().contentEquals(work)){"The destination changed after Bank cleanup."};runCatching{bankCopy.delete()}
         }catch(e:Exception){
