@@ -25,13 +25,13 @@ class SwitchScarletVioletPokemonMove1Activity : Activity() {
     private var position = 0
     private var opened: ByteArray? = null
     private var selectedMoveId = -1
-    private var preservedPpUps = 0
     private var pendingPlan: ScarletVioletMove1CopyPlan? = null
     private var verifiedCopy: Pair<Uri, String>? = null
     private var busy = false
     private lateinit var status: TextView
     private lateinit var move: Button
     private lateinit var pp: EditText
+    private lateinit var ppUps: EditText
     private lateinit var review: Button
     private lateinit var move2: Button
     private lateinit var trainerId: Button
@@ -61,7 +61,7 @@ class SwitchScarletVioletPokemonMove1Activity : Activity() {
         root.addView(TextView(this).apply { text = "Scarlet/Violet • Pokémon Boxes"; textSize = 24f })
         root.addView(TextView(this).apply { text = "Edit Pokémon • Move 1"; textSize = 20f })
         root.addView(TextView(this).apply {
-            text = "$location\nChoose one usable native Scarlet/Violet Move 1 and its current PP. The existing PP Up count is preserved and used for the exact PP limit. Review the before/after values, then save a verified new copy."
+            text = "$location\nChoose one usable native Scarlet/Violet Move 1, its PP Ups, and current PP. PSE recalculates the exact PP limit before review, then saves a verified new copy."
             textSize = 16f
         })
         status = TextView(this).apply {
@@ -81,6 +81,14 @@ class SwitchScarletVioletPokemonMove1Activity : Activity() {
             maxLines = 1
         }
         root.addView(pp)
+        root.addView(TextView(this).apply { text = "Move 1 PP Ups"; textSize = 16f })
+        ppUps = EditText(this).apply {
+            hint = "PP Ups (0–3)"
+            inputType = InputType.TYPE_CLASS_NUMBER
+            isEnabled = false
+            maxLines = 1
+        }
+        root.addView(ppUps)
         review = Button(this).apply {
             text = "Review Move 1 change"; isEnabled = false; setOnClickListener { reviewMove() }
         }
@@ -153,13 +161,13 @@ class SwitchScarletVioletPokemonMove1Activity : Activity() {
                 result.onSuccess { state ->
                     opened = state.bytes
                     selectedMoveId = state.choice.id
-                    preservedPpUps = state.current.ppUps
                     move.text = state.choice.toString()
                     pp.setText(state.current.pp.toString())
+                    ppUps.setText(state.current.ppUps.toString())
                     status.text = "${state.displayName} • Native integrity verified\n" +
                         "$location • ${ScarletVioletSpeciesNames.name(state.pokemon.species)}\n" +
                         "Current Move 1: ${state.choice.name} (#${state.choice.id})\n" +
-                        "Current PP: ${state.current.pp}/${state.maximumPp} • Preserved PP Ups: ${state.current.ppUps}\n" +
+                        "Current PP: ${state.current.pp}/${state.maximumPp} • PP Ups: ${state.current.ppUps}\n" +
                         "Source SHA-256: ${ScarletVioletPokemonMove1Editing.sha256(state.bytes)}"
                 }.onFailure { status.text = it.message ?: "The selected Pokémon could not be opened safely." }
                 setBusy(false)
@@ -171,6 +179,7 @@ class SwitchScarletVioletPokemonMove1Activity : Activity() {
         busy = value
         move.isEnabled = !value && opened != null
         pp.isEnabled = !value && opened != null
+        ppUps.isEnabled = !value && opened != null
         review.isEnabled = !value && opened != null
         move2.isEnabled = !value && opened != null
         trainerId.isEnabled = !value && opened != null
@@ -179,8 +188,13 @@ class SwitchScarletVioletPokemonMove1Activity : Activity() {
 
     private fun chooseMove() {
         if (busy || opened == null) return
+        val requestedPpUps = ppUps.text.toString().toIntOrNull()
+        if (requestedPpUps == null || requestedPpUps !in 0..3) {
+            status.text = "Move 1 PP Ups must be a whole number from 0 through 3."
+            return
+        }
         val choices = ScarletVioletMoveCatalog.choices.filter {
-            runCatching { ScarletVioletMoveCatalog.maximumPp(it.id, preservedPpUps) }.isSuccess
+            runCatching { ScarletVioletMoveCatalog.maximumPp(it.id, requestedPpUps) }.isSuccess
         }
         val labels = choices.map { it.toString() }.toTypedArray()
         val checked = choices.indexOfFirst { it.id == selectedMoveId }
@@ -189,7 +203,7 @@ class SwitchScarletVioletPokemonMove1Activity : Activity() {
                 val selected = choices[which]
                 selectedMoveId = selected.id
                 move.text = selected.toString()
-                pp.setText(ScarletVioletMoveCatalog.maximumPp(selected.id, preservedPpUps).toString())
+                pp.setText(ScarletVioletMoveCatalog.maximumPp(selected.id, requestedPpUps).toString())
                 dialog.dismiss()
             }
             .setNegativeButton("Cancel", null)
@@ -218,11 +232,16 @@ class SwitchScarletVioletPokemonMove1Activity : Activity() {
             status.text = "Move 1 PP must be a whole number within the selected move's exact limit."
             return
         }
+        val requestedPpUps = ppUps.text.toString().toIntOrNull()
+        if (requestedPpUps == null || requestedPpUps !in 0..3) {
+            status.text = "Move 1 PP Ups must be a whole number from 0 through 3."
+            return
+        }
         setBusy(true)
         worker.execute {
             val result = runCatching {
                 ScarletVioletPokemonMove1Editing.stage(
-                    bytes, hash, selectedArea, box, position, selectedMoveId, requestedPp
+                    bytes, hash, selectedArea, box, position, selectedMoveId, requestedPp, requestedPpUps
                 )
             }
             runOnUiThread {
@@ -242,10 +261,10 @@ class SwitchScarletVioletPokemonMove1Activity : Activity() {
                 "${plan.location} • ${ScarletVioletSpeciesNames.name(plan.before.species)}\n" +
                     "Move 1: ${beforeChoice?.name ?: "Move #${before.id}"} (#${before.id}) → ${plan.move.name} (#${plan.move.id})\n" +
                     "Current PP: ${before.pp} → ${plan.pp} / ${plan.maximumPp}\n" +
-                    "PP Ups: ${plan.ppUps} (preserved)\n\n" +
-                    "Legality handling: PSE accepts only IDs in Scarlet/Violet's native Generation 9 usable-move bitset through Malignant Chain, excludes every game-marked unusable move plus Struggle, requires unique consecutive slots, and enforces the exact Generation 9 PP maximum for the preserved PP Up count. Species learnability is not claimed by this bounded field edit.\n\n" +
+                    "PP Ups: ${before.ppUps} → ${plan.ppUps}\n\n" +
+                    "Legality handling: PSE accepts only IDs in Scarlet/Violet's native Generation 9 usable-move bitset through Malignant Chain, excludes every game-marked unusable move plus Struggle, requires unique consecutive slots, accepts PP Ups only from 0 through 3, and enforces the exact Generation 9 PP maximum for the reviewed PP Up count. Species learnability is not claimed by this bounded field edit.\n\n" +
                     "Allowed encrypted scope: one 344-byte PK9 slot at 0x${plan.absoluteOffset.toString(16).uppercase()} and the native SHA-256 footer. " +
-                    "Inside the PK9, only Move 1, its current PP, and checksum may change. PP Ups, Moves 2–4, relearn moves, species, form, Trainer ID, nickname, stats, Tera types, scale, the unselected storage object, every other party and PC-box slot, the dedicated ride Pokémon, and all unrelated bytes remain exact. " +
+                    "Inside the PK9, only Move 1, its current PP, PP Ups, and checksum may change. Moves 2–4, relearn moves, species, form, Trainer ID, nickname, stats, Tera types, scale, the unselected storage object, every other party and PC-box slot, the dedicated ride Pokémon, and all unrelated bytes remain exact. " +
                     "PSE verifies a recovery backup and reopens the persisted copy. Choose a NEW empty document."
             )
             .setNegativeButton("Cancel", null)
