@@ -11066,6 +11066,187 @@ class MainActivity : Activity() {
         }
     }
 
+    private data class Gen5BankWithdrawalPrepared(
+        val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry,val destination:ByteArray,
+        val destinationFile:File,val sourceUri:Uri?,val sourceLabel:String?,var submitted:Boolean=false
+    )
+
+    private fun gen5BankWithdrawalIdentityBound(p:Gen5BankWithdrawalPrepared):Boolean=
+        importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel
+
+    private fun gen5BankWithdrawalStillBound(p:Gen5BankWithdrawalPrepared):Boolean=
+        gen5BankWithdrawalIdentityBound(p)&&runCatching{
+            p.destinationFile.readBytes().contentEquals(p.destination)&&p.bankFile.readBytes().contentEquals(p.bankBytes)
+        }.getOrDefault(false)
+
+    private fun prepareGen5BankWithdrawal(bankFile:File,shown:PokemonEntry){
+        val file=importedFile?:return showDialog("Gen 5 Bank withdrawal","Load a valid Black, White, Black 2 or White 2 destination save first.")
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        val destination=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog("Gen 5 Bank withdrawal","The destination save could not be read.")
+        val profile=detectGen5Profile(destination)
+            ?:return showDialog("Gen 5 Bank withdrawal","Load a valid Black, White, Black 2 or White 2 destination save first.")
+        if(importedFile?.absolutePath!=file.absolutePath||currentSourceUri!=openedUri||currentSourceLabel!=openedLabel||
+            !gen5ChecksumTableValid(destination,profile)||(0 until 24).any{!gen5BoxChecksumValid(destination,it,profile)})
+            return showDialog("Gen 5 Bank withdrawal","The loaded destination is not a checksum-clean native Generation 5 save.")
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()
+            ?:return showDialog("Gen 5 Bank withdrawal","The PSE Bank folder could not be verified.")
+        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+            ?:return showDialog("Gen 5 Bank withdrawal","The selected Bank path could not be verified.")
+        if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk5",true))
+            return showDialog("Gen 5 Bank withdrawal","The selected record is outside the Generation 5 PSE Bank.")
+        val bank=runCatching{selected.readBytes()}.getOrNull()
+            ?:return showDialog("Gen 5 Bank withdrawal","The selected Bank record could not be read.")
+        val source=if(bank.size==136)parsePk5(bank,false)else null
+        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
+            source.tid!=shown.tid||source.sid!=shown.sid)
+            return showDialog("Gen 5 Bank withdrawal","The selected Bank record changed or failed its native PK5 checksum.")
+        val prepared=Gen5BankWithdrawalPrepared(selected,bank,source,destination,file,openedUri,openedLabel)
+        chooseGen5BankWithdrawalDestination(prepared)
+    }
+
+    private fun chooseGen5BankWithdrawalDestination(p:Gen5BankWithdrawalPrepared){
+        if(!gen5BankWithdrawalStillBound(p))
+            return showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
+        val empty=(0 until 720).filter{
+            val offset=0x00400+(it/30)*0x1000+(it%30)*136
+            parsePk5(p.destination.copyOfRange(offset,offset+136),false)==null
+        }
+        if(empty.isEmpty())return showDialog("Gen 5 Bank withdrawal","All 720 native Generation 5 PC slots are occupied.")
+        val first=empty.first()
+        AlertDialog.Builder(this).setTitle("Choose native Gen 5 destination")
+            .setMessage("Choose one empty native PK5 slot. PSE will show the exact no-conversion effect and selected Box / Slot before final confirmation.")
+            .setItems(arrayOf("First Empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
+                if(!gen5BankWithdrawalStillBound(p))showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
+                else if(which==0)reviewGen5BankWithdrawal(p,first)else showGen5BankWithdrawalBoxPicker(p)
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun showGen5BankWithdrawalBoxPicker(p:Gen5BankWithdrawalPrepared){
+        if(!gen5BankWithdrawalStillBound(p))
+            return showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
+        val boxes=(0 until 24).filter{box->(0 until 30).any{slot->
+            val offset=0x00400+box*0x1000+slot*136
+            parsePk5(p.destination.copyOfRange(offset,offset+136),false)==null
+        }}
+        if(boxes.isEmpty())return showDialog("Gen 5 Bank withdrawal","All native Generation 5 PC boxes are full.")
+        AlertDialog.Builder(this).setTitle("Choose Gen 5 destination box")
+            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+                val box=boxes[which]
+                val slots=(0 until 30).filter{slot->
+                    val offset=0x00400+box*0x1000+slot*136
+                    parsePk5(p.destination.copyOfRange(offset,offset+136),false)==null
+                }
+                AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
+                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
+                        reviewGen5BankWithdrawal(p,box*30+slots[slotIndex])
+                    }.setNegativeButton("Cancel",null).show()
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun reviewGen5BankWithdrawal(p:Gen5BankWithdrawalPrepared,target:Int){
+        if(!gen5BankWithdrawalStillBound(p))
+            return showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
+        if(target !in 0 until 720)return showDialog("Gen 5 Bank withdrawal","The selected destination slot is invalid.")
+        val offset=0x00400+(target/30)*0x1000+(target%30)*136
+        if(parsePk5(p.destination.copyOfRange(offset,offset+136),false)!=null)
+            return showDialog("Gen 5 Bank withdrawal","Box ${target/30+1} • Slot ${target%30+1} is no longer empty.")
+        val review="Selected destination: Box ${target/30+1} • Slot ${target%30+1}.\n\n"+
+            "No Pokémon conversion is performed. The exact 136-byte PK5 Bank record is copied byte-for-byte, so species, PID, TID/SID, nickname, OT, experience, ability, nature, gender/form, shiny state, moves, PP, PP Ups, IVs, EVs, friendship, Pokérus, Ball, origin, locations, dates, ribbons and every stored PK5 byte remain unchanged. The source save is not edited.\n\n"+
+            "Only the selected empty PK5 slot, that box's native CRC, its checksum-table mirror and the checksum-table block CRC may change. Existing destination Pokémon and all other save bytes must remain identical. A verified retained recovery backup is required. The Bank record is removed only after the exact slot and native checksums persist and reopen successfully; any failure restores or preserves both destination and Bank record."
+        AlertDialog.Builder(this).setTitle("${p.source.nickname.ifBlank{"Pokémon #${p.source.species}"}} • Gen 5 withdrawal")
+            .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("Withdraw exact PK5"){_,_->
+                if(p.submitted){showDialog("Gen 5 Bank withdrawal","This withdrawal confirmation was already submitted. Reopen PSE Bank.");return@setPositiveButton}
+                p.submitted=true
+                if(!gen5BankWithdrawalStillBound(p)){showDialog("Gen 5 Bank withdrawal","The destination identity, Bank record or selected slot changed after review. Nothing was changed.");return@setPositiveButton}
+                transferGen5BankWithdrawal(p,target)
+            }.show()
+    }
+
+    private fun transferGen5BankWithdrawal(p:Gen5BankWithdrawalPrepared,target:Int){
+        val file=p.destinationFile
+        if(!gen5BankWithdrawalStillBound(p)){showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
+        val original=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog("Gen 5 Bank withdrawal","The destination save could not be read.")
+        var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
+        try{
+            require(original.contentEquals(p.destination)&&target in 0 until 720){"The prepared destination changed or the selected slot is invalid."}
+            val profile=detectGen5Profile(original)?:error("The destination is no longer a valid native Generation 5 save.")
+            require(gen5ChecksumTableValid(original,profile)&&(0 until 24).all{gen5BoxChecksumValid(original,it,profile)}){
+                "The destination box checksums or checksum table changed."
+            }
+            val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The selected Gen 5 Bank record changed after review."}
+            val source=parsePk5(bank,false)?:error("The selected Bank record is not a native PK5.")
+            require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&
+                source.tid==p.source.tid&&source.sid==p.source.sid){"The selected PK5 no longer matches the reviewed Pokémon."}
+            val box=target/30;val slot=target%30;val offset=0x00400+box*0x1000+slot*136
+            require(parsePk5(original.copyOfRange(offset,offset+136),false)==null){"The selected Generation 5 slot is no longer empty."}
+            val save=original.copyOf();bank.copyInto(save,offset)
+            val stagedRaw=save.copyOfRange(offset,offset+136);val staged=parsePk5(stagedRaw,false)
+                ?:error("The exact PK5 could not be parsed after staging.")
+            require(stagedRaw.contentEquals(bank)&&staged.checksumValid&&staged.pid==source.pid&&staged.species==source.species&&
+                staged.tid==source.tid&&staged.sid==source.sid){"The staged PK5 differs from the exact Bank record."}
+            val allowed=HashSet<Int>();for(i in offset until offset+136)allowed.add(i)
+            for(i in 0..1){allowed.add(0x00400+box*0x1000+0x0FF2+i);allowed.add(profile.checksumTable+2+box*2+i);allowed.add(profile.checksumBlockChecksumOffset+i)}
+            updateGen5BoxChecksum(save,box,profile)
+            require(save.indices.all{it in allowed||save[it]==original[it]}){"The staged withdrawal changed data outside the selected PK5 and required native checksum fields."}
+            require(gen5BoxChecksumValid(save,box,profile)&&gen5ChecksumTableValid(save,profile)){
+                "The staged Generation 5 box CRC or checksum table did not verify."
+            }
+            val recovery=File.createTempFile(backupGameName(file)+"_PreGen5BankWithdraw_",".backup",backupsDir());backup=recovery
+            recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)){"The Generation 5 recovery backup did not verify."}
+            retainGen6ToGen5SafetyBackup(recovery,original)
+            val bankCopy=File.createTempFile("PSE_G5Withdraw_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
+            bankCopy.writeBytes(bank);require(bankCopy.readBytes().contentEquals(bank)){"The exact PK5 Bank recovery snapshot did not verify."}
+            require(gen5BankWithdrawalIdentityBound(p)&&isBackupKept(recovery)&&file.readBytes().contentEquals(original)&&
+                p.bankFile.readBytes().contentEquals(bank)&&bankCopy.readBytes().contentEquals(bank)){
+                "The destination identity, retained backup or Bank snapshots changed before writing."
+            }
+            writeStarted=true;file.writeBytes(save)
+            val written=file.readBytes();require(written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){
+                "The persisted Generation 5 save differs from the reviewed write scope."
+            }
+            val reopenedProfile=detectGen5Profile(written)?:error("The persisted Generation 5 save could not be reopened.")
+            require(gen5BoxChecksumValid(written,box,reopenedProfile)&&gen5ChecksumTableValid(written,reopenedProfile)){
+                "The persisted Generation 5 save failed native checksum verification."
+            }
+            val actual=written.copyOfRange(offset,offset+136);val reopened=parsePk5(actual,false)
+            require(actual.contentEquals(bank)&&reopened!=null&&reopened.checksumValid&&reopened.pid==source.pid&&
+                reopened.species==source.species&&reopened.tid==source.tid&&reopened.sid==source.sid){
+                "The exact 136-byte PK5 did not persist after reopening."
+            }
+            require(gen5BankWithdrawalIdentityBound(p)&&p.bankFile.readBytes().contentEquals(bank)&&file.readBytes().contentEquals(save)){
+                "The destination identity, verified save or Bank record changed before cleanup."
+            }
+            bankDeleteAttempted=true
+            require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 5 Bank record could not be removed after destination verification."}
+            require(gen5BankWithdrawalIdentityBound(p)&&!p.bankFile.exists()&&file.readBytes().contentEquals(save)){"The destination identity, verified save or removed Bank path changed after cleanup."}
+            runCatching{bankCopy.delete()}
+        }catch(e:Exception){
+            val bankRestored=runCatching{
+                if(bankDeleteAttempted&&!p.bankFile.exists()){
+                    require(p.bankFile.createNewFile()){"The Bank recovery path could not be reserved."}
+                    p.bankFile.writeBytes(p.bankBytes)
+                }
+                require(p.bankFile.readBytes().contentEquals(p.bankBytes)){"The original PK5 Bank record could not be verified; no existing record was overwritten."}
+            }.isSuccess
+            val destinationRestored=!writeStarted||runCatching{
+                file.writeBytes(original);val restored=file.readBytes();val profile=detectGen5Profile(restored)
+                    ?:error("The restored Generation 5 layout is invalid.")
+                restored.contentEquals(original)&&gen5ChecksumTableValid(restored,profile)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,profile)}
+            }.getOrDefault(false)
+            val recovery=if(bankRestored&&destinationRestored)
+                "The exact Generation 5 destination and PK5 Bank record were restored or kept and verified."
+            else "Automatic recovery could not be fully verified. Stop editing and keep the retained destination backup and Bank recovery snapshot for review."
+            showDialog("Gen 5 Bank withdrawal failed",(e.message?:"Unknown error")+"\n\n"+recovery+
+                (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery: ${it.name}"}?:""))
+            return
+        }
+        Toast.makeText(this,"Withdrew exact Gen 5 PK5 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
+        showBank()
+    }
+
     private fun showGen5BankEntry(bankFile:File,p:PokemonEntry){
         val currentGen=importedFile?.let{generationForSize(it.length().toInt())}?:0
         val message=when(currentGen){
@@ -11073,10 +11254,10 @@ class MainActivity : Activity() {
             2->"Original 136-byte PK5 preserved. Review a direct backward PSE conversion into an empty native Gen 2 PC box."
             3->"Original 136-byte PK5 preserved. Review an explicit-origin backward PSE conversion into a chosen native Gen 3 PC slot."
             4->"Original 136-byte PK5 preserved. Review a backward PSE conversion into the loaded native Gen 4 save. This is not an official transfer or provenance claim."
-            5->"Original 136-byte PK5 preserved. Load Gen 4 for the adjacent backward conversion, Gen 6 for the adjacent forward conversion, or Gen 7 for the reviewed later-generation route."
+            5->"Original 136-byte PK5 preserved. Withdraw it unchanged to one selected native Gen 5 PC slot with retained recovery and reopened verification."
             6->"Original 136-byte PK5 preserved. Review a native Gen 6 conversion, its exact field differences, and an explicit destination slot before writing."
             7->"Original 136-byte PK5 preserved. Review the final PID, markings and native field changes before writing one verified PK7 with retained recovery."
-            else->"Original 136-byte PK5 preserved. Load a valid Gen 1, Gen 2, Gen 3, Gen 4, Gen 6 or Gen 7 save to review a PSE Bank conversion."
+            else->"Original 136-byte PK5 preserved. Load a valid Gen 1, Gen 2, Gen 3, Gen 4, Gen 5, Gen 6 or Gen 7 save to review this PSE Bank route."
         }
         val b=AlertDialog.Builder(this).setTitle("${p.nickname.ifBlank{"Pokémon #${p.species}"}} • Gen 5 Bank").setMessage(message)
             .setNegativeButton("Close",null)
@@ -11085,6 +11266,7 @@ class MainActivity : Activity() {
         if(currentGen==2)b.setPositiveButton("PSE Convert to Gen 2"){_,_->prepareGen5ToGen2Transfer(bankFile,p)}
         if(currentGen==3)b.setPositiveButton("PSE Convert to Gen 3"){_,_->prepareGen5ToGen3Transfer(bankFile,p)}
         if(currentGen==4)b.setPositiveButton("PSE Convert to Gen 4"){_,_->prepareGen5ToGen4Transfer(bankFile,p)}
+        if(currentGen==5)b.setPositiveButton("Withdraw to Gen 5"){_,_->prepareGen5BankWithdrawal(bankFile,p)}
         if(currentGen==6)b.setPositiveButton("Transfer to Gen 6"){_,_->prepareGen5ToGen6Transfer(bankFile,p)}
         if(currentGen==7)b.setPositiveButton("Transfer to Gen 7"){_,_->prepareGen5ToGen7Transfer(bankFile,p)}
         b.show()
