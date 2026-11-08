@@ -2496,24 +2496,6 @@ class SwitchReadOnlyActivity : Activity() {
                 }
             })
         }
-        if (nativeTarget != null && !p.isEgg && !p.fatefulEncounter) {
-            content.addView(Button(this).apply {
-                text = "Edit Gender"
-                isAllCaps = false
-                setOnClickListener {
-                    val source = selectedSourceUri
-                    if (session === bound && source != null) startActivity(
-                        Intent(this@SwitchReadOnlyActivity, SwitchScarletVioletPokemonGenderActivity::class.java)
-                            .setData(source)
-                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
-                            .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
-                            .putExtra("pse.switch.pokemon.box", nativeTarget.second)
-                            .putExtra("pse.switch.pokemon.position", nativeTarget.third)
-                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    )
-                }
-            })
-        }
         if (nativeTarget != null) content.addView(Button(this).apply {
             text = "Edit Pokémon"
             isAllCaps = false
@@ -4610,6 +4592,24 @@ class SwitchReadOnlyActivity : Activity() {
                     val source = selectedSourceUri
                     if (session === bound && source != null) startActivity(
                         Intent(this@SwitchReadOnlyActivity, SwitchScarletVioletPokemonEncryptionConstantActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
+                            .putExtra("pse.switch.pokemon.box", nativeTarget.second)
+                            .putExtra("pse.switch.pokemon.position", nativeTarget.third)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            })
+        }
+        if (nativeTarget != null && !p.isEgg && !p.fatefulEncounter) {
+            content.addView(Button(this).apply {
+                text = "Edit Gender"
+                isAllCaps = false
+                setOnClickListener {
+                    val source = selectedSourceUri
+                    if (session === bound && source != null) startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchScarletVioletPokemonGenderActivity::class.java)
                             .setData(source)
                             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
                             .putExtra("pse.switch.pokemon.area", nativeTarget.first.name)
