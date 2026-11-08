@@ -1,16 +1,16 @@
-# Active priority — Switch features resumed (8 November 2026)
+# Active priority — PSE Bank transfer fixes across Generations 1–7
 
-The user has resumed Switch feature development in the public repository and asked to continue the existing Switch roadmap with its established criteria. Work only on `pse-phone-auto-v2-test`; keep `main`, `pse-phone-auto`, and the private repository unchanged. Keep existing Switch behavior and the completed bidirectional PSE Bank routes intact.
+Switch feature work is paused. Maintain and repair individual-Pokémon PSE Bank transfers for supported saves in Generations 1–7. Do not regress existing working routes or describe conversions as official in-game trades. Transfers must run through PSE Bank, preserve the Bank record until the native destination write and reopen verification succeed, preserve existing destination contents, and keep source saves unchanged.
 
-The six Switch title families are Let's Go, Sword/Shield, BDSP, Legends: Arceus, Scarlet/Violet, and Legends: Z-A. Continue from the public roadmap's current title-specific feature checkpoint: Scarlet/Violet Pokémon Details, following the completed Shiny-status editor with a usable native Secret ID editor. The feature must be reachable from selected Pokémon Details and expose a reviewed edit, destination-valid native field handling, verified recovery backup, save-to-new-copy, persisted reopen verification, source preservation, and failed-copy cleanup. Clearly show the derived shiny-status change and warn that changing trainer identity can affect encounter or distribution legality.
+Current bounded issue: the Gen 3 → Gen 2 conversion preview must explicitly disclose that Gen 2 has no independent fields for the Gen 3 HP and Special Defense IVs. The existing deterministic mapping takes Atk/Def/Speed/SpA IVs divided by two for those DVs; Gen 2 HP DV is derived from the low bits of the four DVs. For Stat Exp, average SpA/SpD EVs with integer rounding down. The UI must state these effects and omitted source fields before the user confirms. Preserve all existing eligibility checks, checksums, recovery backup, native save write, reopen verification, source preservation and rollback.
 
-Keep the same feature-first criteria: each feature commit includes usable UI wired to native save handling and necessary integrity behavior. Do not add or run tests, lint, static analysis, smoke tests, QA, or check-only changes. Keep the existing automatic Android compile on each development commit. Do not build, sign, upload, dispatch, or report an APK unless explicitly requested.
+Keep the same bounded feature-fix criteria. Do not add or run tests, lint, static analysis, smoke tests, QA, or check-only changes. Keep the existing automatic Android compile. Do not build, sign, upload, dispatch, or report APKs unless explicitly requested. Work only on pse-phone-auto-v2-test; never modify main, pse-phone-auto, or the private repository.
 
-## Switch feature roadmap
+## Archived Switch roadmap
 
 # PSE Development Roadmap
 
-## Current priority — Gen 1 feature parity across Switch games (Generations 7–9)
+## Archived priority — Gen 1 feature parity across Switch games (Generations 7–9)
 
 Gen 1 is the completed reference game for the shared PSE feature set, feature order, and screen layout. This roadmap is limited to Switch-save titles in Generations 7–9. Do not start feature work for other generations until the shared and title-specific Switch work below is complete.
 
