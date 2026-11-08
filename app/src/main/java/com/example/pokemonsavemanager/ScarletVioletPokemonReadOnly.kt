@@ -20,7 +20,8 @@ data class ScarletVioletPokemonRead(
     val ball: Int = 0, val metLevel: Int = 0, val originalTrainerGender: Int = 0,
     val eggYear: Int = 0, val eggMonth: Int = 0, val eggDay: Int = 0, val eggLocation: Int = 0,
     val metYear: Int = 0, val metMonth: Int = 0, val metDay: Int = 0, val metLocation: Int = 0,
-    val technicalMachineFlags: List<Boolean> = emptyList()
+    val technicalMachineFlags: List<Boolean> = emptyList(),
+    val pokerusDays: Int = 0, val pokerusStrain: Int = 0
 )
 
 sealed class ScarletVioletSlotRead {
@@ -81,7 +82,8 @@ object ScarletVioletPokemonReadOnly {
             byte(plain, 0x124), byte(plain, 0x125) and 0x7F, byte(plain, 0x125) ushr 7,
             byte(plain, 0x119), byte(plain, 0x11A), byte(plain, 0x11B), u16(plain, 0x120),
             byte(plain, 0x11C), byte(plain, 0x11D), byte(plain, 0x11E), u16(plain, 0x122),
-            immutable((0 until 230).map { technicalMachineFlag(plain, it) })
+            immutable((0 until 230).map { technicalMachineFlag(plain, it) }),
+            byte(plain, 0x32) and 0xF, byte(plain, 0x32) ushr 4
         ))
     }
 
