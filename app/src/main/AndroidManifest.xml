@@ -193,6 +193,7 @@
         <activity android:name=".SwitchScarletVioletPokemonOriginalTeraTypeActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonRelearnMove1Activity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonRelearnMove2Activity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletPokemonRelearnMove3Activity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonMove1Activity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonMove2Activity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonMove3Activity" android:exported="false"/>
