@@ -222,6 +222,7 @@
         <activity android:name=".SwitchScarletVioletPokemonFriendshipActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonMetDateActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonEggDateActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletPokemonEggLocationActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonOriginalTrainerGenderActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonHandlingTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonHandlingTrainerGenderActivity" android:exported="false"/>
