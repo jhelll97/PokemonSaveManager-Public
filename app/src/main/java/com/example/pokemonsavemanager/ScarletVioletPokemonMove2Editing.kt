@@ -10,6 +10,7 @@ object ScarletVioletPokemonMove2Editing {
     private const val STORED_END = 0x148
     private const val MOVE_2 = 0x74
     private const val MOVE_2_PP = 0x7B
+    private const val MOVE_2_PP_UPS = 0x7F
     private val orders = listOf("0123", "0132", "0213", "0312", "0231", "0321",
         "1023", "1032", "2013", "3012", "2031", "3021", "1203", "1302",
         "2103", "3102", "2301", "3201", "1230", "1320", "2130", "3120", "2310", "3210")
@@ -38,7 +39,8 @@ object ScarletVioletPokemonMove2Editing {
         box: Int,
         position: Int,
         requestedMoveId: Int,
-        requestedPp: Int
+        requestedPp: Int,
+        requestedPpUps: Int
     ): ScarletVioletMove2CopyPlan {
         val original = source.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
@@ -53,26 +55,29 @@ object ScarletVioletPokemonMove2Editing {
         require(before.moves.withIndex().none { it.index != 1 && it.value.id == move.id }) {
             "${move.name} already appears in another move slot. Scarlet/Violet move slots must be unique."
         }
-        val ppUps = before.moves[1].ppUps
-        val maximumPp = ScarletVioletMoveCatalog.maximumPp(move.id, ppUps)
+        require(requestedPpUps in 0..3) { "Move 2 PP Ups must be between 0 and 3." }
+        val maximumPp = ScarletVioletMoveCatalog.maximumPp(move.id, requestedPpUps)
         require(requestedPp in 0..maximumPp) {
-            "Current PP must be between 0 and $maximumPp for ${move.name} with $ppUps PP Ups."
+            "Current PP must be between 0 and $maximumPp for ${move.name} with $requestedPpUps PP Ups."
         }
         val beforeMove = before.moves[1]
-        require(beforeMove.id != move.id || beforeMove.pp != requestedPp) {
-            "Choose a different Move 2 or current PP value before review."
+        require(beforeMove.id != move.id || beforeMove.pp != requestedPp || beforeMove.ppUps != requestedPpUps) {
+            "Choose a different Move 2, current PP, or PP Up value before review."
         }
-        val afterRecord = editRecord(target, move.id, requestedPp)
+        val afterRecord = editRecord(target, move.id, requestedPp, requestedPpUps)
         require(ScarletVioletPokemonReadOnly.read(afterRecord) is ScarletVioletSlotRead.Pokemon) {
             "The edited PK9 did not pass its native checksum."
         }
         val written = if (area == ScarletVioletPokemonArea.BOX) {
             ScarletVioletSaveValidation.writeBoxRecord(original, box, position, afterRecord)
         } else ScarletVioletSaveValidation.writePartyRecord(original, position, afterRecord)
-        verify(original, written.bytes, area, box, position, written.absoluteOffset, move.id, requestedPp)
+        verify(
+            original, written.bytes, area, box, position, written.absoluteOffset,
+            move.id, requestedPp, requestedPpUps
+        )
         return ScarletVioletMove2CopyPlan(
             original, written.bytes, area, box, position, written.absoluteOffset,
-            before, move, requestedPp, ppUps, maximumPp
+            before, move, requestedPp, requestedPpUps, maximumPp
         )
     }
 
@@ -84,7 +89,8 @@ object ScarletVioletPokemonMove2Editing {
         position: Int,
         absoluteOffset: Int,
         moveId: Int,
-        pp: Int
+        pp: Int,
+        ppUps: Int
     ) {
         val beforeBlocks = ScarletVioletSaveValidation.readPokemonBlocks(original)
         val afterBlocks = ScarletVioletSaveValidation.readPokemonBlocks(edited)
@@ -99,13 +105,14 @@ object ScarletVioletPokemonMove2Editing {
             ?: throw IllegalArgumentException("The edited PK9 did not reopen as a Pokémon.")
         validateMoves(beforePokemon.moves)
         validateMoves(afterPokemon.moves)
-        val beforeMove = beforePokemon.moves[1]
-        require(afterPokemon.moves[1] == ScarletVioletMoveRead(moveId, pp, beforeMove.ppUps) &&
+        val maximumPp = ScarletVioletMoveCatalog.maximumPp(moveId, ppUps)
+        require(pp in 0..maximumPp) { "The persisted Move 2 PP exceeds its exact PP Up limit." }
+        require(afterPokemon.moves[1] == ScarletVioletMoveRead(moveId, pp, ppUps) &&
             afterPokemon.moves.indices.filter { it != 1 }.all {
                 afterPokemon.moves[it] == beforePokemon.moves[it]
             } &&
             afterPokemon.copy(moves = beforePokemon.moves) == beforePokemon) {
-            "The persisted PK9 changed more than Move 2 and its current PP."
+            "The persisted PK9 changed more than Move 2, its current PP, and PP Ups."
         }
 
         val relativeOffset = if (area == ScarletVioletPokemonArea.BOX)
@@ -125,8 +132,8 @@ object ScarletVioletPokemonMove2Editing {
         val afterPlain = decryptAndUnshuffle(afterRecord)
         require(beforePlain.indices.all { offset ->
             offset in 6..7 || offset in MOVE_2 until MOVE_2 + 2 || offset == MOVE_2_PP ||
-                beforePlain[offset] == afterPlain[offset]
-        }) { "The PK9 edit exceeded Move 2, its current PP, and checksum fields." }
+                offset == MOVE_2_PP_UPS || beforePlain[offset] == afterPlain[offset]
+        }) { "The PK9 edit exceeded Move 2, its current PP, PP Ups, and checksum fields." }
 
         val hashOffset = original.size - 32
         require(original.indices.all { index ->
@@ -181,10 +188,11 @@ object ScarletVioletPokemonMove2Editing {
         return source.copyOfRange(offset, offset + size)
     }
 
-    private fun editRecord(record: ByteArray, moveId: Int, pp: Int): ByteArray {
+    private fun editRecord(record: ByteArray, moveId: Int, pp: Int, ppUps: Int): ByteArray {
         val plain = decryptAndUnshuffle(record)
         writeU16(plain, MOVE_2, moveId)
         plain[MOVE_2_PP] = pp.toByte()
+        plain[MOVE_2_PP_UPS] = ppUps.toByte()
         var checksum = 0
         for (offset in 8 until STORED_END step 2) checksum += u16(plain, offset)
         writeU16(plain, 6, checksum and 0xFFFF)
@@ -278,14 +286,14 @@ class ScarletVioletMove2CopyPlan internal constructor(
         var started = false
         try {
             ScarletVioletPokemonMove2Editing.verify(
-                original, edited, area, box, position, absoluteOffset, move.id, pp
+                original, edited, area, box, position, absoluteOffset, move.id, pp, ppUps
             )
             started = true
             writeDestination(edited.copyOf())
             val persisted = readDestination()
             require(persisted.contentEquals(edited)) { "The saved copy differs from the reviewed Move 2 edit." }
             ScarletVioletPokemonMove2Editing.verify(
-                original, persisted, area, box, position, absoluteOffset, move.id, pp
+                original, persisted, area, box, position, absoluteOffset, move.id, pp, ppUps
             )
             requireSource()
         } catch (failure: Exception) {
