@@ -23601,7 +23601,7 @@ class MainActivity : Activity() {
         if(currentGen==4)b.setPositiveButton("Convert to Gen 4"){_,_->prepareGen3ToGen4Transfer(bankFile,p)}
         if(currentGen==5)b.setPositiveButton("Convert to Gen 5"){_,_->prepareGen3ToGen5Transfer(bankFile,p)}
         if(currentGen==6)b.setPositiveButton("Convert to Gen 6"){_,_->prepareGen3ToGen6Transfer(bankFile,p)}
-        if(currentGen==7)b.setPositiveButton("Transfer to Gen 7"){_,_->prepareGen3ForwardTransfer(bankFile,p)}
+        if(currentGen==7)b.setPositiveButton("PSE Convert to Gen 7"){_,_->prepareGen3ForwardTransfer(bankFile,p)}
         b.show()
     }
 
