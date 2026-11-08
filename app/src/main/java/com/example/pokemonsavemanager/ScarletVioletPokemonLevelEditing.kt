@@ -1273,6 +1273,42 @@ object ScarletVioletPokemonLevelEditing {
         )
     }
 
+    internal fun verifiedValuesForForm(
+        pokemon: ScarletVioletPokemonRead,
+        requestedForm: Int
+    ): ScarletVioletLevelValues {
+        require(pokemon.cachedLevel in 1..100) {
+            "The cached Level is outside the supported 1 through 100 range."
+        }
+        val beforePersonal = resolvePersonal(pokemon)
+        val afterPersonal = ScarletVioletPersonalCatalogue.profile(pokemon.species, requestedForm)
+            ?: throw IllegalArgumentException(
+                "Verified Scarlet/Violet personal data is unavailable for the requested form."
+            )
+        val beforeMaximumExperience = minimumExperience(100, beforePersonal.growth)
+        require(pokemon.experience in 0L..beforeMaximumExperience &&
+            levelForExperience(pokemon.experience, beforePersonal.growth) == pokemon.cachedLevel) {
+            "The saved Level and EXP do not agree with this Pokémon's verified growth group."
+        }
+        val beforeValues = calculate(
+            pokemon, beforePersonal, pokemon.cachedLevel, pokemon.experience
+        )
+        require(matchesCachedValues(pokemon, beforeValues)) {
+            "The existing cached battle values do not match the verified native data."
+        }
+        val afterMaximumExperience = minimumExperience(100, afterPersonal.growth)
+        require(pokemon.experience in 0L..afterMaximumExperience &&
+            levelForExperience(pokemon.experience, afterPersonal.growth) == pokemon.cachedLevel) {
+            "The requested form uses a growth group that does not match the saved Level and EXP."
+        }
+        return calculate(
+            pokemon.copy(form = requestedForm),
+            afterPersonal,
+            pokemon.cachedLevel,
+            pokemon.experience
+        )
+    }
+
     private fun resolvePersonal(pokemon: ScarletVioletPokemonRead): ScarletVioletPersonalData =
         ScarletVioletPersonalCatalogue.profile(pokemon.species, pokemon.form)
             ?: throw IllegalArgumentException(

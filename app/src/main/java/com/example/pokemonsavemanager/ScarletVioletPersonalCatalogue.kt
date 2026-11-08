@@ -24,4 +24,11 @@ object ScarletVioletPersonalCatalogue {
     }
 
     fun profile(species: Int, form: Int): ScarletVioletPersonalData? = profiles[species to form]
+
+    fun forms(species: Int): IntArray = profiles.keys.asSequence()
+        .filter { it.first == species }
+        .map { it.second }
+        .sorted()
+        .toList()
+        .toIntArray()
 }
