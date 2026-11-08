@@ -229,6 +229,7 @@
         <activity android:name=".SwitchScarletVioletPokemonRibbonMarkActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonPokerusActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonContestConditionActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletPokemonMarkingActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonHeldItemActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonAbilityActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonNatureActivity" android:exported="false"/>
