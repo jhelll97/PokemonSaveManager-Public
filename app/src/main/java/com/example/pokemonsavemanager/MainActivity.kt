@@ -37031,11 +37031,12 @@ private data class Gen2ToGen5LegalisePlan(
             when (currentGen) {
                 1 -> append("A Gen 1 save is loaded. You can withdraw this Pokémon back into an initialized PC box.")
                 2 -> append("A Gen 2 save is loaded. You can transfer this preserved Gen 1 Pokémon into a Gold, Silver or Crystal PC box using the Generation I → II Time Capsule record conversion.")
+                3 -> append("A Gen 3 save is loaded. You can review a PSE conversion into one native PK3 slot. No official Gen 1/2 → Gen 3 transfer route existed; the preserved Bank record remains until the destination write and reopen verification succeed.")
                 4 -> append("A Gen 4 save is loaded. You can create a native PK4 conversion and place it in validated PC storage.")
                 5 -> append("A Gen 5 save is loaded. You can create a native PK5 conversion and place it in validated PC storage.")
                 7 -> append("A Gen 7 save is loaded. You can transfer this preserved Gen 1 Pokémon forward using the Virtual Console → Poké Transporter / Bank conversion path.")
                 6 -> append("A Gen 6 save is loaded. You can create a PSE native PK6 direct re-home and place it in validated PC storage.")
-                else -> append("Load a Gen 1 save to withdraw it, a Gen 2 save for Time Capsule conversion, or a Gen 7 save for the Virtual Console transfer path.")
+                else -> append("Load a Gen 1 save to withdraw it, Gen 2 for Time Capsule record conversion, Gen 3 for a reviewed native PK3 PSE conversion, Gen 4–6 for reviewed native-format conversions, or Gen 7 for the Virtual Console transfer path.")
             }
         }
 
