@@ -28,6 +28,8 @@ class SwitchScarletVioletPokemonPokerusActivity : Activity() {
     private var current: ScarletVioletPokemonRead? = null
     private var pendingPlan: ScarletVioletPokerusCopyPlan? = null
     private var verifiedCopy: Pair<Uri, String>? = null
+    private var busy = false
+    private lateinit var status: TextView
     private lateinit var strainChoice: Spinner
     private lateinit var daysChoice: Spinner
     private lateinit var review: Button
