@@ -227,6 +227,7 @@
         <activity android:name=".SwitchScarletVioletPokemonHomeTrackerActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonStatusConditionActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonCurrentHpActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletPokemonMaximumHpActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonOriginalTrainerGenderActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonHandlingTrainerActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonHandlingTrainerGenderActivity" android:exported="false"/>
