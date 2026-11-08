@@ -20467,6 +20467,15 @@ class MainActivity : Activity() {
             var reason:String?=null
             val result=try{
                 require(targetGeneration in 3..5){"This ability lookup supports Generation 3, 4 or 5."}
+                val wanted=p.abilityNumber
+                require(wanted in 1..2){"The PK3 ability slot is not representable in Generation 4."}
+                val sourceAbilities=canonicalGen3SpeciesAbilities(p.species)
+                    ?:error("Canonical Generation 3 ability-slot data is unavailable for species #${p.species}.")
+                val sourceAbility=sourceAbilities.getOrElse(wanted-1){0}.takeIf{it!=0}
+                    ?:error("Species #${p.species} has no Generation 3 ability in source slot $wanted.")
+                require(sourceAbility==p.ability){
+                    "The PK3 has ability #${p.ability} in slot $wanted, but canonical Generation 3 data assigns ability #$sourceAbility to that slot."
+                }
                 val species=fetchJsonObject("https://pokeapi.co/api/v2/pokemon-species/${p.species}")
                     ?:error("Species metadata could not be loaded.")
                 val pokemon=fetchJsonObject("https://pokeapi.co/api/v2/pokemon/${p.species}")
@@ -20474,26 +20483,24 @@ class MainActivity : Activity() {
                 fun generationNumber(name:String):Int=when(name.substringAfter("generation-","")){
                     "i"->1;"ii"->2;"iii"->3;"iv"->4;"v"->5;"vi"->6;"vii"->7;"viii"->8;"ix"->9;else->Int.MAX_VALUE
                 }
-                var targetAbilities=pokemon.optJSONArray("abilities")
+                val currentAbilities=pokemon.optJSONArray("abilities")
+                    ?:error("The Generation $targetGeneration ability list is unavailable.")
+                var historicalGeneration=Int.MAX_VALUE
+                var historicalAbilities:org.json.JSONArray?=null
                 val past=pokemon.optJSONArray("past_abilities")
                 if(past!=null){
-                    var nearestGeneration=Int.MAX_VALUE
-                    var nearestAbilities:org.json.JSONArray?=null
                     for(i in 0 until past.length()){
                         val row=past.optJSONObject(i)?:continue
-                        val historicalGeneration=generationNumber(row.optJSONObject("generation")?.optString("name").orEmpty())
-                        if(historicalGeneration>=targetGeneration&&historicalGeneration<nearestGeneration){
-                            nearestGeneration=historicalGeneration
-                            nearestAbilities=row.optJSONArray("abilities")
+                        val generation=generationNumber(row.optJSONObject("generation")?.optString("name").orEmpty())
+                        if(generation>=targetGeneration&&generation<historicalGeneration){
+                            historicalGeneration=generation
+                            historicalAbilities=row.optJSONArray("abilities")
                         }
                     }
-                    if(nearestAbilities!=null)targetAbilities=nearestAbilities
                 }
-                val wanted=p.abilityNumber
-                require(wanted in 1..2){"The PK3 ability slot is not representable in Generation 4."}
+                val abilities=historicalAbilities?:currentAbilities
                 var ability=0
-                val abilities=targetAbilities
-                if(abilities!=null)for(i in 0 until abilities.length()){
+                for(i in 0 until abilities.length()){
                     val item=abilities.optJSONObject(i)?:continue
                     if(item.optBoolean("is_hidden",false)||item.optInt("slot",0)!=wanted)continue
                     ability=parseIdFromPokeApiUrl(item.optJSONObject("ability")?.optString("url").orEmpty())?:0
@@ -20502,6 +20509,9 @@ class MainActivity : Activity() {
                 val maxAbility=if(targetGeneration<=4)123 else 164
                 require(ability in 1..maxAbility){
                     "No exact non-hidden Generation $targetGeneration ability mapping exists for source ability slot $wanted."
+                }
+                require(ability==sourceAbility){
+                    "Generation $targetGeneration assigns ability #$ability to slot $wanted, but the Gen 3 source has canonical ability #$sourceAbility. PSE will not change its ability or PID silently."
                 }
                 require(ability==p.ability){
                     "The Pokémon has ability #${p.ability} in slot $wanted, but Generation $targetGeneration assigns ability #$ability to that same PID-derived slot. PSE will not change its ability or PID silently."
