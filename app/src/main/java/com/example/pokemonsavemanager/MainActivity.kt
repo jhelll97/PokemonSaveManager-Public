@@ -23597,7 +23597,7 @@ class MainActivity : Activity() {
             .setNeutralButton("Delete"){_,_->AlertDialog.Builder(this).setTitle("Delete Bank entry?").setMessage("This permanently removes the preserved Gen 3 PK3 copy.").setNegativeButton("Cancel",null).setPositiveButton("Delete"){_,_->if(bankFile.delete()){Toast.makeText(this,"Bank entry deleted",Toast.LENGTH_SHORT).show();showBank()}else showDialog("PSE Bank","The Bank entry could not be deleted.")}.show()}
         if(currentGen==1)b.setPositiveButton("Convert to Gen 1"){_,_->prepareGen3ToGen1Transfer(bankFile,p)}
         if(currentGen==3)b.setPositiveButton("Withdraw to Gen 3"){_,_->chooseGen3BankWithdrawDestination(bankFile,p)}
-        if(currentGen==2)b.setPositiveButton("Convert to Gen 2"){_,_->prepareGen3ToGen2Transfer(bankFile,p)}
+        if(currentGen==2)b.setPositiveButton("PSE Convert to Gen 2"){_,_->prepareGen3ToGen2Transfer(bankFile,p)}
         if(currentGen==4)b.setPositiveButton("Convert to Gen 4"){_,_->prepareGen3ToGen4Transfer(bankFile,p)}
         if(currentGen==5)b.setPositiveButton("Convert to Gen 5"){_,_->prepareGen3ToGen5Transfer(bankFile,p)}
         if(currentGen==6)b.setPositiveButton("Convert to Gen 6"){_,_->prepareGen3ToGen6Transfer(bankFile,p)}
