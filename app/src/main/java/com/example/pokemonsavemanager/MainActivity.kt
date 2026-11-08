@@ -20763,17 +20763,19 @@ class MainActivity : Activity() {
             append("\nOT ${p.otName.ifBlank{"—"}} • TID ${p.tid} / SID ${p.sid}")
             append("\n\n")
             when(currentGen){
+                1->append("A Gen 1 save is loaded. You can review a direct backward PSE conversion into an empty native Gen 1 PC box.")
                 3->append("A Gen 3 save is loaded. You can withdraw this original PK3 record back into an empty PC slot.")
                 2->append("A Gen 2 save is loaded. You can review a PSE conversion into an empty native Gen 2 PC slot.")
                 4->append("A Gen 4 save is loaded. You can review a PSE Bank conversion and place a verified native PK4 into Diamond, Pearl, Platinum, HeartGold or SoulSilver.")
                 5->append("A Gen 5 save is loaded. You can review a direct PSE conversion into an empty native PK5 slot, including every changed or unsupported Gen 3 field.")
                 6->append("A Gen 6 save is loaded. You can review a direct PSE conversion into a chosen native PK6 slot with exact PID, ability and field-loss disclosure.")
                 7->append("A Gen 7 save is loaded. You can review every conversion effect and choose a native PK7 slot. PSE retains a verified recovery backup and keeps the Bank entry until the exact PK7, Pokédex and Gen 7 checksums reopen successfully.")
-                else->append("Load a Gen 3 save to withdraw it, or a Gen 2, Gen 4, Gen 5, Gen 6 or Gen 7 save for a reviewed PSE conversion.")
+                else->append("Load a Gen 3 save to withdraw it, or a Gen 1, Gen 2, Gen 4, Gen 5, Gen 6 or Gen 7 save for a reviewed PSE conversion.")
             }
         }
         val b=AlertDialog.Builder(this).setTitle("${p.nickname.ifBlank{canonicalGen3SpeciesName(p.species)?:"Pokémon #${p.species}"}} • Gen 3 Bank").setMessage(message).setNegativeButton("Close",null)
             .setNeutralButton("Delete"){_,_->AlertDialog.Builder(this).setTitle("Delete Bank entry?").setMessage("This permanently removes the preserved Gen 3 PK3 copy.").setNegativeButton("Cancel",null).setPositiveButton("Delete"){_,_->if(bankFile.delete()){Toast.makeText(this,"Bank entry deleted",Toast.LENGTH_SHORT).show();showBank()}else showDialog("PSE Bank","The Bank entry could not be deleted.")}.show()}
+        if(currentGen==1)b.setPositiveButton("Convert to Gen 1"){_,_->prepareGen3ToGen1Transfer(bankFile,p)}
         if(currentGen==3)b.setPositiveButton("Withdraw to Gen 3"){_,_->chooseGen3BankWithdrawDestination(bankFile,p)}
         if(currentGen==2)b.setPositiveButton("Convert to Gen 2"){_,_->prepareGen3ToGen2Transfer(bankFile,p)}
         if(currentGen==4)b.setPositiveButton("Convert to Gen 4"){_,_->prepareGen3ToGen4Transfer(bankFile,p)}
@@ -20781,6 +20783,169 @@ class MainActivity : Activity() {
         if(currentGen==6)b.setPositiveButton("Convert to Gen 6"){_,_->prepareGen3ToGen6Transfer(bankFile,p)}
         if(currentGen==7)b.setPositiveButton("Transfer to Gen 7"){_,_->prepareGen3ForwardTransfer(bankFile,p)}
         b.show()
+    }
+
+
+    private fun buildGen3ToGen1Bridge(raw:ByteArray,p:PokemonEntry):Pair<ByteArray,Gen2Pokemon>{
+        val (mon,ot,nick)=buildGen3ToGen2Record(raw,p)
+        val bridge=ByteArray(GEN2_BANK_FILE_SIZE)
+        bridge[0]='P'.code.toByte();bridge[1]='S'.code.toByte();bridge[2]='E'.code.toByte();bridge[3]='2'.code.toByte()
+        bridge[4]=1;bridge[5]=1;bridge[6]=0;bridge[7]=0
+        mon.copyInto(bridge,GEN2_BANK_HEADER_SIZE)
+        ot.copyInto(bridge,GEN2_BANK_HEADER_SIZE+32)
+        nick.copyInto(bridge,GEN2_BANK_HEADER_SIZE+43)
+        val converted=parseGen2BankPayload(bridge)?:error("The verified Generation 2 bridge could not be reopened.")
+        return bridge to converted
+    }
+
+    private fun prepareGen3ToGen1Transfer(bankFile:File,shown:PokemonEntry){
+        val file=importedFile?:return showDialog("Gen 3 → Gen 1","Load a valid Red, Blue or Yellow destination save first.")
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val destination=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog("Gen 3 → Gen 1","The destination save could not be read.")
+        val integrity=verifyGen1SaveIntegrity(destination)
+        if(!bound()||generationForSize(destination.size)!=1||!integrity.first)
+            return showDialog("Gen 3 → Gen 1",integrity.second)
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()
+            ?:return showDialog("Gen 3 → Gen 1","The PSE Bank folder could not be verified.")
+        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+            ?:return showDialog("Gen 3 → Gen 1","The selected Bank path could not be verified.")
+        if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk3",true))
+            return showDialog("Gen 3 → Gen 1","The selected record is outside the Generation 3 PSE Bank.")
+        val bank=runCatching{selected.readBytes()}.getOrNull()
+            ?:return showDialog("Gen 3 → Gen 1","The selected Bank record could not be read.")
+        val source=if(bank.size==80)parsePk3(bank,0,false)else null
+        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
+            source.tid!=shown.tid||source.sid!=shown.sid)
+            return showDialog("Gen 3 → Gen 1","The selected Bank record changed or failed its PK3 checksum.")
+        gen3ToGen2Blocker(source)?.let{
+            return showDialog("Gen 3 → Gen 1 blocked","$it\n\nThe Bank record and destination were left unchanged.")
+        }
+        val bridgePair=try{buildGen3ToGen1Bridge(bank,source)}catch(e:Exception){
+            return showDialog("Gen 3 → Gen 1 blocked",(e.message?:"No safe Generation 2 bridge is available.")+"\n\nNothing was changed.")
+        }
+        val bridge=bridgePair.first;val converted=bridgePair.second
+        val legalise=gen2ToGen1LegalisePlan(converted)
+        gen2ToGen1Rejection(converted,legalise)?.let{
+            return showDialog("Gen 3 → Gen 1 blocked","$it\n\nNo deterministic native Generation 1 mapping is available. Nothing was changed.")
+        }
+        val targets=availableGen1BoxTargets(destination)
+        if(targets.isEmpty())return showDialog("Gen 3 → Gen 1","No writable Generation 1 PC box has an empty slot. Nothing was changed.")
+        val sourceDvs=source.ivs.take(5).map{it/2}
+        val hpDv=((sourceDvs[1]and 1)shl 3)or((sourceDvs[2]and 1)shl 2)or((sourceDvs[3]and 1)shl 1)or(sourceDvs[4]and 1)
+        val finalDvs=intArrayOf(hpDv,sourceDvs[1],sourceDvs[2],sourceDvs[3],sourceDvs[4])
+        val finalStatExp=converted.statExp.joinToString("/")
+        val finalShiny=gen2Shiny(finalDvs)
+        var metadataConsumed=false;var confirmationConsumed=false;var transferConsumed=false
+        loadGen1SpeciesMetaAsync(source.species){meta->
+            if(metadataConsumed||!bound()){showDialog("Gen 3 → Gen 1","The destination identity or prepared source changed. Reopen PSE Bank. Nothing was changed.");return@loadGen1SpeciesMetaAsync}
+            metadataConsumed=true
+            if(meta==null){showDialog("Gen 3 → Gen 1","PSE could not resolve the Generation 1 species data needed for an exact native record. Nothing was changed.");return@loadGen1SpeciesMetaAsync}
+            if(!runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false)){
+                showDialog("Gen 3 → Gen 1","The source or destination changed while conversion data was prepared. Nothing was changed.");return@loadGen1SpeciesMetaAsync
+            }
+            val review=buildString{
+                append("PSE backward conversion; this is not an in-game trade, official migration or provenance claim. The source save stays unchanged, and the exact PK3 remains in Bank until the native Gen 1 write reopens successfully.\n\n")
+                append("Preserved: species, nickname, OT name/TID, EXP, moves, current PP and PP Ups. Gen 3 IVs ")
+                append(source.ivs.joinToString("/")).append(" become Gen 1 DVs ").append(finalDvs.joinToString("/"))
+                append("; Atk, Def, Speed and Special use floor(IV ÷ 2), HP DV is derived from their low bits, and independent Gen 3 HP and SpD IVs have no Gen 1 fields. EVs become Stat Exp ")
+                append(finalStatExp).append("; Special uses the integer average of SpA/SpD EVs, rounded down. The experience-based level becomes ")
+                append(converted.level).append(". The resulting DV shiny pattern is ").append(if(finalShiny)"shiny" else "not shiny")
+                append(", while the source is ").append(if(source.shiny)"shiny" else "not shiny").append(".\n\n")
+                append("Not represented: SID, PID, nature, ability, gender, friendship, Pokérus, met/egg locations and dates, Ball, ribbons, fateful/origin metadata, and the independent Gen 3 HP/SpD IVs. Gen 1 catch rate is set to 0 because held items are blocked and Generation 3 has no verified catch-rate source field. ")
+                append("Eggs, held items, alternate forms, non-English text, unsupported moves/species and invalid values are blocked instead of discarded.\n\n")
+                append("A verified kept recovery backup is required. PSE writes one chosen native Gen 1 record, updates Seen/Caught and the main checksum, reopens the exact box record, then removes the Bank entry. Any failure restores or preserves both sides.")
+            }
+            val labels=targets.map{"Box ${it.first} • ${it.second} empty slot${if(it.second==1)"" else "s"}"}.toTypedArray()
+            AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 3 → Gen 1")
+                .setMessage(review).setNegativeButton("Cancel",null)
+                .setPositiveButton("Choose Gen 1 Box"){_,_->
+                    if(confirmationConsumed){showDialog("Gen 3 → Gen 1","This transfer confirmation was already submitted. Reopen PSE Bank.");return@setPositiveButton};confirmationConsumed=true
+                    if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false)){
+                        showDialog("Gen 3 → Gen 1","The source or destination changed after review. Nothing was changed.");return@setPositiveButton
+                    }
+                    AlertDialog.Builder(this).setTitle("Choose Gen 1 destination box").setItems(labels){_,which->
+                        if(transferConsumed||which !in targets.indices){showDialog("Gen 3 → Gen 1","This destination choice was already handled. Reopen PSE Bank.");return@setItems};transferConsumed=true
+                        if(!bound()){showDialog("Gen 3 → Gen 1","The destination identity changed. Nothing was changed.");return@setItems}
+                        transferGen3BankToGen1(selected,source,bank,bridge,converted,destination,meta,targets[which].first,file,legalise,openedUri,openedLabel)
+                    }.setNegativeButton("Cancel",null).show()
+                }.show()
+        }
+    }
+
+    private fun transferGen3BankToGen1(
+        bankFile:File,expected:PokemonEntry,expectedBank:ByteArray,expectedBridge:ByteArray,expectedConverted:Gen2Pokemon,
+        preparedDestination:ByteArray,meta:Gen1SpeciesMeta,targetBox:Int,openedFile:File,
+        legalise:Gen2ToGen1LegalisePlan?,openedUri:Uri?,openedLabel:String?
+    ){
+        fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        if(!bound()){showDialog("Gen 3 → Gen 1","The destination identity changed. Reopen PSE Bank. Nothing was changed.");return}
+        val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return
+        var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null
+        try{
+            require(bound()&&fresh.contentEquals(preparedDestination)){"The Gen 1 destination changed after review."}
+            val integrity=verifyGen1SaveIntegrity(fresh);require(integrity.first){integrity.second}
+            require(targetBox in 1..12&&gen1BoxIsWritable(fresh,targetBox)){"The selected Gen 1 box is no longer writable."}
+            val bank=bankFile.readBytes();require(bank.contentEquals(expectedBank)){"The selected Gen 3 Bank record changed after review."}
+            val source=parsePk3(bank,0,false)?:error("The selected PK3 is invalid.")
+            require(source.checksumValid&&source.pid==expected.pid&&source.species==expected.species&&source.tid==expected.tid&&source.sid==expected.sid){"The selected Gen 3 Pokémon changed."}
+            val rebuilt=buildGen3ToGen1Bridge(bank,source);require(rebuilt.first.contentEquals(expectedBridge)&&sameGen2BankRecord(rebuilt.second,expectedConverted)){"The prepared backward conversion changed."}
+            require(legalise==gen2ToGen1LegalisePlan(rebuilt.second)){"The reviewed Generation 1 omissions changed."}
+            gen2ToGen1Rejection(rebuilt.second,legalise)?.let{error(it)}
+            val converted=rebuilt.second;val bridge=rebuilt.first
+            val base=gen1BoxDataOffset(fresh,targetBox);val count=fresh[base].toInt()and 0xFF
+            require(count in 0 until GEN1_BOX_CAPACITY){"Gen 1 Box $targetBox is full or structurally invalid."}
+            val before=parseGen1Box(fresh,targetBox).pokemon.sortedBy{it.slot};require(before.size==count){"Gen 1 Box $targetBox contains an invalid record."}
+            val(mon,ot,nick)=buildGen2ToGen1Record(bridge,converted,meta,legalise)
+            val work=fresh.copyOf();val slot=appendGen1BoxPokemon(work,targetBox,mon,ot,nick);markGen1PokedexCaught(work,converted.species);updateGen1MainChecksum(work)
+            val pre=verifyGen1WriteState(work,targetBox);require(pre.first){pre.second}
+            val staged=parseGen1Box(work,targetBox).pokemon.sortedBy{it.slot};require(staged.size==before.size+1){"The staged Gen 1 box count did not increase by one."}
+            require(staged.take(before.size).zip(before).all{(a,b)->sameGen1TransferRecord(a,b)}){"An existing Gen 1 Pokémon changed during staging."}
+            fun matches(q:Gen1Pokemon)=q.species==meta.internalIndex&&q.nickname==converted.nickname&&q.otName==converted.otName&&
+                q.level==converted.level&&q.currentHp==gen1CalculatedStats(meta,converted.level,converted.dvs,converted.statExp)[0]&&
+                q.tid==converted.tid&&q.experience==converted.experience&&q.moves.contentEquals(converted.moves)&&q.movePP.contentEquals(converted.movePP)&&
+                q.movePpUps.contentEquals(IntArray(4){i->(bridge[GEN2_BANK_HEADER_SIZE+23+i].toInt()ushr 6)and 3})&&
+                q.statExp.contentEquals(converted.statExp)&&q.dvs.contentEquals(converted.dvs)
+            val stagedCopy=staged.firstOrNull{it.slot==slot};require(stagedCopy!=null&&matches(stagedCopy)){"The staged Gen 1 conversion did not preserve every supported field."}
+            val stagedBase=gen1BoxDataOffset(work,targetBox)+GEN1_BOX_MONS+slot*GEN1_BOX_MON_SIZE
+            require(work.copyOfRange(stagedBase,stagedBase+GEN1_BOX_MON_SIZE).contentEquals(mon)){"The exact converted Gen 1 record did not stage."}
+            val dexIndex=converted.species-1;val dexMask=1 shl(dexIndex and 7)
+            require((work[0x25A3+dexIndex/8].toInt()and dexMask)!=0&&(work[0x25B6+dexIndex/8].toInt()and dexMask)!=0){"The Gen 1 Pokédex flags did not stage."}
+            require(bound()&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(expectedBank)&&verifyGen1SaveIntegrity(work).first){"The source, destination or staged integrity changed before backup."}
+            val backup=File.createTempFile(backupGameName(file)+"_PreGen3ToGen1Transfer_",".backup",backupsDir());safetyBackup=backup
+            backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The exact Gen 1 recovery backup did not verify."}
+            retainGen2ToGen1SafetyBackup(backup,fresh)
+            require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(expectedBank)){"The destination, Bank record or retained backup changed before writing."}
+            writeStarted=true
+            file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)){"The Gen 1 destination changed while it was written."}
+            val post=verifyGen1WriteState(written,targetBox);require(post.first){post.second}
+            val after=parseGen1Box(written,targetBox).pokemon.sortedBy{it.slot};require(after.size==before.size+1&&after.take(before.size).zip(before).all{(a,b)->sameGen1TransferRecord(a,b)}){"The persisted Gen 1 box changed unexpectedly."}
+            val persisted=after.firstOrNull{it.slot==slot};require(persisted!=null&&matches(persisted)){"The persisted Gen 1 conversion did not preserve every supported field."}
+            val actualBase=gen1BoxDataOffset(written,targetBox)+GEN1_BOX_MONS+slot*GEN1_BOX_MON_SIZE
+            require(written.copyOfRange(actualBase,actualBase+GEN1_BOX_MON_SIZE).contentEquals(mon)){"The exact Gen 1 record did not persist."}
+            require((written[0x25A3+dexIndex/8].toInt()and dexMask)!=0&&(written[0x25B6+dexIndex/8].toInt()and dexMask)!=0){"The species was not registered Seen and Caught in Gen 1."}
+            require(bound()&&file.readBytes().contentEquals(work)&&verifyGen1SaveIntegrity(written).first){"The verified Gen 1 destination changed before Bank cleanup."}
+            val cleanup=bankFile.readBytes();require(cleanup.contentEquals(expectedBank)){"The Gen 3 Bank record changed before cleanup."}
+            val cleanupSource=parsePk3(cleanup,0,false);require(cleanupSource!=null&&cleanupSource.checksumValid&&cleanupSource.pid==expected.pid&&cleanupSource.species==expected.species&&cleanupSource.tid==expected.tid&&cleanupSource.sid==expected.sid){"The Gen 3 Bank record failed final verification."}
+            bankDeleteAttempted=true;require(bankFile.delete()){"The Gen 3 Bank entry could not be removed after destination verification."};require(!bankFile.exists()){"The removed Gen 3 Bank entry still exists."}
+            require(bound()&&file.readBytes().contentEquals(work)){"The verified Gen 1 destination changed after Bank cleanup."}
+        }catch(e:Exception){
+            val bankRestored=if(!writeStarted)true else runCatching{
+                if(bankDeleteAttempted&&!bankFile.exists()){
+                    require(bankFile.createNewFile()){"The Bank recovery path could not be reserved."}
+                    bankFile.writeBytes(expectedBank)
+                }
+                require(bankFile.readBytes().contentEquals(expectedBank)){"The original Gen 3 Bank record could not be verified; no existing record was overwritten."}
+            }.isSuccess
+            val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&
+                runCatching{file.readBytes().contentEquals(fresh)&&verifyGen1SaveIntegrity(fresh).first}.getOrDefault(false))
+            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else if(bankRestored&&destinationRestored)
+                "The exact Gen 1 destination and Gen 3 Bank record were restored or kept and verified."
+            else "Automatic recovery could not be verified. Stop editing and keep the working save, retained backup and remaining Bank record for review."
+            showDialog("Gen 3 → Gen 1 transfer failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
+        }
+        Toast.makeText(this,"Converted Gen 3 → Gen 1 to Box $targetBox and verified",Toast.LENGTH_LONG).show();showBank()
     }
 
     private fun gen3ToGen2Blocker(p:PokemonEntry):String?=when{
