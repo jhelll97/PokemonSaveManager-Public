@@ -188,6 +188,7 @@
         <activity android:name=".SwitchScarletVioletPokemonTrainerIdActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonSecretIdActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonEncryptionConstantActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletPokemonGenderActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonMove1Activity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonMove2Activity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonMove3Activity" android:exported="false"/>
