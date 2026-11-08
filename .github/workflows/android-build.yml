@@ -53,6 +53,7 @@ jobs:
       - name: Compile sources without APK packaging
         shell: bash
         run: |
+          set +e
           set -uo pipefail
           log="$RUNNER_TEMP/compile-debug.log"
           for attempt in 1 2 3; do
