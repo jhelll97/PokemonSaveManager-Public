@@ -11754,7 +11754,7 @@ class MainActivity : Activity() {
         p.language !in setOf(1,2,3,4,5,7,8)->"Language ID ${p.language} is not a verified Gen 5 language value supported by this Gen 6 writer."
         p.ball !in 1..25->"Ball ID ${p.ball} has no verified Generation 6 mapping on this route."
         p.metLevel !in 1..100->"The met level is outside Generation 6 limits."
-        p.originGame !in 1..23->"Origin game ID ${p.originGame} cannot be represented safely in Generation 6."
+        gen5CompatibleOriginTitle(p.originGame)==null->"Origin game ID ${p.originGame} is not a documented native Generation 1–5 title."
         !gen5ToGen6DateValid(p.metYear,p.metMonth,p.metDay)->"The met date is not a valid native date."
         !gen5ToGen6DateValid(p.eggYear,p.eggMonth,p.eggDay)->"The Egg date is not a valid native date."
         else->null
@@ -11773,6 +11773,7 @@ class MainActivity : Activity() {
         }
         require(trainer.trainerName.isNotBlank()&&trainer.trainerName.length<=12&&trainer.trainerName.none{it=='\uFFFD'||it.code<0x20}){"The destination trainer name cannot be represented exactly as the Gen 6 handling trainer."}
         gen5ToGen6PreflightRejection(p)?.let{error(it)}
+        require(gen5CompatibleOriginTitle(p.originGame)!=null){"The source origin game ID ${p.originGame} is not a documented native Generation 1–5 title."}
         val ups=gen5Pk5PpUps(raw);require(ups.all{it in 0..3}){"The PK5 PP-Up values could not be verified."}
         val out=ByteArray(PK6_STORED_SIZE)
         var ec=(p.pid xor (p.tid.toLong() shl 16) xor p.sid.toLong() xor 0x47354736L) and 0xFFFFFFFFL
@@ -11814,6 +11815,8 @@ class MainActivity : Activity() {
         val source=if(bank.size==136)parsePk5(bank,false)else null
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species)return showDialog("Gen 5 → Gen 6","The selected Bank record changed or failed its PK5 checksum.")
         gen5ToGen6PreflightRejection(source)?.let{return showDialog("Gen 5 → Gen 6 blocked","$it\n\nThe Bank record and destination were left unchanged.")}
+        val originTitle=gen5CompatibleOriginTitle(source.originGame)
+            ?:return showDialog("Gen 5 → Gen 6 blocked","The source origin is not a documented native Generation 1–5 title. Nothing was changed.")
         val pk6=try{buildGen5ToGen6Pk6(bank,source,destination,trainer)}catch(e:Exception){return showDialog("Gen 5 → Gen 6 blocked",(e.message?:"No safe native mapping is available.")+"\n\nNothing was changed.")}
         if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false))return showDialog("Gen 5 → Gen 6","The destination or Bank record changed during preparation. Nothing was changed.")
         val converted=parsePk6(pk6,0,PK6_STORED_SIZE,false,721)?:return showDialog("Gen 5 → Gen 6","The prepared PK6 could not be re-read.")
@@ -11880,7 +11883,7 @@ class MainActivity : Activity() {
         if(!gen5ToGen6StillBound(p))return showDialog(title,"The destination or Bank record changed. Reopen PSE Bank.")
         val file=p.destinationFile
         val original=runCatching{file.readBytes()}.getOrNull()?:return showDialog(title,"The destination save could not be read.")
-        var writeStarted=false;var deleteAttempted=false;var backup:File?=null
+        var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
         try{
             require(original.contentEquals(p.destination)&&(original.size==SIZE_G6_XY||original.size==SIZE_G6_ORAS)){"The prepared Gen 6 destination changed."};require(gen6BoxChecksumValid(original)&&gen6BlockChecksumValid(original,20)){"The destination storage or Pokédex checksum changed."}
             val info=boxStorageInfo(original)?:error("PSE could not resolve native Gen 6 PC storage.");require(target in 0 until info.second){"The selected Gen 6 slot is invalid."};val offset=info.first+target*PK6_STORED_SIZE;require(parsePk6(original,offset,PK6_STORED_SIZE,false,info.third)==null){"The selected Gen 6 slot is no longer empty."}
@@ -11926,7 +11929,10 @@ class MainActivity : Activity() {
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen${p.sourceGeneration}ToGen6_",".backup",backupsDir());backup=recovery
             recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)){"The Gen 6 recovery backup did not verify."}
             retainGenToGen6SafetyBackup(recovery,original)
-            require(gen5ToGen6StillBound(p)&&file.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The source identity, snapshots or retained backup changed before writing."}
+            val bankCopy=File.createTempFile("PSE_G${p.sourceGeneration}ToG6_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
+            bankCopy.writeBytes(p.bankBytes);require(bankCopy.readBytes().contentEquals(p.bankBytes)){"The Bank recovery snapshot did not verify."}
+            require(gen5ToGen6StillBound(p)&&file.readBytes().contentEquals(original)&&isBackupKept(recovery)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){"The source identity, snapshots or retained recovery changed before writing."}
             writeStarted=true;file.writeBytes(save)
             val written=file.readBytes()
             require(written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){"The persisted Gen 6 save differs from the reviewed write scope."}
@@ -11942,11 +11948,15 @@ class MainActivity : Activity() {
             deleteAttempted=true
             require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen ${p.sourceGeneration} Bank record could not be removed after destination verification."}
             require(file.readBytes().contentEquals(save)){"The verified Gen 6 destination changed after Bank cleanup."}
+            runCatching{bankCopy.delete()}
         }catch(e:Exception){
             val bankRestored=runCatching{if(deleteAttempted&&!p.bankFile.exists())p.bankFile.writeBytes(p.bankBytes);p.bankFile.readBytes().contentEquals(p.bankBytes)}.getOrDefault(false)
-            val saveRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(original);file.readBytes().contentEquals(original)&&gen6BoxChecksumValid(original)&&gen6BlockChecksumValid(original,20)}.getOrDefault(false))
-            val recovery=if(bankRestored&&saveRestored)"The exact Gen 6 destination and Gen ${p.sourceGeneration} Bank record were restored or kept and verified." else "Automatic recovery could not be fully verified. Keep the retained recovery backup and remaining files for review."
-            showDialog("$title failed",(e.message?:"Unknown error")+"\n\n"+recovery+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:""));return
+            val saveRestored=!writeStarted||runCatching{file.writeBytes(original);val restored=file.readBytes();restored.contentEquals(original)&&gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)}.getOrDefault(false)
+            if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
+            val recovery=if(bankRestored&&saveRestored)"The exact Gen 6 destination and Gen ${p.sourceGeneration} Bank record were restored or kept and verified." else "Automatic recovery could not be fully verified. Keep the retained destination backup and Bank recovery snapshot for review."
+            showDialog("$title failed",(e.message?:"Unknown error")+"\n\n"+recovery+
+                (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery snapshot: ${it.name}"}?:""));return
         }
         Toast.makeText(this,"PSE transferred Gen ${p.sourceGeneration} → Gen 6 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show();showBank()
     }
