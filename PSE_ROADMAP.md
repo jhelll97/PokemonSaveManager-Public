@@ -604,3 +604,12 @@ The explicit Legalise review distinguishes retained storage data from title-spec
 The selected PK7 Bank entry and Legends: Arceus source save remain unchanged. PSE latches and rechecks the exact PK7 source hash, deterministically regenerates the same PA8, requires the user to choose one currently empty native pasture slot, and stages only that 360-byte core plus the save's SHA-256 footer in a new document. The retained verified recovery backup, persisted destination reopen, unchanged source and Bank checks, and failed-copy deletion provide two-sided rollback without consuming the Bank entry.
 
 Next bounded route: inspect and close the Scarlet/Violet native chosen-slot prerequisite, then add the first reviewed conversion into title-specific PK9. Do not infer PK9 or PA9 conversion support from native deposit/restore inventory.
+
+
+## Scarlet/Violet native Bank destination review prerequisite
+
+Scarlet/Violet PK9 restore now requires the user to choose the exact empty native PC-box slot before the restore review is created. PSE enumerates all empty slots across the 32 native boxes, groups them by box, and binds the selected box and slot into the review. The source save and PK9 Bank entry are reopened before staging, and the route rejects the review if that exact destination is no longer empty.
+
+The native write remains limited to the chosen 344-byte PK9 box record and the save's SHA-256 footer. Existing PC-box records, party data, the dedicated ride Pokémon, and unrelated container bytes remain exact. The retained verified recovery backup, persisted destination reopen, unchanged source and Bank checks, and failed-copy deletion continue to provide two-sided rollback without consuming the Bank entry.
+
+This closes the silent first-empty-slot gap before cross-generation conversion into Generation 9 is enabled. Next bounded route: add the first explicit title-specific conversion into Scarlet/Violet PK9 with documented destination-valid mappings and complete Legalise disclosure. Native PK9 deposit and restore inventory alone remains insufficient evidence of conversion support.

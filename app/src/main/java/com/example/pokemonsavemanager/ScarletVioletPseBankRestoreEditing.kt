@@ -4,6 +4,8 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.security.MessageDigest
 
+data class ScarletVioletPseBankDestination(val box: Int, val position: Int)
+
 /** Restores one checksum-valid native PK9 Bank record into a reviewed new Scarlet/Violet save copy. */
 object ScarletVioletPseBankRestoreEditing {
     private const val MAX_FILE_SIZE = 0x31CF81
@@ -66,32 +68,50 @@ object ScarletVioletPseBankRestoreEditing {
         return pokemon
     }
 
+    fun emptyDestinations(source: ByteArray): List<ScarletVioletPseBankDestination> {
+        val storage = ScarletVioletStorageReadOnly.read(source.copyOf())
+        return (0 until 32).flatMap { box ->
+            storage.box(box).filter { it.read is ScarletVioletSlotRead.Empty }.map {
+                ScarletVioletPseBankDestination(box + 1, it.position)
+            }
+        }
+    }
+
     fun stage(
         source: ByteArray,
         expectedSha256: String,
         bankRecord: ByteArray
     ): ScarletVioletPseBankRestoreCopyPlan {
+        val destination = emptyDestinations(source).firstOrNull()
+            ?: throw IllegalArgumentException("All 960 native Scarlet/Violet PC-box slots are occupied.")
+        return stage(source, expectedSha256, bankRecord, destination.box, destination.position)
+    }
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        bankRecord: ByteArray,
+        box: Int,
+        position: Int
+    ): ScarletVioletPseBankRestoreCopyPlan {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        require(box in 1..32 && position in 1..30) {
+            "The selected Scarlet/Violet PC-box destination is outside native storage."
+        }
         val before = ScarletVioletStorageReadOnly.read(original)
+        require(before.box(box - 1)[position - 1].read is ScarletVioletSlotRead.Empty) {
+            "The selected native destination is no longer empty. Choose another slot."
+        }
         val pokemon = inspectBankRecord(supplied)
-        val destination = (0 until 32).asSequence().flatMap { box -> before.box(box).asSequence() }
-            .firstOrNull { it.read is ScarletVioletSlotRead.Empty }
-            ?: throw IllegalArgumentException("All 960 native Scarlet/Violet PC-box slots are occupied.")
         val written = ScarletVioletSaveValidation.writeBoxRecord(
-            original,
-            destination.box + 1,
-            destination.position,
-            supplied
+            original, box, position, supplied
         )
-        verify(
-            original, written.bytes, supplied,
-            destination.box + 1, destination.position, written.absoluteOffset
-        )
+        verify(original, written.bytes, supplied, box, position, written.absoluteOffset)
         return ScarletVioletPseBankRestoreCopyPlan(
             original, written.bytes, supplied, pokemon,
-            destination.box + 1, destination.position, written.absoluteOffset
+            box, position, written.absoluteOffset
         )
     }
 
