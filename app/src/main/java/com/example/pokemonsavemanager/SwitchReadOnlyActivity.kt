@@ -1995,26 +1995,96 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound) return
         val directory = File(filesDir, "pse_bank")
         val entries = directory.listFiles()?.filter {
-            it.isFile && it.name.startsWith("switch_bdsp_") && it.extension == "pb8"
-        }?.sortedBy { it.name }.orEmpty()
+            it.isFile && ((it.name.startsWith("switch_bdsp_") && it.extension.equals("pb8", true)) ||
+                it.extension.equals("pk7", true))
+        }?.sortedWith(compareBy<File>({ if (it.extension.equals("pb8", true)) 0 else 1 }, { it.name }))
+            .orEmpty()
         val labels = entries.map { file ->
-            val parsed = runCatching { BdspPokemonReadOnly.read(file.readBytes()) }.getOrNull()
-            val pokemon = (parsed as? BdspSlotRead.Pokemon)?.value
-            if (pokemon == null) file.name + " • unreadable"
-            else pokemon.nickname.ifBlank { SwordShieldSpeciesNames.name(pokemon.species) } +
-                " (#" + pokemon.species + ")" + (if (pokemon.shiny) " • Shiny" else "") + " • PB8"
+            if (file.extension.equals("pk7", true)) {
+                val converted = runCatching { Gen7ToBdspPb8.review(file.readBytes()) }
+                converted.fold(
+                    onSuccess = {
+                        val p = BdspPseBankRestoreEditing.inspectBankRecord(it.nativeRecord)
+                        p.nickname.ifBlank { SwordShieldSpeciesNames.name(p.species) } +
+                            " (#" + p.species + ") • Gen 7 PK7 -> PB8 Legalise"
+                    },
+                    onFailure = { file.name + " • Gen 7 route blocked • " + (it.message ?: "unreadable") }
+                )
+            } else {
+                val parsed = runCatching { BdspPokemonReadOnly.read(file.readBytes()) }.getOrNull()
+                val pokemon = (parsed as? BdspSlotRead.Pokemon)?.value
+                if (pokemon == null) file.name + " • unreadable"
+                else pokemon.nickname.ifBlank { SwordShieldSpeciesNames.name(pokemon.species) } +
+                    " (#" + pokemon.species + ")" + (if (pokemon.shiny) " • Shiny" else "") + " • PB8"
+            }
         }
         val builder = AlertDialog.Builder(this)
-            .setTitle("PSE Bank • " + entries.size + " BDSP Pokémon")
+            .setTitle("PSE Bank • " + entries.size + " BDSP routes")
             .setPositiveButton("Close", null)
         if (entries.isEmpty()) {
-            builder.setMessage("No BDSP Pokémon are stored. Open Pokémon Boxes, choose a Pokémon, then tap Add to PSE Bank.")
+            builder.setMessage("No native BDSP PB8 or eligible Gen 7 PK7 Bank entries are available.")
         } else {
             builder.setItems(labels.toTypedArray()) { _, index ->
-                if (session === bound) showBdspBankEntry(bound, entries[index])
+                if (session !== bound) return@setItems
+                val selected = entries[index]
+                if (selected.extension.equals("pk7", true)) {
+                    showBdspGen7BankEntry(bound, selected)
+                } else {
+                    showBdspBankEntry(bound, selected)
+                }
             }
         }
         builder.show()
+    }
+
+    private fun showBdspGen7BankEntry(bound: SwitchReadSession, file: File) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = runCatching { file.canonicalFile }.getOrNull()
+        val result = runCatching {
+            require(entry != null && entry.parentFile == directory && entry.isFile &&
+                entry.extension.equals("pk7", true)) { "This is not a current Gen 7 PSE Bank entry." }
+            Gen7ToBdspPb8.review(entry.readBytes())
+        }
+        val converted = result.getOrElse {
+            AlertDialog.Builder(this).setTitle("Gen 7 -> BDSP blocked")
+                .setMessage((it.message ?: "No safe conversion is available.") +
+                    "\n\nThe PK7 Bank entry and BDSP save remain unchanged.")
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val selected = entry ?: return
+        val p = BdspPseBankRestoreEditing.inspectBankRecord(converted.nativeRecord)
+        val message = buildString {
+            append("${SwordShieldSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n")
+            append("Source: ${selected.name} • preserved 232-byte PK7\n")
+            append("Prepared destination: checksum-valid 344-byte native BDSP PB8\n\n")
+            append("Exact disclosed conversion effects\n• ")
+            append(converted.effects.joinToString("\n• "))
+            append("\n\nContinue only if you accept every disclosed Legalise effect.")
+        }
+        AlertDialog.Builder(this).setTitle("Gen 7 -> BDSP • PSE Legalise review")
+            .setMessage(message).setNegativeButton("Cancel", null)
+            .setPositiveButton("Legalise & choose destination") { _, _ ->
+                try {
+                    require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                    val source = selectedSourceUri ?: error("Reopen the selected BDSP save from PSE.")
+                    require(selected.parentFile == directory && selected.isFile && selected.extension.equals("pk7", true)) {
+                        "The Gen 7 Bank entry changed."
+                    }
+                    Gen7ToBdspPb8.review(selected.readBytes())
+                    startActivity(Intent(this, SwitchBdspPseBankRestoreActivity::class.java)
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.bank.entry", selected.name)
+                        .putExtra("pse.bank.legalise", true)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not prepare Gen 7 conversion")
+                        .setMessage(error.message ?: "Both sources remain unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }.show()
     }
 
     private fun showBdspBankEntry(bound: SwitchReadSession, file: File) {
