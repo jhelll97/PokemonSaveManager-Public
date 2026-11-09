@@ -2343,9 +2343,16 @@ class SwitchReadOnlyActivity : Activity() {
         val entries = directory.listFiles()?.filter {
             it.isFile && (
                 (it.name.startsWith("switch_sv_") && it.extension.equals("pk9", true)) ||
-                    (it.name.startsWith("switch_swsh_") && it.extension.equals("pk8", true))
+                    (it.name.startsWith("switch_swsh_") && it.extension.equals("pk8", true)) ||
+                    (it.name.startsWith("switch_bdsp_") && it.extension.equals("pb8", true))
                 )
-        }?.sortedWith(compareBy<File>({ if (it.extension.equals("pk9", true)) 0 else 1 }, { it.name })).orEmpty()
+        }?.sortedWith(compareBy<File>({
+            when {
+                it.extension.equals("pk9", true) -> 0
+                it.extension.equals("pk8", true) -> 1
+                else -> 2
+            }
+        }, { it.name })).orEmpty()
         val labels = entries.map { file ->
             if (file.extension.equals("pk9", true)) {
                 val parsed = runCatching { ScarletVioletPokemonReadOnly.read(file.readBytes()) }.getOrNull()
@@ -2354,7 +2361,7 @@ class SwitchReadOnlyActivity : Activity() {
                 else pokemon.nickname.ifBlank { ScarletVioletSpeciesNames.name(pokemon.species) } +
                     " (#" + pokemon.species + ")" + (if (pokemon.shiny) " • Shiny" else "") +
                     (if (pokemon.isEgg) " • Egg" else "") + " • native PK9"
-            } else {
+            } else if (file.extension.equals("pk8", true)) {
                 runCatching { SwordShieldToScarletVioletPk9.review(file.readBytes()) }.fold(
                     onSuccess = { review ->
                         review.sourceNickname.ifBlank { SwordShieldSpeciesNames.name(review.sourceSpecies) } +
@@ -2365,6 +2372,17 @@ class SwitchReadOnlyActivity : Activity() {
                             (error.message ?: "unsupported conversion")
                     }
                 )
+            } else {
+                runCatching { BdspToScarletVioletPk9.review(file.readBytes()) }.fold(
+                    onSuccess = { review ->
+                        review.sourceNickname.ifBlank { SwordShieldSpeciesNames.name(review.sourceSpecies) } +
+                            " (#" + review.sourceSpecies + ") • BDSP PB8 → PK9 • Legalise"
+                    },
+                    onFailure = { error ->
+                        file.name + " • BDSP PB8 blocked • " +
+                            (error.message ?: "unsupported conversion")
+                    }
+                )
             }
         }
         val builder = AlertDialog.Builder(this)
@@ -2372,17 +2390,19 @@ class SwitchReadOnlyActivity : Activity() {
             .setPositiveButton("Close", null)
         if (entries.isEmpty()) {
             builder.setMessage(
-                "No native Scarlet/Violet PK9 or Sword/Shield PK8 entries are stored. " +
-                    "Open Pokémon Boxes in either title, choose a Pokémon, then tap Add to PSE Bank."
+                "No native Scarlet/Violet PK9, Sword/Shield PK8, or BDSP PB8 entries are stored. " +
+                    "Open Pokémon Boxes in a supported title, choose a Pokémon, then tap Add to PSE Bank."
             )
         } else {
             builder.setItems(labels.toTypedArray()) { _, index ->
                 if (session === bound) {
                     val entry = entries[index]
-                    if (entry.extension.equals("pk8", true)) {
-                        showScarletVioletSwordShieldBankEntry(bound, entry)
-                    } else {
-                        showScarletVioletBankEntry(bound, entry)
+                    when {
+                        entry.extension.equals("pk8", true) ->
+                            showScarletVioletSwordShieldBankEntry(bound, entry)
+                        entry.extension.equals("pb8", true) ->
+                            showScarletVioletBdspBankEntry(bound, entry)
+                        else -> showScarletVioletBankEntry(bound, entry)
                     }
                 }
             }
@@ -2453,6 +2473,88 @@ class SwitchReadOnlyActivity : Activity() {
                         "The PSE Bank entry changed. Reopen PSE Bank."
                     }
                     SwordShieldToScarletVioletPk9.review(bank)
+                    dialog.dismiss()
+                    startActivity(
+                        Intent(this, SwitchScarletVioletPseBankRestoreActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.bank.entry", entry.name)
+                            .putExtra("pse.bank.legalise", true)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not prepare Legalise conversion")
+                        .setMessage(error.message ?: "The source and Bank entry were left unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showScarletVioletBdspBankEntry(bound: SwitchReadSession, file: File) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = file.canonicalFile
+        val reviewed = runCatching {
+            require(
+                entry.parentFile == directory &&
+                    entry.name.startsWith("switch_bdsp_") &&
+                    entry.extension.equals("pb8", true)
+            ) { "This is not a BDSP PSE Bank entry." }
+            val source = entry.readBytes()
+            val sourceHash = ScarletVioletPseBankRestoreEditing.sha256(source)
+            require(entry.name == "switch_bdsp_${sourceHash}.pb8") {
+                "The PSE Bank filename no longer matches its native PB8 bytes."
+            }
+            BdspToScarletVioletPk9.review(source)
+        }
+        val review = reviewed.getOrElse { error ->
+            AlertDialog.Builder(this).setTitle("BDSP → Scarlet/Violet blocked")
+                .setMessage(
+                    (error.message ?: "This PB8 cannot be converted without unsupported loss.") +
+                        "\n\nThe source save and PSE Bank entry remain unchanged."
+                )
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val detail = buildString {
+            append(
+                review.sourceNickname.ifBlank { SwordShieldSpeciesNames.name(review.sourceSpecies) } +
+                    " (#${review.sourceSpecies})\n\n"
+            )
+            append("Explicit PSE Legalise effects\n• ")
+            append(review.effects.joinToString("\n• "))
+            append(
+                "\n\nChoose Legalise only to create the disclosed PK9 and then choose one empty " +
+                    "native Scarlet/Violet PC-box slot. The source save and PB8 Bank entry remain unchanged. " +
+                    "The destination is written to a new save copy, reopened, and verified; failure restores both sides " +
+                    "and retains the recovery backup. This conversion does not claim an official HOME transfer, trade, " +
+                    "encounter, ability, Tera, moveset, or provenance."
+            )
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("PSE Bank • BDSP → Scarlet/Violet")
+            .setMessage(detail)
+            .setNegativeButton("Close", null)
+            .setPositiveButton("Legalise & choose destination", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                try {
+                    require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                    val source = selectedSourceUri ?: error("Reopen the selected Scarlet/Violet save from PSE.")
+                    require(
+                        entry.parentFile == directory &&
+                            entry.name.startsWith("switch_bdsp_") &&
+                            entry.extension.equals("pb8", true)
+                    ) { "This is not a current BDSP PSE Bank entry." }
+                    val bank = entry.readBytes()
+                    val hash = ScarletVioletPseBankRestoreEditing.sha256(bank)
+                    require(entry.name == "switch_bdsp_${hash}.pb8") {
+                        "The PSE Bank entry changed. Reopen PSE Bank."
+                    }
+                    BdspToScarletVioletPk9.review(bank)
                     dialog.dismiss()
                     startActivity(
                         Intent(this, SwitchScarletVioletPseBankRestoreActivity::class.java)
