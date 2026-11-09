@@ -13,13 +13,23 @@ import android.widget.TextView
 import java.io.File
 import java.util.concurrent.Executors
 
-/** Restores one native Legends: Arceus PSE Bank entry into a reviewed new save copy. */
+private data class LegendsArceusBankPreparation(
+    val pokemon: LegendsArceusPokemonRead,
+    val destinations: List<LegendsArceusPseBankDestination>,
+    val sourceBankHash: String,
+    val nativeRecordHash: String,
+    val effects: List<String>
+)
+
+/** Restores one native PA8 or explicitly reviewed Gen 7 conversion into a new save copy. */
 class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
     private val createCopyRequest = 2151
     private var sourceUri: Uri? = null
     private var expectedHash: String? = null
     private var bankEntryName: String? = null
+    private var expectedBankSourceHash: String? = null
+    private var conversionEffects: List<String> = emptyList()
     private var readyDestinations: List<LegendsArceusPseBankDestination> = emptyList()
     private var readyPlan: LegendsArceusPseBankRestoreCopyPlan? = null
     private var pendingPlan: LegendsArceusPseBankRestoreCopyPlan? = null
@@ -46,9 +56,9 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Legends: Arceus • PSE Bank"; textSize = 24f })
         root.addView(TextView(this).apply { text = "Restore to Pastures"; textSize = 20f })
         root.addView(TextView(this).apply {
-            text = "PSE restores the exact checksum-valid PA8 stored core to one empty native pasture slot you choose in a new save copy. " +
-                "Only same-format Legends: Arceus records are accepted. Eggs, Noble records, invalid native limits, and species/forms without a uniquely verified game profile remain protected. " +
-                "The record's existing species, form, moves, trainer data, and encounter fields are preserved; this bounded restore does not certify encounter or moveset legality."
+            text = "PSE restores one checksum-valid native PA8 stored core to an empty pasture slot you choose in a new save copy. " +
+                "Native PA8 entries remain byte-exact. Eligible Gen 7 PK7 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Unsupported species, forms, items, moves, limits, or text remain blocked; this PSE conversion does not certify encounter, ability, or moveset legality."
             textSize = 16f
         })
         status = TextView(this).apply {
@@ -80,22 +90,32 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 require(LegendsArceusPseBankRestoreEditing.sha256(source) == hash) {
                     "The source changed. Reopen it from PSE."
                 }
-                val bank = readBankRecord()
-                val pokemon = LegendsArceusPseBankRestoreEditing.inspectBankRecord(bank)
+                val bankSource = readBankSource()
+                val bankSourceHash = LegendsArceusPseBankRestoreEditing.sha256(bankSource)
+                expectedBankSourceHash = bankSourceHash
+                val prepared = prepareBankRecord(bankSource)
+                val pokemon = LegendsArceusPseBankRestoreEditing.inspectBankRecord(prepared.first)
                 val destinations = LegendsArceusPseBankRestoreEditing.emptyDestinations(source)
                 require(destinations.isNotEmpty()) {
                     "All 960 native Legends: Arceus pasture slots are occupied."
                 }
-                Triple(pokemon, destinations, LegendsArceusPseBankRestoreEditing.sha256(bank))
+                LegendsArceusBankPreparation(
+                    pokemon, destinations, bankSourceHash,
+                    LegendsArceusPseBankRestoreEditing.sha256(prepared.first), prepared.second
+                )
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
-                result.onSuccess { (pokemon, destinations, bankHash) ->
-                    readyDestinations = destinations
+                result.onSuccess { prepared ->
+                    readyDestinations = prepared.destinations
+                    conversionEffects = prepared.effects
                     status.text = "Native source and Bank integrity verified\n" +
-                        "${LegendsArceusSpeciesNames.name(pokemon.species)} (#${pokemon.species}) • EXP ${pokemon.experience}\n" +
-                        "${destinations.size} empty native destination slots available\n" +
-                        "Source SHA-256: ${expectedHash}\nBank SHA-256: $bankHash"
+                        "${LegendsArceusSpeciesNames.name(prepared.pokemon.species)} (#${prepared.pokemon.species}) • EXP ${prepared.pokemon.experience}\n" +
+                        "${prepared.destinations.size} empty native destination slots available\n" +
+                        "Source SHA-256: ${expectedHash}\nBank source SHA-256: ${prepared.sourceBankHash}\n" +
+                        "Prepared PA8 SHA-256: ${prepared.nativeRecordHash}" +
+                        if (prepared.effects.isEmpty()) "" else "\n\nGen 7 -> Legends: Arceus Legalise effects\n• " +
+                            prepared.effects.joinToString("\n• ")
                 }.onFailure { status.text = it.message ?: "The PSE Bank restore could not be prepared safely." }
                 setBusy(false)
             }
@@ -178,23 +198,42 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         val name = bankEntryName ?: error("Reopen PSE Bank.")
         val directory = File(filesDir, "pse_bank").canonicalFile
         val entry = File(directory, name).canonicalFile
-        require(entry.parentFile == directory && entry.isFile &&
-            entry.name.startsWith("switch_pla_") && entry.extension == "pa8") {
-            "This is not a current Legends: Arceus PSE Bank entry."
+        val native = entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)
+        val gen7 = entry.extension.equals("pk7", true)
+        require(entry.parentFile == directory && entry.isFile && (native || gen7)) {
+            "This is not a current Legends: Arceus or Gen 7 PSE Bank entry."
+        }
+        if (gen7) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+            "Review and explicitly choose the disclosed Gen 7 Legalise conversion from PSE Bank."
         }
         return entry
     }
 
-    private fun readBankRecord(): ByteArray {
+    private fun readBankSource(): ByteArray {
+        val bytes = bankFile().readBytes()
+        expectedBankSourceHash?.let {
+            require(LegendsArceusPseBankRestoreEditing.sha256(bytes) == it) {
+                "The preserved PSE Bank source changed. Reopen PSE Bank."
+            }
+        }
+        return bytes
+    }
+
+    private fun prepareBankRecord(source: ByteArray): Pair<ByteArray, List<String>> {
         val entry = bankFile()
-        val bytes = entry.readBytes()
-        val hash = LegendsArceusPseBankRestoreEditing.sha256(bytes)
+        if (entry.extension.equals("pk7", true)) {
+            val converted = Gen7ToLegendsArceusPa8.review(source)
+            return converted.nativeRecord to converted.effects
+        }
+        val hash = LegendsArceusPseBankRestoreEditing.sha256(source)
         require(entry.name == "switch_pla_${hash}.pa8") {
             "The PSE Bank filename no longer matches its native record bytes."
         }
-        LegendsArceusPseBankRestoreEditing.inspectBankRecord(bytes)
-        return bytes
+        LegendsArceusPseBankRestoreEditing.inspectBankRecord(source)
+        return source to emptyList()
     }
+
+    private fun readBankRecord(): ByteArray = prepareBankRecord(readBankSource()).first
 
     private fun showReview(plan: LegendsArceusPseBankRestoreCopyPlan) {
         if (busy || plan !== readyPlan) return
@@ -208,7 +247,12 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
             "This Bank entry includes a ${plan.partyTailBytes}-byte party-only tail with no pasture equivalent. " +
                 "Its exact 360-byte stored core is written; the unchanged complete entry remains in PSE Bank."
         }
-        AlertDialog.Builder(this).setTitle("Restore this Bank Pokémon to a new copy?")
+        val effects = if (conversionEffects.isEmpty()) "" else
+            "\n\nExplicit Gen 7 Legalise effects\n• " + conversionEffects.joinToString("\n• ")
+        AlertDialog.Builder(this).setTitle(
+            if (conversionEffects.isEmpty()) "Restore this Bank Pokémon to a new copy?"
+            else "Legalise Gen 7 and restore to a new copy?"
+        )
             .setMessage(
                 "${LegendsArceusSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form} • EXP ${p.experience}\n" +
                     "Nickname: ${p.nickname.ifBlank { "None" }} • Shiny: ${if (p.shiny) "Yes" else "No"}\n" +
@@ -218,7 +262,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                     "Allowed native byte scope: one previously empty 360-byte PA8 pasture slot at 0x${plan.absoluteOffset.toString(16).uppercase()} " +
                     "plus the native SHA-256 footer. Every existing pasture slot, all party data, and all unrelated bytes remain exact. " +
                     "PSE verifies the unchanged source and Bank entry, retains a verified recovery backup, reopens the persisted copy, and removes a failed copy when possible. " +
-                    "The Bank entry remains available. Choose a NEW empty document."
+                    "The Bank entry remains available. Choose a NEW empty document." + effects
             )
             .setNegativeButton("Cancel", null)
             .setOnDismissListener { if (!dispatched) setBusy(false) }
@@ -302,7 +346,8 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 inspectCopy.visibility = if (verifiedCopy != null) android.view.View.VISIBLE else android.view.View.GONE
                 status.text = result.fold(
                     onSuccess = {
-                        "PSE Bank restore saved and reopened successfully.\n" +
+                        (if (conversionEffects.isEmpty()) "PSE Bank restore saved and reopened successfully.\n"
+                        else "Gen 7 -> Legends: Arceus PSE conversion saved and reopened successfully.\n") +
                             "Pasture ${plan.pasture}, slot ${plan.position} • SHA-256: ${plan.editedSha256}\n" +
                             "Recovery backup: $backupName\nOriginal source and Bank entry unchanged."
                     },

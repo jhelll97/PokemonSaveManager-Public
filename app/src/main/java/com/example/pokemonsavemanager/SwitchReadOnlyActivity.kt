@@ -2167,27 +2167,97 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound) return
         val directory = File(filesDir, "pse_bank")
         val entries = directory.listFiles()?.filter {
-            it.isFile && it.name.startsWith("switch_pla_") && it.extension == "pa8"
-        }?.sortedBy { it.name }.orEmpty()
+            it.isFile && ((it.name.startsWith("switch_pla_") && it.extension.equals("pa8", true)) ||
+                it.extension.equals("pk7", true))
+        }?.sortedWith(compareBy<File>({ if (it.extension.equals("pa8", true)) 0 else 1 }, { it.name }))
+            .orEmpty()
         val labels = entries.map { file ->
-            val parsed = runCatching { LegendsArceusPokemonReadOnly.read(file.readBytes()) }.getOrNull()
-            val pokemon = (parsed as? LegendsArceusSlotRead.Pokemon)?.value
-            if (pokemon == null) file.name + " • unreadable"
-            else pokemon.nickname.ifBlank { LegendsArceusSpeciesNames.name(pokemon.species) } +
-                " (#" + pokemon.species + ")" + (if (pokemon.shiny) " • Shiny" else "") +
-                (if (pokemon.isAlpha) " • Alpha" else "") + " • PA8"
+            if (file.extension.equals("pk7", true)) {
+                val converted = runCatching { Gen7ToLegendsArceusPa8.review(file.readBytes()) }
+                converted.fold(
+                    onSuccess = {
+                        val p = LegendsArceusPseBankRestoreEditing.inspectBankRecord(it.nativeRecord)
+                        p.nickname.ifBlank { LegendsArceusSpeciesNames.name(p.species) } +
+                            " (#" + p.species + ") • Gen 7 PK7 -> PA8 Legalise"
+                    },
+                    onFailure = { file.name + " • Gen 7 route blocked • " + (it.message ?: "unreadable") }
+                )
+            } else {
+                val parsed = runCatching { LegendsArceusPokemonReadOnly.read(file.readBytes()) }.getOrNull()
+                val pokemon = (parsed as? LegendsArceusSlotRead.Pokemon)?.value
+                if (pokemon == null) file.name + " • unreadable"
+                else pokemon.nickname.ifBlank { LegendsArceusSpeciesNames.name(pokemon.species) } +
+                    " (#" + pokemon.species + ")" + (if (pokemon.shiny) " • Shiny" else "") +
+                    (if (pokemon.isAlpha) " • Alpha" else "") + " • PA8"
+            }
         }
         val builder = AlertDialog.Builder(this)
-            .setTitle("PSE Bank • " + entries.size + " Legends: Arceus Pokémon")
+            .setTitle("PSE Bank • " + entries.size + " Legends: Arceus routes")
             .setPositiveButton("Close", null)
         if (entries.isEmpty()) {
-            builder.setMessage("No Legends: Arceus Pokémon are stored. Open Pokémon Boxes, choose a Pokémon, then tap Add to PSE Bank.")
+            builder.setMessage("No native Legends: Arceus PA8 or eligible Gen 7 PK7 Bank entries are available.")
         } else {
             builder.setItems(labels.toTypedArray()) { _, index ->
-                if (session === bound) showLegendsArceusBankEntry(bound, entries[index])
+                if (session !== bound) return@setItems
+                val selected = entries[index]
+                if (selected.extension.equals("pk7", true)) {
+                    showLegendsArceusGen7BankEntry(bound, selected)
+                } else {
+                    showLegendsArceusBankEntry(bound, selected)
+                }
             }
         }
         builder.show()
+    }
+
+    private fun showLegendsArceusGen7BankEntry(bound: SwitchReadSession, file: File) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = runCatching { file.canonicalFile }.getOrNull()
+        val result = runCatching {
+            require(entry != null && entry.parentFile == directory && entry.isFile &&
+                entry.extension.equals("pk7", true)) { "This is not a current Gen 7 PSE Bank entry." }
+            Gen7ToLegendsArceusPa8.review(entry.readBytes())
+        }
+        val converted = result.getOrElse {
+            AlertDialog.Builder(this).setTitle("Gen 7 -> Legends: Arceus blocked")
+                .setMessage((it.message ?: "No safe conversion is available.") +
+                    "\n\nThe PK7 Bank entry and Legends: Arceus save remain unchanged.")
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val selected = entry ?: return
+        val p = LegendsArceusPseBankRestoreEditing.inspectBankRecord(converted.nativeRecord)
+        val message = buildString {
+            append("${LegendsArceusSpeciesNames.name(p.species)} (#${p.species}) • EXP ${p.experience}\n")
+            append("Source: ${selected.name} • preserved 232-byte PK7\n")
+            append("Prepared destination: checksum-valid 360-byte native Legends: Arceus PA8\n\n")
+            append("Exact disclosed conversion effects\n• ")
+            append(converted.effects.joinToString("\n• "))
+            append("\n\nContinue only if you accept every disclosed Legalise effect.")
+        }
+        AlertDialog.Builder(this).setTitle("Gen 7 -> Legends: Arceus • PSE Legalise review")
+            .setMessage(message).setNegativeButton("Cancel", null)
+            .setPositiveButton("Legalise & choose destination") { _, _ ->
+                try {
+                    require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                    val source = selectedSourceUri ?: error("Reopen the selected Legends: Arceus save from PSE.")
+                    require(selected.parentFile == directory && selected.isFile && selected.extension.equals("pk7", true)) {
+                        "The Gen 7 Bank entry changed."
+                    }
+                    Gen7ToLegendsArceusPa8.review(selected.readBytes())
+                    startActivity(Intent(this, SwitchLegendsArceusPseBankRestoreActivity::class.java)
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.bank.entry", selected.name)
+                        .putExtra("pse.bank.legalise", true)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not prepare Gen 7 conversion")
+                        .setMessage(error.message ?: "Both sources remain unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }.show()
     }
 
     private fun showLegendsArceusBankEntry(bound: SwitchReadSession, file: File) {
