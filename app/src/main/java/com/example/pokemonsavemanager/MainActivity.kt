@@ -10548,7 +10548,7 @@ class MainActivity : Activity() {
             append("The destination DV pattern is ").append(if(finalShiny)"shiny" else "not shiny").append("; the source is ").append(if(source.shiny)"shiny" else "not shiny")
             append(". Not represented: SID, PID, nature, ability, gender, Ball, markings, met/egg locations and dates, ribbons, fateful/origin metadata, and the independent Gen 4 HP/SpD IVs. The held-item byte and caught-data fields are 0. ")
             append("Held items, Eggs, alternate forms, unsupported species/moves/text and invalid values are blocked instead of discarded.\n\n")
-            append("A verified kept recovery backup is required. PSE writes one selected native Gen 2 box record, updates Owned/Seen and the primary checksum, reopens the exact record, then removes the Bank entry. Any failure restores or preserves both sides.")
+            append("Verified retained destination and PK4 Bank recovery snapshots are required. PSE writes one selected native Gen 2 box record, updates Owned/Seen and the primary checksum, reopens the exact record, then removes the Bank entry. Any failure restores or preserves both sides independently.")
         }
         val labels=targets.map{gen2BoxDestinationLabel(it.first,it.second,file,profile,openedUri,destination)}.toTypedArray()
         var reviewConsumed=false;var transferConsumed=false
@@ -10570,7 +10570,7 @@ class MainActivity : Activity() {
         targetBox:Int,file:File,openedDestination:ByteArray,openedUri:Uri?,openedLabel:String?,profileKey:String
     ){
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
-        var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null
+        var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
         try{
             val fresh=file.readBytes()
             require(bound()&&fresh.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(fresh).first){"The destination save or source identity changed. Reopen PSE Bank."}
@@ -10591,31 +10591,54 @@ class MainActivity : Activity() {
             val b=File.createTempFile(backupGameName(file)+"_PreGen4ToGen2_",".backup",backupsDir());backup=b
             b.writeBytes(fresh);require(b.readBytes().contentEquals(fresh)){"The recovery backup did not verify."}
             retainGen2SafetyBackup(b,fresh)
-            require(bound()&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(bankBytes)&&isBackupKept(b)){"The source, destination or kept recovery backup changed before writing."}
+            val bankCopy=File.createTempFile("PSE_G4ToG2_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
+            bankCopy.writeBytes(bankBytes);require(bankCopy.readBytes().contentEquals(bankBytes)){"The exact PK4 Bank recovery snapshot did not verify."}
+            require(bound()&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(bankBytes)&&
+                isBackupKept(b)&&b.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){
+                "The source, destination or retained recovery snapshots changed before writing."
+            }
             writeStarted=true;file.writeBytes(work);val written=file.readBytes()
             val wp=detectGen2Profile(written)?:error("The persisted Gen 2 save failed validation.")
             require(bound()&&written.contentEquals(work)&&wp.key==profileKey&&verifyGen2SaveIntegrity(written).first){"The persisted Gen 2 destination failed verification."}
             val after=gen2LocationPayloads(written,"Box $targetBox",wp)
             require(after.size==before.size+1&&sameGen2PayloadList(after.take(before.size),before)&&gen2BoxRawCore(written,targetBox,slot).contentEquals(mon)&&gen2PokedexOwnedSeen(written,wp,source.species)){"The exact converted record, existing Box contents or Pokédex registration did not persist."}
-            require(bankFile.readBytes().contentEquals(bankBytes)&&bound()&&file.readBytes().contentEquals(written)){"The destination or Bank record changed before cleanup."}
+            require(bankFile.readBytes().contentEquals(bankBytes)&&bound()&&file.readBytes().contentEquals(written)&&
+                isBackupKept(b)&&b.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){
+                "The destination, Bank record or retained recovery snapshots changed before cleanup."
+            }
             bankDeleteAttempted=true;require(bankFile.delete()&&!bankFile.exists()){"The destination was written, but Bank cleanup could not be verified."}
-            require(bound()&&file.readBytes().contentEquals(written)){"The verified destination changed after Bank cleanup."}
+            require(bound()&&file.readBytes().contentEquals(written)&&isBackupKept(b)&&
+                b.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){
+                "The verified destination identity or retained recovery snapshots changed after Bank cleanup."
+            }
+            runCatching{bankCopy.delete()}
         }catch(e:Exception){
-            val bankRestored=!writeStarted||runCatching{
+            val bankRestored=runCatching{
                 if(bankDeleteAttempted&&!bankFile.exists()){
                     require(bankFile.createNewFile()){"The Bank recovery path could not be reserved."}
                     bankFile.writeBytes(bankBytes)
                 }
-                bankFile.readBytes().contentEquals(bankBytes)
+                val restored=bankFile.readBytes()
+                restored.contentEquals(bankBytes)&&parsePk4(restored,false)?.let{
+                    it.checksumValid&&it.pid==source.pid&&it.species==source.species&&
+                        it.tid==source.tid&&it.sid==source.sid
+                }==true
             }.getOrDefault(false)
-            val restored=!writeStarted||(bankRestored&&runCatching{
-                file.writeBytes(openedDestination)
-                file.readBytes().contentEquals(openedDestination)&&verifyGen2SaveIntegrity(openedDestination).first
-            }.getOrDefault(false))
-            val recovery=if(!writeStarted)"Nothing was written and the Bank record remains." else if(restored)
-                "The exact Gen 2 destination and original Gen 4 Bank record were restored or kept and verified."
-            else "Automatic recovery could not be verified. Keep the save, Bank entry and recovery backup for review."
-            showDialog("Gen 4 → Gen 2 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:""));return
+            val saveRestored=!writeStarted||runCatching{
+                file.writeBytes(openedDestination);val restored=file.readBytes()
+                restored.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(restored).first&&
+                    detectGen2Profile(restored)?.key==profileKey
+            }.getOrDefault(false)
+            if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&saveRestored->"The exact Generation 2 destination and PK4 Bank record were restored or kept and verified."
+                bankRestored->"The PK4 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                saveRestored->"The exact Generation 2 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
+                else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
+            }
+            showDialog("Gen 4 → Gen 2 PSE conversion failed",(e.message?:"Unknown error")+"\n\n$recovery"+
+                (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery snapshot: ${it.name}"}?:""));return
         }
         Toast.makeText(this,"PSE converted Gen 4 → Gen 2 in Box $targetBox and verified",Toast.LENGTH_LONG).show()
         showGen2PokemonViewer("boxes",targetBox)
