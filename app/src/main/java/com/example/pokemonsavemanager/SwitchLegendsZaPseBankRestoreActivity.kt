@@ -57,7 +57,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid native PA9 to an empty PC-box slot you choose in a new save copy. " +
-                "Native PA9 entries remain byte-exact. Eligible Generation 7 PK7, Sword/Shield PK8, BDSP PB8, and Legends: Arceus PA8 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Native PA9 entries remain byte-exact. Eligible Generation 7 PK7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, and Scarlet/Violet PK9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
                 "Unsupported species, forms, items, moves, limits, or text remain blocked; these PSE conversions do not certify encounter, ability, Mega, or moveset legality."
             textSize = 16f
         })
@@ -201,6 +201,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
 
     private fun conversionSourceName(): String = when {
         bankEntryName?.endsWith(".pk7", true) == true -> "Generation 7"
+        bankEntryName?.endsWith(".pk9", true) == true -> "Scarlet/Violet"
         bankEntryName?.endsWith(".pk8", true) == true -> "Sword/Shield"
         bankEntryName?.endsWith(".pb8", true) == true -> "BDSP"
         bankEntryName?.endsWith(".pa8", true) == true -> "Legends: Arceus"
@@ -213,14 +214,15 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         val entry = File(directory, name).canonicalFile
         val native = entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true)
         val gen7 = entry.extension.equals("pk7", true)
+        val scarletViolet = entry.name.startsWith("switch_sv_") && entry.extension.equals("pk9", true)
         val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
         val bdsp = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
         val legendsArceus = entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)
         require(entry.parentFile == directory && entry.isFile &&
-            (native || gen7 || swordShield || bdsp || legendsArceus)) {
-            "This is not a current Legends: Z-A, Generation 7, Sword/Shield, BDSP, or Legends: Arceus PSE Bank entry."
+            (native || gen7 || swordShield || bdsp || legendsArceus || scarletViolet)) {
+            "This is not a current Legends: Z-A, Generation 7, Sword/Shield, BDSP, Legends: Arceus, or Scarlet/Violet PSE Bank entry."
         }
-        if (gen7 || swordShield || bdsp || legendsArceus) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+        if (gen7 || swordShield || bdsp || legendsArceus || scarletViolet) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
             "Review and explicitly choose the disclosed ${conversionSourceName()} Legalise conversion from PSE Bank."
         }
         return entry
@@ -262,6 +264,13 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                 "The PSE Bank filename no longer matches its native PA8 bytes."
             }
             val converted = LegendsArceusToLegendsZaPa9.review(source)
+            return converted.nativeRecord to converted.effects
+        }
+        if (entry.extension.equals("pk9", true)) {
+            require(entry.name == "switch_sv_${hash}.pk9") {
+                "The PSE Bank filename no longer matches its native PK9 bytes."
+            }
+            val converted = ScarletVioletToLegendsZaPa9.review(source)
             return converted.nativeRecord to converted.effects
         }
         require(entry.name == "switch_za_${hash}.pa9") {
