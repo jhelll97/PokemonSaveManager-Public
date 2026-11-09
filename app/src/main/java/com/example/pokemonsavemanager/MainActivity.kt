@@ -13692,7 +13692,11 @@ class MainActivity : Activity() {
             retainGen2ToGen4SafetyBackup(recovery,fresh)
             val bankCopy=File.createTempFile("PSE_G6ToG4_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
             bankCopy.writeBytes(p.bankBytes);require(bankCopy.readBytes().contentEquals(p.bankBytes)){"The Bank recovery snapshot did not verify."}
-            require(gen6ToGen4StillBound(p)&&recovery.readBytes().contentEquals(fresh)&&isBackupKept(recovery)){"The destination, Bank record or retained recovery backup changed before writing."}
+            require(gen6ToGen4StillBound(p)&&file.readBytes().contentEquals(fresh)&&
+                recovery.readBytes().contentEquals(fresh)&&isBackupKept(recovery)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The destination identity, Bank record or retained recovery snapshots changed before writing."
+            }
             writeStarted=true;file.writeBytes(work);val written=file.readBytes()
             require(written.contentEquals(work)&&written.indices.all{it in allowed||written[it]==fresh[it]}){"The persisted destination changed outside the reviewed byte scope."}
             val wp=detectGen4Profile(written)?:error("The persisted Gen 4 layout could not be reopened.")
@@ -13702,12 +13706,18 @@ class MainActivity : Activity() {
             val reopened=parsePk4(actual,false)?:error("The persisted PK4 could not be reopened.")
             require(actual.contentEquals(pk4)&&sameGen5ToGen4Pk4(reopened,staged)&&gen4Pk4PpUps(actual).contentEquals(gen6Pk6PpUps(bank))){"The exact reviewed PK4 did not persist."}
             require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
-                p.bankFile.readBytes().contentEquals(p.bankBytes)&&file.readBytes().contentEquals(work)){
-                "The source identity, Gen 6 Bank record or verified Gen 4 destination changed before Bank cleanup."
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&file.readBytes().contentEquals(work)&&
+                recovery.readBytes().contentEquals(fresh)&&isBackupKept(recovery)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The source identity, Gen 6 Bank record, verified Gen 4 destination or retained recovery snapshots changed before Bank cleanup."
             }
             deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 6 Bank record could not be removed after destination verification."}
-            require(file.readBytes().contentEquals(work)){"The destination changed after Bank cleanup."}
-            require(recovery.readBytes().contentEquals(fresh)&&isBackupKept(recovery)){"The retained destination recovery backup changed after Bank cleanup."}
+            require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&
+                currentSourceLabel==p.sourceLabel&&file.readBytes().contentEquals(work)&&
+                recovery.readBytes().contentEquals(fresh)&&isBackupKept(recovery)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The verified Gen 4 destination or retained recovery snapshots changed after Bank cleanup."
+            }
             runCatching{bankCopy.delete()}
         }catch(e:Exception){
             val bankRestored=runCatching{
@@ -13715,7 +13725,11 @@ class MainActivity : Activity() {
                     require(p.bankFile.createNewFile()){"The Bank recovery path could not be reserved."}
                     p.bankFile.writeBytes(p.bankBytes)
                 }
-                p.bankFile.readBytes().contentEquals(p.bankBytes)
+                val restored=p.bankFile.readBytes()
+                restored.contentEquals(p.bankBytes)&&parsePk6(restored,0,PK6_STORED_SIZE,false,721)?.let{
+                    it.checksumValid&&it.pid==p.source.pid&&it.species==p.source.species&&
+                        it.tid==p.source.tid&&it.sid==p.source.sid
+                }==true
             }.getOrDefault(false)
             val saveRestored=!writeStarted||runCatching{
                 file.writeBytes(fresh);val restored=file.readBytes()
@@ -13730,7 +13744,9 @@ class MainActivity : Activity() {
                 saveRestored->"The exact Gen 4 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
                 else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
             }
-            showDialog("Gen 6 → Gen 4 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+(bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery: ${it.name}"}?:""));return
+            showDialog("Gen 6 → Gen 4 PSE conversion failed",(e.message?:"Unknown error")+"\n\n$recovery"+
+                (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery snapshot: ${it.name}"}?:""));return
         }
         Toast.makeText(this,"PSE converted Gen 6 → Gen 4 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
         showBank()
