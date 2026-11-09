@@ -35974,19 +35974,71 @@ private data class Gen2ToGen5LegalisePlan(
         else -> null
     }
 
-    private fun sameGen2ToGen7Pk7(a:PokemonEntry,b:PokemonEntry):Boolean = a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.otName==b.otName&&a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&a.gender==b.gender&&a.shiny==b.shiny&&a.originGame==b.originGame&&a.metLocation==b.metLocation&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.language==b.language&&a.heldItem==b.heldItem&&a.friendship==b.friendship&&a.currentHandler==b.currentHandler&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.isEgg==b.isEgg&&a.fatefulEncounter==b.fatefulEncounter&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)
+    private fun gen2BankToGen7PpUps(bankBytes:ByteArray):IntArray{
+        if(bankBytes.size!=GEN2_BANK_FILE_SIZE)return IntArray(4){-1}
+        val o=GEN2_BANK_HEADER_SIZE
+        return IntArray(4){(bankBytes[o+23+it].toInt() ushr 6) and 3}
+    }
+
+    private fun sameGen2ToGen7Pk7(a:PokemonEntry,b:PokemonEntry):Boolean =
+        a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.nickname==b.nickname&&
+            a.isNicknamed==b.isNicknamed&&a.level==b.level&&a.heldItem==b.heldItem&&a.tid==b.tid&&a.sid==b.sid&&
+            a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&
+            a.gender==b.gender&&a.form==b.form&&a.evs.contentEquals(b.evs)&&a.moves.contentEquals(b.moves)&&
+            a.movePP.contentEquals(b.movePP)&&a.ivs.contentEquals(b.ivs)&&a.isEgg==b.isEgg&&a.otName==b.otName&&
+            a.friendship==b.friendship&&a.currentHandler==b.currentHandler&&a.pokerusDays==b.pokerusDays&&
+            a.pokerusStrain==b.pokerusStrain&&a.shiny==b.shiny&&a.language==b.language&&a.markingValue==b.markingValue&&
+            a.fatefulEncounter==b.fatefulEncounter&&a.relearnMoves.contentEquals(b.relearnMoves)&&
+            a.eggLocation==b.eggLocation&&a.metLocation==b.metLocation&&a.ball==b.ball&&a.metLevel==b.metLevel&&
+            a.otGender==b.otGender&&a.originGame==b.originGame&&a.country==b.country&&a.region==b.region&&
+            a.consoleRegion==b.consoleRegion&&a.eggYear==b.eggYear&&a.eggMonth==b.eggMonth&&a.eggDay==b.eggDay&&
+            a.metYear==b.metYear&&a.metMonth==b.metMonth&&a.metDay==b.metDay&&a.hyperTrainFlags==b.hyperTrainFlags
 
     private fun buildGen2ToGen7Pk7(bankBytes:ByteArray,p:Gen2Pokemon,destinationSave:ByteArray,trainer:TrainerData,meta:Gen1ToGen7TransferMeta,plan:Gen2ToGen7LegalisePlan):ByteArray {
-        require(!p.isEgg){"Gen 2 Eggs cannot be converted to Gen 7 until egg-specific conversion is implemented."};require(bankBytes.size==GEN2_BANK_FILE_SIZE){"The preserved Gen 2 Bank record has an unexpected size."};require(destinationSave.size==SIZE_G7_SM||destinationSave.size==SIZE_G7_USUM){"A Generation 7 destination save is required."};gen2ToGen7Rejection(p,plan,meta,bankBytes)?.let{error(it)}
-        val pk=ByteArray(PK6_STORED_SIZE);var ec=((p.tid.toLong() shl 16) xor p.experience xor (p.species.toLong() shl 8) xor p.caughtData.toLong() xor 0x47503237L) and 0xFFFFFFFFL;if(ec==0L)ec=1L
+        require(!p.isEgg){"Gen 2 Eggs cannot be converted to Gen 7 until egg-specific conversion is implemented."}
+        require(bankBytes.size==GEN2_BANK_FILE_SIZE){"The preserved Gen 2 Bank record has an unexpected size."}
+        require(destinationSave.size==SIZE_G7_SM||destinationSave.size==SIZE_G7_USUM){"A Generation 7 destination save is required."}
+        gen2ToGen7Rejection(p,plan,meta,bankBytes)?.let{error(it)}
+        val ppUps=gen2BankToGen7PpUps(bankBytes)
+        require(ppUps.all{it in 0..3}){"The Gen 2 PP-Up values could not be represented safely."}
+        require((0..3).all{i->p.moves[i]!=0||(p.movePP[i]==0&&ppUps[i]==0)}){"An empty Gen 2 move slot contains PP or PP-Up data that cannot be preserved."}
+        val pk=ByteArray(PK6_STORED_SIZE)
+        var ec=((p.tid.toLong() shl 16) xor p.experience xor (p.species.toLong() shl 8) xor p.caughtData.toLong() xor 0x47503237L) and 0xFFFFFFFFL
+        if(ec==0L)ec=1L
         writeU32LE(pk,0x00,ec);writeU16LE(pk,0x04,0);writeU16LE(pk,0x08,p.species);writeU16LE(pk,0x0A,0);writeU16LE(pk,0x0C,p.tid);writeU16LE(pk,0x0E,0);writeU32LE(pk,0x10,p.experience);pk[0x14]=meta.abilityId.toByte();pk[0x15]=meta.abilityNumber.toByte();writeU16LE(pk,0x16,0)
-        val pid=forceTransferShinyState((ec xor 0xA5A55A5AL) and 0xFFFFFFFFL,p.tid,p.shiny);writeU32LE(pk,0x18,pid);pk[0x1C]=plan.nature.toByte();val fateful=p.species==251;pk[0x1D]=(((plan.gender and 3) shl 1) or (if(fateful)1 else 0)).toByte();val evs=gen2ToGen3Evs(p);for(i in 0..5)pk[0x1E+i]=evs[i].toByte();pk[0x2B]=p.pokerus.toByte()
-        val speciesName=GEN2_NATIONAL_NAMES.getOrElse(p.species-1){error("The Gen 2 species name is unavailable.")};val custom=p.nickname.isNotBlank()&&!p.nickname.equals(speciesName,true);val expectedName=if(custom)p.nickname else speciesName;writeGen6String(pk,0x40,26,expectedName);val o=GEN2_BANK_HEADER_SIZE
-        for(i in 0..3){val move=p.moves[i];writeU16LE(pk,0x5A+i*2,move);pk[0x62+i]=if(move==0)0 else p.movePP[i].coerceIn(0,63).toByte();pk[0x66+i]=if(move==0)0 else ((bankBytes[o+23+i].toInt() ushr 6) and 3).toByte()}
-        val ivs=plan.ivs.toIntArray();var iv32=0L;for(i in 0..5)iv32=iv32 or ((ivs[i].toLong() and 31L) shl(i*5));if(custom)iv32=iv32 or 0x80000000L;writeU32LE(pk,0x74,iv32)
-        writeGen6String(pk,0x78,26,trainer.trainerName);pk[0x92]=if(trainer.gender.equals("Female",true))1 else 0;pk[0x93]=1;pk[0xA2]=p.happiness.toByte();writeGen6String(pk,0xB0,26,p.otName);pk[0xCA]=p.happiness.toByte();writeU16LE(pk,0xD8,0);writeU16LE(pk,0xDA,30017);pk[0xDC]=4;pk[0xDD]=(p.level.coerceIn(1,100) and 0x7F).toByte();pk[0xDF]=plan.originGame.toByte();pk[0xE3]=currentGen7LanguageId(destinationSave).coerceIn(1,10).toByte()
-        updatePk6Checksum(pk);val enc=encryptPk6(pk);val q=parsePk6(enc,0,PK6_STORED_SIZE,false,807)?:error("The converted PK7 could not be parsed.")
-        require(q.checksumValid&&q.species==p.species&&q.tid==p.tid&&q.nickname==expectedName&&q.otName==p.otName&&q.experience==p.experience&&q.ability==meta.abilityId&&q.abilityNumber==meta.abilityNumber&&q.nature==plan.nature&&q.gender==plan.gender&&q.shiny==p.shiny&&q.originGame==plan.originGame&&q.metLocation==30017&&q.ball==4&&q.metLevel==p.level.coerceIn(1,100)&&q.heldItem==0&&q.friendship==p.happiness&&q.pokerusDays==(p.pokerus and 0xF)&&q.pokerusStrain==((p.pokerus ushr 4) and 0xF)&&q.fatefulEncounter==fateful&&q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(p.movePP)&&q.evs.contentEquals(evs)&&q.ivs.contentEquals(ivs)){"The converted PK7 did not preserve every destination-representable field."};return enc
+        val pid=forceTransferShinyState((ec xor 0xA5A55A5AL) and 0xFFFFFFFFL,p.tid,p.shiny)
+        writeU32LE(pk,0x18,pid);pk[0x1C]=plan.nature.toByte()
+        val fateful=p.species==251;pk[0x1D]=(((plan.gender and 3) shl 1) or (if(fateful)1 else 0)).toByte()
+        val evs=gen2ToGen3Evs(p);for(i in 0..5)pk[0x1E+i]=evs[i].toByte();pk[0x2B]=p.pokerus.toByte()
+        val speciesName=GEN2_NATIONAL_NAMES.getOrElse(p.species-1){error("The Gen 2 species name is unavailable.")}
+        val custom=p.nickname.isNotBlank()&&!p.nickname.equals(speciesName,true);val expectedName=if(custom)p.nickname else speciesName
+        writeGen6String(pk,0x40,26,expectedName)
+        for(i in 0..3){
+            val move=p.moves[i];writeU16LE(pk,0x5A+i*2,move)
+            pk[0x62+i]=if(move==0)0 else p.movePP[i].coerceIn(0,63).toByte()
+            pk[0x66+i]=if(move==0)0 else ppUps[i].toByte()
+        }
+        val ivs=plan.ivs.toIntArray();var iv32=0L
+        for(i in 0..5)iv32=iv32 or((ivs[i].toLong()and 31L)shl(i*5));if(custom)iv32=iv32 or 0x80000000L;writeU32LE(pk,0x74,iv32)
+        writeGen6String(pk,0x78,26,trainer.trainerName);pk[0x92]=if(trainer.gender.equals("Female",true))1 else 0;pk[0x93]=1;pk[0xA2]=p.happiness.toByte()
+        writeGen6String(pk,0xB0,26,p.otName);pk[0xCA]=p.happiness.toByte();writeU16LE(pk,0xD8,0);writeU16LE(pk,0xDA,30017);pk[0xDC]=4;pk[0xDD]=(p.level.coerceIn(1,100)and 0x7F).toByte();pk[0xDF]=plan.originGame.toByte()
+        val language=currentGen7LanguageId(destinationSave).coerceIn(1,10);pk[0xE3]=language.toByte()
+        updatePk6Checksum(pk);val enc=encryptPk6(pk)
+        val q=parsePk6(enc,0,PK6_STORED_SIZE,false,807)?:error("The converted PK7 could not be parsed.")
+        require(
+            q.checksumValid&&q.species==p.species&&q.nickname==expectedName&&q.isNicknamed==custom&&q.level==p.level&&
+                q.heldItem==0&&q.tid==p.tid&&q.sid==0&&q.experience==p.experience&&q.ability==meta.abilityId&&
+                q.abilityNumber==meta.abilityNumber&&q.pid==pid&&q.nature==plan.nature&&q.gender==plan.gender&&q.form==0&&
+                q.evs.contentEquals(evs)&&q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(p.movePP)&&
+                gen6Pk6PpUps(enc).contentEquals(ppUps)&&q.ivs.contentEquals(ivs)&&!q.isEgg&&q.otName==p.otName&&
+                q.friendship==p.happiness&&q.currentHandler==1&&gen6Pk6HandlerName(enc)==trainer.trainerName&&
+                q.pokerusDays==(p.pokerus and 0xF)&&q.pokerusStrain==((p.pokerus ushr 4)and 0xF)&&q.shiny==p.shiny&&
+                q.language==language&&q.markingValue==0&&q.fatefulEncounter==fateful&&q.relearnMoves.all{it==0}&&
+                q.eggLocation==0&&q.metLocation==30017&&q.ball==4&&q.metLevel==p.level.coerceIn(1,100)&&q.otGender==0&&
+                q.originGame==plan.originGame&&q.country==0&&q.region==0&&q.consoleRegion==0&&q.eggYear==0&&
+                q.eggMonth==0&&q.eggDay==0&&q.metYear==0&&q.metMonth==0&&q.metDay==0&&q.hyperTrainFlags==0
+        ){"The converted PK7 did not preserve every reviewed destination-representable field."}
+        return enc
     }
 
     private data class Gen2Gen7SingleBinding(val uri:Uri?,val label:String?,val destination:ByteArray,val bank:ByteArray){var submitted=false}
@@ -36010,6 +36062,8 @@ private data class Gen2ToGen5LegalisePlan(
         var metadataConsumed=false;var legaliseConsumed=false
         if(importedFile?.absolutePath!=openedFile.absolutePath)return showDialog("Gen 2 → Gen 7","The active save changed. Reopen PSE Bank. Nothing was changed.")
         val file=openedFile;val bank=runCatching{bankFile.readBytes()}.getOrNull()?:return showDialog("Gen 2 → Gen 7","PSE could not read the preserved Gen 2 Bank entry.");val source=parseGen2BankPayload(bank)?:return showDialog("Gen 2 → Gen 7","The selected Gen 2 Bank record is invalid.");if(!sameGen2BankRecord(source,shown))return showDialog("Gen 2 → Gen 7","The selected Gen 2 Bank record changed. Nothing was changed.")
+        val sourcePpUps=gen2BankToGen7PpUps(bank)
+        if(sourcePpUps.any{it !in 0..3}||(0..3).any{source.moves[it]==0&&(source.movePP[it]!=0||sourcePpUps[it]!=0)})return showDialog("Gen 2 → Gen 7 blocked","An empty move slot contains PP or PP-Up data that cannot be preserved. The Bank record and destination were left unchanged.")
         val destination=runCatching{file.readBytes()}.getOrNull()?:return showDialog("Gen 2 → Gen 7","PSE could not read the destination save.");val checksumState=validateGen7CoreChecksums(destination);if(generationForSize(destination.size)!=7||!checksumState.first)return showDialog("Gen 2 → Gen 7",checksumState.second);if(source.isEgg||source.heldItem in GEN2_MAIL_ITEM_IDS)return showDialog("Cannot transfer to Gen 7",gen2ToGen7Rejection(source)!!+"\n\nNo safe deterministic Gen 7 representation is available. Both sides were left unchanged.")
         if(binding!=null&&(!destination.contentEquals(binding.destination)||!bank.contentEquals(binding.bank)||binding.submitted))return showDialog("Gen 2 → Gen 7","The original destination or Bank snapshot changed. Reopen PSE Bank. Nothing was changed.")
         val captured=binding?:Gen2Gen7SingleBinding(openedUri,openedLabel,destination,bank)
@@ -36032,9 +36086,38 @@ private data class Gen2ToGen5LegalisePlan(
         fun snapshotsMatch()=!binding.submitted&&bound()&&preparedDestination.contentEquals(binding.destination)&&bankBytes.contentEquals(binding.bank)&&runCatching{openedFile.readBytes().contentEquals(binding.destination)&&bankFile.readBytes().contentEquals(binding.bank)}.getOrDefault(false)
         if(!snapshotsMatch())return showDialog("Gen 2 → Gen 7","The destination identity or original snapshots changed, or this transfer was already submitted. Reopen PSE Bank. Nothing was changed.")
         var choiceConsumed=false
-        if(importedFile?.absolutePath!=openedFile.absolutePath)return showDialog("Gen 2 → Gen 7","The active save changed after destination selection. Reopen PSE Bank. Nothing was changed.")
-        val file=openedFile;val data=runCatching{file.readBytes()}.getOrNull()?:return;val checks=validateGen7CoreChecksums(data);if(!data.contentEquals(preparedDestination)||generationForSize(data.size)!=7||!checks.first)return showDialog("Gen 2 → Gen 7","The destination changed or failed validation. Nothing was changed.");val info=boxStorageInfo(data)?:return;val first=findFirstEmptyBoxSlot(data,info.first,info.second,info.third)?:return showDialog("Gen 2 → Gen 7","No empty Gen 7 PC box slot was found.");val box=first/30+1;val slot=first%30+1
-        AlertDialog.Builder(this).setTitle("Place legal Gen 7 conversion").setMessage("The confirmed destination-specific changes will be applied. The original Gen 2 Bank record remains exact until the PK7, Pokédex and Gen 7 checksums persist and re-open successfully. A verified kept Gen 7 recovery backup is required before writing; review the retained backup, working save and Bank record if recovery cannot be verified.").setPositiveButton("First Empty ($box/$slot)"){_,_->if(choiceConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 7","The original destination or Bank snapshots changed, or this choice was already used. Reopen PSE Bank.");return@setPositiveButton};choiceConsumed=true;transferGen2BankToGen7(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,first,file,binding)}.setNeutralButton("Choose Box / Slot"){_,_->if(choiceConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 7","The original destination or Bank snapshots changed, or this choice was already used. Reopen PSE Bank.");return@setNeutralButton};choiceConsumed=true;showGen2ToGen7BoxPicker(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,file,binding)}.setNegativeButton("Cancel",null).show()
+        val data=runCatching{openedFile.readBytes()}.getOrNull()?:return
+        val checks=validateGen7CoreChecksums(data)
+        if(!data.contentEquals(preparedDestination)||generationForSize(data.size)!=7||!checks.first)
+            return showDialog("Gen 2 → Gen 7","The destination changed or failed validation. Nothing was changed.")
+        val info=boxStorageInfo(data)?:return
+        val first=findFirstEmptyBoxSlot(data,info.first,info.second,info.third)
+            ?:return showDialog("Gen 2 → Gen 7","No empty Gen 7 PC box slot was found.")
+        val ppUps=gen2BankToGen7PpUps(bankBytes);val decrypted=decryptPk6IfNeeded(pk7);val ec=readU32LE(decrypted,0)
+        val preview=buildString{
+            append("PSE Bank conversion preview\n\n")
+            append(gen2ToGen7LegaliseChanges(plan)).append("\n\n")
+            append("Preserved: species, nickname, original OT/TID, EXP, level, moves, current PP (${converted.movePP.joinToString("/")}), PP Ups (${ppUps.joinToString("/")}), happiness ${converted.friendship}, Pokérus strain ${converted.pokerusStrain}/days ${converted.pokerusDays}, and shiny state (${converted.shiny}).\n")
+            append("Encryption constant: ${"%08X".format(ec)}. PID: ${"%08X".format(converted.pid)}; SID becomes 0; nature #${converted.nature} is EXP mod 25; gender becomes #${converted.gender}; ability #${converted.ability}, slot ${converted.abilityNumber}.\n")
+            append("IVs: deterministic Gen 7 mapping ${converted.ivs.joinToString("/")}, including ${if(source.species==251)5 else 3} required flawless values while preserving gender and shiny state. EVs: Gen 2 Stat Exp ÷ 257, with the single Special budget split across SpA/SpD and total capped at 510; final ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")
+            append("Destination trainer “${gen6Pk6HandlerName(pk7)}” becomes current handler. Native values: language #${converted.language}, no held item, Poké Ball, met level ${converted.metLevel}, PSE Johto marker #${converted.metLocation}, origin #${converted.originGame}, and no met date. Celebi alone receives the fateful-encounter flag (${converted.fatefulEncounter}).\n")
+            if(source.heldItem!=0)append("Held item #${source.heldItem} is explicitly removed because Gen 2 and Gen 7 item IDs are not interchangeable.\n")
+            if(source.caughtData!=0)append("Gen 2 caught/met value 0x${source.caughtData.toString(16).uppercase().padStart(4,'0')} is omitted because it has no exact PK7 representation.\n")
+            append("Egg, geographic, relearn, ribbon, marking and Hyper Training fields remain empty; OT gender defaults to male because Gen 2 does not encode it in this Bank record.\n\n")
+            append("This is a reviewed PSE native PK7 conversion and does not claim official migration provenance. The source save stays unchanged. The exact Bank record remains until a Keep-pinned destination backup, native PK7, PP Ups, Pokédex registration, Gen 7 checksums and reopened destination all verify.")
+        }
+        val box=first/30+1;val slot=first%30+1
+        AlertDialog.Builder(this).setTitle("PSE Convert ${source.nickname.ifBlank{"Pokémon #${source.species}"}} to Gen 7")
+            .setMessage(preview)
+            .setPositiveButton("First Empty ($box/$slot)"){_,_->
+                if(choiceConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 7","The original destination or Bank snapshots changed, or this choice was already used. Reopen PSE Bank.");return@setPositiveButton}
+                choiceConsumed=true;transferGen2BankToGen7(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,first,openedFile,binding)
+            }
+            .setNeutralButton("Choose Box / Slot"){_,_->
+                if(choiceConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 7","The original destination or Bank snapshots changed, or this choice was already used. Reopen PSE Bank.");return@setNeutralButton}
+                choiceConsumed=true;showGen2ToGen7BoxPicker(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,openedFile,binding)
+            }
+            .setNegativeButton("Cancel",null).show()
     }
 
     private fun showGen2ToGen7BoxPicker(bankFile:File,source:Gen2Pokemon,bankBytes:ByteArray,preparedDestination:ByteArray,trainer:TrainerData,meta:Gen1ToGen7TransferMeta,plan:Gen2ToGen7LegalisePlan,pk7:ByteArray,converted:PokemonEntry,openedFile:File,binding:Gen2Gen7SingleBinding){
@@ -36060,42 +36143,66 @@ private data class Gen2ToGen5LegalisePlan(
 
     private fun transferGen2BankToGen7(bankFile:File,expected:Gen2Pokemon,expectedBank:ByteArray,preparedDestination:ByteArray,trainer:TrainerData,meta:Gen1ToGen7TransferMeta,plan:Gen2ToGen7LegalisePlan,preparedPk7:ByteArray,prepared:PokemonEntry,target:Int,openedFile:File,binding:Gen2Gen7SingleBinding){
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==binding.uri&&currentSourceLabel==binding.label
-        if(binding.submitted||!bound()){showDialog("Gen 2 → Gen 7","The destination identity or original snapshots changed, or this selection was already submitted. Reopen PSE Bank. Nothing was changed.");return};binding.submitted=true
-        if(importedFile?.absolutePath!=openedFile.absolutePath)return showDialog("Gen 2 → Gen 7","The active save changed after destination selection. Reopen PSE Bank. Nothing was changed.")
-        val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;var writeStarted=false;var bankDeleteAttempted=false
-        var safetyBackup:File?=null
+        if(binding.submitted||!bound()){showDialog("Gen 2 → Gen 7","The destination identity or original snapshots changed, or this selection was already submitted. Reopen PSE Bank. Nothing was changed.");return}
+        binding.submitted=true
+        val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return
+        var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null
         try{
             require(bound()&&fresh.contentEquals(binding.destination)&&expectedBank.contentEquals(binding.bank)){"The original Gen 7 destination identity or Bank binding changed."}
-            require(fresh.contentEquals(preparedDestination)&&generationForSize(fresh.size)==7){"The Gen 7 destination changed while the conversion was prepared."};val checksumState=validateGen7CoreChecksums(fresh);require(checksumState.first){checksumState.second};val info=boxStorageInfo(fresh)?:error("PSE could not resolve Gen 7 PC storage.");require(target in 0 until info.second){"Invalid Gen 7 PC slot."};val off=info.first+target*PK6_STORED_SIZE;require(parsePk6(fresh,off,PK6_STORED_SIZE,false,info.third)==null){"The destination slot is no longer empty."}
-            val bank=bankFile.readBytes();require(bank.contentEquals(expectedBank)){"The selected Gen 2 Bank bytes changed after confirmation."};val source=parseGen2BankPayload(bank)?:error("The selected Gen 2 Bank record is invalid.");require(sameGen2BankRecord(source,expected)){"The selected Gen 2 Pokémon changed after confirmation."};require(plan==gen2ToGen7LegalisePlan(source,meta,bank)){"The prepared Gen 7 Legalise plan no longer matches the selected Pokémon."};gen2ToGen7Rejection(source,plan,meta,bank)?.let{error(it)};val pk7=buildGen2ToGen7Pk7(bank,source,fresh,trainer,meta,plan);val converted=parsePk6(pk7,0,PK6_STORED_SIZE,false,807)?:error("The refreshed PK7 could not be parsed.");require(pk7.contentEquals(preparedPk7)&&sameGen2ToGen7Pk7(converted,prepared)){"The prepared PK7 conversion changed before staging."}
-            val storageLength=info.second*PK6_STORED_SIZE;val beforeStorage=fresh.copyOfRange(info.first,info.first+storageLength);val relative=target*PK6_STORED_SIZE;val work=fresh.copyOf();pk7.copyInto(work,off);val staged=parsePk6(work,off,PK6_STORED_SIZE,false,807)?:error("The staged PK7 could not be parsed.");require(sameGen2ToGen7Pk7(staged,converted)){"The staged PK7 did not preserve every converted field."};fun pcIsolated(data:ByteArray):Boolean{val after=data.copyOfRange(info.first,info.first+storageLength);return after.indices.all{it in relative until relative+PK6_STORED_SIZE||after[it]==beforeStorage[it]}}
-            require(pcIsolated(work)){"Unrelated Gen 7 PC data changed during staging."};registerGen7Dex(work,staged.species,staged.form,staged.gender,staged.shiny,staged.language);updateGen7SaveBlockChecksum(work,14,info.first,storageLength);val dexInfo=gen7BlockInfo(work,6)?:error("Gen 7 Pokédex block layout is unavailable.");updateGen7SaveBlockChecksum(work,6,dexInfo.first,dexInfo.second);finalizeGen7Save(work);require(gen7DexRegistered(work,staged)){"The staged Gen 7 Pokédex registration failed verification."};val stagedChecks=validateGen7CoreChecksums(work);require(stagedChecks.first){stagedChecks.second};require(pcIsolated(work)){"Unrelated Gen 7 PC data changed while rebuilding integrity data."}
-            require(bankFile.readBytes().contentEquals(expectedBank)){"The selected Gen 2 Bank record changed during staging."}
-            require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(fresh)){"The active Gen 7 destination changed during staging. Nothing was written."}
-            require(bound()&&validGen2ToGen7Destination(work)){"The staged Gen 7 destination identity or core save-block integrity is invalid."}
+            require(fresh.contentEquals(preparedDestination)&&generationForSize(fresh.size)==7){"The Gen 7 destination changed while the conversion was prepared."}
+            val checksumState=validateGen7CoreChecksums(fresh);require(checksumState.first){checksumState.second}
+            val info=boxStorageInfo(fresh)?:error("PSE could not resolve Gen 7 PC storage.")
+            require(target in 0 until info.second){"Invalid Gen 7 PC slot."}
+            val off=info.first+target*PK6_STORED_SIZE
+            require(parsePk6(fresh,off,PK6_STORED_SIZE,false,info.third)==null){"The destination slot is no longer empty."}
+            val bank=bankFile.readBytes();require(bank.contentEquals(expectedBank)){"The selected Gen 2 Bank bytes changed after confirmation."}
+            val source=parseGen2BankPayload(bank)?:error("The selected Gen 2 Bank record is invalid.")
+            require(sameGen2BankRecord(source,expected)){"The selected Gen 2 Pokémon changed after confirmation."}
+            require(plan==gen2ToGen7LegalisePlan(source,meta,bank)){"The prepared Gen 7 Legalise plan no longer matches the selected Pokémon."}
+            gen2ToGen7Rejection(source,plan,meta,bank)?.let{error(it)}
+            val expectedPpUps=gen2BankToGen7PpUps(bank)
+            require((0..3).all{i->source.moves[i]!=0||(source.movePP[i]==0&&expectedPpUps[i]==0)}){"An empty move slot contains PP or PP-Up data that cannot be preserved."}
+            val pk7=buildGen2ToGen7Pk7(bank,source,fresh,trainer,meta,plan)
+            val converted=parsePk6(pk7,0,PK6_STORED_SIZE,false,807)?:error("The refreshed PK7 could not be parsed.")
+            require(pk7.contentEquals(preparedPk7)&&sameGen2ToGen7Pk7(converted,prepared)&&gen6Pk6PpUps(pk7).contentEquals(expectedPpUps)){"The reviewed PK7 or PP-Up conversion changed before staging."}
+            val storageLength=info.second*PK6_STORED_SIZE
+            val beforeStorage=fresh.copyOfRange(info.first,info.first+storageLength);val relative=target*PK6_STORED_SIZE
+            val work=fresh.copyOf();pk7.copyInto(work,off)
+            val stagedBytes=work.copyOfRange(off,off+PK6_STORED_SIZE)
+            val staged=parsePk6(stagedBytes,0,PK6_STORED_SIZE,false,807)?:error("The staged PK7 could not be parsed.")
+            require(stagedBytes.contentEquals(pk7)&&sameGen2ToGen7Pk7(staged,converted)&&gen6Pk6PpUps(stagedBytes).contentEquals(expectedPpUps)){"The staged PK7 did not preserve every reviewed field and PP-Up value."}
+            fun pcIsolated(data:ByteArray):Boolean{val after=data.copyOfRange(info.first,info.first+storageLength);return after.indices.all{it in relative until relative+PK6_STORED_SIZE||after[it]==beforeStorage[it]}}
+            require(pcIsolated(work)){"Unrelated Gen 7 PC data changed during staging."}
+            registerGen7Dex(work,staged.species,staged.form,staged.gender,staged.shiny,staged.language);updateGen7SaveBlockChecksum(work,14,info.first,storageLength)
+            val dexInfo=gen7BlockInfo(work,6)?:error("Gen 7 Pokédex block layout is unavailable.")
+            updateGen7SaveBlockChecksum(work,6,dexInfo.first,dexInfo.second);finalizeGen7Save(work)
+            require(gen7DexRegistered(work,staged)){"The staged Gen 7 Pokédex registration failed verification."}
+            val stagedChecks=validateGen7CoreChecksums(work);require(stagedChecks.first){stagedChecks.second};require(pcIsolated(work)){"Unrelated Gen 7 PC data changed while rebuilding integrity data."}
+            require(bound()&&bankFile.readBytes().contentEquals(expectedBank)&&file.readBytes().contentEquals(fresh)){"The source or destination changed during staging."}
+            require(validGen2ToGen7Destination(work)){"The staged Gen 7 destination integrity is invalid."}
             val backup=File.createTempFile(backupGameName(file)+"_PreGen2ToGen7Transfer_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The exact Gen 7 recovery backup did not verify."};retainGen2ToGen7SafetyBackup(backup,fresh)
-            require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(expectedBank)){"The Gen 7 destination, Bank record or retained backup changed before writing. Nothing was written."}
-            writeStarted=true
-            file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)&&boxStorageInfo(written)==info){"The destination changed while it was written."};val actual=written.copyOfRange(off,off+PK6_STORED_SIZE);val q=parsePk6(actual,0,PK6_STORED_SIZE,false,807)?:error("The persisted PK7 could not be parsed.");require(actual.contentEquals(pk7)&&sameGen2ToGen7Pk7(q,staged)&&gen7DexRegistered(written,q)){"The exact converted PK7 or Pokédex registration did not persist."};val writtenChecks=validateGen7CoreChecksums(written);require(writtenChecks.first){writtenChecks.second};require(pcIsolated(written)){"Unrelated Gen 7 PC data changed after persistence."}
-            require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 7 destination changed before Bank cleanup."}
-            require(bound()&&validGen2ToGen7Destination(written)){"The Gen 7 destination identity or core save-block integrity changed before Bank cleanup."}
-            val cleanup=bankFile.readBytes();require(cleanup.contentEquals(expectedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true){"The Gen 2 Bank record changed before cleanup."};bankDeleteAttempted=true;require(bankFile.delete()){"The Gen 2 Bank entry could not be removed after destination verification."};require(!bankFile.exists()){"The removed Gen 2 Bank entry still exists."}
-            require(bound()){"The Gen 7 destination identity changed after Bank cleanup."}
-            require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 7 destination changed after Bank cleanup."}
+            require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(expectedBank)){"The destination, Bank record or retained backup changed before writing."}
+            writeStarted=true;file.writeBytes(work)
+            val written=file.readBytes();require(written.contentEquals(work)&&boxStorageInfo(written)==info){"The destination changed while it was written."}
+            val actual=written.copyOfRange(off,off+PK6_STORED_SIZE);val reopened=parsePk6(actual,0,PK6_STORED_SIZE,false,807)?:error("The persisted PK7 could not be parsed.")
+            require(actual.contentEquals(pk7)&&sameGen2ToGen7Pk7(reopened,staged)&&gen6Pk6PpUps(actual).contentEquals(expectedPpUps)&&gen7DexRegistered(written,reopened)){"The exact converted PK7, PP Ups or Pokédex registration did not persist."}
+            val writtenChecks=validateGen7CoreChecksums(written);require(writtenChecks.first){writtenChecks.second};require(pcIsolated(written)){"Unrelated Gen 7 PC data changed after persistence."}
+            val cleanup=bankFile.readBytes()
+            require(bound()&&cleanup.contentEquals(expectedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true&&file.readBytes().contentEquals(work)&&isBackupKept(backup)){"The Bank record, destination identity or retained backup changed before cleanup."}
+            bankDeleteAttempted=true;require(bankFile.delete()&&!bankFile.exists()){"The Gen 2 Bank entry could not be removed after destination verification."}
+            require(bound()&&file.readBytes().contentEquals(work)){"The verified Gen 7 destination changed after Bank cleanup."}
         }catch(e:Exception){
-            val bankRestored=if(!writeStarted)true else runCatching{
-                if(bankDeleteAttempted&&!bankFile.exists()){
-                    require(bankFile.createNewFile()){"The Bank recovery path could not be reserved."}
-                    bankFile.writeBytes(expectedBank)
-                }
-                require(bankFile.readBytes().contentEquals(expectedBank)){"The original Gen 2 Bank record could not be verified; no existing record was overwritten."}
-            }.isSuccess
-            val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)&&runCatching{file.readBytes().contentEquals(fresh)&&validGen2ToGen7Destination(fresh)}.getOrDefault(false))
-            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 7 destination and Gen 2 Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
-            showDialog("Gen 2 → Gen 7 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
+            val bankRestored=runCatching{
+                if(bankDeleteAttempted){if(!bankFile.exists())require(bankFile.createNewFile()){"The Bank recovery path could not be reserved."};bankFile.writeBytes(expectedBank)}
+                bankFile.readBytes().contentEquals(expectedBank)&&parseGen2BankPayload(bankFile.readBytes())?.let{sameGen2BankRecord(it,expected)}==true
+            }.getOrDefault(false)
+            val destinationRestored=!writeStarted||runCatching{file.writeBytes(fresh);file.readBytes().contentEquals(fresh)&&validGen2ToGen7Destination(fresh)}.getOrDefault(false)
+            val recovery=if(bankRestored&&destinationRestored)"The exact Gen 7 destination and Gen 2 Bank record were restored or kept and verified." else "Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
+            showDialog("Gen 2 → Gen 7 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
-        Toast.makeText(this,"Transferred Gen 2 → Gen 7 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show();showBank()
+        Toast.makeText(this,"PSE converted Gen 2 → Gen 7 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
+        showBank()
     }
 
     private data class Gen2Gen7BatchPrepared(
