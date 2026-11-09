@@ -14471,9 +14471,47 @@ class MainActivity : Activity() {
             registerGen6Dex(work,staged.species,staged.gender,staged.shiny,staged.language);updateGen6BoxChecksum(work);updateGen6DexChecksum(work);require(work.indices.all{it in allowed||work[it]==fresh[it]}){"The conversion changed data outside the reviewed PK6, Pokédex flags and native checksums."};require(gen6BoxChecksumValid(work)&&gen6BlockChecksumValid(work,20)&&gen6DexCaught(work,staged.species)){"The staged Gen 6 save failed storage, Pokédex or checksum verification."}
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen7ToGen6_",".backup",backupsDir());backup=recovery;recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The exact Gen 6 recovery backup did not verify."};retainGenToGen6SafetyBackup(recovery,fresh);val bankCopy=File.createTempFile("PSE_G7ToG6_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy;bankCopy.writeBytes(p.bankBytes);require(bankCopy.readBytes().contentEquals(p.bankBytes)){"The Bank recovery snapshot did not verify."};require(gen7ToGen6SnapshotsMatch(p,false)&&isBackupKept(recovery)&&file.readBytes().contentEquals(fresh)){"The source identity, snapshots or retained backup changed before writing."}
             writeStarted=true;file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)&&written.indices.all{it in allowed||written[it]==fresh[it]}){"The persisted Gen 6 save differs from the reviewed write scope."};require(gen6BoxChecksumValid(written)&&gen6BlockChecksumValid(written,20)&&gen6DexCaught(written,staged.species)){"The persisted Gen 6 save failed checksum or Pokédex validation."};val actual=written.copyOfRange(off,off+PK6_STORED_SIZE);val reopened=parsePk6(actual,0,PK6_STORED_SIZE,false,721)?:error("The persisted PK6 could not be parsed.");require(actual.contentEquals(pk6)&&sameGen6ToGen7Pk7(reopened,p.converted)&&reopened.markingValue==p.converted.markingValue&&gen6Pk6PpUps(actual).contentEquals(gen6Pk6PpUps(bank))){"The exact converted PK6 did not persist after reopening."}
-            require(p.bankFile.readBytes().contentEquals(p.bankBytes)&&file.readBytes().contentEquals(work)){"The Bank record or destination changed before cleanup."};deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 7 Bank record could not be removed after destination verification."};require(file.readBytes().contentEquals(work)){"The destination changed after Bank cleanup."};runCatching{bankCopy.delete()}
+            require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&
+                currentSourceLabel==p.sourceLabel&&p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                file.readBytes().contentEquals(work)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The Gen 7 Bank record, destination identity or retained recovery snapshots changed before cleanup."
+            }
+            deleteAttempted=true
+            require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 7 Bank record could not be removed after destination verification."}
+            require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&
+                currentSourceLabel==p.sourceLabel&&file.readBytes().contentEquals(work)&&
+                isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The verified Gen 6 destination or retained recovery snapshots changed after Bank cleanup."
+            }
+            runCatching{bankCopy.delete()}
         }catch(e:Exception){
-            val bankRestored=runCatching{if(deleteAttempted&&!p.bankFile.exists())p.bankFile.writeBytes(p.bankBytes);p.bankFile.readBytes().contentEquals(p.bankBytes)}.getOrDefault(false);val destinationRestored=!writeStarted||runCatching{file.writeBytes(fresh);val restored=file.readBytes();restored.contentEquals(fresh)&&gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)}.getOrDefault(false);val recovery=if(bankRestored&&destinationRestored)"The exact Gen 6 destination and Gen 7 Bank record were restored or kept and verified." else "Automatic recovery could not be fully verified. Keep the retained recovery backup and Bank recovery file for review.";showDialog("Gen 7 → Gen 6 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+(bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery: ${it.name}"}?:""));return
+            val bankRestored=runCatching{
+                if(deleteAttempted&&!p.bankFile.exists()){
+                    require(p.bankFile.createNewFile()){"The Bank recovery path could not be reserved."}
+                    p.bankFile.writeBytes(p.bankBytes)
+                }
+                val restored=p.bankFile.readBytes()
+                restored.contentEquals(p.bankBytes)&&parsePk6(restored,0,PK6_STORED_SIZE,false,807)?.let{
+                    it.checksumValid&&it.pid==p.source.pid&&it.species==p.source.species&&
+                        it.tid==p.source.tid&&it.sid==p.source.sid
+                }==true
+            }.getOrDefault(false)
+            val destinationRestored=!writeStarted||runCatching{
+                file.writeBytes(fresh);val restored=file.readBytes()
+                restored.contentEquals(fresh)&&gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)
+            }.getOrDefault(false)
+            if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&destinationRestored->"The exact Gen 6 destination and Gen 7 Bank record were restored or kept and verified."
+                bankRestored->"The Gen 7 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                destinationRestored->"The exact Gen 6 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
+                else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
+            }
+            showDialog("Gen 7 → Gen 6 PSE conversion failed",(e.message?:"Unknown error")+"\n\n"+recovery+
+                (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery snapshot: ${it.name}"}?:""));return
         }
         Toast.makeText(this,"PSE converted Gen 7 → Gen 6 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show();showBank()
     }
