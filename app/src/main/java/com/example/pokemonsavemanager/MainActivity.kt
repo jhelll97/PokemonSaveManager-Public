@@ -13205,19 +13205,21 @@ class MainActivity : Activity() {
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
             source.tid!=shown.tid||source.sid!=shown.sid)
             return showDialog("Gen 7 → Gen 4","The selected Bank record changed or failed its PK7 checksum.")
-        val originLegalised=source.originGame !in 1..12
-        val plan=if(!originLegalised)Gen6Gen5Plan(source.originGame,"preserve origin ID ${source.originGame}",false)else requestedPlan
+        val sourceOriginTitle=gen4CompatibleOriginTitle(source.originGame)
+        val originLegalised=sourceOriginTitle==null
+        val plan=if(sourceOriginTitle!=null)Gen6Gen5Plan(source.originGame,"preserve $sourceOriginTitle (ID ${source.originGame})",false)else requestedPlan
         if(plan==null){
-            val ids=(1..12).toList()
-            AlertDialog.Builder(this).setTitle("Choose Gen 4-compatible origin")
-                .setMessage("Origin game ID ${source.originGame} cannot be written to native PK4. Choose the origin ID to write. This explicit PSE Legalise choice changes provenance and does not verify history. Cancel leaves both files unchanged.")
-                .setItems(ids.map{"Origin game ID $it"}.toTypedArray()){_,which->
-                    val id=ids[which];prepareGen7ToGen4Transfer(bankFile,shown,Gen6Gen5Plan(id,"user-selected Gen 4-compatible origin ID $id",true))
+            val ids=listOf(1,2,3,4,5,7,8,10,11,12,15)
+            val choices=ids.map{it to requireNotNull(gen4CompatibleOriginTitle(it))}
+            AlertDialog.Builder(this).setTitle("Choose documented Gen 4 origin mapping")
+                .setMessage("Origin ${originGameName(source.originGame)} (ID ${source.originGame}) has no documented native PK4 mapping. Choose the exact title and ID to write. This explicit PSE Legalise choice changes provenance and does not verify history. Cancel leaves both files unchanged.")
+                .setItems(choices.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
+                    val (id,title)=choices[which];prepareGen7ToGen4Transfer(bankFile,shown,Gen6Gen5Plan(id,"user-selected $title (ID $id)",true))
                 }.setNegativeButton("Cancel",null).show()
             return
         }
-        if(plan.originGame !in 1..12||plan.legalised!=originLegalised)
-            return showDialog("Gen 7 → Gen 4 blocked","The reviewed origin mapping no longer matches this record. Nothing was changed.")
+        if(gen4CompatibleOriginTitle(plan.originGame)==null||plan.legalised!=originLegalised)
+            return showDialog("Gen 7 → Gen 4 blocked","The reviewed origin title and ID no longer match this record. Nothing was changed.")
         gen7ToGen6PreflightRejection(source,bank,plan.originGame)?.let{
             return showDialog("Gen 7 → Gen 4 blocked","$it\n\nThe Bank record and destination were left unchanged.")
         }
@@ -13255,10 +13257,12 @@ class MainActivity : Activity() {
             val converted4=parsePk4(pk4,false)
                 ?:return@loadGen3ToGen4MetaAsync showDialog("Gen 7 → Gen 4","The prepared PK4 could not be reopened.")
             val omitted=gen6ToGen5OmittedMetadata(pk6,converted6)
+            val reviewedOriginTitle=gen4CompatibleOriginTitle(plan.originGame)
+                ?:return@loadGen3ToGen4MetaAsync showDialog("Gen 7 → Gen 4 blocked","The reviewed origin title and ID are no longer destination-valid. Nothing was changed.")
             val prepared=Gen7Gen4Prepared(selected,bank,source,destination,plan,pk6,converted6,pk5,converted5,meta4,pk4,converted4,file,openedUri,openedLabel,omitted)
             val pidNote=if(converted4.pid==source.pid)"PID remains ${"%08X".format(source.pid)}." else
                 "PID changes ${"%08X".format(source.pid)} → ${"%08X".format(converted4.pid)} only to preserve shiny state, nature, gender and the verified normal ability slot under Generation 5/4 PID rules."
-            val originNote=if(plan.legalised)"Origin ${source.originGame} → ${plan.originGame}: ${plan.originLabel}. This is an explicit PSE Legalise provenance edit, not verified history." else "Origin ID ${source.originGame} is preserved."
+            val originNote=if(plan.legalised)"Origin Legalise: ${originGameName(source.originGame)} (ID ${source.originGame}) → $reviewedOriginTitle (ID ${plan.originGame}). This is a user-selected provenance edit and does not verify history." else "Origin preserved: $reviewedOriginTitle (ID ${plan.originGame})."
             val preview=buildString{
                 append("PSE backward conversion; this is not an in-game trade, official migration or provenance claim. The source save stays unchanged and the exact PK7 remains in Bank until the native PK4 reopens successfully.\n\n")
                 append("Preserved: species/form, TID/SID, nickname and OT, EXP, nature, gender, shiny state, verified non-hidden ability/slot, IVs, EVs, moves, current PP, PP Ups, active friendship, Pokérus, Ball, met level, dates, markings and fateful marker. ")
@@ -13367,6 +13371,7 @@ class MainActivity : Activity() {
             }
             deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 7 Bank record could not be removed after destination verification."}
             require(file.readBytes().contentEquals(work)){"The destination changed after Bank cleanup."}
+            require(recovery.readBytes().contentEquals(fresh)&&isBackupKept(recovery)){"The retained destination recovery backup changed after Bank cleanup."}
             runCatching{bankCopy.delete()}
         }catch(e:Exception){
             val bankRestored=runCatching{
@@ -13382,8 +13387,13 @@ class MainActivity : Activity() {
                 val rv=gen4Validation(restored,rp)
                 restored.contentEquals(fresh)&&rv.generalChecksum&&rv.storageChecksum&&rv.badPk4==0
             }.getOrDefault(false)
-            val recovery=if(bankRestored&&saveRestored)"The exact Gen 4 destination and Gen 7 Bank record were restored or kept and verified."
-            else "Automatic recovery could not be fully verified. Keep the retained recovery backup and Bank recovery file for review."
+            if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&saveRestored->"The exact Gen 4 destination and Gen 7 Bank record were restored or kept and verified."
+                bankRestored->"The Gen 7 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                saveRestored->"The exact Gen 4 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
+                else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
+            }
             showDialog("Gen 7 → Gen 4 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+(bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery: ${it.name}"}?:""));return
         }
         Toast.makeText(this,"PSE converted Gen 7 → Gen 4 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
