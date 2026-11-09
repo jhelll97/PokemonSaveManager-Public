@@ -57,7 +57,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid native PA9 to an empty PC-box slot you choose in a new save copy. " +
-                "Native PA9 entries remain byte-exact. Eligible Sword/Shield PK8 and BDSP PB8 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Native PA9 entries remain byte-exact. Eligible Sword/Shield PK8, BDSP PB8, and Legends: Arceus PA8 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
                 "Unsupported species, forms, items, moves, limits, or text remain blocked; these PSE conversions do not certify encounter, ability, Mega, or moveset legality."
             textSize = 16f
         })
@@ -202,6 +202,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
     private fun conversionSourceName(): String = when {
         bankEntryName?.endsWith(".pk8", true) == true -> "Sword/Shield"
         bankEntryName?.endsWith(".pb8", true) == true -> "BDSP"
+        bankEntryName?.endsWith(".pa8", true) == true -> "Legends: Arceus"
         else -> "Native PA9"
     }
 
@@ -212,10 +213,11 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         val native = entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true)
         val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
         val bdsp = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
-        require(entry.parentFile == directory && entry.isFile && (native || swordShield || bdsp)) {
-            "This is not a current Legends: Z-A, Sword/Shield, or BDSP PSE Bank entry."
+        val legendsArceus = entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)
+        require(entry.parentFile == directory && entry.isFile && (native || swordShield || bdsp || legendsArceus)) {
+            "This is not a current Legends: Z-A, Sword/Shield, BDSP, or Legends: Arceus PSE Bank entry."
         }
-        if (swordShield || bdsp) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+        if (swordShield || bdsp || legendsArceus) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
             "Review and explicitly choose the disclosed ${conversionSourceName()} Legalise conversion from PSE Bank."
         }
         return entry
@@ -246,6 +248,13 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                 "The PSE Bank filename no longer matches its native PB8 bytes."
             }
             val converted = BdspToLegendsZaPa9.review(source)
+            return converted.nativeRecord to converted.effects
+        }
+        if (entry.extension.equals("pa8", true)) {
+            require(entry.name == "switch_pla_${hash}.pa8") {
+                "The PSE Bank filename no longer matches its native PA8 bytes."
+            }
+            val converted = LegendsArceusToLegendsZaPa9.review(source)
             return converted.nativeRecord to converted.effects
         }
         require(entry.name == "switch_za_${hash}.pa9") {
