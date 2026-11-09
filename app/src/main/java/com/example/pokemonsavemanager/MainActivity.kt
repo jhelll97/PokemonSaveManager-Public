@@ -13983,20 +13983,21 @@ class MainActivity : Activity() {
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
             source.tid!=shown.tid||source.sid!=shown.sid)
             return showDialog("Gen 7 → Gen 5","The selected Bank record changed or failed its PK7 checksum.")
-        val originLegalised=source.originGame !in 1..23
+        val originLegalised=gen5CompatibleOriginTitle(source.originGame)==null
         val originGame=requestedOriginGame?:source.originGame
         if(originLegalised&&requestedOriginGame==null){
-            val options=if(profile.sequel)arrayOf("Legalise origin as Pokémon Black 2 (22)","Legalise origin as Pokémon White 2 (23)")
-                else arrayOf("Legalise origin as Pokémon Black (20)","Legalise origin as Pokémon White (21)")
+            val options=if(profile.sequel)listOf(22 to "Pokémon White 2",23 to "Pokémon Black 2")
+                else listOf(20 to "Pokémon White",21 to "Pokémon Black")
             AlertDialog.Builder(this).setTitle("Choose Gen 5 origin mapping")
-                .setMessage("Origin game ID ${source.originGame} cannot be written to native PK5. Choose the destination-family origin to write. This explicit PSE Legalise choice changes provenance and does not verify history. Cancel leaves both files unchanged.")
-                .setItems(options){_,which->
-                    val id=if(profile.sequel)22+which else 20+which
-                    prepareGen7ToGen5Transfer(bankFile,shown,id)
+                .setMessage("Origin game ID ${source.originGame} cannot be written to native PK5. Choose the exact destination-family title and ID to write. This explicit PSE Legalise choice changes provenance and does not verify history. Cancel leaves both files unchanged.")
+                .setItems(options.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
+                    prepareGen7ToGen5Transfer(bankFile,shown,options[which].first)
                 }.setNegativeButton("Cancel",null).show()
             return
         }
-        if(originGame !in 1..23)return showDialog("Gen 7 → Gen 5 blocked","Choose a valid Generation 5-compatible origin ID. Nothing was changed.")
+        if(gen5CompatibleOriginTitle(originGame)==null)return showDialog("Gen 7 → Gen 5 blocked","Choose a documented native Generation 1–5 origin title. Nothing was changed.")
+        if(originLegalised&&(if(profile.sequel)originGame !in 22..23 else originGame !in 20..21))
+            return showDialog("Gen 7 → Gen 5 blocked","The selected origin title does not match the loaded Generation 5 destination family. Nothing was changed.")
         gen7ToGen6PreflightRejection(source,bank,originGame)?.let{
             return showDialog("Gen 7 → Gen 5 blocked","$it\n\nThe Bank record and destination were left unchanged.")
         }
@@ -14008,7 +14009,8 @@ class MainActivity : Activity() {
         gen6ToGen5PreflightRejection(converted6)?.let{
             return showDialog("Gen 7 → Gen 5 blocked","$it\n\nNothing was changed.")
         }
-        val originLabel=if(originLegalised)"user-selected Generation 5 origin ID $originGame" else "preserve origin ID $originGame"
+        val originTitle=gen5CompatibleOriginTitle(originGame)?:return showDialog("Gen 7 → Gen 5 blocked","The reviewed origin title is no longer destination-valid. Nothing was changed.")
+        val originLabel=if(originLegalised)"user-selected $originTitle (ID $originGame)" else "preserve $originTitle (ID $originGame)"
         val plan5=Gen6Gen5Plan(originGame,originLabel,false)
         val pk5=try{buildGen6ToGen5Pk5(pk6,converted6,destination,plan5)}catch(e:Exception){
             return showDialog("Gen 7 → Gen 5 blocked",(e.message?:"No safe native PK5 mapping is available.")+"\n\nNothing was changed.")
@@ -14022,7 +14024,7 @@ class MainActivity : Activity() {
         val prepared=Gen7Gen5Prepared(selected,bank,source,destination,originGame,originLegalised,pk6,converted6,plan5,pk5,converted5,file,openedUri,openedLabel,markingNote,omitted)
         val pidNote=if(converted5.pid==source.pid)"PID remains ${"%08X".format(source.pid)}." else
             "PID changes ${"%08X".format(source.pid)} → ${"%08X".format(converted5.pid)} only to preserve shiny state and the normal ability slot under Generation 5 PID rules."
-        val originNote=if(originLegalised)"Origin ${source.originGame} → $originGame. This is an explicit PSE Legalise provenance edit, not verified history." else "Origin ID $originGame is preserved."
+        val originNote=if(originLegalised)"Origin ${originGameName(source.originGame)} (ID ${source.originGame}) → $originTitle (ID $originGame). This is an explicit PSE Legalise provenance edit, not verified history." else "Origin preserved: $originTitle (ID $originGame)."
         val preview=buildString{
             append("PSE backward conversion; this is not an in-game trade, official migration or provenance claim. The source save stays unchanged and the exact PK7 remains in Bank until the native PK5 reopens successfully.\n\n")
             append("Preserved: destination-valid species/form, TID/SID, nickname and OT, EXP, nature, gender, shiny state, verified ability/slot, IVs, EVs, moves, current PP, PP Ups, active friendship, Pokérus, Ball, met level, dates, markings and fateful marker. ")
@@ -14113,16 +14115,25 @@ class MainActivity : Activity() {
             retainGen6ToGen5SafetyBackup(recovery,original)
             val bankCopy=File.createTempFile("PSE_G7ToG5_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
             bankCopy.writeBytes(p.bankBytes);require(bankCopy.readBytes().contentEquals(p.bankBytes)){"The Bank recovery snapshot did not verify."}
-            require(gen7ToGen5StillBound(p)&&file.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The source identity, snapshots or retained backup changed before writing."}
+            require(gen7ToGen5StillBound(p)&&file.readBytes().contentEquals(original)&&isBackupKept(recovery)&&
+                recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The source identity or retained destination and Bank recovery snapshots changed before writing."
+            }
             writeStarted=true;file.writeBytes(save);val written=file.readBytes()
             require(written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){"The persisted Generation 5 save differs from the reviewed write scope."}
             val wp=detectGen5Profile(written)?:error("The persisted Generation 5 save could not be reopened.")
             require(gen5BoxChecksumValid(written,box,wp)&&gen5ChecksumTableValid(written,wp)&&gen1ToGen5DexRegistered(written,wp,staged)){"The persisted Generation 5 save failed checksum or Pokédex validation."}
             val actual=written.copyOfRange(offset,offset+136);val reopened=parsePk5(actual,false)
             require(actual.contentEquals(pk5)&&reopened!=null&&sameGen6ToGen5Pk5(reopened,converted5)&&gen5Pk5PpUps(actual).contentEquals(gen6Pk6PpUps(bank))){"The exact converted PK5 did not persist after reopening."}
-            require(p.bankFile.readBytes().contentEquals(p.bankBytes)&&file.readBytes().contentEquals(save)){"The Bank record or destination changed before cleanup."}
+            require(p.bankFile.readBytes().contentEquals(p.bankBytes)&&file.readBytes().contentEquals(save)&&
+                isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The Bank record, destination or retained recovery snapshots changed before cleanup."
+            }
             deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 7 Bank record could not be removed after destination verification."}
-            require(file.readBytes().contentEquals(save)){"The destination changed after Bank cleanup."}
+            require(file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)){
+                "The destination or retained recovery backup changed after Bank cleanup."
+            }
             runCatching{bankCopy.delete()}
         }catch(e:Exception){
             val bankRestored=runCatching{
@@ -14137,8 +14148,13 @@ class MainActivity : Activity() {
                 val rp=detectGen5Profile(restored)?:error("The restored Generation 5 layout is invalid.")
                 restored.contentEquals(original)&&gen5ChecksumTableValid(restored,rp)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,rp)}
             }.getOrDefault(false)
-            val recovery=if(bankRestored&&saveRestored)"The exact Generation 5 destination and Gen 7 Bank record were restored or kept and verified."
-            else "Automatic recovery could not be fully verified. Keep the retained recovery backup and Bank recovery file for review."
+            if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&saveRestored->"The exact Generation 5 destination and Gen 7 Bank record were restored or kept and verified."
+                bankRestored->"The Gen 7 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                saveRestored->"The exact Generation 5 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
+                else->"Automatic recovery could not be fully verified. Keep the retained destination backup and Bank recovery snapshot for review."
+            }
             showDialog("Gen 7 → Gen 5 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+(bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery: ${it.name}"}?:""));return
         }
         Toast.makeText(this,"PSE converted Gen 7 → Gen 5 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
