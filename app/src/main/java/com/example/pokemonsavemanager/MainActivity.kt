@@ -25152,7 +25152,7 @@ class MainActivity : Activity() {
         if(!gen3ToGen7StillBound(p))return showDialog("Gen 3 → Gen 7","The destination or Bank record changed. Reopen PSE Bank.")
         val file=p.destinationFile;val original=runCatching{file.readBytes()}.getOrNull()
             ?:return showDialog("Gen 3 → Gen 7","The destination save could not be read.")
-        var writeStarted=false;var deleteAttempted=false;var backup:File?=null
+        var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
         try{
             require(original.contentEquals(p.destination)){"The reviewed destination changed."}
             val info=boxStorageInfo(original)?:error("The Gen 7 PC layout is unavailable.")
@@ -25195,8 +25195,14 @@ class MainActivity : Activity() {
                 "The Gen 7 recovery backup did not verify."
             }
             retainGen3ToGen7SafetyBackup(recovery,original)
-            require(gen3ToGen7StillBound(p)&&file.readBytes().contentEquals(original)){
-                "The source identity, snapshots or retained recovery backup changed before writing."
+            val bankCopy=File.createTempFile("PSE_G3ToG7_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
+            bankCopy.writeBytes(p.bankBytes);require(bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The Gen 3 Bank recovery snapshot did not verify."
+            }
+            require(gen3ToGen7StillBound(p)&&file.readBytes().contentEquals(original)&&
+                isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The source identity, snapshots or retained recovery files changed before writing."
             }
             writeStarted=true;file.writeBytes(save)
             val written=file.readBytes();require(written.contentEquals(save)&&pcIsolated(written)){"The persisted Gen 7 save differs from the reviewed write scope."}
@@ -25207,24 +25213,46 @@ class MainActivity : Activity() {
                 gen7DexRegistered(written,reopened)){"The exact converted PK7 or Pokédex registration did not persist."}
             val writtenChecks=validateGen7CoreChecksums(written);require(writtenChecks.first){writtenChecks.second}
             require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
-                p.bankFile.readBytes().contentEquals(p.bankBytes)&&file.readBytes().contentEquals(save)&&isBackupKept(recovery)){
-                "The source identity, Gen 3 Bank record, destination or recovery backup changed before cleanup."
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&file.readBytes().contentEquals(save)&&
+                isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The source identity, Gen 3 Bank record, verified Gen 7 destination or retained recovery files changed before cleanup."
             }
             deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 3 Bank entry could not be removed after destination verification."}
-            require(file.readBytes().contentEquals(save)){"The verified Gen 7 destination changed after Bank cleanup."}
+            require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&
+                currentSourceLabel==p.sourceLabel&&file.readBytes().contentEquals(save)&&
+                isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The verified Gen 7 destination or retained recovery files changed after Bank cleanup."
+            }
+            runCatching{bankCopy.delete()}
         }catch(e:Exception){
             val bankRestored=runCatching{
-                if(deleteAttempted&&!p.bankFile.exists())p.bankFile.writeBytes(p.bankBytes)
-                p.bankFile.readBytes().contentEquals(p.bankBytes)
+                if(deleteAttempted&&!p.bankFile.exists()){
+                    require(p.bankFile.createNewFile()){"The Bank recovery path could not be reserved."}
+                    p.bankFile.writeBytes(p.bankBytes)
+                }
+                val restored=p.bankFile.readBytes();val parsed=if(restored.size==80)parsePk3(restored,0,false)else null
+                restored.contentEquals(p.bankBytes)&&parsed!=null&&parsed.checksumValid&&
+                    parsed.pid==p.source.pid&&parsed.species==p.source.species&&
+                    parsed.tid==p.source.tid&&parsed.sid==p.source.sid
             }.getOrDefault(false)
-            val saveRestored=!writeStarted||(bankRestored&&runCatching{
-                file.writeBytes(original);file.readBytes().contentEquals(original)&&validateGen7CoreChecksums(original).first
-            }.getOrDefault(false))
-            val recovery=if(bankRestored&&saveRestored)"The exact Gen 7 destination and Gen 3 Bank record were restored or kept and verified." else
-                "Automatic recovery could not be fully verified. Keep the retained recovery backup and remaining files for review."
-            showDialog("Gen 3 → Gen 7 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:""));return
+            val saveRestored=!writeStarted||runCatching{
+                file.writeBytes(original);val restored=file.readBytes()
+                restored.contentEquals(original)&&validateGen7CoreChecksums(restored).first
+            }.getOrDefault(false)
+            if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&saveRestored->"The exact Gen 7 destination and Gen 3 Bank record were restored or kept and verified."
+                bankRestored->"The Gen 3 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                saveRestored->"The exact Gen 7 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
+                else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
+            }
+            showDialog("Gen 3 → Gen 7 PSE conversion failed",(e.message?:"Unknown error")+"\n\n"+recovery+
+                (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery snapshot: ${it.name}"}?:""));return
         }
-        Toast.makeText(this,"PSE transferred Gen 3 → Gen 7 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
+        Toast.makeText(this,"PSE converted Gen 3 → Gen 7 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
         showBank()
     }
 
