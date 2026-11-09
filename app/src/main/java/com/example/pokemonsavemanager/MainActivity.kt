@@ -13899,9 +13899,49 @@ class MainActivity : Activity() {
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen6ToGen5_",".backup",backupsDir());backup=recovery;recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)){"The Generation 5 recovery backup did not verify."};retainGen6ToGen5SafetyBackup(recovery,original)
             val bankCopy=File.createTempFile("PSE_G6ToG5_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy;bankCopy.writeBytes(p.bankBytes);require(bankCopy.readBytes().contentEquals(p.bankBytes)){"The Bank recovery snapshot did not verify."};require(gen6ToGen5StillBound(p)&&file.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The source identity, snapshots or retained backup changed before writing."}
             writeStarted=true;file.writeBytes(save);val written=file.readBytes();require(written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){"The persisted Generation 5 save differs from the reviewed write scope."};val wp=detectGen5Profile(written)?:error("The persisted Generation 5 save could not be reopened.");require(gen5BoxChecksumValid(written,box,wp)&&gen5ChecksumTableValid(written,wp)&&gen1ToGen5DexRegistered(written,wp,staged)){"The persisted Generation 5 save failed checksum or Pokédex validation."};val actual=written.copyOfRange(offset,offset+136);val reopened=parsePk5(actual,false);require(actual.contentEquals(pk5)&&reopened!=null&&sameGen6ToGen5Pk5(reopened,p.converted)&&gen5Pk5PpUps(actual).contentEquals(gen6Pk6PpUps(bank))){"The exact converted PK5 did not persist after reopening."}
-            require(p.bankFile.readBytes().contentEquals(p.bankBytes)&&file.readBytes().contentEquals(save)){"The Bank record or destination identity changed before cleanup."};deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 6 Bank record could not be removed after destination verification."};require(file.readBytes().contentEquals(save)){"The destination changed after Bank cleanup."};runCatching{bankCopy.delete()}
+            require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&
+                currentSourceLabel==p.sourceLabel&&p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The Gen 6 Bank record, destination identity or retained recovery snapshots changed before cleanup."
+            }
+            deleteAttempted=true
+            require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 6 Bank record could not be removed after destination verification."}
+            require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&
+                currentSourceLabel==p.sourceLabel&&file.readBytes().contentEquals(save)&&
+                isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The verified Gen 5 destination or retained recovery snapshots changed after Bank cleanup."
+            }
+            runCatching{bankCopy.delete()}
         }catch(e:Exception){
-            val bankRestored=runCatching{if(deleteAttempted&&!p.bankFile.exists())p.bankFile.writeBytes(p.bankBytes);p.bankFile.readBytes().contentEquals(p.bankBytes)}.getOrDefault(false);val saveRestored=!writeStarted||runCatching{file.writeBytes(original);val restored=file.readBytes();val rp=detectGen5Profile(restored)?:error("The restored Generation 5 layout is invalid.");restored.contentEquals(original)&&gen5ChecksumTableValid(restored,rp)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,rp)}}.getOrDefault(false);val recovery=if(bankRestored&&saveRestored)"The exact Generation 5 destination and Gen 6 Bank record were restored or kept and verified." else "Automatic recovery could not be fully verified. Keep the retained recovery backup and Bank recovery file for review.";showDialog("Gen 6 → Gen 5 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+(bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery: ${it.name}"}?:""));return
+            val bankRestored=runCatching{
+                if(deleteAttempted&&!p.bankFile.exists()){
+                    require(p.bankFile.createNewFile()){"The Bank recovery path could not be reserved."}
+                    p.bankFile.writeBytes(p.bankBytes)
+                }
+                val restored=p.bankFile.readBytes()
+                restored.contentEquals(p.bankBytes)&&parsePk6(restored,0,PK6_STORED_SIZE,false,721)?.let{
+                    it.checksumValid&&it.pid==p.source.pid&&it.species==p.source.species&&
+                        it.tid==p.source.tid&&it.sid==p.source.sid
+                }==true
+            }.getOrDefault(false)
+            val saveRestored=!writeStarted||runCatching{
+                file.writeBytes(original);val restored=file.readBytes()
+                val rp=detectGen5Profile(restored)?:error("The restored Generation 5 layout is invalid.")
+                restored.contentEquals(original)&&gen5ChecksumTableValid(restored,rp)&&
+                    (0 until 24).all{gen5BoxChecksumValid(restored,it,rp)}
+            }.getOrDefault(false)
+            if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&saveRestored->"The exact Gen 5 destination and Gen 6 Bank record were restored or kept and verified."
+                bankRestored->"The Gen 6 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                saveRestored->"The exact Gen 5 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
+                else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
+            }
+            showDialog("Gen 6 → Gen 5 PSE conversion failed",(e.message?:"Unknown error")+"\n\n"+recovery+
+                (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery snapshot: ${it.name}"}?:""));return
         }
         Toast.makeText(this,"PSE converted Gen 6 → Gen 5 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show();showBank()
     }
