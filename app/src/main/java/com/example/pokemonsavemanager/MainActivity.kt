@@ -13557,7 +13557,12 @@ class MainActivity : Activity() {
 
     private fun gen6ToGen5Markings(markings:Int):Int=markings and 0x3F
 
-    private fun gen6ToGen5PreflightRejection(p:PokemonEntry):String?=when{
+    private fun gen5CompatibleOriginTitle(id:Int):String?=when(id){
+        1,2,3,4,5,7,8,10,11,12,15,20,21,22,23->originGameName(id)
+        else->null
+    }
+
+    private fun gen6ToGen5PreflightRejection(p:PokemonEntry,allowGen6OriginLegalise:Boolean=false):String?=when{
         !p.checksumValid->"The source PK6 checksum is invalid."
         p.species !in 1..649->"Species #${p.species} did not exist in Generation 5."
         p.isEgg->"Egg records do not have a verified Gen 6 to Gen 5 PSE Bank mapping."
@@ -13581,7 +13586,7 @@ class MainActivity : Activity() {
         p.language !in setOf(1,2,3,4,5,7,8)->"Language ID ${p.language} is not a verified Generation 5 language value."
         p.ball !in 1..25->"Ball ID ${p.ball} has no verified Generation 5 mapping on this route."
         p.metLevel !in 1..100->"The met level is outside Generation 5 limits."
-        p.originGame !in 1..27->"Origin game ID ${p.originGame} has no documented Generation 5 conversion rule."
+        gen5CompatibleOriginTitle(p.originGame)==null&&(!allowGen6OriginLegalise||p.originGame !in 24..27)->"Origin game ID ${p.originGame} is neither a documented native Generation 1–5 title nor a Gen 6 title eligible for explicit origin Legalise."
         !gen5ToGen6DateValid(p.metYear,p.metMonth,p.metDay)->"The met date is not a valid native date."
         !gen5ToGen6DateValid(p.eggYear,p.eggMonth,p.eggDay)->"The Egg date is not a valid native date."
         else->null
@@ -13609,7 +13614,10 @@ class MainActivity : Activity() {
         require(raw.size==PK6_STORED_SIZE){"The preserved Gen 6 Bank record has an unexpected size."}
         val profile=if(allowBridge)null else detectGen5Profile(destination)
         if(!allowBridge&&profile==null)error("A valid Generation 5 destination save is required.")
-        gen6ToGen5PreflightRejection(p)?.let{error(it)}
+        gen6ToGen5PreflightRejection(p,plan.legalised)?.let{error(it)}
+        require(gen5CompatibleOriginTitle(plan.originGame)!=null){
+            "The selected origin game ID ${plan.originGame} is not a documented native Generation 1–5 title."
+        }
         if(allowBridge){
             require(plan.originGame in 1..12){"Choose a Generation 4-compatible origin ID for the bridge."}
             require(!plan.legalised||p.originGame !in 1..12){"Origin Legalise was requested for a record that does not need it."}
@@ -13657,11 +13665,21 @@ class MainActivity : Activity() {
         val bank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Gen 6 → Gen 5","The Bank record could not be read.")
         val source=if(bank.size==PK6_STORED_SIZE)parsePk6(bank,0,PK6_STORED_SIZE,false,721)else null
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species)return showDialog("Gen 6 → Gen 5","The selected Bank record changed or failed its PK6 checksum.")
-        gen6ToGen5PreflightRejection(source)?.let{return showDialog("Gen 6 → Gen 5 blocked","$it\n\nThe Bank record and destination were left unchanged.")}
-        val plan=if(source.originGame<=23)Gen6Gen5Plan(source.originGame,"preserve origin ID ${source.originGame}",false)else requestedPlan
+        val sourceIsGen6Title=source.originGame in 24..27
+        gen6ToGen5PreflightRejection(source,sourceIsGen6Title)?.let{return showDialog("Gen 6 → Gen 5 blocked","$it\n\nThe Bank record and destination were left unchanged.")}
+        val sourceOriginTitle=gen5CompatibleOriginTitle(source.originGame)
+        val plan=if(sourceOriginTitle!=null)Gen6Gen5Plan(source.originGame,"preserve $sourceOriginTitle (ID ${source.originGame})",false)else requestedPlan
         if(plan==null){
-            val options=if(profile.sequel)arrayOf("Legalise origin as Pokémon Black 2 (22)","Legalise origin as Pokémon White 2 (23)") else arrayOf("Legalise origin as Pokémon Black (20)","Legalise origin as Pokémon White (21)")
-            AlertDialog.Builder(this).setTitle("Choose documented Gen 5 origin mapping").setMessage("Origin game ID ${source.originGame} identifies a Gen 6 title and cannot exist in PK5. This explicit PSE Legalise choice records the loaded Gen 5 title family; it is not official provenance. No other field is changed by this choice.").setItems(options){_,which->val id=if(profile.sequel)22+which else 20+which;prepareGen6ToGen5Transfer(bankFile,shown,Gen6Gen5Plan(id,options[which],true))}.setNegativeButton("Cancel",null).show()
+            val choices=if(profile.sequel)
+                listOf(22 to "Pokémon White 2",23 to "Pokémon Black 2")
+            else
+                listOf(20 to "Pokémon White",21 to "Pokémon Black")
+            AlertDialog.Builder(this).setTitle("Choose documented Gen 5 origin mapping")
+                .setMessage("Origin game ID ${source.originGame} identifies a Gen 6 title and cannot exist in PK5. Choose the exact Gen 5 title to write. This explicit PSE Legalise choice changes provenance and does not verify history; cancelling leaves the Bank record and destination unchanged.")
+                .setItems(choices.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
+                    val choice=choices[which]
+                    prepareGen6ToGen5Transfer(bankFile,shown,Gen6Gen5Plan(choice.first,"user-selected ${choice.second} (ID ${choice.first})",true))
+                }.setNegativeButton("Cancel",null).show()
             return
         }
         if(plan.legalised&&source.originGame !in 24..27)return showDialog("Gen 6 → Gen 5 blocked","The requested origin conversion does not apply to this record.")
@@ -13670,7 +13688,8 @@ class MainActivity : Activity() {
         val converted=parsePk5(pk5,false)?:return showDialog("Gen 6 → Gen 5","The prepared PK5 could not be re-read.")
         val omitted=gen6ToGen5OmittedMetadata(bank,source);val prepared=Gen6Gen5Prepared(selected,bank,source,destination,plan,pk5,converted,file,openedUri,openedLabel,omitted)
         val pidNote=if(source.pid==converted.pid)"PID remains ${"%08X".format(source.pid)}." else "PID changes ${"%08X".format(source.pid)} → ${"%08X".format(converted.pid)} only to preserve ${if(source.shiny)"shiny" else "non-shiny"} state and the normal ability slot under Gen 5 PID rules."
-        val originNote=if(plan.legalised)"Origin ${source.originGame} → ${plan.originGame}: ${plan.originLabel}. This is an explicit PSE Legalise conversion, not official provenance." else "Origin ID ${source.originGame} is preserved."
+        val targetOriginTitle=gen5CompatibleOriginTitle(plan.originGame)?:return showDialog("Gen 6 → Gen 5 blocked","The reviewed origin mapping is no longer destination-valid. Nothing was changed.")
+        val originNote=if(plan.legalised)"Origin ${source.originGame} → $targetOriginTitle (ID ${plan.originGame}): ${plan.originLabel}. This is an explicit PSE Legalise conversion, not official provenance." else "Origin preserved: $targetOriginTitle (ID ${source.originGame})."
         val preview="PSE conversion, not an official backward transfer or provenance claim.\n\nPreserved: species/form, TID/SID, nickname and OT, EXP, ability/slot, nature, gender, shiny state, moves/PP/PP Ups, IVs, EVs, active friendship, Pokérus, Ball, met level, dates and fateful marker.\n\nReviewed Gen 5 differences:\n• $pidNote\n• $originNote\n• Gen 6 and Gen 5 use the same six one-bit markings, so 0x${"%02X".format(source.markingValue)} is preserved exactly.\n• Met location #${source.metLocation} and Egg location #${source.eggLocation} become explicit unspecified location 0 because the catalogs are not interchangeable.\n• PK5 has one friendship value, so active friendship ${source.friendship} is retained; separate OT/handler friendship cannot both be represented.\n• PK5 has no current handler, relearn-move, geography, affection or memory fields. Relearn moves and Hyper Training must already be empty. Omitted exact PK6 metadata: $omitted.\n\nHeld items and unsupported species, forms, moves or fields are blocked instead of discarded. The PK6 Bank record remains until the native PK5, Pokédex, box CRCs, checksum table and persisted reopen all verify. Round trips are not promised lossless."
         AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 6 → Gen 5").setMessage(preview).setNegativeButton("Cancel",null).setPositiveButton("Choose Gen 5 destination"){_,_->chooseGen6ToGen5Destination(prepared)}.show()
     }
