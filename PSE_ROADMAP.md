@@ -646,3 +646,12 @@ The explicit Legalise review lists every retained or transformed field. Species 
 The selected PA8 Bank entry and Scarlet/Violet source save remain unchanged. PSE latches and rechecks the exact PA8 source hash, deterministically regenerates the same PK9, requires the user to choose one currently empty native PC-box slot, and stages only that 344-byte record plus the save's SHA-256 footer in a new document. The retained verified recovery backup, persisted destination reopen, unchanged source and Bank checks, and failed-copy deletion provide two-sided rollback without consuming the Bank entry.
 
 Next bounded route: inspect and close the Legends: Z-A PA9 native chosen-slot prerequisite before enabling the first reviewed route into PA9. Keep PA9 title-specific species, form, move, ability, size, Mega, tracker, provenance, integrity, and rollback rules separate from Scarlet/Violet PK9.
+
+## Legends: Z-A native Bank destination review prerequisite
+
+Legends: Z-A PA9 restore now requires the user to choose the exact empty native PC-box slot before the restore review is created. PSE enumerates all empty slots across the 32 native boxes, groups them by box, and binds the selected box and slot into the review. The source save and PA9 Bank entry are reopened before staging, and the route rejects the review if that exact destination is no longer empty.
+
+The native write remains limited to the chosen 344-byte PA9 body and the save's SHA-256 footer. The selected slot's 64-byte native footer, every existing PC-box record, party data, title and revision identity, and unrelated container bytes remain exact. The retained verified recovery backup, persisted destination reopen, unchanged source and Bank checks, and failed-copy deletion continue to provide two-sided rollback without consuming the Bank entry.
+
+This closes the silent first-empty-slot gap before cross-generation conversion into Legends: Z-A is enabled. Next bounded route: add the first explicit title-specific conversion into PA9 in the existing source order, beginning with Sword/Shield PK8 -> Legends: Z-A PA9, with documented species, form, move, ability, size, Mega, tracker, provenance, integrity, and rollback effects. Native PA9 deposit and restore inventory alone remains insufficient evidence of conversion support.
+
