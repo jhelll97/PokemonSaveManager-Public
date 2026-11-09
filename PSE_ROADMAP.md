@@ -568,3 +568,10 @@ The first forward route into Generation 8 now connects preserved 232-byte Gen 7 
 The selected PK7 and Sword/Shield source remain unchanged. The existing restore flow rechecks the exact PK7 source hash, regenerates and reopens the same checksum-valid PK8, writes only one user-chosen empty native PC-box slot in a new save document, retains the verified source recovery backup, reopens the persisted destination, and removes a failed destination copy when possible. The PK7 Bank entry remains available after success.
 
 Next bounded route: retain this Gen 7 -> PK8 disclosure and recovery contract while adding the first reviewed title-specific Generation 8 destination after Sword/Shield, without treating native PB8, PA8, PK9, or PA9 deposit/restore inventory as cross-generation conversion support.
+
+
+## BDSP native Bank destination review prerequisite
+
+BDSP PB8 restore now requires the user to choose the exact empty native PC-box slot before the restore review is created. PSE lists all empty slots grouped by the 40 native boxes, reopens the selected source and Bank record, and rejects the review if that exact slot is no longer empty. The staged write remains limited to one 344-byte PB8 record and the native whole-file MD5, with source identity checks, a retained verified recovery backup, persisted reopen verification, unchanged Bank entry verification, and failed-copy cleanup.
+
+This closes the silent first-empty-slot gap in the next Generation 8 title-specific restore adapter. The next bounded route can add a disclosed Gen 7 PK7 -> BDSP PB8 conversion without treating the presence of the PB8 deposit/restore inventory as conversion support.

@@ -4,6 +4,8 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.security.MessageDigest
 
+data class BdspPseBankDestination(val box: Int, val position: Int)
+
 /** Restores one checksum-valid native PB8 Bank record into a reviewed new BDSP save copy. */
 object BdspPseBankRestoreEditing {
     private const val BOX_OFFSET = 0x14EF4
@@ -52,24 +54,46 @@ object BdspPseBankRestoreEditing {
         return pokemon
     }
 
+    fun emptyDestinations(source: ByteArray): List<BdspPseBankDestination> {
+        val storage = BdspStorageReadOnly.read(source.copyOf())
+        return (0 until 40).flatMap { box ->
+            storage.box(box).filter { it.read is BdspSlotRead.Empty }
+                .map { BdspPseBankDestination(box + 1, it.position) }
+        }
+    }
+
     fun stage(source: ByteArray, expectedSha256: String, bankRecord: ByteArray): BdspPseBankRestoreCopyPlan {
+        val destination = emptyDestinations(source).firstOrNull()
+            ?: throw IllegalArgumentException("All 1,200 native BDSP PC-box slots are occupied.")
+        return stage(source, expectedSha256, bankRecord, destination.box, destination.position)
+    }
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        bankRecord: ByteArray,
+        box: Int,
+        position: Int
+    ): BdspPseBankRestoreCopyPlan {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        require(box in 1..40 && position in 1..30) {
+            "The selected BDSP PC-box destination is outside native storage."
+        }
         val before = BdspStorageReadOnly.read(original)
+        require(before.box(box - 1)[position - 1].read is BdspSlotRead.Empty) {
+            "The selected BDSP destination is no longer empty. Choose another slot."
+        }
         val pokemon = inspectBankRecord(supplied)
-        val destination = (0 until 40).asSequence().flatMap { box -> before.box(box).asSequence() }
-            .firstOrNull { it.read is BdspSlotRead.Empty }
-            ?: throw IllegalArgumentException("All 1,200 native BDSP PC-box slots are occupied.")
         val recordOffset = BOX_OFFSET +
-            (destination.box * 30 + destination.position - 1) * BdspPokemonReadOnly.RECORD_SIZE
+            ((box - 1) * 30 + position - 1) * BdspPokemonReadOnly.RECORD_SIZE
         val edited = original.copyOf()
         supplied.copyInto(edited, recordOffset)
         refreshDigest(edited)
-        verify(original, edited, supplied, destination.box + 1, destination.position, recordOffset)
+        verify(original, edited, supplied, box, position, recordOffset)
         return BdspPseBankRestoreCopyPlan(
-            original, edited, supplied, pokemon,
-            destination.box + 1, destination.position, recordOffset
+            original, edited, supplied, pokemon, box, position, recordOffset
         )
     }
 
