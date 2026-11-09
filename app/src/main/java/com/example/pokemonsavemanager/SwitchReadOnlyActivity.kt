@@ -2345,14 +2345,16 @@ class SwitchReadOnlyActivity : Activity() {
                 (it.name.startsWith("switch_sv_") && it.extension.equals("pk9", true)) ||
                     (it.name.startsWith("switch_swsh_") && it.extension.equals("pk8", true)) ||
                     (it.name.startsWith("switch_bdsp_") && it.extension.equals("pb8", true)) ||
-                    (it.name.startsWith("switch_pla_") && it.extension.equals("pa8", true))
+                    (it.name.startsWith("switch_pla_") && it.extension.equals("pa8", true)) ||
+                    it.extension.equals("pk7", true)
                 )
         }?.sortedWith(compareBy<File>({
             when {
                 it.extension.equals("pk9", true) -> 0
                 it.extension.equals("pk8", true) -> 1
                 it.extension.equals("pb8", true) -> 2
-                else -> 3
+                it.extension.equals("pa8", true) -> 3
+                else -> 4
             }
         }, { it.name })).orEmpty()
         val labels = entries.map { file ->
@@ -2385,7 +2387,7 @@ class SwitchReadOnlyActivity : Activity() {
                             (error.message ?: "unsupported conversion")
                     }
                 )
-            } else {
+            } else if (file.extension.equals("pa8", true)) {
                 runCatching { LegendsArceusToScarletVioletPk9.review(file.readBytes()) }.fold(
                     onSuccess = { review ->
                         review.sourceNickname.ifBlank { LegendsArceusSpeciesNames.name(review.sourceSpecies) } +
@@ -2396,6 +2398,17 @@ class SwitchReadOnlyActivity : Activity() {
                             (error.message ?: "unsupported conversion")
                     }
                 )
+            } else {
+                runCatching { Gen7ToScarletVioletPk9.review(file.readBytes()) }.fold(
+                    onSuccess = { review ->
+                        review.sourceNickname.ifBlank { ScarletVioletSpeciesNames.name(review.sourceSpecies) } +
+                            " (#" + review.sourceSpecies + ") • Gen 7 PK7 → PK9 • Legalise"
+                    },
+                    onFailure = { error ->
+                        file.name + " • Gen 7 PK7 blocked • " +
+                            (error.message ?: "unsupported conversion")
+                    }
+                )
             }
         }
         val builder = AlertDialog.Builder(this)
@@ -2403,7 +2416,7 @@ class SwitchReadOnlyActivity : Activity() {
             .setPositiveButton("Close", null)
         if (entries.isEmpty()) {
             builder.setMessage(
-                "No native Scarlet/Violet PK9, Sword/Shield PK8, BDSP PB8, or Legends: Arceus PA8 entries are stored. " +
+                "No native Scarlet/Violet PK9, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, or eligible Generation 7 PK7 entries are stored. " +
                     "Open Pokémon Boxes in a supported title, choose a Pokémon, then tap Add to PSE Bank."
             )
         } else {
@@ -2417,12 +2430,64 @@ class SwitchReadOnlyActivity : Activity() {
                             showScarletVioletBdspBankEntry(bound, entry)
                         entry.extension.equals("pa8", true) ->
                             showScarletVioletLegendsArceusBankEntry(bound, entry)
+                        entry.extension.equals("pk7", true) ->
+                            showScarletVioletGen7BankEntry(bound, entry)
                         else -> showScarletVioletBankEntry(bound, entry)
                     }
                 }
             }
         }
         builder.show()
+    }
+
+    private fun showScarletVioletGen7BankEntry(bound: SwitchReadSession, file: File) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = runCatching { file.canonicalFile }.getOrNull()
+        val result = runCatching {
+            require(entry != null && entry.parentFile == directory && entry.isFile &&
+                entry.extension.equals("pk7", true)) { "This is not a current Gen 7 PSE Bank entry." }
+            Gen7ToScarletVioletPk9.review(entry.readBytes())
+        }
+        val converted = result.getOrElse {
+            AlertDialog.Builder(this).setTitle("Gen 7 -> Scarlet/Violet blocked")
+                .setMessage((it.message ?: "No safe conversion is available.") +
+                    "\n\nThe PK7 Bank entry and Scarlet/Violet save remain unchanged.")
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val selected = entry ?: return
+        val p = ScarletVioletPseBankRestoreEditing.inspectBankRecord(converted.nativeRecord)
+        val message = buildString {
+            append("${ScarletVioletSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n")
+            append("Source: ${selected.name} • preserved 232-byte PK7\n")
+            append("Prepared destination: checksum-valid 344-byte native Scarlet/Violet PK9\n\n")
+            append("Exact disclosed conversion effects\n• ")
+            append(converted.effects.joinToString("\n• "))
+            append("\n\nContinue only if you accept every disclosed Legalise effect.")
+        }
+        AlertDialog.Builder(this).setTitle("Gen 7 -> Scarlet/Violet • PSE Legalise review")
+            .setMessage(message).setNegativeButton("Cancel", null)
+            .setPositiveButton("Legalise & choose destination") { _, _ ->
+                try {
+                    require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                    val source = selectedSourceUri ?: error("Reopen the selected Scarlet/Violet save from PSE.")
+                    require(selected.parentFile == directory && selected.isFile && selected.extension.equals("pk7", true)) {
+                        "The Gen 7 Bank entry changed."
+                    }
+                    Gen7ToScarletVioletPk9.review(selected.readBytes())
+                    startActivity(Intent(this, SwitchScarletVioletPseBankRestoreActivity::class.java)
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.bank.entry", selected.name)
+                        .putExtra("pse.bank.legalise", true)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not prepare Gen 7 conversion")
+                        .setMessage(error.message ?: "Both sources remain unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }.show()
     }
 
     private fun showScarletVioletSwordShieldBankEntry(bound: SwitchReadSession, file: File) {

@@ -21,7 +21,7 @@ private data class ScarletVioletBankPreparation(
     val effects: List<String>
 )
 
-/** Restores one native PK9 or explicitly reviewed Generation 8 conversion into a new save copy. */
+/** Restores one native PK9 or explicitly reviewed cross-generation conversion into a new save copy. */
 class SwitchScarletVioletPseBankRestoreActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
     private val createCopyRequest = 2152
@@ -57,7 +57,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid native PK9 to an empty PC-box slot you choose in a new save copy. " +
-                "Native PK9 entries remain byte-exact. Eligible Sword/Shield PK8, BDSP PB8, and Legends: Arceus PA8 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Native PK9 entries remain byte-exact. Eligible Generation 7 PK7, Sword/Shield PK8, BDSP PB8, and Legends: Arceus PA8 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
                 "Unsupported species, forms, items, moves, limits, or text remain blocked; this PSE conversion does not certify encounter, ability, Tera, or moveset legality."
             textSize = 16f
         })
@@ -114,7 +114,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                         "${prepared.destinations.size} empty native destination slots available\n" +
                         "Source SHA-256: ${expectedHash}\nBank source SHA-256: ${prepared.sourceBankHash}\n" +
                         "Prepared PK9 SHA-256: ${prepared.nativeRecordHash}" +
-                        if (prepared.effects.isEmpty()) "" else "\n\nGeneration 8 -> Scarlet/Violet Legalise effects\n• " +
+                        if (prepared.effects.isEmpty()) "" else "\n\nPSE conversion Legalise effects\n• " +
                             prepared.effects.joinToString("\n• ")
                 }.onFailure { status.text = it.message ?: "The PSE Bank restore could not be prepared safely." }
                 setBusy(false)
@@ -199,14 +199,16 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
         val directory = File(filesDir, "pse_bank").canonicalFile
         val entry = File(directory, name).canonicalFile
         val native = entry.name.startsWith("switch_sv_") && entry.extension.equals("pk9", true)
+        val gen7 = entry.extension.equals("pk7", true)
         val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
         val bdsp = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
         val legendsArceus = entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)
-        require(entry.parentFile == directory && entry.isFile && (native || swordShield || bdsp || legendsArceus)) {
-            "This is not a current Scarlet/Violet, Sword/Shield, BDSP, or Legends: Arceus PSE Bank entry."
+        require(entry.parentFile == directory && entry.isFile &&
+            (native || gen7 || swordShield || bdsp || legendsArceus)) {
+            "This is not a current Scarlet/Violet, Generation 7, Sword/Shield, BDSP, or Legends: Arceus PSE Bank entry."
         }
-        if (swordShield || bdsp || legendsArceus) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
-            "Review and explicitly choose the disclosed Generation 8 Legalise conversion from PSE Bank."
+        if (gen7 || swordShield || bdsp || legendsArceus) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+            "Review and explicitly choose the disclosed cross-generation Legalise conversion from PSE Bank."
         }
         return entry
     }
@@ -223,6 +225,10 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
 
     private fun prepareBankRecord(source: ByteArray): Pair<ByteArray, List<String>> {
         val entry = bankFile()
+        if (entry.extension.equals("pk7", true)) {
+            val converted = Gen7ToScarletVioletPk9.review(source)
+            return converted.nativeRecord to converted.effects
+        }
         val hash = ScarletVioletPseBankRestoreEditing.sha256(source)
         if (entry.extension.equals("pk8", true)) {
             require(entry.name == "switch_swsh_${hash}.pk8") {
@@ -261,10 +267,10 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
         val p = plan.pokemon
         val moves = p.moves.filter { it.id != 0 }.joinToString { "#${it.id} (PP ${it.pp})" }.ifBlank { "None" }
         val effects = if (conversionEffects.isEmpty()) "" else
-            "\n\nExplicit Generation 8 Legalise effects\n• " + conversionEffects.joinToString("\n• ")
+            "\n\nExplicit PSE conversion Legalise effects\n• " + conversionEffects.joinToString("\n• ")
         AlertDialog.Builder(this).setTitle(
             if (conversionEffects.isEmpty()) "Restore this Bank Pokémon to a new copy?"
-            else "Legalise the Generation 8 record and restore to a new copy?"
+            else "Legalise the converted record and restore to a new copy?"
         )
             .setMessage(
                 "${ScarletVioletSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form} • Level ${p.cachedLevel}\n" +
@@ -359,7 +365,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                 status.text = result.fold(
                     onSuccess = {
                         (if (conversionEffects.isEmpty()) "PSE Bank restore saved and reopened successfully.\n"
-                        else "Generation 8 -> Scarlet/Violet PSE conversion saved and reopened successfully.\n") +
+                        else "PSE conversion saved and reopened successfully.\n") +
                             "Box ${plan.box}, slot ${plan.position} • SHA-256: ${plan.editedSha256}\n" +
                             "Recovery backup: $backupName\nOriginal source and Bank entry unchanged."
                     },
