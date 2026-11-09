@@ -10424,6 +10424,9 @@ class MainActivity : Activity() {
             return showDialog("Gen 4 → Gen 6","Load a checksum-clean Pokémon X, Y, Omega Ruby or Alpha Sapphire save first.")
         val trainer=analyzeSave(file).trainer
             ?:return showDialog("Gen 4 → Gen 6","PSE could not read the destination trainer identity.")
+        if(trainer.gender!="Male"&&trainer.gender!="Female")
+            return showDialog("Gen 4 → Gen 6 blocked",
+                "The destination trainer gender is ${trainer.gender}. PSE will not guess the native PK6 handling-trainer gender.\n\nThe Bank record and destination were left unchanged.")
         fun snapshotsMatch()=bound()&&runCatching{
             file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)
         }.getOrDefault(false)
@@ -10467,7 +10470,7 @@ class MainActivity : Activity() {
                 append("Preserved: species/form, TID/SID, nickname and OT, EXP, verified ability, nature, gender, shiny state, moves, current PP, PP Ups, IVs, EVs, friendship, Pokérus, Ball, language, source title, met level/date and fateful marker.\n")
                 append("$pidNote\n")
                 append("Ability: source ability #${source.ability} in slot ${source.abilityNumber} remains verified ability #${meta.abilityId}.\n")
-                append("Required format changes: Gen 4 met location $oldMet becomes native Gen 6 transfer marker 30001; Egg location $oldEgg becomes 0 because the location catalog is not interchangeable. Current handler becomes ${trainer.trainerName}; relearn moves and geographic fields start empty.\n\n")
+                append("Required format changes: Gen 4 met location $oldMet becomes native Gen 6 transfer marker 30001; Egg location $oldEgg becomes 0 because the location catalog is not interchangeable. Current handler becomes ${trainer.trainerName} (${trainer.gender}); relearn moves and geographic fields start empty.\n\n")
                 append("Held items, Eggs and unsupported source values are blocked instead of discarded. This is a PSE conversion, not an in-game trade or a claim of official transfer provenance. The source save stays unchanged. The exact Gen 4 Bank record remains until a retained recovery backup, chosen PK6 slot, Pokédex update, checksums and reopened destination all verify.")
             }
             AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{meta.speciesName}} • Gen 4 → Gen 6")
