@@ -24601,10 +24601,15 @@ class MainActivity : Activity() {
             }
             writeStarted=true;file.writeBytes(work);val written=file.readBytes();val wp=detectGen2Profile(written)?:error("The persisted Gen 2 save failed validation.");require(bound()&&written.contentEquals(work)&&wp.key==profileKey&&verifyGen2SaveIntegrity(written).first){"The persisted Gen 2 destination failed verification."}
             val after=gen2LocationPayloads(written,"Box $targetBox",wp);require(after.size==before.size+1&&sameGen2PayloadList(after.take(before.size),before)&&gen2BoxRawCore(written,targetBox,slot).contentEquals(mon)&&gen2PokedexOwnedSeen(written,wp,source.species)){"The exact converted record, existing Box contents or Pokédex registration did not persist."}
-            require(bankFile.readBytes().contentEquals(bankBytes)&&bound()&&file.readBytes().contentEquals(written)){"The source or Bank record changed before cleanup."}
+            require(bankFile.readBytes().contentEquals(bankBytes)&&bound()&&file.readBytes().contentEquals(written)&&
+                isBackupKept(b)&&b.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){
+                "The destination, Bank record or retained recovery snapshots changed before cleanup."
+            }
             bankDeleteAttempted=true;require(bankFile.delete()&&!bankFile.exists()){"The destination was written, but Bank cleanup could not be verified."}
-            require(bound()&&file.readBytes().contentEquals(written)){"The verified Gen 2 destination changed after Bank cleanup."}
-            require(isBackupKept(b)&&b.readBytes().contentEquals(fresh)){"The retained destination recovery backup changed after Bank cleanup."}
+            require(bound()&&file.readBytes().contentEquals(written)&&isBackupKept(b)&&
+                b.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){
+                "The verified destination identity or retained recovery snapshots changed after Bank cleanup."
+            }
             runCatching{bankCopy.delete()}
         }catch(e:Exception){
             val bankRestored=runCatching{
