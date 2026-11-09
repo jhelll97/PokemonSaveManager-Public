@@ -23992,6 +23992,16 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun gen3ToGen4PidLegaliseRejection(p:PokemonEntry):String?{
+        if(((p.pid.toInt() and 1)+1)==p.abilityNumber)return null
+        return when(p.species){
+            201->"PID Legalise is blocked for Unown because the current conversion cannot prove that a replacement PID preserves its form."
+            265->"PID Legalise is blocked for Wurmple because the current conversion cannot prove that a replacement PID preserves its evolution path."
+            327->"PID Legalise is blocked for Spinda because changing the PID changes its spot pattern."
+            else->null
+        }
+    }
+
     private fun gen3ToGen4PreflightRejection(p:PokemonEntry,allowPidLegalise:Boolean=false):String?=when{
         !p.checksumValid->"The source PK3 checksum is invalid."
         p.species !in 1..386->"Species #${p.species} is not a valid Generation 3 species."
@@ -24005,6 +24015,7 @@ class MainActivity : Activity() {
         p.ball !in 1..12->"Ball ID ${p.ball} has no verified direct Generation 3 to Generation 4 mapping."
         p.originGame !in 1..5->"Origin game ID ${p.originGame} is not a verified Generation 3 title."
         p.abilityNumber !in 1..2->"The PK3 ability slot is invalid."
+        allowPidLegalise&&gen3ToGen4PidLegaliseRejection(p)!=null->gen3ToGen4PidLegaliseRejection(p)
         !allowPidLegalise&&((p.pid.toInt() and 1)+1)!=p.abilityNumber->"The PK3 ability flag does not match its PID ability parity. Choose explicit PID Legalise to preserve the recorded ability slot."
         p.nickname.any{gen4EncodeChar(it)==null}->"The nickname contains a character that the native Gen 4 writer cannot represent."
         p.otName.any{gen4EncodeChar(it)==null}->"The Original Trainer name contains a character that the native Gen 4 writer cannot represent."
@@ -24155,6 +24166,9 @@ class MainActivity : Activity() {
         if(source.pid!=shown.pid||source.species!=shown.species||source.tid!=shown.tid||source.sid!=shown.sid)
             return showDialog("Gen 3 → Gen 4","The selected Bank record changed. Nothing was changed.")
         val needsPidLegalise=((source.pid.toInt() and 1)+1)!=source.abilityNumber
+        if(needsPidLegalise)gen3ToGen4PidLegaliseRejection(source)?.let{
+            return showDialog("Gen 3 → Gen 4 blocked","$it\n\nThe Bank record and destination were left unchanged.")
+        }
         if(needsPidLegalise&&!legalisePid){
             AlertDialog.Builder(this).setTitle("Legalise Gen 3 ability PID")
                 .setMessage("The saved PK3 ability flag conflicts with PID parity. PSE can keep the recorded ability slot by changing the PID while preserving nature, gender and shiny state. The PID is identity data, so review the proposed value before writing. Cancel leaves the Bank record and destination unchanged.")
