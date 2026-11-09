@@ -24089,6 +24089,16 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun gen3CompatibleOriginTitle(id:Int):String?=when(id){
+        1->"Pokémon Sapphire"
+        2->"Pokémon Ruby"
+        3->"Pokémon Emerald"
+        4->"Pokémon FireRed"
+        5->"Pokémon LeafGreen"
+        15->"Pokémon Colosseum / XD"
+        else->null
+    }
+
     private fun gen3ToGen4PreflightRejection(p:PokemonEntry,allowPidLegalise:Boolean=false):String?=when{
         !p.checksumValid->"The source PK3 checksum is invalid."
         p.species !in 1..386->"Species #${p.species} is not a valid Generation 3 species."
@@ -24100,7 +24110,7 @@ class MainActivity : Activity() {
         p.evs.any{it !in 0..255}||p.evs.sum()>510->"The PK3 EV data is not destination-valid for Generation 4."
         p.ivs.any{it !in 0..31}->"The PK3 IV data is invalid."
         p.ball !in 1..12->"Ball ID ${p.ball} has no verified direct Generation 3 to Generation 4 mapping."
-        p.originGame !in 1..5->"Origin game ID ${p.originGame} is not a verified Generation 3 title."
+        gen3CompatibleOriginTitle(p.originGame)==null->"Origin game ID ${p.originGame} is not a documented native Generation 3 title."
         p.abilityNumber !in 1..2->"The PK3 ability slot is invalid."
         allowPidLegalise&&gen3ToGen4PidLegaliseRejection(p)!=null->gen3ToGen4PidLegaliseRejection(p)
         !allowPidLegalise&&((p.pid.toInt() and 1)+1)!=p.abilityNumber->"The PK3 ability flag does not match its PID ability parity. Choose explicit PID Legalise to preserve the recorded ability slot."
@@ -24172,6 +24182,7 @@ class MainActivity : Activity() {
         require(raw.size==80){"The preserved Gen 3 Bank record has an unexpected size."}
         if(validateGen4Destination)detectGen4Profile(destination)?:error("A valid Generation 4 destination save is required.")
         gen3ToGen4PreflightRejection(p,plan.pidLegalised)?.let{error(it)}
+        require(gen3CompatibleOriginTitle(p.originGame)!=null){"The source origin game ID ${p.originGame} is not a documented native Generation 3 title."}
         require(plan==makeGen3ToGen4PlanWithDate(p,plan.meta,plan.metYear,plan.metMonth,plan.metDay,plan.pidLegalised)){
             "The prepared conversion plan no longer matches this PK3."
         }
@@ -24289,9 +24300,11 @@ class MainActivity : Activity() {
             val prepared=Gen3Gen4Prepared(canonical,bank,source,destination,plan,pk4,converted,file,openedUri,openedLabel)
             val oldMet=if(source.metLocation==0)"none" else "#${source.metLocation}"
             val pidSummary=if(plan.pidLegalised)"PID after explicit ability-parity Legalise" else "PID"
+            val originTitle=gen3CompatibleOriginTitle(source.originGame)?:return@loadGen3ToGen4MetaAsync showDialog("Gen 3 → Gen 4 blocked","The source origin is no longer a documented native Generation 3 title. Nothing was changed.")
             val preview=buildString{
                 append("PSE Bank conversion preview\n\n")
-                append("Preserved: species, $pidSummary, shiny state, gender, nature, OT/TID/SID, nickname, EXP, friendship, IVs, EVs, moves, current PP, PP Ups, Pokérus, Ball and source title.\n")
+                append("Preserved: species, $pidSummary, shiny state, gender, nature, OT/TID/SID, nickname, EXP, friendship, IVs, EVs, moves, current PP, PP Ups, Pokérus and Ball.\n")
+                append("Origin preserved: $originTitle (ID ${source.originGame}).\n")
                 if(plan.pidLegalised)append("PID: ${"%08X".format(source.pid)} → ${"%08X".format(plan.pid)}. The saved ability slot, nature, gender and shiny state are preserved.\n")
                 append("\n")
                 append("Ability: source slot ${source.abilityNumber} → verified Gen 4 ability #${plan.meta.abilityId}.\n")
@@ -24591,8 +24604,9 @@ class MainActivity : Activity() {
             bankRecovery=recovery;recovery.writeBytes(p.bankBytes)
             require(recovery.readBytes().contentEquals(p.bankBytes)){"The Bank recovery snapshot did not verify."}
             require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&
-                file.readBytes().contentEquals(fresh)&&p.bankFile.readBytes().contentEquals(p.bankBytes)){
-                "The destination, Bank record or retained recovery backup changed before writing."
+                file.readBytes().contentEquals(fresh)&&p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                recovery.readBytes().contentEquals(p.bankBytes)){
+                "The destination, Bank record or retained recovery snapshots changed before writing."
             }
             writeStarted=true;file.writeBytes(work)
             val written=file.readBytes()
@@ -24611,13 +24625,16 @@ class MainActivity : Activity() {
                 gen4Pk4PpUps(actual).contentEquals(gen4Pk4PpUps(refreshedPk4))){
                 "The exact reviewed PK4 did not persist."
             }
-            require(bound()&&validGen2ToGen4Destination(written)&&file.readBytes().contentEquals(work)){
-                "The verified destination changed before Bank cleanup."
+            require(bound()&&validGen2ToGen4Destination(written)&&file.readBytes().contentEquals(work)&&
+                isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&
+                recovery.readBytes().contentEquals(p.bankBytes)){
+                "The verified destination or retained recovery snapshots changed before Bank cleanup."
             }
             require(p.bankFile.readBytes().contentEquals(p.bankBytes)){"The Gen 3 Bank record changed before cleanup."}
             bankDeleteAttempted=true;require(p.bankFile.delete()){"The Gen 3 Bank record could not be removed after destination verification."}
-            require(!p.bankFile.exists()&&bound()&&file.readBytes().contentEquals(work)){
-                "The completed transfer could not be rechecked after Bank cleanup."
+            require(!p.bankFile.exists()&&bound()&&file.readBytes().contentEquals(work)&&
+                isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){
+                "The completed conversion or retained destination backup could not be rechecked after Bank cleanup."
             }
             runCatching{recovery.delete()}
         }catch(e:Exception){
@@ -24628,13 +24645,16 @@ class MainActivity : Activity() {
                 }
                 require(p.bankFile.readBytes().contentEquals(p.bankBytes)){"The Gen 3 Bank record could not be restored exactly."}
             }.isSuccess
-            val saveRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&
-                runCatching{file.readBytes().contentEquals(fresh)&&validGen2ToGen4Destination(fresh)}.getOrDefault(false))
+            val saveRestored=!writeStarted||runCatching{
+                file.writeBytes(fresh);val restored=file.readBytes()
+                restored.contentEquals(fresh)&&validGen2ToGen4Destination(restored)
+            }.getOrDefault(false)
             if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
                 !writeStarted->"Nothing was written and the Bank record was not removed."
                 bankRestored&&saveRestored->"The exact Gen 4 destination and Gen 3 Bank record were restored or kept and verified."
-                bankRestored->"The Bank record was restored. Use the retained recovery backup before editing the destination again."
+                bankRestored->"The Bank record was restored, but destination restoration was not verified. Use the retained recovery backup before editing again."
+                saveRestored->"The exact Gen 4 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
                 else->"Automatic recovery could not be verified. Stop editing and review the retained backup, working save and Bank recovery snapshot."
             }
             showDialog("Gen 3 → Gen 4 failed",(e.message?:"Unknown error")+"\n\n$recovery"+
@@ -24642,7 +24662,7 @@ class MainActivity : Activity() {
                 (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery snapshot: ${it.name}"}?:""))
             return
         }
-        Toast.makeText(this,"Transferred Gen 3 → Gen 4 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
+        Toast.makeText(this,"PSE converted Gen 3 → Gen 4 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
         showBank()
     }
 
