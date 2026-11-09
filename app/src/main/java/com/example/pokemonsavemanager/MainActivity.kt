@@ -11060,12 +11060,25 @@ class MainActivity : Activity() {
             }
             bankDeleteAttempted=true
             require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen ${p.sourceGeneration} Bank entry could not be removed after the Gen 5 destination was written."}
-            require(file.readBytes().contentEquals(save)){"The verified Gen 5 destination changed after Bank cleanup."}
+            require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
+                file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(bank)){
+                "The verified Gen 5 destination or retained recovery snapshots changed after Bank cleanup."
+            }
             runCatching{bankCopy.delete()}
         }catch(e:Exception){
             val bankRestored=runCatching{
-                if(bankDeleteAttempted&&!p.bankFile.exists()){require(p.bankFile.createNewFile()){"The Bank recovery path could not be reserved."};p.bankFile.writeBytes(p.bankBytes)}
-                p.bankFile.readBytes().contentEquals(p.bankBytes)
+                if(bankDeleteAttempted&&!p.bankFile.exists()){
+                    require(p.bankFile.createNewFile()){"The Bank recovery path could not be reserved."}
+                    p.bankFile.writeBytes(p.bankBytes)
+                }
+                val restored=p.bankFile.readBytes()
+                restored.contentEquals(p.bankBytes)&&when(p.sourceGeneration){
+                    3->parsePk3(restored,0,false)?.let{it.checksumValid&&it.pid==p.source.pid&&
+                        it.species==p.source.species&&it.tid==p.source.tid&&it.sid==p.source.sid}==true
+                    4->parsePk4(restored,false)?.let{it.checksumValid&&sameGen4ToGen5Pk5(it,p.source)}==true
+                    else->false
+                }
             }.getOrDefault(false)
             val saveRestored=!writeStarted||runCatching{
                 file.writeBytes(original);val restored=file.readBytes();val restoredProfile=detectGen5Profile(restored)
@@ -11073,9 +11086,13 @@ class MainActivity : Activity() {
                     (0 until 24).all{gen5BoxChecksumValid(restored,it,restoredProfile)}
             }.getOrDefault(false)
             if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
-            val recovery=if(bankRestored&&saveRestored)"The exact original Gen 5 destination and Gen ${p.sourceGeneration} Bank record were restored or kept and verified." else
-                "Automatic recovery could not be fully verified. Keep the retained destination backup and Bank recovery snapshot for review."
-            showDialog("$title failed",(e.message?:"Unknown error")+"\n\n"+recovery+
+            val recovery=when{
+                bankRestored&&saveRestored->"The exact original Gen 5 destination and Gen ${p.sourceGeneration} Bank record were restored or kept and verified."
+                bankRestored->"The Gen ${p.sourceGeneration} Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                saveRestored->"The exact Gen 5 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
+                else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
+            }
+            showDialog("Gen ${p.sourceGeneration} → Gen 5 PSE conversion failed",(e.message?:"Unknown error")+"\n\n"+recovery+
                 (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
                 (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery snapshot: ${it.name}"}?:""))
             return
