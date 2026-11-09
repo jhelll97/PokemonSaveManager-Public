@@ -4,6 +4,8 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.security.MessageDigest
 
+data class LegendsArceusPseBankDestination(val pasture: Int, val position: Int)
+
 /** Restores one checksum-valid PA8 Bank record into a reviewed new Legends: Arceus save copy. */
 object LegendsArceusPseBankRestoreEditing {
     private const val MAX_FILE_SIZE = 0x13AD06
@@ -71,34 +73,54 @@ object LegendsArceusPseBankRestoreEditing {
         return pokemon
     }
 
+    fun emptyDestinations(source: ByteArray): List<LegendsArceusPseBankDestination> {
+        val storage = LegendsArceusStorageReadOnly.read(source.copyOf())
+        return (0 until 32).flatMap { pasture ->
+            storage.pasture(pasture).filter { it.read is LegendsArceusSlotRead.Empty }
+                .map { LegendsArceusPseBankDestination(pasture + 1, it.position) }
+        }
+    }
+
     fun stage(
         source: ByteArray,
         expectedSha256: String,
         bankRecord: ByteArray
     ): LegendsArceusPseBankRestoreCopyPlan {
+        val destination = emptyDestinations(source).firstOrNull()
+            ?: throw IllegalArgumentException("All 960 native Legends: Arceus pasture slots are occupied.")
+        return stage(source, expectedSha256, bankRecord, destination.pasture, destination.position)
+    }
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        bankRecord: ByteArray,
+        pasture: Int,
+        position: Int
+    ): LegendsArceusPseBankRestoreCopyPlan {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        require(pasture in 1..32 && position in 1..30) {
+            "The selected Legends: Arceus pasture destination is outside native storage."
+        }
         val before = LegendsArceusStorageReadOnly.read(original)
+        require(before.pasture(pasture - 1)[position - 1].read is LegendsArceusSlotRead.Empty) {
+            "The selected Legends: Arceus destination is no longer empty. Choose another slot."
+        }
         val pokemon = inspectBankRecord(supplied)
         val storedRecord = supplied.copyOfRange(0, LegendsArceusPokemonReadOnly.STORED_SIZE)
         inspectBankRecord(storedRecord)
-        val destination = (0 until 32).asSequence().flatMap { pasture -> before.pasture(pasture).asSequence() }
-            .firstOrNull { it.read is LegendsArceusSlotRead.Empty }
-            ?: throw IllegalArgumentException("All 960 native Legends: Arceus pasture slots are occupied.")
         val written = LegendsArceusSaveValidation.writePastureRecord(
-            original,
-            destination.pasture + 1,
-            destination.position,
-            storedRecord
+            original, pasture, position, storedRecord
         )
         verify(
             original, written.bytes, supplied, storedRecord,
-            destination.pasture + 1, destination.position, written.absoluteOffset
+            pasture, position, written.absoluteOffset
         )
         return LegendsArceusPseBankRestoreCopyPlan(
             original, written.bytes, supplied, storedRecord, pokemon,
-            destination.pasture + 1, destination.position, written.absoluteOffset
+            pasture, position, written.absoluteOffset
         )
     }
 

@@ -20,6 +20,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
     private var sourceUri: Uri? = null
     private var expectedHash: String? = null
     private var bankEntryName: String? = null
+    private var readyDestinations: List<LegendsArceusPseBankDestination> = emptyList()
     private var readyPlan: LegendsArceusPseBankRestoreCopyPlan? = null
     private var pendingPlan: LegendsArceusPseBankRestoreCopyPlan? = null
     private var verifiedCopy: Pair<Uri, String>? = null
@@ -43,9 +44,9 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
             setPadding(pad, pad * 2, pad, pad)
         }
         root.addView(TextView(this).apply { text = "Legends: Arceus • PSE Bank"; textSize = 24f })
-        root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
+        root.addView(TextView(this).apply { text = "Restore to Pastures"; textSize = 20f })
         root.addView(TextView(this).apply {
-            text = "PSE restores the exact checksum-valid PA8 stored core to the first empty native pasture slot in a new save copy. " +
+            text = "PSE restores the exact checksum-valid PA8 stored core to one empty native pasture slot you choose in a new save copy. " +
                 "Only same-format Legends: Arceus records are accepted. Eggs, Noble records, invalid native limits, and species/forms without a uniquely verified game profile remain protected. " +
                 "The record's existing species, form, moves, trainer data, and encounter fields are preserved; this bounded restore does not certify encounter or moveset legality."
             textSize = 16f
@@ -57,9 +58,9 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         }
         root.addView(status)
         review = Button(this).apply {
-            text = "Review restore to new copy"
+            text = "Choose destination & review"
             isEnabled = false
-            setOnClickListener { readyPlan?.let { showReview(it) } }
+            setOnClickListener { showDestinationPasturePicker() }
         }
         root.addView(review)
         inspectCopy = Button(this).apply {
@@ -80,17 +81,21 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                     "The source changed. Reopen it from PSE."
                 }
                 val bank = readBankRecord()
-                LegendsArceusPseBankRestoreEditing.stage(source, hash, bank)
+                val pokemon = LegendsArceusPseBankRestoreEditing.inspectBankRecord(bank)
+                val destinations = LegendsArceusPseBankRestoreEditing.emptyDestinations(source)
+                require(destinations.isNotEmpty()) {
+                    "All 960 native Legends: Arceus pasture slots are occupied."
+                }
+                Triple(pokemon, destinations, LegendsArceusPseBankRestoreEditing.sha256(bank))
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
-                result.onSuccess { plan ->
-                    readyPlan = plan
-                    val p = plan.pokemon
+                result.onSuccess { (pokemon, destinations, bankHash) ->
+                    readyDestinations = destinations
                     status.text = "Native source and Bank integrity verified\n" +
-                        "${LegendsArceusSpeciesNames.name(p.species)} (#${p.species}) • EXP ${p.experience}\n" +
-                        "Destination: Pasture ${plan.pasture}, slot ${plan.position}\n" +
-                        "Source SHA-256: ${plan.sourceSha256}\nBank SHA-256: ${plan.bankSha256}"
+                        "${LegendsArceusSpeciesNames.name(pokemon.species)} (#${pokemon.species}) • EXP ${pokemon.experience}\n" +
+                        "${destinations.size} empty native destination slots available\n" +
+                        "Source SHA-256: ${expectedHash}\nBank SHA-256: $bankHash"
                 }.onFailure { status.text = it.message ?: "The PSE Bank restore could not be prepared safely." }
                 setBusy(false)
             }
@@ -99,8 +104,62 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
 
     private fun setBusy(value: Boolean) {
         busy = value
-        review.isEnabled = !value && readyPlan != null
+        review.isEnabled = !value && readyDestinations.isNotEmpty()
         inspectCopy.isEnabled = !value && verifiedCopy != null
+    }
+
+    private fun showDestinationPasturePicker() {
+        if (busy || readyDestinations.isEmpty()) return
+        val pastures = readyDestinations.groupBy { it.pasture }.toSortedMap()
+        val labels = pastures.map { (pasture, slots) ->
+            "Pasture $pasture • ${slots.size} empty slot${if (slots.size == 1) "" else "s"}"
+        }.toTypedArray()
+        AlertDialog.Builder(this).setTitle("Choose Legends: Arceus Pasture")
+            .setItems(labels) { _, index ->
+                val pasture = pastures.keys.elementAt(index)
+                showDestinationSlotPicker(pasture, pastures.getValue(pasture))
+            }
+            .setNegativeButton("Cancel", null).show()
+    }
+
+    private fun showDestinationSlotPicker(
+        pasture: Int,
+        destinations: List<LegendsArceusPseBankDestination>
+    ) {
+        if (busy) return
+        val labels = destinations.map { "Slot ${it.position}" }.toTypedArray()
+        AlertDialog.Builder(this).setTitle("Pasture $pasture • choose empty slot")
+            .setItems(labels) { _, index -> prepareDestinationReview(destinations[index]) }
+            .setNegativeButton("Back") { _, _ -> showDestinationPasturePicker() }
+            .show()
+    }
+
+    private fun prepareDestinationReview(destination: LegendsArceusPseBankDestination) {
+        if (busy || destination !in readyDestinations) return
+        setBusy(true)
+        status.text = "Binding Pasture ${destination.pasture}, slot ${destination.position} to the restore review…"
+        worker.execute {
+            val result = runCatching {
+                val source = readSource()
+                val hash = expectedHash ?: error("Reopen the source from PSE.")
+                val bank = readBankRecord()
+                LegendsArceusPseBankRestoreEditing.stage(
+                    source, hash, bank, destination.pasture, destination.position
+                )
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                result.onSuccess { plan ->
+                    readyPlan = plan
+                    setBusy(false)
+                    showReview(plan)
+                }.onFailure {
+                    readyPlan = null
+                    status.text = it.message ?: "The selected destination could not be prepared safely."
+                    setBusy(false)
+                }
+            }
+        }
     }
 
     private fun readSource(): ByteArray {
@@ -253,6 +312,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                     }
                 )
                 readyPlan = null
+                readyDestinations = emptyList()
                 setBusy(false)
             }
         }

@@ -584,3 +584,12 @@ The next title-specific Generation 8 route now connects preserved 232-byte Gen 7
 The source PK7 Bank entry and BDSP source save remain unchanged. Before staging, PSE latches and rechecks the exact PK7 source hash, regenerates and reopens the same checksum-valid PB8, and requires the user to choose one currently empty slot among all 40 native boxes. The write remains limited to that one 344-byte PB8 record and BDSP's whole-file MD5 in a new document. The existing retained recovery backup, persisted destination reopen, unchanged source and Bank checks, and failed-copy deletion provide two-sided rollback without consuming the Bank entry.
 
 Next bounded route: retain the per-title disclosure, chosen-slot, recovery, and reopen contract while adding the reviewed Gen 7 PK7 -> Legends: Arceus PA8 adapter. Do not infer PA8 conversion support from the existing native deposit and restore inventory.
+
+
+## Legends: Arceus native Bank destination review prerequisite
+
+Legends: Arceus PA8 restore now requires the user to choose the exact empty native pasture slot before the restore review is created. PSE enumerates all empty slots across the 32 native pastures, groups them by pasture, and binds the selected pasture and slot into the review. The source save and PA8 Bank entry are reopened before staging, and the route rejects the review if the chosen slot is no longer empty.
+
+The native write remains limited to the chosen 360-byte PA8 pasture core and the save's SHA-256 footer. Existing pasture records, party data, and unrelated container bytes remain exact. The retained verified recovery backup, persisted destination reopen, unchanged source and Bank checks, and failed-copy deletion continue to provide rollback without consuming the Bank entry. Party-format PA8 entries still disclose that their 16-byte party-only tail has no pasture equivalent and remains preserved in PSE Bank.
+
+This closes the silent first-empty-pasture gap before cross-generation conversion is enabled. Next bounded route: add the explicit Gen 7 PK7 -> Legends: Arceus PA8 adapter with title-specific species, move, Ganbaru Value, ball, size, Alpha/Noble, encounter, memory, and provenance disclosures. Native PA8 deposit and restore inventory alone remains insufficient evidence of conversion support.
