@@ -11951,6 +11951,7 @@ class MainActivity : Activity() {
             "PSE could not verify the loaded Generation $targetGeneration title."
         }
         require(trainer.trainerName.isNotBlank()&&trainer.trainerName.length<=12&&trainer.trainerName.none{it=='\uFFFD'||it.code<0x20}){"The destination trainer name cannot be represented exactly as the Gen 6 handling trainer."}
+        require(trainer.gender=="Male"||trainer.gender=="Female"){"The destination trainer gender is ${trainer.gender}; native PK6 handler metadata cannot be guessed."}
         gen5ToGen6PreflightRejection(p)?.let{error(it)}
         require(gen5CompatibleOriginTitle(p.originGame)!=null){"The source origin game ID ${p.originGame} is not a documented native Generation 1–5 title."}
         val ups=gen5Pk5PpUps(raw);require(ups.all{it in 0..3}){"The PK5 PP-Up values could not be verified."}
@@ -25108,6 +25109,8 @@ class MainActivity : Activity() {
             return showDialog("Gen 3 → Gen 6","Load a checksum-clean Pokémon X, Y, Omega Ruby or Alpha Sapphire save first.")
         val trainer=analyzeSave(file).trainer
             ?:return showDialog("Gen 3 → Gen 6","PSE could not read the destination trainer identity.")
+        if(trainer.gender!="Male"&&trainer.gender!="Female")
+            return showDialog("Gen 3 → Gen 6 blocked","The destination trainer gender is ${trainer.gender}. PSE will not guess the native PK6 handling-trainer gender.\n\nThe Bank record and destination were left unchanged.")
         fun snapshotsMatch()=bound()&&runCatching{
             file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)
         }.getOrDefault(false)
@@ -25162,7 +25165,7 @@ class MainActivity : Activity() {
                     append("Preserved: species, TID/SID, nickname and OT, EXP, ability slot, nature, gender, shiny state, moves, current PP, PP Ups, IVs, EVs, friendship, Pokérus, Ball, language and source title.\n")
                     append("$pidNote\n")
                     append("Ability: source ability #${source.ability} in slot ${source.abilityNumber} → verified Gen 6 ability #${meta6.abilityId}.\n")
-                    append("Required format changes: held items and Eggs are blocked; Gen 3 met location $oldMet, original met/egg details, markings, contest data, ribbons and event marker are not represented. Native PK6 uses transfer marker 30001, conversion date 20${plan.metYear.toString().padStart(2,'0')}-${plan.metMonth.toString().padStart(2,'0')}-${plan.metDay.toString().padStart(2,'0')}, current handler ${trainer.trainerName}, empty relearn/geographic fields and Egg location 0.\n\n")
+                    append("Required format changes: held items and Eggs are blocked; Gen 3 met location $oldMet, original met/egg details, markings, contest data, ribbons and event marker are not represented. Native PK6 uses transfer marker 30001, conversion date 20${plan.metYear.toString().padStart(2,'0')}-${plan.metMonth.toString().padStart(2,'0')}-${plan.metDay.toString().padStart(2,'0')}, current handler ${trainer.trainerName} (${trainer.gender}), empty relearn/geographic fields and Egg location 0.\n\n")
                     append("This is a PSE conversion, not an in-game trade or a claim of official transfer provenance. The source save stays unchanged. The exact Gen 3 Bank record remains until a retained recovery backup, chosen PK6 slot, Pokédex update, checksums and reopened destination all verify.")
                 }
                 AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{meta5.speciesName}} • Gen 3 → Gen 6")
