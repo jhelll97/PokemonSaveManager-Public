@@ -13239,8 +13239,11 @@ class MainActivity : Activity() {
                 "The source identity, PK7 Bank record, verified destination or retained recovery snapshots changed before cleanup."
             }
             deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The PK7 Bank record could not be removed after destination verification."}
-            require(file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)){
-                "The verified destination or retained destination backup changed after Bank cleanup."
+            require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&
+                currentSourceLabel==p.sourceLabel&&file.readBytes().contentEquals(save)&&
+                isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The verified destination identity or retained recovery snapshots changed after Bank cleanup."
             }
             runCatching{bankCopy.delete()}
         }catch(e:Exception){
@@ -13249,7 +13252,11 @@ class MainActivity : Activity() {
                     require(p.bankFile.createNewFile()){"The Bank recovery path could not be reserved."}
                     p.bankFile.writeBytes(p.bankBytes)
                 }
-                p.bankFile.readBytes().contentEquals(p.bankBytes)
+                val restored=p.bankFile.readBytes()
+                restored.contentEquals(p.bankBytes)&&parsePk6(restored,0,PK6_STORED_SIZE,false,807)?.let{
+                    it.checksumValid&&it.pid==p.source.pid&&it.species==p.source.species&&
+                        it.tid==p.source.tid&&it.sid==p.source.sid
+                }==true
             }.getOrDefault(false)
             val saveRestored=!writeStarted||runCatching{
                 file.writeBytes(fresh);val restored=file.readBytes()
@@ -13262,7 +13269,7 @@ class MainActivity : Activity() {
                 saveRestored->"The exact Generation 3 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
                 else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
             }
-            showDialog("Gen 7 → Gen 3 failed",(e.message?:"Unknown error")+"\n\n$recovery"+
+            showDialog("Gen 7 → Gen 3 PSE conversion failed",(e.message?:"Unknown error")+"\n\n$recovery"+
                 (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
                 (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery snapshot: ${it.name}"}?:""));return
         }
