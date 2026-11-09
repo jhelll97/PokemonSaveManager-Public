@@ -23646,6 +23646,7 @@ class MainActivity : Activity() {
         require(raw.size==80){"The preserved Gen 3 Bank record has an unexpected size."}
         require(destinationSave.size==SIZE_G7_SM || destinationSave.size==SIZE_G7_USUM){"A Generation 7 destination save is required."}
         gen3ToGen7PreflightRejection(p)?.let{error(it)}
+        require(trainer.gender=="Male"||trainer.gender=="Female"){"The destination trainer gender is ${trainer.gender}; native PK7 handler metadata cannot be guessed."}
         val pk=ByteArray(PK6_STORED_SIZE)
         writeU32LE(pk,0x00,randomU32(java.security.SecureRandom()))
         writeU16LE(pk,0x04,0); writeU16LE(pk,0x08,p.species); writeU16LE(pk,0x0A,0)
@@ -25369,6 +25370,8 @@ class MainActivity : Activity() {
         if(!initialChecks.first)return showDialog("Gen 3 → Gen 7",initialChecks.second)
         val trainer=analyzeSave(file).trainer
             ?:return showDialog("Gen 3 → Gen 7","PSE could not read the destination Gen 7 trainer data.")
+        if(trainer.gender!="Male"&&trainer.gender!="Female")
+            return showDialog("Gen 3 → Gen 7 blocked","The destination trainer gender is ${trainer.gender}. PSE will not guess the native PK7 handling-trainer gender.\n\nThe Bank record and destination were left unchanged.")
         fun snapshotsMatch()=bound()&&runCatching{
             file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)
         }.getOrDefault(false)
@@ -25394,7 +25397,7 @@ class MainActivity : Activity() {
                 append("Preserved: species, TID/SID, nickname and OT, EXP, nature, gender, shiny state, moves, current PP, PP Ups, IVs, EVs, Pokérus, Ball, language and source title.\n")
                 append("$pidNote\n")
                 append("Ability: source slot ${source.abilityNumber}, ability #${source.ability} → verified Gen 7 ability #${meta.abilityId}.\n")
-                append("Required Gen 7 changes: held items and Eggs are blocked; current handler becomes ${trainer.trainerName}; current-handler friendship starts at species base friendship ${meta.baseFriendship}; original OT friendship remains ${source.friendship}; met location becomes transfer marker 30001 with today's conversion date; Egg location, relearn moves and geographic fields start empty. Gen 3 contest data, ribbons, markings, original met/egg details and event marker are not represented by this bounded PK7 conversion.\n\n")
+                append("Required Gen 7 changes: held items and Eggs are blocked; current handler becomes ${trainer.trainerName} (${trainer.gender}); current-handler friendship starts at species base friendship ${meta.baseFriendship}; original OT friendship remains ${source.friendship}; met location becomes transfer marker 30001 with today's conversion date; Egg location, relearn moves and geographic fields start empty. Gen 3 contest data, ribbons, markings, original met/egg details and event marker are not represented by this bounded PK7 conversion.\n\n")
                 append("This is a PSE conversion, not an in-game trade or a claim of official transfer provenance. The source save stays unchanged. The exact Gen 3 Bank record remains until a verified recovery backup is retained and the reviewed PK7, Pokédex update, checksums and reopened destination all verify.")
             }
             AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{meta.speciesName}} • Gen 3 → Gen 7")
