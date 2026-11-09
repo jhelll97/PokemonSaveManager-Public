@@ -13,13 +13,23 @@ import android.widget.TextView
 import java.io.File
 import java.util.concurrent.Executors
 
-/** Restores one native Sword/Shield PSE Bank entry into a reviewed new save copy. */
+private data class SwordShieldBankPreparation(
+    val pokemon: SwordShieldPokemonRead,
+    val destinations: List<SwordShieldPseBankDestination>,
+    val sourceBankHash: String,
+    val nativeRecordHash: String,
+    val effects: List<String>
+)
+
+/** Restores one native PK8 or explicitly reviewed Gen 7 conversion into a new save copy. */
 class SwitchSwordShieldPseBankRestoreActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
     private val createCopyRequest = 2149
     private var sourceUri: Uri? = null
     private var expectedHash: String? = null
     private var bankEntryName: String? = null
+    private var expectedBankSourceHash: String? = null
+    private var conversionEffects: List<String> = emptyList()
     private var readyDestinations: List<SwordShieldPseBankDestination> = emptyList()
     private var readyPlan: SwordShieldPseBankRestoreCopyPlan? = null
     private var pendingPlan: SwordShieldPseBankRestoreCopyPlan? = null
@@ -46,9 +56,9 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Sword/Shield • PSE Bank"; textSize = 24f })
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
-            text = "PSE restores the exact checksum-valid PK8 bytes to one empty native PC-box slot you choose in a new save copy. " +
-                "Only same-format Sword/Shield records are accepted. Eggs, invalid native limits, and species/forms without a uniquely verified game profile remain protected. " +
-                "The record's existing species, form, moves, trainer data, and encounter fields are preserved; this bounded restore does not certify encounter or moveset legality."
+            text = "PSE restores one checksum-valid native PK8 to an empty PC-box slot you choose in a new save copy. " +
+                "Native PK8 entries remain byte-exact. Eligible Gen 7 PK7 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Unsupported species, forms, items, moves, limits, or text remain blocked; this PSE conversion does not certify encounter or moveset legality."
             textSize = 16f
         })
         status = TextView(this).apply {
@@ -80,20 +90,30 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
                 require(SwordShieldPseBankRestoreEditing.sha256(source) == hash) {
                     "The source changed. Reopen it from PSE."
                 }
-                val bank = readBankRecord()
-                val pokemon = SwordShieldPseBankRestoreEditing.inspectBankRecord(bank)
+                val bankSource = readBankSource()
+                val bankSourceHash = SwordShieldPseBankRestoreEditing.sha256(bankSource)
+                expectedBankSourceHash = bankSourceHash
+                val prepared = prepareBankRecord(bankSource)
+                val pokemon = SwordShieldPseBankRestoreEditing.inspectBankRecord(prepared.first)
                 val destinations = SwordShieldPseBankRestoreEditing.emptyDestinations(source)
                 require(destinations.isNotEmpty()) { "All 960 native Sword/Shield PC-box slots are occupied." }
-                Triple(pokemon, destinations, SwordShieldPseBankRestoreEditing.sha256(bank))
+                SwordShieldBankPreparation(
+                    pokemon, destinations, bankSourceHash,
+                    SwordShieldPseBankRestoreEditing.sha256(prepared.first), prepared.second
+                )
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
-                result.onSuccess { (pokemon, destinations, bankHash) ->
-                    readyDestinations = destinations
+                result.onSuccess { prepared ->
+                    readyDestinations = prepared.destinations
+                    conversionEffects = prepared.effects
                     status.text = "Native source and Bank integrity verified\n" +
-                        "${SwordShieldSpeciesNames.name(pokemon.species)} (#${pokemon.species}) • Level ${pokemon.cachedLevel}\n" +
-                        "${destinations.size} empty native destination slots available\n" +
-                        "Source SHA-256: ${expectedHash}\nBank SHA-256: $bankHash"
+                        "${SwordShieldSpeciesNames.name(prepared.pokemon.species)} (#${prepared.pokemon.species}) • Level ${prepared.pokemon.cachedLevel}\n" +
+                        "${prepared.destinations.size} empty native destination slots available\n" +
+                        "Source SHA-256: ${expectedHash}\nBank source SHA-256: ${prepared.sourceBankHash}\n" +
+                        "Prepared PK8 SHA-256: ${prepared.nativeRecordHash}" +
+                        if (prepared.effects.isEmpty()) "" else "\n\nGen 7 -> Sword/Shield Legalise effects\n• " +
+                            prepared.effects.joinToString("\n• ")
                 }.onFailure { status.text = it.message ?: "The PSE Bank restore could not be prepared safely." }
                 setBusy(false)
             }
@@ -176,23 +196,42 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
         val name = bankEntryName ?: error("Reopen PSE Bank.")
         val directory = File(filesDir, "pse_bank").canonicalFile
         val entry = File(directory, name).canonicalFile
-        require(entry.parentFile == directory && entry.isFile &&
-            entry.name.startsWith("switch_swsh_") && entry.extension == "pk8") {
-            "This is not a current Sword/Shield PSE Bank entry."
+        val native = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
+        val gen7 = entry.extension.equals("pk7", true)
+        require(entry.parentFile == directory && entry.isFile && (native || gen7)) {
+            "This is not a current Sword/Shield or Gen 7 PSE Bank entry."
+        }
+        if (gen7) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+            "Review and explicitly choose the disclosed Gen 7 Legalise conversion from PSE Bank."
         }
         return entry
     }
 
-    private fun readBankRecord(): ByteArray {
+    private fun readBankSource(): ByteArray {
+        val bytes = bankFile().readBytes()
+        expectedBankSourceHash?.let {
+            require(SwordShieldPseBankRestoreEditing.sha256(bytes) == it) {
+                "The preserved PSE Bank source changed. Reopen PSE Bank."
+            }
+        }
+        return bytes
+    }
+
+    private fun prepareBankRecord(source: ByteArray): Pair<ByteArray, List<String>> {
         val entry = bankFile()
-        val bytes = entry.readBytes()
-        val hash = SwordShieldPseBankRestoreEditing.sha256(bytes)
+        if (entry.extension.equals("pk7", true)) {
+            val converted = Gen7ToSwordShieldPk8.review(source)
+            return converted.nativeRecord to converted.effects
+        }
+        val hash = SwordShieldPseBankRestoreEditing.sha256(source)
         require(entry.name == "switch_swsh_${hash}.pk8") {
             "The PSE Bank filename no longer matches its native record bytes."
         }
-        SwordShieldPseBankRestoreEditing.inspectBankRecord(bytes)
-        return bytes
+        SwordShieldPseBankRestoreEditing.inspectBankRecord(source)
+        return source to emptyList()
     }
+
+    private fun readBankRecord(): ByteArray = prepareBankRecord(readBankSource()).first
 
     private fun showReview(plan: SwordShieldPseBankRestoreCopyPlan) {
         if (busy || plan !== readyPlan) return
@@ -200,7 +239,12 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
         var dispatched = false
         val p = plan.pokemon
         val moves = p.moves.filter { it.id != 0 }.joinToString { "#${it.id} (PP ${it.pp})" }.ifBlank { "None" }
-        AlertDialog.Builder(this).setTitle("Restore this Bank Pokémon to a new copy?")
+        val effects = if (conversionEffects.isEmpty()) "" else
+            "\n\nExplicit Gen 7 Legalise effects\n• " + conversionEffects.joinToString("\n• ")
+        AlertDialog.Builder(this).setTitle(
+            if (conversionEffects.isEmpty()) "Restore this Bank Pokémon to a new copy?"
+            else "Legalise Gen 7 and restore to a new copy?"
+        )
             .setMessage(
                 "${SwordShieldSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form} • Level ${p.cachedLevel}\n" +
                     "Nickname: ${p.nickname.ifBlank { "None" }} • Shiny: ${if (p.shiny) "Yes" else "No"}\n" +
@@ -209,7 +253,7 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
                     "Allowed encrypted byte scope: one previously empty 344-byte PK8 slot at 0x${plan.absoluteOffset.toString(16).uppercase()} " +
                     "plus the native SHA-256 footer. Every existing PC-box slot, all party data, and all unrelated bytes remain exact. " +
                     "PSE verifies the unchanged source and Bank entry, retains a verified recovery backup, reopens the persisted copy, and removes a failed copy when possible. " +
-                    "The Bank entry remains available. Choose a NEW empty document."
+                    "The Bank entry remains available. Choose a NEW empty document." + effects
             )
             .setNegativeButton("Cancel", null)
             .setOnDismissListener { if (!dispatched) setBusy(false) }
@@ -293,7 +337,8 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
                 inspectCopy.visibility = if (verifiedCopy != null) android.view.View.VISIBLE else android.view.View.GONE
                 status.text = result.fold(
                     onSuccess = {
-                        "PSE Bank restore saved and reopened successfully.\n" +
+                        (if (conversionEffects.isEmpty()) "PSE Bank restore saved and reopened successfully.\n"
+                        else "Gen 7 -> Sword/Shield PSE conversion saved and reopened successfully.\n") +
                             "Box ${plan.box}, slot ${plan.position} • SHA-256: ${plan.editedSha256}\n" +
                             "Recovery backup: $backupName\nOriginal source and Bank entry unchanged."
                     },

@@ -2406,19 +2406,99 @@ class SwitchReadOnlyActivity : Activity() {
     private fun showSwordShieldBank(bound: SwitchReadSession) {
         if (session !== bound) return
         val directory = File(filesDir, "pse_bank")
-        val entries = directory.listFiles()?.filter { it.isFile && it.name.startsWith("switch_swsh_") && it.extension == "pk8" }?.sortedBy { it.name }.orEmpty()
+        val entries = directory.listFiles()?.filter {
+            it.isFile && ((it.name.startsWith("switch_swsh_") && it.extension.equals("pk8", true)) ||
+                it.extension.equals("pk7", true))
+        }?.sortedWith(compareBy<File>({ if (it.extension.equals("pk8", true)) 0 else 1 }, { it.name }))
+            .orEmpty()
         val labels = entries.map { file ->
-            val parsed = runCatching { SwordShieldPokemonReadOnly.read(file.readBytes()) }.getOrNull()
-            val pokemon = (parsed as? SwordShieldSlotRead.Pokemon)?.value
-            if (pokemon == null) file.name + " • unreadable" else pokemon.nickname.ifBlank { SwordShieldSpeciesNames.name(pokemon.species) } + " (#" + pokemon.species + ")" + (if (pokemon.shiny) " • Shiny" else "") + " • PK8"
-        }
-        AlertDialog.Builder(this).setTitle("PSE Bank • " + entries.size + " Sword/Shield Pokémon")
-            .setItems(labels.toTypedArray()) { _, index ->
-                if (session !== bound) return@setItems
-                val result = runCatching { SwordShieldPokemonReadOnly.read(entries[index].readBytes()) }.getOrNull()
-                showSwordShieldPokemon(bound, "PSE Bank • " + entries[index].name, result ?: SwordShieldSlotRead.Invalid("Bank record could not be read."))
+            if (file.extension.equals("pk7", true)) {
+                val converted = runCatching { Gen7ToSwordShieldPk8.review(file.readBytes()) }
+                converted.fold(
+                    onSuccess = {
+                        val p = SwordShieldPseBankRestoreEditing.inspectBankRecord(it.nativeRecord)
+                        p.nickname.ifBlank { SwordShieldSpeciesNames.name(p.species) } +
+                            " (#" + p.species + ") • Gen 7 PK7 -> PK8 Legalise"
+                    },
+                    onFailure = { file.name + " • Gen 7 route blocked • " + (it.message ?: "unreadable") }
+                )
+            } else {
+                val parsed = runCatching { SwordShieldPokemonReadOnly.read(file.readBytes()) }.getOrNull()
+                val pokemon = (parsed as? SwordShieldSlotRead.Pokemon)?.value
+                if (pokemon == null) file.name + " • unreadable"
+                else pokemon.nickname.ifBlank { SwordShieldSpeciesNames.name(pokemon.species) } +
+                    " (#" + pokemon.species + ")" + (if (pokemon.shiny) " • Shiny" else "") + " • PK8"
             }
-            .setPositiveButton("Close", null).show()
+        }
+        val builder = AlertDialog.Builder(this)
+            .setTitle("PSE Bank • " + entries.size + " Sword/Shield routes")
+            .setPositiveButton("Close", null)
+        if (entries.isEmpty()) {
+            builder.setMessage("No native Sword/Shield PK8 or eligible Gen 7 PK7 Bank entries are available.")
+        } else {
+            builder.setItems(labels.toTypedArray()) { _, index ->
+                if (session !== bound) return@setItems
+                val entry = entries[index]
+                if (entry.extension.equals("pk7", true)) {
+                    showSwordShieldGen7BankEntry(bound, entry)
+                } else {
+                    val result = runCatching { SwordShieldPokemonReadOnly.read(entry.readBytes()) }.getOrNull()
+                    showSwordShieldPokemon(bound, "PSE Bank • " + entry.name,
+                        result ?: SwordShieldSlotRead.Invalid("Bank record could not be read."))
+                }
+            }
+        }
+        builder.show()
+    }
+
+    private fun showSwordShieldGen7BankEntry(bound: SwitchReadSession, file: File) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = runCatching { file.canonicalFile }.getOrNull()
+        val result = runCatching {
+            require(entry != null && entry.parentFile == directory && entry.isFile &&
+                entry.extension.equals("pk7", true)) { "This is not a current Gen 7 PSE Bank entry." }
+            Gen7ToSwordShieldPk8.review(entry.readBytes())
+        }
+        val converted = result.getOrElse {
+            AlertDialog.Builder(this).setTitle("Gen 7 -> Sword/Shield blocked")
+                .setMessage((it.message ?: "No safe conversion is available.") +
+                    "\n\nThe PK7 Bank entry and Sword/Shield save remain unchanged.")
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val selected = entry ?: return
+        val p = SwordShieldPseBankRestoreEditing.inspectBankRecord(converted.nativeRecord)
+        val message = buildString {
+            append("${SwordShieldSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n")
+            append("Source: ${selected.name} • preserved 232-byte PK7\n")
+            append("Prepared destination: checksum-valid 344-byte native Sword/Shield PK8\n\n")
+            append("Exact disclosed conversion effects\n• ")
+            append(converted.effects.joinToString("\n• "))
+            append("\n\nContinue only if you accept every disclosed Legalise effect.")
+        }
+        AlertDialog.Builder(this).setTitle("Gen 7 -> Sword/Shield • PSE Legalise review")
+            .setMessage(message).setNegativeButton("Cancel", null)
+            .setPositiveButton("Legalise & choose destination") { _, _ ->
+                try {
+                    require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                    val source = selectedSourceUri ?: error("Reopen the selected Sword/Shield save from PSE.")
+                    require(selected.parentFile == directory && selected.isFile && selected.extension.equals("pk7", true)) {
+                        "The Gen 7 Bank entry changed."
+                    }
+                    Gen7ToSwordShieldPk8.review(selected.readBytes())
+                    startActivity(Intent(this, SwitchSwordShieldPseBankRestoreActivity::class.java)
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.bank.entry", selected.name)
+                        .putExtra("pse.bank.legalise", true)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not prepare Gen 7 conversion")
+                        .setMessage(error.message ?: "Both sources remain unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }.show()
     }
 
     private fun swordShieldRecordBytes(bound: SwitchReadSession, location: String): ByteArray {
