@@ -24991,6 +24991,15 @@ class MainActivity : Activity() {
         gen3ToGen4PreflightRejection(source,legalisePid)?.let{
             return showDialog("Gen 3 → Gen 5 blocked","$it\n\nThe Bank record and destination were left unchanged.")
         }
+        source.moves.indices.firstOrNull{source.moves[it]==0&&source.movePP[it]!=0}?.let{slot->
+            return showDialog("Gen 3 → Gen 5 blocked",
+                "Move slot ${slot+1} is empty but carries ${source.movePP[slot]} current PP. Native PK5 cannot preserve PP without a move, so PSE will not clear it silently.\n\nThe Bank record and destination were left unchanged.")
+        }
+        val sourcePpUps=gen3MovePpUps(bank)
+        source.moves.indices.firstOrNull{source.moves[it]==0&&sourcePpUps[it]!=0}?.let{slot->
+            return showDialog("Gen 3 → Gen 5 blocked",
+                "Move slot ${slot+1} is empty but carries ${sourcePpUps[slot]} PP Up level. Native PK5 cannot preserve PP Ups without a move, so PSE will not clear it silently.\n\nThe Bank record and destination were left unchanged.")
+        }
         val destination=runCatching{file.readBytes()}.getOrNull()
             ?:return showDialog("Gen 3 → Gen 5","The destination save could not be read.")
         val profile=detectGen5Profile(destination)
@@ -25035,7 +25044,7 @@ class MainActivity : Activity() {
                 append("Preserved: species, shiny state, gender, nature, OT/TID/SID, nickname, EXP, friendship, IVs, EVs, moves, current PP, PP Ups, Pokérus, Ball, language and source title.\n")
                 append("$pidNotice\n")
                 append("Ability: source slot ${source.abilityNumber} → verified Gen 5 ability #${meta.abilityId}.\n")
-                append("Required format changes: this route blocks nonzero held items. Gen 3 met location $oldMet, original met/egg details, contest data, ribbons and event marker are not represented by this bounded PK5 conversion. The PK5 uses unspecified met location 0, derived level ${plan.level}, and conversion date 20${plan.metYear.toString().padStart(2,'0')}-${plan.metMonth.toString().padStart(2,'0')}-${plan.metDay.toString().padStart(2,'0')}.\n\n")
+                append("Required format changes: this route blocks nonzero held items, and empty move slots carrying PP or PP Ups are blocked instead of cleared. Gen 3 met location $oldMet, original met/egg details, contest data, ribbons and event marker are not represented by this bounded PK5 conversion. The PK5 uses unspecified met location 0, derived level ${plan.level}, and conversion date 20${plan.metYear.toString().padStart(2,'0')}-${plan.metMonth.toString().padStart(2,'0')}-${plan.metDay.toString().padStart(2,'0')}.\n\n")
                 append("This is a PSE conversion, not an in-game trade or a claim of official transfer provenance. The source save stays unchanged. The exact Gen 3 Bank record remains until the reviewed PK5, Pokédex update, checksums and reopened destination verify; failures restore both sides from the verified recovery path.")
             }
             AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{meta.speciesName}} • Gen 3 → Gen 5")
