@@ -21,7 +21,7 @@ private data class LegendsZaBankPreparation(
     val effects: List<String>
 )
 
-/** Restores one native PA9 or explicitly reviewed Sword/Shield conversion into a new Z-A save copy. */
+/** Restores one native PA9 or explicitly reviewed Gen 8 conversion into a new Z-A save copy. */
 class SwitchLegendsZaPseBankRestoreActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
     private val createCopyRequest = 2153
@@ -57,8 +57,8 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid native PA9 to an empty PC-box slot you choose in a new save copy. " +
-                "Native PA9 entries remain byte-exact. Eligible Sword/Shield PK8 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
-                "Unsupported species, forms, items, moves, limits, or text remain blocked; this PSE conversion does not certify encounter, ability, Mega, or moveset legality."
+                "Native PA9 entries remain byte-exact. Eligible Sword/Shield PK8 and BDSP PB8 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Unsupported species, forms, items, moves, limits, or text remain blocked; these PSE conversions do not certify encounter, ability, Mega, or moveset legality."
             textSize = 16f
         })
         status = TextView(this).apply {
@@ -119,7 +119,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                         "${ScarletVioletSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n" +
                         "${prepared.destinations.size} empty native destination slots available\n" +
                         "Bank source SHA-256: ${prepared.sourceBankHash}\nPrepared PA9 SHA-256: ${prepared.nativeRecordHash}" +
-                        if (prepared.effects.isEmpty()) "" else "\n\nSword/Shield -> Legends: Z-A Legalise effects\n• " +
+                        if (prepared.effects.isEmpty()) "" else "\n\n${conversionSourceName()} -> Legends: Z-A Legalise effects\n• " +
                             prepared.effects.joinToString("\n• ")
                 }.onFailure { status.text = it.message ?: "The PSE Bank restore could not be prepared safely." }
                 setBusy(false)
@@ -199,17 +199,24 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         contentResolver.openInputStream(uri) ?: error("The document cannot be read.")
     )
 
+    private fun conversionSourceName(): String = when {
+        bankEntryName?.endsWith(".pk8", true) == true -> "Sword/Shield"
+        bankEntryName?.endsWith(".pb8", true) == true -> "BDSP"
+        else -> "Native PA9"
+    }
+
     private fun bankFile(): File {
         val name = bankEntryName ?: error("Reopen PSE Bank.")
         val directory = File(filesDir, "pse_bank").canonicalFile
         val entry = File(directory, name).canonicalFile
         val native = entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true)
         val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
-        require(entry.parentFile == directory && entry.isFile && (native || swordShield)) {
-            "This is not a current Legends: Z-A or Sword/Shield PSE Bank entry."
+        val bdsp = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
+        require(entry.parentFile == directory && entry.isFile && (native || swordShield || bdsp)) {
+            "This is not a current Legends: Z-A, Sword/Shield, or BDSP PSE Bank entry."
         }
-        if (swordShield) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
-            "Review and explicitly choose the disclosed Sword/Shield Legalise conversion from PSE Bank."
+        if (swordShield || bdsp) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+            "Review and explicitly choose the disclosed ${conversionSourceName()} Legalise conversion from PSE Bank."
         }
         return entry
     }
@@ -226,11 +233,21 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
 
     private fun prepareBankRecord(source: ByteArray): Pair<ByteArray, List<String>> {
         val entry = bankFile()
+        val hash = LegendsZaPseBankRestoreEditing.sha256(source)
         if (entry.extension.equals("pk8", true)) {
+            require(entry.name == "switch_swsh_${hash}.pk8") {
+                "The PSE Bank filename no longer matches its native PK8 bytes."
+            }
             val converted = SwordShieldToLegendsZaPa9.review(source)
             return converted.nativeRecord to converted.effects
         }
-        val hash = LegendsZaPseBankRestoreEditing.sha256(source)
+        if (entry.extension.equals("pb8", true)) {
+            require(entry.name == "switch_bdsp_${hash}.pb8") {
+                "The PSE Bank filename no longer matches its native PB8 bytes."
+            }
+            val converted = BdspToLegendsZaPa9.review(source)
+            return converted.nativeRecord to converted.effects
+        }
         require(entry.name == "switch_za_${hash}.pa9") {
             "The PSE Bank filename no longer matches its native record bytes."
         }
@@ -256,10 +273,10 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         val p = plan.pokemon
         val moves = p.moves.filter { it.id != 0 }.joinToString { "#${it.id} (PP ${it.pp})" }.ifBlank { "None" }
         val effects = if (conversionEffects.isEmpty()) "" else
-            "\n\nExplicit Sword/Shield Legalise effects\n• " + conversionEffects.joinToString("\n• ")
+            "\n\nExplicit ${conversionSourceName()} Legalise effects\n• " + conversionEffects.joinToString("\n• ")
         AlertDialog.Builder(this).setTitle(
             if (conversionEffects.isEmpty()) "Restore this Bank Pokémon to a new copy?"
-            else "Legalise Sword/Shield and restore to a new copy?"
+            else "Legalise ${conversionSourceName()} and restore to a new copy?"
         )
             .setMessage(
                 "${ScarletVioletSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form} • Level ${p.cachedLevel}\n" +
@@ -354,7 +371,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                 status.text = result.fold(
                     onSuccess = {
                         (if (conversionEffects.isEmpty()) "PSE Bank restore saved and reopened successfully.\n"
-                        else "Sword/Shield -> Legends: Z-A PSE conversion saved and reopened successfully.\n") +
+                        else "${conversionSourceName()} -> Legends: Z-A PSE conversion saved and reopened successfully.\n") +
                             "Box ${plan.box}, slot ${plan.position} • SHA-256: ${plan.editedSha256}\n" +
                             "Recovery backup: $backupName\nOriginal source and Bank entry unchanged."
                     },
