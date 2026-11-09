@@ -13731,6 +13731,11 @@ class MainActivity : Activity() {
         return mapped to "native Gen 6 one-bit markings 0x${"%02X".format(markings)} → Gen 7 blue marking states 0x${"%04X".format(mapped)}"
     }
 
+    private fun gen6CompatibleOriginTitle(id:Int):String?=when(id){
+        1,2,3,4,5,7,8,10,11,12,15,20,21,22,23,24,25,26,27->originGameName(id)
+        else->null
+    }
+
     private fun gen6ToGen7PreflightRejection(p:PokemonEntry,raw:ByteArray,originGame:Int=p.originGame):String?=when{
         !p.checksumValid->"The source PK6 checksum is invalid."
         raw.size!=PK6_STORED_SIZE->"The preserved Gen 6 Bank record has an unexpected size."
@@ -13758,7 +13763,7 @@ class MainActivity : Activity() {
         p.language !in setOf(1,2,3,4,5,7,8)->"Language ID ${p.language} is not a verified Generation 6 value."
         p.ball !in 1..25->"Ball ID ${p.ball} is outside the Generation 6 catalogue."
         p.metLevel !in 1..100->"The met level is outside native limits."
-        originGame !in 1..27->"Origin game ID $originGame is not representable by a verified Generation 6-origin PK6."
+        gen6CompatibleOriginTitle(originGame)==null->"Origin game ID $originGame is not a documented native Generation 1–6 title."
         !gen5ToGen6DateValid(p.metYear,p.metMonth,p.metDay)->"The met date is invalid."
         !gen5ToGen6DateValid(p.eggYear,p.eggMonth,p.eggDay)->"The Egg date is invalid."
         else->null
@@ -13769,6 +13774,7 @@ class MainActivity : Activity() {
 
     private fun buildGen6ToGen7Pk7(raw:ByteArray,p:PokemonEntry,originGame:Int=p.originGame):ByteArray{
         require(raw.size==PK6_STORED_SIZE){"The preserved Gen 6 Bank record has an unexpected size."};gen6ToGen7PreflightRejection(p,raw,originGame)?.let{error(it)}
+        require(gen6CompatibleOriginTitle(originGame)!=null){"The selected origin game ID $originGame is not a documented native Generation 1–6 title."}
         val ups=gen6Pk6PpUps(raw);require(ups.all{it in 0..3}){"The PK6 PP-Up values could not be verified."};require((0..3).all{p.moves[it]!=0||(p.movePP[it]==0&&ups[it]==0)}){"An empty move slot contains PP or PP-Up data that cannot be reviewed safely."}
         val sourcePlain=decryptPk6IfNeeded(raw);val targetPlain=sourcePlain.copyOf();val markings=gen6ToGen7Markings(p.markingValue).first;writeU16LE(targetPlain,0x16,markings);targetPlain[0x2A]=0;targetPlain[0xDE]=0;targetPlain[0xDF]=originGame.toByte();updatePk6Checksum(targetPlain)
         require(targetPlain.indices.all{it in setOf(0x06,0x07,0x16,0x17,0x2A,0xDE,0xDF)||targetPlain[it]==sourcePlain[it]}){"The PK7 conversion changed an unreviewed stored-Pokémon field."}
@@ -13783,21 +13789,24 @@ class MainActivity : Activity() {
         val destination=runCatching{file.readBytes()}.getOrNull()?:return showDialog("Gen 6 → Gen 7","The destination save could not be read.");val checks=validateGen7CoreChecksums(destination);if(!bound()||generationForSize(destination.size)!=7||!checks.first)return showDialog("Gen 6 → Gen 7",checks.second)
         val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return;val selected=runCatching{bankFile.canonicalFile}.getOrNull()?:return;if(selected.parentFile!=root||!selected.extension.equals("pk6",true))return showDialog("Gen 6 → Gen 7","The selected record is outside the Generation 6 PSE Bank.")
         val bank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Gen 6 → Gen 7","The Bank record could not be read.");val source=if(bank.size==PK6_STORED_SIZE)parsePk6(bank,0,PK6_STORED_SIZE,false,721)else null
-        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||source.tid!=shown.tid||source.sid!=shown.sid)return showDialog("Gen 6 → Gen 7","The selected Bank record changed or failed its PK6 checksum.");val needsLegalise=source.originGame !in 1..27
+        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||source.tid!=shown.tid||source.sid!=shown.sid)return showDialog("Gen 6 → Gen 7","The selected Bank record changed or failed its PK6 checksum.");val needsLegalise=gen6CompatibleOriginTitle(source.originGame)==null
         val originGame=requestedOriginGame?:source.originGame
         if(needsLegalise&&requestedOriginGame==null){
-            val ids=listOf(24,25,26,27)
+            val choices=listOf(24 to "Pokémon X",25 to "Pokémon Y",26 to "Pokémon Alpha Sapphire",27 to "Pokémon Omega Ruby")
             AlertDialog.Builder(this).setTitle("Choose Gen 6 origin mapping")
-                .setMessage("Origin game ID ${source.originGame} is outside the verified Gen 6-origin range. Choose a Gen 6 origin ID for PK7. This is an explicit PSE Legalise choice, not verified history; cancelling leaves the Bank record and destination unchanged.")
-                .setItems(ids.map{"Origin game ID $it"}.toTypedArray()){_,which->prepareGen6ToGen7Transfer(bankFile,shown,ids[which])}
+                .setMessage("Origin game ID ${source.originGame} is not a documented native Generation 1–6 title. Choose the exact Gen 6 title to write in PK7. This is an explicit PSE Legalise choice, not verified history; cancelling leaves the Bank record and destination unchanged.")
+                .setItems(choices.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
+                    prepareGen6ToGen7Transfer(bankFile,shown,choices[which].first)
+                }
                 .setNegativeButton("Cancel",null).show()
             return
         }
-        if(needsLegalise&&originGame !in 24..27)return showDialog("Gen 6 → Gen 7 blocked","Choose a valid Gen 6 origin ID.")
+        if(needsLegalise&&originGame !in 24..27)return showDialog("Gen 6 → Gen 7 blocked","Choose Pokémon X, Y, Alpha Sapphire or Omega Ruby as the Gen 6 origin.")
         gen6ToGen7PreflightRejection(source,bank,originGame)?.let{return showDialog("Gen 6 → Gen 7 blocked","$it\n\nThe PK6 Bank record and Gen 7 destination were left unchanged.")}
         val pk7=try{buildGen6ToGen7Pk7(bank,source,originGame)}catch(e:Exception){return showDialog("Gen 6 → Gen 7 blocked",(e.message?:"No safe native PK7 mapping is available.")+"\n\nNothing was changed.")};if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false))return showDialog("Gen 6 → Gen 7","The destination or Bank record changed during preparation. Nothing was changed.")
         val converted=parsePk6(pk7,0,PK6_STORED_SIZE,false,807)?:return showDialog("Gen 6 → Gen 7","The prepared PK7 could not be re-read.");val markingNote=gen6ToGen7Markings(source.markingValue).second;val prepared=Gen6Gen7Prepared(selected,bank,source,destination,pk7,converted,file,openedUri,openedLabel,markingNote,originGame)
-        val originNote=if(needsLegalise)"Origin Legalise: game ID ${source.originGame} → ${originGame}; this is a user-selected provenance change, not verified history." else "Origin game ID ${originGame} is preserved."
+        val originTitle=gen6CompatibleOriginTitle(originGame)?:return showDialog("Gen 6 → Gen 7 blocked","The reviewed origin mapping is no longer destination-valid. Nothing was changed.")
+        val originNote=if(needsLegalise)"Origin Legalise: game ID ${source.originGame} → $originTitle (ID $originGame); this is a user-selected provenance change, not verified history." else "Origin preserved: $originTitle (ID $originGame)."
         val preview="PSE Bank conversion into native PK7 storage; this does not claim an official Pokémon Bank transaction or provenance.\n\nPreserved exactly: species/form, encryption constant, PID, OT/TID/SID, nickname, held item, EXP, ability/slot, nature, gender, shiny state, moves/PP/PP Ups/relearn moves, IVs, EVs, friendship and handler data, Pokérus, encounter locations, Ball, met level, origin game, language, dates, geography, memories and all other stored metadata.\n\nReviewed format differences:\n• $markingNote.\n• $originNote\n• PK6 Super Training Bag state must be empty because PK7 uses bytes 0x16–0x17 for markings; nonzero Bag state is blocked rather than discarded.\n• Gen 7 Resort state and Hyper Training start empty. Nonzero reserved PK6 byte 0xDE is blocked rather than reinterpreted.\n• Generation-specific Pikachu forms, Eggs, invalid catalogue values and unsupported metadata are blocked with their exact reason.\n\nThe user chooses one empty native Gen 7 slot. PSE then updates that exact PK7, required Pokédex flags, Box/Pokédex block CRCs and the native save signature. A retained verified recovery backup is mandatory. The PK6 Bank record is removed only after persisted reopen verification; either side is restored on failure."
         AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 6 → Gen 7").setMessage(preview).setNegativeButton("Cancel",null).setPositiveButton("Choose Gen 7 destination"){_,_->chooseGen6ToGen7Destination(prepared)}.show()
     }
@@ -14134,7 +14143,7 @@ class MainActivity : Activity() {
         if(p.language !in setOf(1,2,3,4,5,7,8))return "Language ID ${p.language} is not a verified Generation 6 value."
         if(p.ball !in 1..25)return "Ball ID ${p.ball} did not exist in Generation 6."
         if(p.metLevel !in 1..100)return "The met level is outside native limits."
-        if(originGame !in 1..27)return "Origin game ID $originGame is Generation 7 data with no documented destination-valid Generation 6 provenance mapping."
+        if(gen6CompatibleOriginTitle(originGame)==null)return "Origin game ID $originGame has no documented destination-valid Generation 6 provenance mapping."
         if(!gen5ToGen6DateValid(p.metYear,p.metMonth,p.metDay))return "The met date is invalid."
         if(!gen5ToGen6DateValid(p.eggYear,p.eggMonth,p.eggDay))return "The Egg date is invalid."
         val plain=decryptPk6IfNeeded(raw)
@@ -14149,6 +14158,7 @@ class MainActivity : Activity() {
 
     private fun buildGen7ToGen6Pk6(raw:ByteArray,p:PokemonEntry,originGame:Int=p.originGame):ByteArray{
         require(raw.size==PK6_STORED_SIZE){"The preserved Gen 7 Bank record has an unexpected size."};gen7ToGen6PreflightRejection(p,raw,originGame)?.let{error(it)}
+        require(gen6CompatibleOriginTitle(originGame)!=null){"The selected origin game ID $originGame has no documented native PK6 mapping."}
         val ups=gen6Pk6PpUps(raw);require(ups.all{it in 0..3}){"The PK7 PP-Up values could not be verified."};require((0..3).all{p.moves[it]!=0||(p.movePP[it]==0&&ups[it]==0)}){"An empty move slot contains PP or PP-Up data that cannot be reviewed safely."}
         val sourcePlain=decryptPk6IfNeeded(raw);val targetPlain=sourcePlain.copyOf();val markings=gen7ToGen6Markings(p.markingValue).first
         targetPlain[0x16]=0;targetPlain[0x17]=0;targetPlain[0x2A]=markings.toByte();targetPlain[0xDE]=0;targetPlain[0xDF]=originGame.toByte();updatePk6Checksum(targetPlain)
@@ -14167,22 +14177,25 @@ class MainActivity : Activity() {
         if(selected.parentFile!=root||!selected.extension.equals("pk7",true))return showDialog("Gen 7 → Gen 6","The selected record is outside the Generation 7 PSE Bank.")
         val bank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Gen 7 → Gen 6","The Bank record could not be read.");val source=if(bank.size==PK6_STORED_SIZE)parsePk6(bank,0,PK6_STORED_SIZE,false,807)else null
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||source.tid!=shown.tid||source.sid!=shown.sid)return showDialog("Gen 7 → Gen 6","The selected Bank record changed or failed its PK7 checksum.")
-        val needsLegalise=source.originGame !in 1..27
+        val needsLegalise=gen6CompatibleOriginTitle(source.originGame)==null
         val originGame=requestedOriginGame?:source.originGame
         if(needsLegalise&&requestedOriginGame==null){
-            val ids=listOf(24,25,26,27)
+            val choices=listOf(24 to "Pokémon X",25 to "Pokémon Y",26 to "Pokémon Alpha Sapphire",27 to "Pokémon Omega Ruby")
             AlertDialog.Builder(this).setTitle("Choose Gen 6 origin mapping")
-                .setMessage("Origin game ID ${source.originGame} has no documented Generation 6 provenance mapping. Choose a Gen 6 origin ID for PK6. This is an explicit PSE Legalise choice, not verified history; cancelling leaves the Bank record and destination unchanged.")
-                .setItems(ids.map{"Origin game ID $it"}.toTypedArray()){_,which->prepareGen7ToGen6Transfer(bankFile,shown,ids[which])}
+                .setMessage("Origin game ID ${source.originGame} has no documented Generation 6 provenance mapping. Choose the exact Gen 6 title to write in PK6. This is an explicit PSE Legalise choice, not verified history; cancelling leaves the Bank record and destination unchanged.")
+                .setItems(choices.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
+                    prepareGen7ToGen6Transfer(bankFile,shown,choices[which].first)
+                }
                 .setNegativeButton("Cancel",null).show()
             return
         }
-        if(needsLegalise&&originGame !in 24..27)return showDialog("Gen 7 → Gen 6 blocked","Choose a valid Gen 6 origin ID.")
+        if(needsLegalise&&originGame !in 24..27)return showDialog("Gen 7 → Gen 6 blocked","Choose Pokémon X, Y, Alpha Sapphire or Omega Ruby as the Gen 6 origin.")
         gen7ToGen6PreflightRejection(source,bank,originGame)?.let{return showDialog("Gen 7 → Gen 6 blocked","$it\n\nThe PK7 Bank record and Gen 6 destination were left unchanged.")}
         val pk6=try{buildGen7ToGen6Pk6(bank,source,originGame)}catch(e:Exception){return showDialog("Gen 7 → Gen 6 blocked",(e.message?:"No safe native PK6 mapping is available.")+"\n\nNothing was changed.")}
         if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false))return showDialog("Gen 7 → Gen 6","The destination or Bank record changed during preparation. Nothing was changed.")
         val converted=parsePk6(pk6,0,PK6_STORED_SIZE,false,721)?:return showDialog("Gen 7 → Gen 6","The prepared PK6 could not be re-read.");val markingNote=gen7ToGen6Markings(source.markingValue).second;val prepared=Gen7Gen6Prepared(selected,bank,source,destination,pk6,converted,file,openedUri,openedLabel,markingNote,originGame)
-        val originNote=if(needsLegalise)"Origin Legalise: game ID ${source.originGame} → ${originGame}; this is a user-selected provenance change, not verified history." else "Origin game ID ${originGame} is preserved."
+        val originTitle=gen6CompatibleOriginTitle(originGame)?:return showDialog("Gen 7 → Gen 6 blocked","The reviewed origin mapping is no longer destination-valid. Nothing was changed.")
+        val originNote=if(needsLegalise)"Origin Legalise: game ID ${source.originGame} → $originTitle (ID $originGame); this is a user-selected provenance change, not verified history." else "Origin preserved: $originTitle (ID $originGame)."
         val preview="Backward PSE conversion into native PK6 storage. This is not an official game transfer, trade or provenance claim, and PSE does not promise a lossless round trip.\n\nPreserved exactly: destination-representable species/form, encryption constant, PID, OT/TID/SID, nickname, held item, EXP, ability/slot, nature, gender, shiny state, moves/PP/PP Ups/relearn moves, IVs, EVs, friendship and handler data, Pokérus, encounter locations, Ball, met level, pre-Gen-7 origin, language, dates, geography, memories and all other shared metadata.\n\nReviewed format differences:\n• $markingNote.\n• $originNote\n• Red or mixed marking states are blocked because PK6 has only one bit per marking.\n• PK6 Super Training Bag state starts empty because PK7 uses bytes 0x16–0x17 for markings.\n• Nonzero Resort state, Hyper Training, Gen 7-only ribbons, species, forms, moves, items, abilities, Balls and origin data are blocked with the exact reason rather than discarded or relabelled.\n\nThe user chooses one empty native Gen 6 slot. PSE updates that exact PK6, required Pokédex flags and native block checksums. A retained verified recovery backup is mandatory. The PK7 Bank record is removed only after persisted reopen verification; either side is restored on failure."
         AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 7 → Gen 6").setMessage(preview).setNegativeButton("Cancel",null).setPositiveButton("Choose Gen 6 destination"){_,_->chooseGen7ToGen6Destination(prepared)}.show()
     }
