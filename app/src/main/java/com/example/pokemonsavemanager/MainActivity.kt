@@ -30593,11 +30593,11 @@ class MainActivity : Activity() {
     private fun transferGen1BankToGen2(bankFile:File,p:Gen1Pokemon,targetBox:Int,openedFile:File,openedDestination:ByteArray,openedSource:Uri?,openedLabel:String?,profileKey:String){
         val file=openedFile
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedSource&&currentSourceLabel==openedLabel
-        val fresh=runCatching{file.readBytes()}.getOrElse{showDialog("Gen 1 → Gen 2 transfer failed","The fresh destination save could not be read. Nothing was changed.");return}
+        val fresh=runCatching{file.readBytes()}.getOrElse{showDialog("Gen 1 → Gen 2 PSE conversion failed","The fresh destination save could not be read. Nothing was changed.");return}
         var committedSlot=-1
         var writeStarted=false;var bankDeleteAttempted=false
         var recoveryBankBytes:ByteArray?=null
-        var safetyBackup:File?=null
+        var safetyBackup:File?=null;var bankRecovery:File?=null
         try{
             require(bound()&&fresh.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(fresh).first){"The selected destination save or source identity changed. Reopen the Bank entry."}
             val profile=detectGen2Profile(fresh)?:error("The loaded destination is no longer a valid Gen 2 save.")
@@ -30633,7 +30633,12 @@ class MainActivity : Activity() {
             val backup=File.createTempFile(backupGameName(file)+"_PreGen1BankTransfer_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The recovery backup did not persist exactly."}
             retainGen2SafetyBackup(backup,fresh)
-            require(bound()&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(bankBytes)&&backup.readBytes().contentEquals(fresh)&&isBackupKept(backup)){"The destination, Bank record, source identity or retained backup changed before writing."}
+            val bankCopy=File.createTempFile("PSE_G1ToG2_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
+            bankCopy.writeBytes(bankBytes);require(bankCopy.readBytes().contentEquals(bankBytes)){"The Gen 1 Bank recovery snapshot did not persist exactly."}
+            require(bound()&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(bankBytes)&&
+                backup.readBytes().contentEquals(fresh)&&isBackupKept(backup)&&bankCopy.readBytes().contentEquals(bankBytes)){
+                "The destination, Bank record, source identity or retained recovery snapshots changed before writing."
+            }
             writeStarted=true
             file.writeBytes(work)
             val written=file.readBytes();require(written.contentEquals(work)){"The Gen 2 destination changed while the transfer was being written."};val writtenProfile=detectGen2Profile(written)?:error("The written Gen 2 save failed checksum verification.")
@@ -30651,22 +30656,37 @@ class MainActivity : Activity() {
             bankDeleteAttempted=true
             require(bankFile.delete()){"The verified destination was written, but Bank cleanup failed."}
             require(!bankFile.exists()){"The Bank deletion could not be verified."}
+            require(bound()&&file.readBytes().contentEquals(written)){"The verified Gen 2 destination changed after Bank cleanup."}
+            require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 recovery backup changed after Bank cleanup."}
+            runCatching{bankCopy.delete()}
             committedSlot=slot
         }catch(e:Exception){
-            val bankRestored=!writeStarted||runCatching{
+            val bankRestored=runCatching{
                 val expected=recoveryBankBytes?:error("The original Bank payload is unavailable.")
-                if(bankDeleteAttempted){
-                    if(bankFile.exists())require(bankFile.readBytes().contentEquals(expected)){"An existing Bank recovery path changed; it was not overwritten."}
-                    else{require(bankFile.createNewFile()){"A Bank recovery path could not be reserved."};bankFile.writeBytes(expected)}
+                if(bankDeleteAttempted&&!bankFile.exists()){
+                    require(bankFile.createNewFile()){"A Bank recovery path could not be reserved."}
+                    bankFile.writeBytes(expected)
                 }
-                require(bankFile.readBytes().contentEquals(expected)){"The original Bank payload could not be kept or restored exactly."}
-            }.isSuccess
-            val restored=writeStarted&&bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)&&verifyGen2SaveIntegrity(fresh).first}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the destination save or removed from Bank." else  if(restored)"The exact previous destination and original Bank record were kept or restored and verified." else  "Automatic recovery could not be verified. Stop editing; keep the working save and remaining Bank records, and restore the kept recovery backup only after reviewing Bank recovery."
-            showDialog("Gen 1 → Gen 2 transfer failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""))
+                val restored=bankFile.readBytes();val parsed=parseGen1BankPayload(restored)
+                restored.contentEquals(expected)&&parsed!=null&&sameGen1TransferRecord(parsed,p)
+            }.getOrDefault(false)
+            val destinationRestored=!writeStarted||runCatching{
+                file.writeBytes(fresh);val restored=file.readBytes()
+                restored.contentEquals(fresh)&&verifyGen2SaveIntegrity(restored).first
+            }.getOrDefault(false)
+            if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&destinationRestored->"The exact Gen 2 destination and Gen 1 Bank record were restored or kept and verified."
+                bankRestored->"The Gen 1 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                destinationRestored->"The exact Gen 2 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
+                else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
+            }
+            showDialog("Gen 1 → Gen 2 PSE conversion failed",(e.message?:"Unknown error")+"\n\n"+recovery+
+                (safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:"")+
+                (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery: "+it.name}?:""))
             return
         }
-        Toast.makeText(this,"Transferred to Gen 2 Box $targetBox • Slot ${committedSlot+1} and verified",Toast.LENGTH_LONG).show()
+        Toast.makeText(this,"PSE converted Gen 1 → Gen 2 to Box $targetBox • Slot ${committedSlot+1} and verified",Toast.LENGTH_LONG).show()
         showGen2PokemonViewer("boxes",targetBox)
     }
 
