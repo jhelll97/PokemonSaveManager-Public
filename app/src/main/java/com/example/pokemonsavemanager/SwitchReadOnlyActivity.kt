@@ -2820,14 +2820,16 @@ class SwitchReadOnlyActivity : Activity() {
                 (it.name.startsWith("switch_za_") && it.extension.equals("pa9", true)) ||
                     (it.name.startsWith("switch_swsh_") && it.extension.equals("pk8", true)) ||
                     (it.name.startsWith("switch_bdsp_") && it.extension.equals("pb8", true)) ||
-                    (it.name.startsWith("switch_pla_") && it.extension.equals("pa8", true))
+                    (it.name.startsWith("switch_pla_") && it.extension.equals("pa8", true)) ||
+                    it.extension.equals("pk7", true)
                 )
         }?.sortedWith(compareBy<File>({
             when {
                 it.extension.equals("pa9", true) -> 0
                 it.extension.equals("pk8", true) -> 1
                 it.extension.equals("pb8", true) -> 2
-                else -> 3
+                it.extension.equals("pa8", true) -> 3
+                else -> 4
             }
         }, { it.name })).orEmpty()
         val labels = entries.map { file ->
@@ -2860,7 +2862,7 @@ class SwitchReadOnlyActivity : Activity() {
                             (error.message ?: "unsupported conversion")
                     }
                 )
-            } else {
+            } else if (file.extension.equals("pa8", true)) {
                 runCatching { LegendsArceusToLegendsZaPa9.review(file.readBytes()) }.fold(
                     onSuccess = { review ->
                         review.sourceNickname.ifBlank { LegendsArceusSpeciesNames.name(review.sourceSpecies) } +
@@ -2871,6 +2873,17 @@ class SwitchReadOnlyActivity : Activity() {
                             (error.message ?: "unsupported conversion")
                     }
                 )
+            } else {
+                runCatching { Gen7ToLegendsZaPa9.review(file.readBytes()) }.fold(
+                    onSuccess = { review ->
+                        review.sourceNickname.ifBlank { ScarletVioletSpeciesNames.name(review.sourceSpecies) } +
+                            " (#${review.sourceSpecies}) • Gen 7 PK7 → PA9 • Legalise"
+                    },
+                    onFailure = { error ->
+                        file.name + " • Gen 7 PK7 blocked • " +
+                            (error.message ?: "unsupported conversion")
+                    }
+                )
             }
         }
         val builder = AlertDialog.Builder(this)
@@ -2878,7 +2891,7 @@ class SwitchReadOnlyActivity : Activity() {
             .setPositiveButton("Close", null)
         if (entries.isEmpty()) {
             builder.setMessage(
-                "No native Legends: Z-A PA9, eligible Sword/Shield PK8, BDSP PB8, or Legends: Arceus PA8 entries are stored. " +
+                "No native Legends: Z-A PA9, eligible Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, or Generation 7 PK7 entries are stored. " +
                     "Open Pokémon Boxes in a supported title, choose a Pokémon, then tap Add to PSE Bank."
             )
         } else {
@@ -2892,12 +2905,104 @@ class SwitchReadOnlyActivity : Activity() {
                             showLegendsZaBdspBankEntry(bound, entry)
                         entry.extension.equals("pa8", true) ->
                             showLegendsZaLegendsArceusBankEntry(bound, entry)
+                        entry.extension.equals("pk7", true) ->
+                            showLegendsZaGen7BankEntry(bound, entry)
                         else -> showLegendsZaBankEntry(bound, entry)
                     }
                 }
             }
         }
         builder.show()
+    }
+
+    private fun showLegendsZaGen7BankEntry(bound: SwitchReadSession, file: File) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = file.canonicalFile
+        val reviewed = runCatching {
+            require(entry.parentFile == directory && entry.isFile &&
+                entry.extension.equals("pk7", true)) {
+                "This is not a current Generation 7 PSE Bank entry."
+            }
+            val bank = entry.readBytes()
+            val destinationUri = selectedSourceUri
+                ?: error("Reopen the selected Legends: Z-A save from PSE.")
+            val destination = readSelectedSwitchSource(destinationUri)
+            require(LegendsZaPseBankRestoreEditing.sha256(destination) == bound.snapshot.sourceSha256) {
+                "The Legends: Z-A source changed. Reopen it from PSE."
+            }
+            val review = Gen7ToLegendsZaPa9.review(bank)
+            require(review.sourceSpecies in LegendsZaPokedexReadOnly.supportedSpecies(destination)) {
+                "Species #${review.sourceSpecies} is not present in this Legends: Z-A save's native Pokédex table."
+            }
+            review
+        }
+        val review = reviewed.getOrElse { error ->
+            AlertDialog.Builder(this).setTitle("Generation 7 → Legends: Z-A blocked")
+                .setMessage(
+                    (error.message ?: "This PK7 cannot be converted without unsupported loss.") +
+                        "\n\nThe source save and PSE Bank entry remain unchanged."
+                )
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val detail = buildString {
+            append(
+                review.sourceNickname.ifBlank { ScarletVioletSpeciesNames.name(review.sourceSpecies) } +
+                    " (#${review.sourceSpecies})\n\n"
+            )
+            append("Explicit PSE Legalise effects\n• ")
+            append(review.effects.joinToString("\n• "))
+            append(
+                "\n\nChoose Legalise only to create the disclosed PA9 and then choose one empty " +
+                    "native Legends: Z-A PC-box slot. The source save and PK7 Bank entry remain unchanged. " +
+                    "The destination is written to a new save copy, reopened, and verified; failure restores both sides " +
+                    "and retains the recovery backup. This conversion does not claim an official HOME transfer, trade, " +
+                    "encounter, ability, Mega, moveset, or provenance."
+            )
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("PSE Bank • Generation 7 → Legends: Z-A")
+            .setMessage(detail)
+            .setNegativeButton("Close", null)
+            .setPositiveButton("Legalise & choose destination", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                try {
+                    require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                    val destinationUri = selectedSourceUri
+                        ?: error("Reopen the selected Legends: Z-A save from PSE.")
+                    require(entry.parentFile == directory && entry.isFile &&
+                        entry.extension.equals("pk7", true)) {
+                        "This is not a current Generation 7 PSE Bank entry."
+                    }
+                    val bank = entry.readBytes()
+                    val current = readSelectedSwitchSource(destinationUri)
+                    require(LegendsZaPseBankRestoreEditing.sha256(current) == bound.snapshot.sourceSha256) {
+                        "The Legends: Z-A source changed. Reopen it from PSE."
+                    }
+                    val currentReview = Gen7ToLegendsZaPa9.review(bank)
+                    require(currentReview.sourceSpecies in LegendsZaPokedexReadOnly.supportedSpecies(current)) {
+                        "Species #${currentReview.sourceSpecies} is not present in this Legends: Z-A save's native Pokédex table."
+                    }
+                    dialog.dismiss()
+                    startActivity(
+                        Intent(this, SwitchLegendsZaPseBankRestoreActivity::class.java)
+                            .setData(destinationUri)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.bank.entry", entry.name)
+                            .putExtra("pse.bank.legalise", true)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not prepare Legalise conversion")
+                        .setMessage(error.message ?: "The source and Bank entry were left unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun showLegendsZaSwordShieldBankEntry(bound: SwitchReadSession, file: File) {

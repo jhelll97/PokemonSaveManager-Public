@@ -21,7 +21,7 @@ private data class LegendsZaBankPreparation(
     val effects: List<String>
 )
 
-/** Restores one native PA9 or explicitly reviewed Gen 8 conversion into a new Z-A save copy. */
+/** Restores one native PA9 or explicitly reviewed cross-generation conversion into a new Z-A save copy. */
 class SwitchLegendsZaPseBankRestoreActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
     private val createCopyRequest = 2153
@@ -57,7 +57,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid native PA9 to an empty PC-box slot you choose in a new save copy. " +
-                "Native PA9 entries remain byte-exact. Eligible Sword/Shield PK8, BDSP PB8, and Legends: Arceus PA8 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Native PA9 entries remain byte-exact. Eligible Generation 7 PK7, Sword/Shield PK8, BDSP PB8, and Legends: Arceus PA8 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
                 "Unsupported species, forms, items, moves, limits, or text remain blocked; these PSE conversions do not certify encounter, ability, Mega, or moveset legality."
             textSize = 16f
         })
@@ -200,6 +200,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
     )
 
     private fun conversionSourceName(): String = when {
+        bankEntryName?.endsWith(".pk7", true) == true -> "Generation 7"
         bankEntryName?.endsWith(".pk8", true) == true -> "Sword/Shield"
         bankEntryName?.endsWith(".pb8", true) == true -> "BDSP"
         bankEntryName?.endsWith(".pa8", true) == true -> "Legends: Arceus"
@@ -211,13 +212,15 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         val directory = File(filesDir, "pse_bank").canonicalFile
         val entry = File(directory, name).canonicalFile
         val native = entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true)
+        val gen7 = entry.extension.equals("pk7", true)
         val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
         val bdsp = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
         val legendsArceus = entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)
-        require(entry.parentFile == directory && entry.isFile && (native || swordShield || bdsp || legendsArceus)) {
-            "This is not a current Legends: Z-A, Sword/Shield, BDSP, or Legends: Arceus PSE Bank entry."
+        require(entry.parentFile == directory && entry.isFile &&
+            (native || gen7 || swordShield || bdsp || legendsArceus)) {
+            "This is not a current Legends: Z-A, Generation 7, Sword/Shield, BDSP, or Legends: Arceus PSE Bank entry."
         }
-        if (swordShield || bdsp || legendsArceus) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+        if (gen7 || swordShield || bdsp || legendsArceus) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
             "Review and explicitly choose the disclosed ${conversionSourceName()} Legalise conversion from PSE Bank."
         }
         return entry
@@ -235,6 +238,10 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
 
     private fun prepareBankRecord(source: ByteArray): Pair<ByteArray, List<String>> {
         val entry = bankFile()
+        if (entry.extension.equals("pk7", true)) {
+            val converted = Gen7ToLegendsZaPa9.review(source)
+            return converted.nativeRecord to converted.effects
+        }
         val hash = LegendsZaPseBankRestoreEditing.sha256(source)
         if (entry.extension.equals("pk8", true)) {
             require(entry.name == "switch_swsh_${hash}.pk8") {
