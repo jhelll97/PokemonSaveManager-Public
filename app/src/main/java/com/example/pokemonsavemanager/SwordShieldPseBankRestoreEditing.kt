@@ -4,6 +4,8 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.security.MessageDigest
 
+data class SwordShieldPseBankDestination(val box: Int, val position: Int)
+
 /** Restores one checksum-valid native PK8 Bank record into a reviewed new Sword/Shield save copy. */
 object SwordShieldPseBankRestoreEditing {
     private const val MAX_FILE_SIZE = 0x1876B1
@@ -53,32 +55,49 @@ object SwordShieldPseBankRestoreEditing {
         return pokemon
     }
 
+    fun emptyDestinations(source: ByteArray): List<SwordShieldPseBankDestination> {
+        val storage = SwordShieldStorageReadOnly.read(source.copyOf())
+        return (0 until 32).flatMap { box ->
+            storage.box(box).filter { it.read is SwordShieldSlotRead.Empty }
+                .map { SwordShieldPseBankDestination(box + 1, it.position) }
+        }
+    }
+
     fun stage(
         source: ByteArray,
         expectedSha256: String,
         bankRecord: ByteArray
     ): SwordShieldPseBankRestoreCopyPlan {
+        val destination = emptyDestinations(source).firstOrNull()
+            ?: throw IllegalArgumentException("All 960 native Sword/Shield PC-box slots are occupied.")
+        return stage(source, expectedSha256, bankRecord, destination.box, destination.position)
+    }
+
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        bankRecord: ByteArray,
+        box: Int,
+        position: Int
+    ): SwordShieldPseBankRestoreCopyPlan {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
+        require(box in 1..32 && position in 1..30) {
+            "The selected Sword/Shield PC-box destination is outside native storage."
+        }
         val before = SwordShieldStorageReadOnly.read(original)
+        require(before.box(box - 1)[position - 1].read is SwordShieldSlotRead.Empty) {
+            "The selected Sword/Shield destination is no longer empty. Choose another slot."
+        }
         val pokemon = inspectBankRecord(supplied)
-        val destination = (0 until 32).asSequence().flatMap { box -> before.box(box).asSequence() }
-            .firstOrNull { it.read is SwordShieldSlotRead.Empty }
-            ?: throw IllegalArgumentException("All 960 native Sword/Shield PC-box slots are occupied.")
         val written = SwordShieldSaveValidation.writeBoxRecord(
-            original,
-            destination.box + 1,
-            destination.position,
-            supplied
+            original, box, position, supplied
         )
-        verify(
-            original, written.bytes, supplied,
-            destination.box + 1, destination.position, written.absoluteOffset
-        )
+        verify(original, written.bytes, supplied, box, position, written.absoluteOffset)
         return SwordShieldPseBankRestoreCopyPlan(
             original, written.bytes, supplied, pokemon,
-            destination.box + 1, destination.position, written.absoluteOffset
+            box, position, written.absoluteOffset
         )
     }
 

@@ -20,6 +20,7 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
     private var sourceUri: Uri? = null
     private var expectedHash: String? = null
     private var bankEntryName: String? = null
+    private var readyDestinations: List<SwordShieldPseBankDestination> = emptyList()
     private var readyPlan: SwordShieldPseBankRestoreCopyPlan? = null
     private var pendingPlan: SwordShieldPseBankRestoreCopyPlan? = null
     private var verifiedCopy: Pair<Uri, String>? = null
@@ -45,7 +46,7 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Sword/Shield • PSE Bank"; textSize = 24f })
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
-            text = "PSE restores the exact checksum-valid PK8 bytes to the first empty native PC-box slot in a new save copy. " +
+            text = "PSE restores the exact checksum-valid PK8 bytes to one empty native PC-box slot you choose in a new save copy. " +
                 "Only same-format Sword/Shield records are accepted. Eggs, invalid native limits, and species/forms without a uniquely verified game profile remain protected. " +
                 "The record's existing species, form, moves, trainer data, and encounter fields are preserved; this bounded restore does not certify encounter or moveset legality."
             textSize = 16f
@@ -57,9 +58,9 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
         }
         root.addView(status)
         review = Button(this).apply {
-            text = "Review restore to new copy"
+            text = "Choose destination & review"
             isEnabled = false
-            setOnClickListener { readyPlan?.let { showReview(it) } }
+            setOnClickListener { showDestinationBoxPicker() }
         }
         root.addView(review)
         inspectCopy = Button(this).apply {
@@ -80,17 +81,19 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
                     "The source changed. Reopen it from PSE."
                 }
                 val bank = readBankRecord()
-                SwordShieldPseBankRestoreEditing.stage(source, hash, bank)
+                val pokemon = SwordShieldPseBankRestoreEditing.inspectBankRecord(bank)
+                val destinations = SwordShieldPseBankRestoreEditing.emptyDestinations(source)
+                require(destinations.isNotEmpty()) { "All 960 native Sword/Shield PC-box slots are occupied." }
+                Triple(pokemon, destinations, SwordShieldPseBankRestoreEditing.sha256(bank))
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
-                result.onSuccess { plan ->
-                    readyPlan = plan
-                    val p = plan.pokemon
+                result.onSuccess { (pokemon, destinations, bankHash) ->
+                    readyDestinations = destinations
                     status.text = "Native source and Bank integrity verified\n" +
-                        "${SwordShieldSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n" +
-                        "Destination: Box ${plan.box}, slot ${plan.position}\n" +
-                        "Source SHA-256: ${plan.sourceSha256}\nBank SHA-256: ${plan.bankSha256}"
+                        "${SwordShieldSpeciesNames.name(pokemon.species)} (#${pokemon.species}) • Level ${pokemon.cachedLevel}\n" +
+                        "${destinations.size} empty native destination slots available\n" +
+                        "Source SHA-256: ${expectedHash}\nBank SHA-256: $bankHash"
                 }.onFailure { status.text = it.message ?: "The PSE Bank restore could not be prepared safely." }
                 setBusy(false)
             }
@@ -99,8 +102,62 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
 
     private fun setBusy(value: Boolean) {
         busy = value
-        review.isEnabled = !value && readyPlan != null
+        review.isEnabled = !value && readyDestinations.isNotEmpty()
         inspectCopy.isEnabled = !value && verifiedCopy != null
+    }
+
+    private fun showDestinationBoxPicker() {
+        if (busy || readyDestinations.isEmpty()) return
+        val boxes = readyDestinations.groupBy { it.box }.toSortedMap()
+        val labels = boxes.map { (box, slots) ->
+            "Box $box • ${slots.size} empty slot${if (slots.size == 1) "" else "s"}"
+        }.toTypedArray()
+        AlertDialog.Builder(this).setTitle("Choose Sword/Shield PC Box")
+            .setItems(labels) { _, index ->
+                val box = boxes.keys.elementAt(index)
+                showDestinationSlotPicker(box, boxes.getValue(box))
+            }
+            .setNegativeButton("Cancel", null).show()
+    }
+
+    private fun showDestinationSlotPicker(
+        box: Int,
+        destinations: List<SwordShieldPseBankDestination>
+    ) {
+        if (busy) return
+        val labels = destinations.map { "Slot ${it.position}" }.toTypedArray()
+        AlertDialog.Builder(this).setTitle("Box $box • choose empty slot")
+            .setItems(labels) { _, index -> prepareDestinationReview(destinations[index]) }
+            .setNegativeButton("Back") { _, _ -> showDestinationBoxPicker() }
+            .show()
+    }
+
+    private fun prepareDestinationReview(destination: SwordShieldPseBankDestination) {
+        if (busy || destination !in readyDestinations) return
+        setBusy(true)
+        status.text = "Binding Box ${destination.box}, slot ${destination.position} to the restore review…"
+        worker.execute {
+            val result = runCatching {
+                val source = readSource()
+                val hash = expectedHash ?: error("Reopen the source from PSE.")
+                val bank = readBankRecord()
+                SwordShieldPseBankRestoreEditing.stage(
+                    source, hash, bank, destination.box, destination.position
+                )
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                result.onSuccess { plan ->
+                    readyPlan = plan
+                    setBusy(false)
+                    showReview(plan)
+                }.onFailure {
+                    readyPlan = null
+                    status.text = it.message ?: "The selected destination could not be prepared safely."
+                    setBusy(false)
+                }
+            }
+        }
     }
 
     private fun readSource(): ByteArray {
@@ -246,6 +303,7 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
                     }
                 )
                 readyPlan = null
+                readyDestinations = emptyList()
                 setBusy(false)
             }
         }
