@@ -9160,6 +9160,12 @@ class MainActivity : Activity() {
         return out
     }
 
+    private fun gen2BankToGen5PpUps(raw:ByteArray):IntArray {
+        if(raw.size!=GEN2_BANK_FILE_SIZE)return IntArray(4){-1}
+        val o=GEN2_BANK_HEADER_SIZE
+        return IntArray(4){(raw[o+23+it].toInt() ushr 6) and 3}
+    }
+
     private fun gen5Pk5PpUps(raw:ByteArray):IntArray {
         val d=decryptPk5(raw)?:return IntArray(4){-1}
         return IntArray(4){d[0x34+it].toInt() and 3}
@@ -35338,14 +35344,16 @@ private data class Gen2ToGen5LegalisePlan(
         require(bankBytes.size==GEN2_BANK_FILE_SIZE){"The preserved Gen 2 Bank record has an unexpected size."}
         val profile=detectGen5Profile(destination)?:error("A valid Generation 5 destination save is required.")
         gen2ToGen5Rejection(p,plan,meta)?.let{error(it)}
+        val ppUps=gen2BankToGen5PpUps(bankBytes)
+        require(ppUps.all{it in 0..3}){"The Gen 2 PP-Up values could not be represented safely."}
+        require((0..3).all{i->p.moves[i]!=0||(p.movePP[i]==0&&ppUps[i]==0)}){"An empty Gen 2 move slot contains PP or PP-Up data that cannot be preserved."}
         val pidSeed=((p.tid.toLong() shl 16) xor p.experience xor (p.species.toLong() shl 8) xor p.caughtData.toLong() xor 0x47503235L) and 0xFFFFFFFFL
         val pid=gen5PidForAbilityAndShiny(pidSeed,p.tid,0,1,plan.shiny)
         val out=ByteArray(136)
         writeU32LE(out,0,pid);writeU16LE(out,0x08,p.species);writeU16LE(out,0x0C,p.tid);writeU16LE(out,0x0E,0);writeU32LE(out,0x10,p.experience)
         out[0x14]=plan.happiness.toByte();out[0x15]=meta.abilityId.toByte();out[0x17]=2
         val ev=gen2ToGen5Evs(p.statExp);for(i in 0..5)out[0x18+i]=ev[i].toByte()
-        val bankOffset=GEN2_BANK_HEADER_SIZE
-        for(i in 0..3){writeU16LE(out,0x28+i*2,p.moves[i]);out[0x30+i]=bankBytes[bankOffset+23+i]}
+        for(i in 0..3){val move=p.moves[i];writeU16LE(out,0x28+i*2,move);out[0x30+i]=if(move==0)0 else p.movePP[i].coerceIn(0,63).toByte();out[0x34+i]=if(move==0)0 else ppUps[i].toByte()}
         val ivs=gen2ToGen6Ivs(p);var ivWord=0L;for(i in 0..5)ivWord=ivWord or ((ivs[i].toLong() and 31L) shl(i*5));writeU32LE(out,0x38,ivWord)
         out[0x40]=((plan.gender and 3) shl 1).toByte();out[0x41]=plan.nature.toByte()
         val speciesName=builtinGen2SpeciesMeta(p.species)?.name?:GEN2_NATIONAL_NAMES.getOrElse(p.species-1){"Pokemon"}
@@ -35354,7 +35362,7 @@ private data class Gen2ToGen5LegalisePlan(
         val caughtDetails=decodeGen2CaughtData(plan.caughtData);val otGender=if(caughtDetails?.otGender=="Female")1 else 0
         out[0x82]=plan.pokerus.toByte();out[0x83]=4;out[0x84]=((p.level.coerceIn(1,100) and 0x7F) or (otGender shl 7)).toByte()
         val encrypted=encryptPk5(out);val q=parsePk5(encrypted,false)?:error("The converted PK5 could not be parsed.")
-        require(q.checksumValid&&!q.isEgg&&q.species==p.species&&q.tid==p.tid&&q.sid==0&&q.nickname==nickname&&q.otName==p.otName&&q.experience==p.experience&&q.heldItem==0&&q.ability==meta.abilityId&&q.abilityNumber==1&&q.gender==plan.gender&&q.nature==plan.nature&&q.shiny==plan.shiny&&q.friendship==plan.happiness&&q.pokerusDays+((q.pokerusStrain shl 4))==plan.pokerus&&q.ball==4&&q.metLevel==p.level&&q.otGender==otGender&&q.originGame==(if(profile.sequel)22 else 20)&&q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(p.movePP)&&q.ivs.contentEquals(ivs)&&q.evs.contentEquals(ev)){"The converted PK5 failed identity or preserved-state verification."}
+        require(q.checksumValid&&!q.isEgg&&q.species==p.species&&q.tid==p.tid&&q.sid==0&&q.nickname==nickname&&q.otName==p.otName&&q.experience==p.experience&&q.heldItem==0&&q.ability==meta.abilityId&&q.abilityNumber==1&&q.gender==plan.gender&&q.nature==plan.nature&&q.shiny==plan.shiny&&q.friendship==plan.happiness&&q.pokerusDays+((q.pokerusStrain shl 4))==plan.pokerus&&q.ball==4&&q.metLevel==p.level&&q.otGender==otGender&&q.originGame==(if(profile.sequel)22 else 20)&&q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(p.movePP)&&gen5Pk5PpUps(encrypted).contentEquals(ppUps)&&q.ivs.contentEquals(ivs)&&q.evs.contentEquals(ev)){"The converted PK5 failed identity or preserved-state verification."}
         return encrypted
     }
 
@@ -35386,6 +35394,8 @@ private data class Gen2ToGen5LegalisePlan(
         val bank=runCatching{bankFile.readBytes()}.getOrNull()?:return showDialog("Gen 2 → Gen 5","PSE could not read the preserved Gen 2 Bank entry.")
         val source=parseGen2BankPayload(bank)?:return showDialog("Gen 2 → Gen 5","The selected Gen 2 Bank record is invalid.")
         if(!sameGen2BankRecord(source,shown))return showDialog("Gen 2 → Gen 5","The selected Gen 2 Bank record changed. Nothing was changed.")
+        val sourcePpUps=gen2BankToGen5PpUps(bank)
+        if(sourcePpUps.any{it !in 0..3}||(0..3).any{source.moves[it]==0&&(source.movePP[it]!=0||sourcePpUps[it]!=0)})return showDialog("Gen 2 → Gen 5 blocked","An empty move slot contains PP or PP-Up data that cannot be preserved. The Bank record and destination were left unchanged.")
         val destination=runCatching{file.readBytes()}.getOrNull()?:return showDialog("Gen 2 → Gen 5","PSE could not read the destination save.")
         val profile=detectGen5Profile(destination)?:return showDialog("Gen 2 → Gen 5","Load a valid Generation 5 save first.")
         if(!gen5ChecksumTableValid(destination,profile)||(0 until 24).any{!gen5BoxChecksumValid(destination,it,profile)})return showDialog("Gen 2 → Gen 5","The Gen 5 destination did not pass storage and checksum-table validation.")
@@ -35399,7 +35409,7 @@ private data class Gen2ToGen5LegalisePlan(
             if(importedFile?.absolutePath!=file.absolutePath)return@loadGen1ToGen5MetaAsync showDialog("Gen 2 → Gen 5","The active save changed while conversion data was prepared. Reopen PSE Bank. Nothing was changed.")
             if(meta==null)return@loadGen1ToGen5MetaAsync showDialog("Gen 2 → Gen 5","PSE could not load verified conversion metadata. Both sides were left unchanged.")
             val plan=gen2ToGen5LegalisePlan(source,meta)?:run{showDialog("Cannot transfer to Gen 5",gen2ToGen5Rejection(source,null,meta)?:"No safe deterministic Gen 5 representation is available.");return@loadGen1ToGen5MetaAsync}
-            if(confirmed==null){AlertDialog.Builder(this).setTitle("Cannot transfer unchanged").setMessage((gen2ToGen5Rejection(source,null,meta)?:"This record requires explicit conversion.")+"\n\nMake legal for Gen 5 will:\n"+gen2ToGen5LegaliseChanges(plan)+"\n\nSpecies, nickname, OT/TID, EXP, level, moves, current PP, happiness and Pokérus are preserved. Cancel leaves the Gen 2 Bank record and Gen 5 destination byte-exact; the Bank record is not removed until the destination write verifies.").setNegativeButton("Cancel",null).setPositiveButton("Make legal for Gen 5"){_,_->if(legaliseConsumed){showDialog("Gen 2 → Gen 5","This Legalise confirmation was already submitted. Reopen PSE Bank.");return@setPositiveButton};legaliseConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 5","The destination identity or original snapshots changed. Nothing was changed.");return@setPositiveButton};prepareGen2ToGen5Transfer(bankFile,shown,file,plan,Gen2Gen5SingleBinding(openedUri,openedLabel,destination,bank))}.show();return@loadGen1ToGen5MetaAsync}
+            if(confirmed==null){AlertDialog.Builder(this).setTitle("Cannot transfer unchanged").setMessage((gen2ToGen5Rejection(source,null,meta)?:"This record requires explicit conversion.")+"\n\nMake legal for Gen 5 will:\n"+gen2ToGen5LegaliseChanges(plan)+"\n\nSpecies, nickname, OT/TID, EXP, level, moves, current PP, PP Ups, happiness and Pokérus are preserved. Cancel leaves the Gen 2 Bank record and Gen 5 destination byte-exact; the Bank record is not removed until the destination write verifies.").setNegativeButton("Cancel",null).setPositiveButton("Make legal for Gen 5"){_,_->if(legaliseConsumed){showDialog("Gen 2 → Gen 5","This Legalise confirmation was already submitted. Reopen PSE Bank.");return@setPositiveButton};legaliseConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 5","The destination identity or original snapshots changed. Nothing was changed.");return@setPositiveButton};prepareGen2ToGen5Transfer(bankFile,shown,file,plan,Gen2Gen5SingleBinding(openedUri,openedLabel,destination,bank))}.show();return@loadGen1ToGen5MetaAsync}
             if(confirmed!=plan)return@loadGen1ToGen5MetaAsync showDialog("Legalise blocked","The prepared Gen 5 Legalise plan no longer matches this Bank record. Nothing was changed.")
             val currentBank=runCatching{bankFile.readBytes()}.getOrNull();val currentDestination=runCatching{file.readBytes()}.getOrNull()
             if(currentBank==null||!currentBank.contentEquals(bank)||parseGen2BankPayload(currentBank)?.let{sameGen2BankRecord(it,source)}!=true||currentDestination==null||!currentDestination.contentEquals(destination))return@loadGen1ToGen5MetaAsync showDialog("Gen 2 → Gen 5","The source or destination changed while conversion data was prepared. Nothing was changed.")
@@ -35408,7 +35418,20 @@ private data class Gen2ToGen5LegalisePlan(
             val targets=(0 until 24*30).filter{slot->val off=0x00400+(slot/30)*0x1000+(slot%30)*136;val raw=destination.copyOfRange(off,off+136);parsePk5(raw,false)==null&&raw.all{it==0.toByte()}}
             if(targets.isEmpty())return@loadGen1ToGen5MetaAsync showDialog("Gen 2 → Gen 5","No empty Gen 5 PC slot is available. Nothing was changed.")
             val target=targets.first()
-            AlertDialog.Builder(this).setTitle("Convert "+(source.nickname.ifBlank{GEN2_NATIONAL_NAMES.getOrElse(source.species-1){"Pokémon"}})+" to Gen 5").setMessage("PSE will place a verified PK5 in Box "+(target/30+1)+", Slot "+(target%30+1)+", update the Gen 5 Pokédex and box checksums, verify the reopened save, then remove the Bank record last. A verified kept Gen 5 recovery backup is required before writing; if recovery cannot be verified, review the retained backup, working save and Bank record.").setPositiveButton("Transfer"){_,_->if(transferConsumed){showDialog("Gen 2 → Gen 5","This transfer was already submitted. Reopen PSE Bank.");return@setPositiveButton};transferConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 5","The destination identity or prepared snapshots changed. Nothing was changed.");return@setPositiveButton};transferGen2BankToGen5(bankFile,source,bank,destination,meta,plan,pk5,converted,target,file,openedUri,openedLabel)}.setNegativeButton("Cancel",null).show()
+            val preview=buildString{
+                append("PSE Bank conversion preview\n\n")
+                append(gen2ToGen5LegaliseChanges(plan)).append("\n\n")
+                append("Destination: Box ${target/30+1}, Slot ${target%30+1}.\n")
+                append("Preserved: species, nickname, original OT/TID, EXP, level, moves, current PP (${converted.movePP.joinToString("/")}), PP Ups (${sourcePpUps.joinToString("/")}), happiness ${converted.friendship}, Pokérus strain ${converted.pokerusStrain}/days ${converted.pokerusDays}, and shiny state (${converted.shiny}).\n")
+                append("PID: ${"%08X".format(converted.pid)}; SID becomes 0; nature #${converted.nature} is EXP mod 25; gender becomes #${converted.gender}; ability #${converted.ability}, slot ${converted.abilityNumber}.\n")
+                append("IVs: deterministic Gen 5 mapping ${converted.ivs.joinToString("/")}. EVs: Gen 2 Stat Exp ÷ 257, with the single Special budget split across SpA/SpD and total capped at 510; final ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")
+                append("Native values: no held item, Poké Ball, met level ${converted.metLevel}, origin #${converted.originGame}, and OT gender #${converted.otGender}.\n")
+                if(source.heldItem!=0)append("Held item #${source.heldItem} is explicitly removed because Gen 2 and Gen 5 item IDs are not interchangeable.\n")
+                if(source.caughtData!=0)append("Packed Gen 2 caught location/time 0x${source.caughtData.toString(16).uppercase().padStart(4,'0')} is omitted; only its recorded OT gender is preserved when present.\n")
+                append("Egg and unsupported native fields remain empty. This is a reviewed PSE native PK5 conversion and does not claim official migration provenance.\n\n")
+                append("The source save stays unchanged. The exact Bank record remains until a Keep-pinned destination backup, native PK5, current PP and PP Ups, Pokédex registration, Gen 5 checksums and reopened destination all verify. Failure restores the destination and Bank record independently.")
+            }
+            AlertDialog.Builder(this).setTitle("PSE Convert "+(source.nickname.ifBlank{GEN2_NATIONAL_NAMES.getOrElse(source.species-1){"Pokémon"}})+" to Gen 5").setMessage(preview).setPositiveButton("Transfer"){_,_->if(transferConsumed){showDialog("Gen 2 → Gen 5","This transfer was already submitted. Reopen PSE Bank.");return@setPositiveButton};transferConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 5","The destination identity or prepared snapshots changed. Nothing was changed.");return@setPositiveButton};transferGen2BankToGen5(bankFile,source,bank,destination,meta,plan,pk5,converted,target,file,openedUri,openedLabel)}.setNegativeButton("Cancel",null).show()
         }
     }
 
@@ -35430,11 +35453,13 @@ private data class Gen2ToGen5LegalisePlan(
             val source=parseGen2BankPayload(bank)?:error("The selected Gen 2 Bank record is invalid.");require(sameGen2BankRecord(source,expected)){"The selected Gen 2 Pokémon changed after confirmation."}
             require(plan==gen2ToGen5LegalisePlan(source,meta)){"The prepared Gen 5 Legalise plan no longer matches the selected Pokémon."}
             gen2ToGen5Rejection(source,plan,meta)?.let{error(it)}
+            val expectedPpUps=gen2BankToGen5PpUps(bank)
+            require(expectedPpUps.all{it in 0..3}&&(0..3).all{i->source.moves[i]!=0||(source.movePP[i]==0&&expectedPpUps[i]==0)}){"The Gen 2 PP-Up state cannot be preserved safely."}
             val pk5=buildGen2ToGen5Pk5(bank,source,original,meta,plan);val refreshed=parsePk5(pk5,false)?:error("The refreshed PK5 could not be parsed.")
-            require(pk5.contentEquals(preparedPk5)&&sameGen2ToGen5Pk5(refreshed,prepared)){"The prepared PK5 conversion changed before staging."}
+            require(pk5.contentEquals(preparedPk5)&&sameGen2ToGen5Pk5(refreshed,prepared)&&gen5Pk5PpUps(pk5).contentEquals(expectedPpUps)){"The reviewed PK5 or PP-Up conversion changed before staging."}
             val box=target/30;val work=original.copyOf();pk5.copyInto(work,offset)
             val staged=parsePk5(work.copyOfRange(offset,offset+136),false)?:error("The staged PK5 could not be parsed.")
-            require(sameGen2ToGen5Pk5(staged,refreshed)){"The staged PK5 did not preserve every converted field."}
+            require(sameGen2ToGen5Pk5(staged,refreshed)&&gen5Pk5PpUps(work.copyOfRange(offset,offset+136)).contentEquals(expectedPpUps)){"The staged PK5 did not preserve every converted field and PP-Up value."}
             registerGen1ToGen5Pokedex(work,profile,staged);updateGen5BoxChecksum(work,box,profile)
             require(gen5BoxChecksumValid(work,box,profile)&&gen5ChecksumTableValid(work,profile)&&gen1ToGen5DexRegistered(work,profile,staged)){"The staged Gen 5 save, PK5 or Pokédex failed verification."}
             require(bankFile.readBytes().contentEquals(expectedBank)){"The selected Gen 2 Bank record changed during staging."}
@@ -35448,7 +35473,7 @@ private data class Gen2ToGen5LegalisePlan(
             val persistedProfile=detectGen5Profile(written)?:error("The persisted Gen 5 layout could not be re-read.")
             require(gen5BoxChecksumValid(written,box,persistedProfile)&&gen5ChecksumTableValid(written,persistedProfile)&&gen1ToGen5DexRegistered(written,persistedProfile,staged)){"The persisted Gen 5 save failed verification."}
             val actual=written.copyOfRange(offset,offset+136);val verified=parsePk5(actual,false)
-            require(actual.contentEquals(pk5)&&verified!=null&&sameGen2ToGen5Pk5(verified,staged)){"The exact converted PK5 did not persist."}
+            require(actual.contentEquals(pk5)&&verified!=null&&sameGen2ToGen5Pk5(verified,staged)&&gen5Pk5PpUps(actual).contentEquals(expectedPpUps)){"The exact converted PK5 or PP Ups did not persist."}
             require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 5 destination changed before Bank cleanup."}
             require(bound()&&validGen2ToGen5Destination(written)){"The Gen 5 destination identity or integrity changed before Bank cleanup."}
             val cleanup=bankFile.readBytes();require(cleanup.contentEquals(expectedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true){"The Gen 2 Bank record changed before cleanup."}
@@ -35456,14 +35481,15 @@ private data class Gen2ToGen5LegalisePlan(
             require(bound()){"The Gen 5 destination identity changed after Bank cleanup."}
             require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 5 destination changed after Bank cleanup."}
         }catch(e:Exception){
-            val bankRestored=if(!writeStarted)true else runCatching{
+            val bankRestored=runCatching{
                 if(bankDeleteAttempted&&!bankFile.exists()){
                     require(bankFile.createNewFile()){"The Bank recovery path could not be reserved."}
                     bankFile.writeBytes(expectedBank)
                 }
-                require(bankFile.readBytes().contentEquals(expectedBank)){"The original Gen 2 Bank record could not be verified; no existing record was overwritten."}
+                val restored=bankFile.readBytes()
+                require(restored.contentEquals(expectedBank)&&parseGen2BankPayload(restored)?.let{sameGen2BankRecord(it,expected)}==true){"The original Gen 2 Bank record could not be verified; no existing record was overwritten."}
             }.isSuccess
-            val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(original)}.isSuccess&&runCatching{file.readBytes().contentEquals(original)}.getOrDefault(false)&&runCatching{file.readBytes().contentEquals(original)&&validGen2ToGen5Destination(original)}.getOrDefault(false))
+            val destinationRestored=!writeStarted||runCatching{file.writeBytes(original);file.readBytes().contentEquals(original)&&validGen2ToGen5Destination(original)}.getOrDefault(false)
             val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 5 destination and Gen 2 Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
             showDialog("Gen 2 → Gen 5 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
