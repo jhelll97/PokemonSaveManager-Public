@@ -10645,7 +10645,7 @@ class MainActivity : Activity() {
         p.evs.any{it !in 0..255}||p.evs.sum()>510->"The EV data is not destination-valid for Generation 3."
         p.ivs.any{it !in 0..31}->"The IV data is invalid."
         p.ball !in 1..12->"Ball ID ${p.ball} has no verified direct Gen 4 to Gen 3 mapping."
-        !allowOriginLegalise&&p.originGame !in 1..5->"Origin game ID ${p.originGame} is not a Gen 3 title. Choose an explicit Legalise origin to continue; PSE will not assign provenance silently."
+        !allowOriginLegalise&&gen3CompatibleOriginTitle(p.originGame)==null->"Origin game ID ${p.originGame} is not a documented native Generation 3 title. Choose an explicit Legalise origin to continue; PSE will not assign provenance silently."
         !allowOriginLegalise&&p.metLocation!=55->"Only Gen 3-origin Pal Park records (Gen 4 met location #55) have a documented reverse PSE conversion unless you explicitly Legalise the origin."
         p.eggLocation!=0->"The PK4 contains Egg location data that PK3 cannot preserve safely."
         p.fatefulEncounter->"Fateful-encounter provenance cannot be represented without changing its meaning."
@@ -10661,7 +10661,7 @@ class MainActivity : Activity() {
         require(generationForSize(destination.size)==3&&gen3SaveValid(destination)){"A valid Generation 3 destination save is required."}
         gen4ToGen3PreflightRejection(p,plan.originLegalised)?.let{error(it)}
         require(plan.metLocation==0){"The prepared PK3 met-location mapping is invalid."}
-        require(plan.originGame in 1..5){"Choose a valid Generation 3 origin title."}
+        require(gen3CompatibleOriginTitle(plan.originGame)!=null){"Choose a documented native Generation 3 origin title."}
         require(plan.meta.abilityId==p.ability){"The PK4 ability does not match the verified Generation 3 ability for slot ${p.abilityNumber}."}
         require(gen3TransferGender(p,plan.meta.genderRate)==p.gender){"PID-derived gender does not match the PK4 gender field."}
         val ups=gen4Pk4PpUps(raw);require(ups.all{it in 0..3}){"PK4 PP Ups could not be verified."}
@@ -12963,17 +12963,20 @@ class MainActivity : Activity() {
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
             source.tid!=shown.tid||source.sid!=shown.sid)
             return showDialog("Gen 7 → Gen 3","The selected Bank record changed or failed its PK7 checksum.")
-        val originLegalised=source.originGame !in 1..5
+        val originLegalised=gen3CompatibleOriginTitle(source.originGame)==null
         val originGame=requestedOriginGame?:source.originGame
         if(originLegalised&&requestedOriginGame==null){
-            val games=arrayOf("Pokémon Sapphire","Pokémon Ruby","Pokémon Emerald","Pokémon FireRed","Pokémon LeafGreen")
+            val games=listOf(1 to "Pokémon Sapphire",2 to "Pokémon Ruby",3 to "Pokémon Emerald",
+                4 to "Pokémon FireRed",5 to "Pokémon LeafGreen",15 to "Pokémon Colosseum / XD")
             AlertDialog.Builder(this).setTitle("Choose Gen 3 origin")
-                .setMessage("Generation 3 stores one of five origin titles, but this PK7 has origin game ID ${source.originGame}. Choose the native PK3 origin to write. This explicit PSE Legalise change does not verify history. Cancel leaves both files unchanged.")
-                .setItems(games){_,which->prepareGen7ToGen3Transfer(bankFile,shown,which+1)}
+                .setMessage("This PK7 origin cannot be written directly to native PK3. Choose the exact destination-valid title and ID to write. This explicit PSE Legalise change does not verify history. Cancel leaves both files unchanged.")
+                .setItems(games.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
+                    prepareGen7ToGen3Transfer(bankFile,shown,games[which].first)
+                }
                 .setNegativeButton("Cancel",null).show()
             return
         }
-        if(originGame !in 1..5)return showDialog("Gen 7 → Gen 3 blocked","Choose a valid Generation 3 origin title. Nothing was changed.")
+        if(gen3CompatibleOriginTitle(originGame)==null)return showDialog("Gen 7 → Gen 3 blocked","Choose a documented native Generation 3 origin title. Nothing was changed.")
         gen7ToGen6PreflightRejection(source,bank,originGame)?.let{
             return showDialog("Gen 7 → Gen 3 blocked","$it\n\nThe Bank record and destination were left unchanged.")
         }
@@ -12986,7 +12989,8 @@ class MainActivity : Activity() {
             return showDialog("Gen 7 → Gen 3 blocked","$it\n\nNothing was changed.")
         }
         val markingNote=gen7ToGen6Markings(source.markingValue).second
-        val plan5=Gen6Gen5Plan(originGame,if(originLegalised)"user-selected Generation 3 origin ID $originGame" else "preserve origin ID $originGame",false)
+        val originTitle=gen3CompatibleOriginTitle(originGame)?:return showDialog("Gen 7 → Gen 3 blocked","The reviewed origin title is no longer destination-valid. Nothing was changed.")
+        val plan5=Gen6Gen5Plan(originGame,if(originLegalised)"user-selected $originTitle (ID $originGame)" else "preserve $originTitle (ID $originGame)",false)
         val pk5=try{buildGen6ToGen5Pk5(pk6,converted6,ByteArray(0),plan5,true)}catch(e:Exception){
             return showDialog("Gen 7 → Gen 3 blocked",(e.message?:"No safe Generation 5 bridge is available.")+"\n\nNothing was changed.")
         }
@@ -13025,8 +13029,7 @@ class MainActivity : Activity() {
                     ?:return@inner showDialog("Gen 7 → Gen 3","The prepared PK3 could not be reopened.")
                 val omitted=gen6ToGen5OmittedMetadata(pk6,converted6)
                 val prepared=Gen7Gen3Prepared(selected,bank,source,destination,pk6,converted6,plan5,pk5,converted5,meta4,meta3,originGame,originLegalised,pk4,converted4,plan3,pk3,converted3,file,openedUri,openedLabel,omitted)
-                val originName=arrayOf("Sapphire","Ruby","Emerald","FireRed","LeafGreen")[originGame-1]
-                val originNotice=if(originLegalised)"Origin Legalise: game ID ${source.originGame} → $originName. This is a user-selected provenance edit and does not verify history." else "Generation 3 origin $originName is preserved."
+                val originNotice=if(originLegalised)"Origin Legalise: ${originGameName(source.originGame)} (ID ${source.originGame}) → $originTitle (ID $originGame). This is a user-selected provenance edit and does not verify history." else "Origin preserved: $originTitle (ID $originGame)."
                 val pidNotice=if(converted3.pid==source.pid)"PID remains ${"%08X".format(source.pid)}." else
                     "PID changes ${"%08X".format(source.pid)} → ${"%08X".format(converted3.pid)} only to satisfy Generation 4/3 PID-derived nature, ability slot, gender and shiny constraints."
                 val preview=buildString{
@@ -13074,7 +13077,7 @@ class MainActivity : Activity() {
     private fun transferGen7BankToGen3(p:Gen7Gen3Prepared,target:Int){
         if(!gen7ToGen3StillBound(p))return showDialog("Gen 7 → Gen 3","The prepared snapshots changed. Reopen PSE Bank.")
         val file=p.destinationFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return
-        var writeStarted=false;var deleteAttempted=false;var backup:File?=null
+        var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
         try{
             require(fresh.contentEquals(p.destination)&&generationForSize(fresh.size)==3&&gen3SaveValid(fresh)){"The Gen 3 destination changed or failed validation."}
             require(target in 0 until 420){"The destination slot is invalid."}
@@ -13115,7 +13118,12 @@ class MainActivity : Activity() {
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen7ToGen3_",".backup",backupsDir());backup=recovery
             recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The recovery backup did not verify."}
             retainGen2ToGen3SafetyBackup(recovery,fresh)
-            require(isBackupKept(recovery)&&gen7ToGen3StillBound(p)){"The retained backup, destination identity or Bank record changed before writing."}
+            val bankCopy=File.createTempFile("PSE_G7ToG3_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
+            bankCopy.writeBytes(p.bankBytes);require(bankCopy.readBytes().contentEquals(p.bankBytes)){"The exact PK7 Bank recovery snapshot did not verify."}
+            require(isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&gen7ToGen3StillBound(p)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The retained destination and Bank recovery snapshots, destination identity or Bank record changed before writing."
+            }
             writeStarted=true;file.writeBytes(save);val written=file.readBytes()
             require(written.contentEquals(save)&&gen3SaveValid(written)&&gen2ToGen3DexRegistered(written,converted3.species)){"The persisted Gen 3 save failed verification."}
             require(written.indices.all{it in allowed||written[it]==fresh[it]}){"The reopened save changed outside the reviewed scope."}
@@ -13123,11 +13131,16 @@ class MainActivity : Activity() {
             val actual=vpc.copyOfRange(off,off+80);val reopened=parsePk3(actual,0,false)?:error("The persisted PK3 could not be parsed.")
             require(actual.contentEquals(pk3)&&sameGen4ToGen3Pk3(reopened,staged)){"The exact native PK3 did not persist."}
             require(p.bankFile.readBytes().contentEquals(p.bankBytes)&&importedFile?.absolutePath==file.absolutePath&&
-                currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&file.readBytes().contentEquals(save)){
-                "The source identity, PK7 Bank record or verified destination changed before cleanup."
+                currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&file.readBytes().contentEquals(save)&&
+                isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The source identity, PK7 Bank record, verified destination or retained recovery snapshots changed before cleanup."
             }
             deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The PK7 Bank record could not be removed after destination verification."}
-            require(file.readBytes().contentEquals(save)){"The verified destination changed after Bank cleanup."}
+            require(file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)){
+                "The verified destination or retained destination backup changed after Bank cleanup."
+            }
+            runCatching{bankCopy.delete()}
         }catch(e:Exception){
             val bankRestored=runCatching{
                 if(deleteAttempted&&!p.bankFile.exists()){
@@ -13136,12 +13149,20 @@ class MainActivity : Activity() {
                 }
                 p.bankFile.readBytes().contentEquals(p.bankBytes)
             }.getOrDefault(false)
-            val saveRestored=!writeStarted||(bankRestored&&runCatching{
-                file.writeBytes(fresh);file.readBytes().contentEquals(fresh)&&gen3SaveValid(fresh)
-            }.getOrDefault(false))
-            val recovery=if(bankRestored&&saveRestored)"The exact destination and PK7 Bank record were restored or kept and verified."
-            else "Automatic recovery could not be verified. Keep the recovery backup and remaining files for review."
-            showDialog("Gen 7 → Gen 3 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:""));return
+            val saveRestored=!writeStarted||runCatching{
+                file.writeBytes(fresh);val restored=file.readBytes()
+                restored.contentEquals(fresh)&&gen3SaveValid(restored)
+            }.getOrDefault(false)
+            if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&saveRestored->"The exact Generation 3 destination and PK7 Bank record were restored or kept and verified."
+                bankRestored->"The PK7 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                saveRestored->"The exact Generation 3 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
+                else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
+            }
+            showDialog("Gen 7 → Gen 3 failed",(e.message?:"Unknown error")+"\n\n$recovery"+
+                (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery snapshot: ${it.name}"}?:""));return
         }
         Toast.makeText(this,"PSE converted Gen 7 → Gen 3 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
         showBank()
@@ -13647,8 +13668,8 @@ class MainActivity : Activity() {
             "The selected origin game ID ${plan.originGame} is not a documented native Generation 1–5 title."
         }
         if(allowBridge){
-            require(plan.originGame in 1..12){"Choose a Generation 4-compatible origin ID for the bridge."}
-            require(!plan.legalised||p.originGame !in 1..12){"Origin Legalise was requested for a record that does not need it."}
+            require(gen4CompatibleOriginTitle(plan.originGame)!=null){"Choose a documented native Generation 4-compatible origin title for the bridge."}
+            require(!plan.legalised||gen4CompatibleOriginTitle(p.originGame)==null){"Origin Legalise was requested for a record that does not need it."}
         }else{
             require(!plan.legalised||(if(profile!!.sequel)plan.originGame in 22..23 else plan.originGame in 20..21)){"The chosen title mapping does not match the loaded Generation 5 save family."}
             require(!plan.legalised||p.originGame in 24..27){"Origin Legalise was requested for a record that does not need it."}
