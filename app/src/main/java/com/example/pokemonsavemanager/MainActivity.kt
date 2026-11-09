@@ -14414,6 +14414,21 @@ class MainActivity : Activity() {
         val sourceUri:Uri?,val sourceLabel:String?
     )
 
+    private fun gen4CompatibleOriginTitle(id:Int):String?=when(id){
+        1->"Pokémon Sapphire"
+        2->"Pokémon Ruby"
+        3->"Pokémon Emerald"
+        4->"Pokémon FireRed"
+        5->"Pokémon LeafGreen"
+        7->"Pokémon HeartGold"
+        8->"Pokémon SoulSilver"
+        10->"Pokémon Diamond"
+        11->"Pokémon Pearl"
+        12->"Pokémon Platinum"
+        15->"Pokémon Colosseum / XD"
+        else->null
+    }
+
     private fun gen5ToGen4PreflightRejection(p:PokemonEntry,allowOriginLegalise:Boolean=false):String?=when{
         !p.checksumValid->"The source PK5 checksum is invalid."
         p.species !in 1..493->"Species #${p.species} did not exist in Generation 4."
@@ -14432,7 +14447,7 @@ class MainActivity : Activity() {
         p.ivs.any{it !in 0..31}->"The IV data is invalid."
         p.movePP.any{it !in 0..63}->"A move PP value is invalid."
         p.ball !in 1..16->"Ball ID ${p.ball} has no verified title-independent Gen 4 mapping."
-        !allowOriginLegalise&&p.originGame !in 1..12->"Origin game ID ${p.originGame} is not representable as verified pre-Gen-5 provenance. Choose an explicit Gen 4-era origin mapping to continue."
+        !allowOriginLegalise&&gen4CompatibleOriginTitle(p.originGame)==null->"Origin game ID ${p.originGame} is not a documented native Gen 4-compatible title. Choose an explicit origin mapping to continue."
         p.metLevel !in 1..100->"The met level is outside Generation 4 limits."
         p.metLocation!=0->"Gen 5 met location #${p.metLocation} has no documented Gen 4 location mapping. Only the explicit unspecified location used by PSE's Gen 4 → Gen 5 route can be reversed safely."
         p.eggLocation!=0->"The PK5 contains Egg location data that cannot be mapped safely to Gen 4."
@@ -14443,6 +14458,9 @@ class MainActivity : Activity() {
         require(raw.size==136){"The preserved Gen 5 Bank record has an unexpected size."}
         if(!allowBridge)detectGen4Profile(destination)?:error("A valid Generation 4 destination save is required.")
         gen5ToGen4PreflightRejection(p,originLegalised)?.let{error(it)}
+        require(gen4CompatibleOriginTitle(originGame)!=null){
+            "The selected origin game ID $originGame is not a documented native Gen 4-compatible title."
+        }
         require(meta.abilityId==p.ability){"The PK5 ability does not match the verified Generation 4 ability for slot ${p.abilityNumber}."}
         require(gen3TransferGender(p,meta.genderRate)==p.gender){"PID-derived gender does not match the PK5 gender field."}
         val ups=gen5Pk5PpUps(raw);require(ups.all{it in 0..3}){"The PK5 PP-Up values could not be verified."}
@@ -14494,17 +14512,25 @@ class MainActivity : Activity() {
         val source=if(bank.size==136)parsePk5(bank,false)else null
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species)
             return showDialog("Gen 5 → Gen 4","The selected Bank record changed or failed its PK5 checksum.")
-        val originLegalised=source.originGame !in 1..12
+        val originLegalised=gen4CompatibleOriginTitle(source.originGame)==null
         val originGame=requestedOriginGame?:source.originGame
         if(originLegalised&&requestedOriginGame==null){
-            val ids=(1..12).toList()
+            val choices=listOf(
+                1 to "Pokémon Sapphire",2 to "Pokémon Ruby",3 to "Pokémon Emerald",
+                4 to "Pokémon FireRed",5 to "Pokémon LeafGreen",7 to "Pokémon HeartGold",
+                8 to "Pokémon SoulSilver",10 to "Pokémon Diamond",11 to "Pokémon Pearl",
+                12 to "Pokémon Platinum",15 to "Pokémon Colosseum / XD"
+            )
             AlertDialog.Builder(this).setTitle("Choose Gen 4-compatible origin")
-                .setMessage("Origin game ID ${source.originGame} is outside the verified pre-Gen-5 range. Choose the origin ID to write in PK4. This is an explicit PSE Legalise change, not official provenance; cancelling leaves the Bank record and destination unchanged.")
-                .setItems(ids.map{"Origin game ID $it"}.toTypedArray()){_,which->prepareGen5ToGen4Transfer(bankFile,shown,ids[which])}
+                .setMessage("Origin game ID ${source.originGame} is not a documented native Gen 4-compatible title. Choose the exact title to write in PK4. This is an explicit PSE Legalise change, not official provenance; cancelling leaves the Bank record and destination unchanged.")
+                .setItems(choices.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
+                    prepareGen5ToGen4Transfer(bankFile,shown,choices[which].first)
+                }
                 .setNegativeButton("Cancel",null).show()
             return
         }
-        if(originLegalised&&originGame !in 1..12)return showDialog("Gen 5 → Gen 4 blocked","Choose a valid pre-Gen-5 origin ID.")
+        if(gen4CompatibleOriginTitle(originGame)==null)
+            return showDialog("Gen 5 → Gen 4 blocked","Choose a documented native Gen 4-compatible origin title.")
         gen5ToGen4PreflightRejection(source,originLegalised)?.let{return showDialog("Gen 5 → Gen 4 blocked","$it\n\nThe Bank record and destination were left unchanged.")}
         fun snapshotsMatch()=bound()&&runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false)
         val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 5 → Gen 4").setMessage("Verifying the historical ability, PID-derived fields and native PK4 mapping…").setCancelable(false).create();loading.show()
@@ -14515,7 +14541,8 @@ class MainActivity : Activity() {
             val converted=parsePk4(pk4,false)?:return@loadGen3ToGen4MetaAsync showDialog("Gen 5 → Gen 4","The prepared PK4 could not be re-read.")
             val prepared=Gen5Gen4Prepared(selected,bank,source,destination,meta,originGame,originLegalised,pk4,converted,file,openedUri,openedLabel)
             val pidNotice=if(converted.pid==source.pid)"PID preserved." else "PID adjustment: ${source.pid.toString(16).uppercase().padStart(8,'0')} → ${converted.pid.toString(16).uppercase().padStart(8,'0')} so Generation 4 PID-derived nature and ability slot remain valid; nature, ability, shiny state and TID/SID are preserved. Review before continuing."
-            val originNotice=if(originLegalised)"Origin Legalise: game ID ${source.originGame} → ${originGame}; this is a user-selected provenance change, not verified history." else "Origin game ID ${source.originGame} is preserved."
+            val originTitle=gen4CompatibleOriginTitle(originGame)?:return@loadGen3ToGen4MetaAsync showDialog("Gen 5 → Gen 4 blocked","The reviewed origin mapping is no longer destination-valid. Nothing was changed.")
+            val originNotice=if(originLegalised)"Origin Legalise: game ID ${source.originGame} → $originTitle (ID $originGame); this is a user-selected provenance change, not verified history." else "Origin preserved: $originTitle (ID ${source.originGame})."
             val preview="PSE conversion, not an official backward transfer or provenance claim.\n\nPreserved: species, OT/TID/SID, nickname, EXP, nature, shiny state, verified non-hidden ability, gender, IVs, EVs, moves, PP/PP Ups, friendship, Pokérus, markings, Ball, met level, encounter dates and fateful marker. $originNotice $pidNotice\n\nRequired format difference: native PK4 has no explicit nature or hidden-ability field. Gen 5 location IDs are not remapped; only the explicit unspecified location 0 produced by PSE's forward route is accepted and remains 0. Held items, Eggs, forms, Gen 5 species/moves/abilities/origins and all ambiguous fields are blocked instead of discarded.\n\nThe exact PK5 Bank record remains until the reviewed native PK4, Pokédex mirrors, block CRCs and persisted reopen all verify."
             AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 5 → Gen 4").setMessage(preview)
                 .setNegativeButton("Cancel",null).setPositiveButton("Review destination"){_,_->if(snapshotsMatch())chooseGen5ToGen4Destination(prepared)else showDialog("Gen 5 → Gen 4","The destination or Bank record changed after review.")}.show()
