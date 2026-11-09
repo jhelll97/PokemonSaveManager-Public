@@ -16,17 +16,20 @@ import java.util.concurrent.Executors
 private data class LegendsZaBankPreparation(
     val pokemon: LegendsZaPokemonRead,
     val destinations: List<LegendsZaPseBankDestination>,
-    val sourceSha256: String,
-    val bankSha256: String
+    val sourceBankHash: String,
+    val nativeRecordHash: String,
+    val effects: List<String>
 )
 
-/** Restores one native Legends: Z-A PSE Bank entry into a reviewed new save copy. */
+/** Restores one native PA9 or explicitly reviewed Sword/Shield conversion into a new Z-A save copy. */
 class SwitchLegendsZaPseBankRestoreActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
     private val createCopyRequest = 2153
     private var sourceUri: Uri? = null
     private var expectedHash: String? = null
     private var bankEntryName: String? = null
+    private var expectedBankSourceHash: String? = null
+    private var conversionEffects: List<String> = emptyList()
     private var readyDestinations: List<LegendsZaPseBankDestination> = emptyList()
     private var readyPlan: LegendsZaPseBankRestoreCopyPlan? = null
     private var pendingPlan: LegendsZaPseBankRestoreCopyPlan? = null
@@ -53,9 +56,9 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Legends: Z-A • PSE Bank"; textSize = 24f })
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
-            text = "PSE restores the exact checksum-valid PA9 bytes to an empty native PC-box slot you choose in a new save copy. " +
-                "Only same-format Legends: Z-A records are accepted. Eggs, invalid native limits, and species/forms without a uniquely verified game profile remain protected. " +
-                "The record's existing species, form, moves, trainer data, and encounter fields are preserved; this bounded restore does not certify encounter or moveset legality."
+            text = "PSE restores one checksum-valid native PA9 to an empty PC-box slot you choose in a new save copy. " +
+                "Native PA9 entries remain byte-exact. Eligible Sword/Shield PK8 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Unsupported species, forms, items, moves, limits, or text remain blocked; this PSE conversion does not certify encounter, ability, Mega, or moveset legality."
             textSize = 16f
         })
         status = TextView(this).apply {
@@ -87,27 +90,37 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                 require(LegendsZaPseBankRestoreEditing.sha256(source) == hash) {
                     "The source changed. Reopen it from PSE."
                 }
-                val bank = readBankRecord()
-                val pokemon = LegendsZaPseBankRestoreEditing.inspectBankRecord(bank)
+                val bankSource = readBankSource()
+                val bankSourceHash = LegendsZaPseBankRestoreEditing.sha256(bankSource)
+                expectedBankSourceHash = bankSourceHash
+                val prepared = prepareBankRecord(bankSource)
+                val pokemon = LegendsZaPseBankRestoreEditing.inspectBankRecord(prepared.first)
+                if (prepared.second.isNotEmpty()) require(
+                    pokemon.species in LegendsZaPokedexReadOnly.supportedSpecies(source)
+                ) {
+                    "Species #${pokemon.species} is not present in this Legends: Z-A save's native Pokédex table."
+                }
                 val destinations = LegendsZaPseBankRestoreEditing.emptyDestinations(source)
                 require(destinations.isNotEmpty()) {
                     "All 960 native Legends: Z-A PC-box slots are occupied."
                 }
                 LegendsZaBankPreparation(
-                    pokemon, destinations,
-                    LegendsZaPseBankRestoreEditing.sha256(source),
-                    LegendsZaPseBankRestoreEditing.sha256(bank)
+                    pokemon, destinations, bankSourceHash,
+                    LegendsZaPseBankRestoreEditing.sha256(prepared.first), prepared.second
                 )
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 result.onSuccess { prepared ->
                     readyDestinations = prepared.destinations
+                    conversionEffects = prepared.effects
                     val p = prepared.pokemon
                     status.text = "Native source and Bank integrity verified\n" +
                         "${ScarletVioletSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n" +
                         "${prepared.destinations.size} empty native destination slots available\n" +
-                        "Source SHA-256: ${prepared.sourceSha256}\nBank SHA-256: ${prepared.bankSha256}"
+                        "Bank source SHA-256: ${prepared.sourceBankHash}\nPrepared PA9 SHA-256: ${prepared.nativeRecordHash}" +
+                        if (prepared.effects.isEmpty()) "" else "\n\nSword/Shield -> Legends: Z-A Legalise effects\n• " +
+                            prepared.effects.joinToString("\n• ")
                 }.onFailure { status.text = it.message ?: "The PSE Bank restore could not be prepared safely." }
                 setBusy(false)
             }
@@ -154,7 +167,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
             val result = runCatching {
                 val source = readSource()
                 val hash = expectedHash ?: error("Reopen the source from PSE.")
-                val bank = readBankRecord()
+                val bank = readBankRecord(source)
                 LegendsZaPseBankRestoreEditing.stage(
                     source, hash, bank, destination.box, destination.position
                 )
@@ -190,22 +203,50 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         val name = bankEntryName ?: error("Reopen PSE Bank.")
         val directory = File(filesDir, "pse_bank").canonicalFile
         val entry = File(directory, name).canonicalFile
-        require(entry.parentFile == directory && entry.isFile &&
-            entry.name.startsWith("switch_za_") && entry.extension == "pa9") {
-            "This is not a current Legends: Z-A PSE Bank entry."
+        val native = entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true)
+        val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
+        require(entry.parentFile == directory && entry.isFile && (native || swordShield)) {
+            "This is not a current Legends: Z-A or Sword/Shield PSE Bank entry."
+        }
+        if (swordShield) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+            "Review and explicitly choose the disclosed Sword/Shield Legalise conversion from PSE Bank."
         }
         return entry
     }
 
-    private fun readBankRecord(): ByteArray {
+    private fun readBankSource(): ByteArray {
+        val bytes = bankFile().readBytes()
+        expectedBankSourceHash?.let {
+            require(LegendsZaPseBankRestoreEditing.sha256(bytes) == it) {
+                "The preserved PSE Bank source changed. Reopen PSE Bank."
+            }
+        }
+        return bytes
+    }
+
+    private fun prepareBankRecord(source: ByteArray): Pair<ByteArray, List<String>> {
         val entry = bankFile()
-        val bytes = entry.readBytes()
-        val hash = LegendsZaPseBankRestoreEditing.sha256(bytes)
+        if (entry.extension.equals("pk8", true)) {
+            val converted = SwordShieldToLegendsZaPa9.review(source)
+            return converted.nativeRecord to converted.effects
+        }
+        val hash = LegendsZaPseBankRestoreEditing.sha256(source)
         require(entry.name == "switch_za_${hash}.pa9") {
             "The PSE Bank filename no longer matches its native record bytes."
         }
-        LegendsZaPseBankRestoreEditing.inspectBankRecord(bytes)
-        return bytes
+        LegendsZaPseBankRestoreEditing.inspectBankRecord(source)
+        return source to emptyList()
+    }
+
+    private fun readBankRecord(destinationSource: ByteArray): ByteArray {
+        val prepared = prepareBankRecord(readBankSource())
+        if (prepared.second.isNotEmpty()) {
+            val pokemon = LegendsZaPseBankRestoreEditing.inspectBankRecord(prepared.first)
+            require(pokemon.species in LegendsZaPokedexReadOnly.supportedSpecies(destinationSource)) {
+                "Species #${pokemon.species} is not present in this Legends: Z-A save's native Pokédex table."
+            }
+        }
+        return prepared.first
     }
 
     private fun showReview(plan: LegendsZaPseBankRestoreCopyPlan) {
@@ -214,7 +255,12 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         var dispatched = false
         val p = plan.pokemon
         val moves = p.moves.filter { it.id != 0 }.joinToString { "#${it.id} (PP ${it.pp})" }.ifBlank { "None" }
-        AlertDialog.Builder(this).setTitle("Restore this Bank Pokémon to a new copy?")
+        val effects = if (conversionEffects.isEmpty()) "" else
+            "\n\nExplicit Sword/Shield Legalise effects\n• " + conversionEffects.joinToString("\n• ")
+        AlertDialog.Builder(this).setTitle(
+            if (conversionEffects.isEmpty()) "Restore this Bank Pokémon to a new copy?"
+            else "Legalise Sword/Shield and restore to a new copy?"
+        )
             .setMessage(
                 "${ScarletVioletSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form} • Level ${p.cachedLevel}\n" +
                     "Nickname: ${p.nickname.ifBlank { "None" }} • Shiny: ${if (p.shiny) "Yes" else "No"} • Alpha: ${if (p.isAlpha) "Yes" else "No"}\n" +
@@ -223,7 +269,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                     "Allowed native byte scope: the 344-byte PA9 body of one previously empty PC-box slot at 0x${plan.absoluteOffset.toString(16).uppercase()} " +
                     "plus the native SHA-256 footer. The target slot's 64-byte native footer, every existing PC-box slot, all party data, the save revision, and all unrelated bytes remain exact. " +
                     "PSE verifies the unchanged source and Bank entry, retains a verified recovery backup, reopens the persisted copy, and removes a failed copy when possible. " +
-                    "The Bank entry remains available. Choose a NEW empty document."
+                    "The Bank entry remains available. Choose a NEW empty document." + effects
             )
             .setNegativeButton("Cancel", null)
             .setOnDismissListener { if (!dispatched) setBusy(false) }
@@ -282,7 +328,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
             val result = runCatching {
                 plan.saveNewCopy(
                     readSource = { readSource() },
-                    readBankRecord = { readBankRecord() },
+                    readBankRecord = { readBankRecord(readSource()) },
                     retainBackup = { original ->
                         val backup = SwitchSafeBackupStore.createVerified(
                             this, SwitchGameFamily.LEGENDS_ZA, original
@@ -307,7 +353,8 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                 inspectCopy.visibility = if (verifiedCopy != null) android.view.View.VISIBLE else android.view.View.GONE
                 status.text = result.fold(
                     onSuccess = {
-                        "PSE Bank restore saved and reopened successfully.\n" +
+                        (if (conversionEffects.isEmpty()) "PSE Bank restore saved and reopened successfully.\n"
+                        else "Sword/Shield -> Legends: Z-A PSE conversion saved and reopened successfully.\n") +
                             "Box ${plan.box}, slot ${plan.position} • SHA-256: ${plan.editedSha256}\n" +
                             "Recovery backup: $backupName\nOriginal source and Bank entry unchanged."
                     },

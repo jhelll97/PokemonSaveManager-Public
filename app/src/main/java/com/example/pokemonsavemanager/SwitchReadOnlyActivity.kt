@@ -2751,27 +2751,151 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound) return
         val directory = File(filesDir, "pse_bank")
         val entries = directory.listFiles()?.filter {
-            it.isFile && it.name.startsWith("switch_za_") && it.extension == "pa9"
-        }?.sortedBy { it.name }.orEmpty()
+            it.isFile && (
+                (it.name.startsWith("switch_za_") && it.extension.equals("pa9", true)) ||
+                    (it.name.startsWith("switch_swsh_") && it.extension.equals("pk8", true))
+                )
+        }?.sortedWith(compareBy<File>({ if (it.extension.equals("pa9", true)) 0 else 1 }, { it.name })).orEmpty()
         val labels = entries.map { file ->
-            val parsed = runCatching { LegendsZaPokemonReadOnly.read(file.readBytes()) }.getOrNull()
-            val pokemon = (parsed as? LegendsZaSlotRead.Pokemon)?.value
-            if (pokemon == null) file.name + " • unreadable"
-            else pokemon.nickname.ifBlank { ScarletVioletSpeciesNames.name(pokemon.species) } +
-                " (#" + pokemon.species + ")" + (if (pokemon.shiny) " • Shiny" else "") +
-                (if (pokemon.isAlpha) " • Alpha" else "") + (if (pokemon.isEgg) " • Egg" else "") + " • PA9"
+            if (file.extension.equals("pa9", true)) {
+                val parsed = runCatching { LegendsZaPokemonReadOnly.read(file.readBytes()) }.getOrNull()
+                val pokemon = (parsed as? LegendsZaSlotRead.Pokemon)?.value
+                if (pokemon == null) file.name + " • unreadable"
+                else pokemon.nickname.ifBlank { ScarletVioletSpeciesNames.name(pokemon.species) } +
+                    " (#" + pokemon.species + ")" + (if (pokemon.shiny) " • Shiny" else "") +
+                    (if (pokemon.isAlpha) " • Alpha" else "") + (if (pokemon.isEgg) " • Egg" else "") + " • PA9"
+            } else {
+                runCatching { SwordShieldToLegendsZaPa9.review(file.readBytes()) }.fold(
+                    onSuccess = { review ->
+                        review.sourceNickname.ifBlank { SwordShieldSpeciesNames.name(review.sourceSpecies) } +
+                            " (#${review.sourceSpecies}) • Sword/Shield PK8 → PA9 • Legalise"
+                    },
+                    onFailure = { error ->
+                        file.name + " • Sword/Shield PK8 blocked • " +
+                            (error.message ?: "unsupported conversion")
+                    }
+                )
+            }
         }
         val builder = AlertDialog.Builder(this)
-            .setTitle("PSE Bank • " + entries.size + " Legends: Z-A Pokémon")
+            .setTitle("PSE Bank • " + entries.size + " Legends: Z-A-compatible entries")
             .setPositiveButton("Close", null)
         if (entries.isEmpty()) {
-            builder.setMessage("No Legends: Z-A Pokémon are stored. Open Pokémon Boxes, choose a Pokémon, then tap Add to PSE Bank.")
+            builder.setMessage(
+                "No native Legends: Z-A PA9 or eligible Sword/Shield PK8 entries are stored. " +
+                    "Open Pokémon Boxes in a supported title, choose a Pokémon, then tap Add to PSE Bank."
+            )
         } else {
             builder.setItems(labels.toTypedArray()) { _, index ->
-                if (session === bound) showLegendsZaBankEntry(bound, entries[index])
+                if (session === bound) {
+                    val entry = entries[index]
+                    if (entry.extension.equals("pk8", true)) {
+                        showLegendsZaSwordShieldBankEntry(bound, entry)
+                    } else showLegendsZaBankEntry(bound, entry)
+                }
             }
         }
         builder.show()
+    }
+
+    private fun showLegendsZaSwordShieldBankEntry(bound: SwitchReadSession, file: File) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = file.canonicalFile
+        val reviewed = runCatching {
+            require(
+                entry.parentFile == directory &&
+                    entry.name.startsWith("switch_swsh_") &&
+                    entry.extension.equals("pk8", true)
+            ) { "This is not a Sword/Shield PSE Bank entry." }
+            val bank = entry.readBytes()
+            val bankHash = LegendsZaPseBankRestoreEditing.sha256(bank)
+            require(entry.name == "switch_swsh_${bankHash}.pk8") {
+                "The PSE Bank filename no longer matches its native PK8 bytes."
+            }
+            val destinationUri = selectedSourceUri
+                ?: error("Reopen the selected Legends: Z-A save from PSE.")
+            val destination = readSelectedSwitchSource(destinationUri)
+            require(LegendsZaPseBankRestoreEditing.sha256(destination) == bound.snapshot.sourceSha256) {
+                "The Legends: Z-A source changed. Reopen it from PSE."
+            }
+            val review = SwordShieldToLegendsZaPa9.review(bank)
+            require(review.sourceSpecies in LegendsZaPokedexReadOnly.supportedSpecies(destination)) {
+                "Species #${review.sourceSpecies} is not present in this Legends: Z-A save's native Pokédex table."
+            }
+            review
+        }
+        val review = reviewed.getOrElse { error ->
+            AlertDialog.Builder(this).setTitle("Sword/Shield → Legends: Z-A blocked")
+                .setMessage(
+                    (error.message ?: "This PK8 cannot be converted without unsupported loss.") +
+                        "\n\nThe source save and PSE Bank entry remain unchanged."
+                )
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val detail = buildString {
+            append(
+                review.sourceNickname.ifBlank { SwordShieldSpeciesNames.name(review.sourceSpecies) } +
+                    " (#${review.sourceSpecies})\n\n"
+            )
+            append("Explicit PSE Legalise effects\n• ")
+            append(review.effects.joinToString("\n• "))
+            append(
+                "\n\nChoose Legalise only to create the disclosed PA9 and then choose one empty " +
+                    "native Legends: Z-A PC-box slot. The source save and PK8 Bank entry remain unchanged. " +
+                    "The destination is written to a new save copy, reopened, and verified; failure restores both sides " +
+                    "and retains the recovery backup. This conversion does not claim an official HOME transfer, trade, " +
+                    "encounter, ability, Mega, moveset, or provenance."
+            )
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("PSE Bank • Sword/Shield → Legends: Z-A")
+            .setMessage(detail)
+            .setNegativeButton("Close", null)
+            .setPositiveButton("Legalise & choose destination", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                try {
+                    require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                    val destinationUri = selectedSourceUri
+                        ?: error("Reopen the selected Legends: Z-A save from PSE.")
+                    require(
+                        entry.parentFile == directory &&
+                            entry.name.startsWith("switch_swsh_") &&
+                            entry.extension.equals("pk8", true)
+                    ) { "This is not a current Sword/Shield PSE Bank entry." }
+                    val bank = entry.readBytes()
+                    val bankHash = LegendsZaPseBankRestoreEditing.sha256(bank)
+                    require(entry.name == "switch_swsh_${bankHash}.pk8") {
+                        "The PSE Bank entry changed. Reopen PSE Bank."
+                    }
+                    val current = readSelectedSwitchSource(destinationUri)
+                    require(LegendsZaPseBankRestoreEditing.sha256(current) == bound.snapshot.sourceSha256) {
+                        "The Legends: Z-A source changed. Reopen it from PSE."
+                    }
+                    val currentReview = SwordShieldToLegendsZaPa9.review(bank)
+                    require(currentReview.sourceSpecies in LegendsZaPokedexReadOnly.supportedSpecies(current)) {
+                        "Species #${currentReview.sourceSpecies} is not present in this Legends: Z-A save's native Pokédex table."
+                    }
+                    dialog.dismiss()
+                    startActivity(
+                        Intent(this, SwitchLegendsZaPseBankRestoreActivity::class.java)
+                            .setData(destinationUri)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.bank.entry", entry.name)
+                            .putExtra("pse.bank.legalise", true)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not prepare Legalise conversion")
+                        .setMessage(error.message ?: "The source and Bank entry were left unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun showLegendsZaBankEntry(bound: SwitchReadSession, file: File) {
