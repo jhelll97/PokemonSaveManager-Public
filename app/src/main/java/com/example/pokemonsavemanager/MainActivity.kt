@@ -34753,12 +34753,16 @@ class MainActivity : Activity() {
             }
             writeStarted=true
             file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)){"The Gen 1 destination changed while it was written."};val post=verifyGen1WriteState(written,targetBox);require(post.first){post.second};val after=parseGen1Box(written,targetBox).pokemon.sortedBy{it.slot};require(after.size==before.size+1&&after.take(before.size).zip(before).all{(a,b)->sameGen1TransferRecord(a,b)}){"The persisted Gen 1 box changed unexpectedly."};val q=after.firstOrNull{it.slot==slot};require(q!=null&&matches(q)){"The persisted Gen 1 conversion did not preserve every supported field."};val actualBase=gen1BoxDataOffset(written,targetBox)+GEN1_BOX_MONS+slot*GEN1_BOX_MON_SIZE;require(written.copyOfRange(actualBase,actualBase+GEN1_BOX_MON_SIZE).contentEquals(mon)){"The exact Gen 1 record did not persist."};require((written[0x25A3+dexIndex/8].toInt() and dexMask)!=0&&(written[0x25B6+dexIndex/8].toInt() and dexMask)!=0){"The species was not registered Seen and Caught in Gen 1."}
-            require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 1 destination changed before Bank cleanup."}
-            require(bound()&&verifyGen1SaveIntegrity(written).first){"The destination identity or full integrity changed before Bank cleanup."}
+            require(bound()&&importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)&&
+                verifyGen1SaveIntegrity(written).first&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&
+                bankCopy.readBytes().contentEquals(expectedBank)){
+                "The verified Gen 1 destination or retained recovery snapshots changed before Bank cleanup."
+            }
             val cleanup=bankFile.readBytes();require(cleanup.contentEquals(expectedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true){"The Gen 2 Bank record changed before cleanup."};bankDeleteAttempted=true;require(bankFile.delete()){"The Gen 2 Bank entry could not be removed after destination verification."};require(!bankFile.exists()){"The removed Gen 2 Bank entry still exists."}
-            require(bound()){"The destination identity changed after Bank cleanup."}
-            require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 1 destination changed after Bank cleanup."}
-            require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 1 recovery backup changed after Bank cleanup."}
+            require(bound()&&importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)&&
+                isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(expectedBank)){
+                "The verified Gen 1 destination identity or retained recovery snapshots changed after Bank cleanup."
+            }
             runCatching{bankCopy.delete()}
         }catch(e:Exception){
             val bankRestored=runCatching{
