@@ -14385,17 +14385,21 @@ class MainActivity : Activity() {
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
             source.tid!=shown.tid||source.sid!=shown.sid)
             return showDialog("Gen 5 → Gen 3","The selected Bank record changed or failed its PK5 checksum.")
-        val originLegalised=source.originGame !in 1..5
+        val sourceOriginTitle=gen3CompatibleOriginTitle(source.originGame)
+        val originLegalised=sourceOriginTitle==null
         val originGame=requestedOriginGame?:source.originGame
         if(originLegalised&&requestedOriginGame==null){
-            val games=arrayOf("Pokémon Sapphire","Pokémon Ruby","Pokémon Emerald","Pokémon FireRed","Pokémon LeafGreen")
-            AlertDialog.Builder(this).setTitle("Choose Gen 3 origin")
-                .setMessage("Generation 3 stores one of five origin titles, but this PK5 has origin game ID ${source.originGame}. Choose the native PK3 origin to write. This explicit PSE Legalise change does not verify history. Cancel leaves both files unchanged.")
-                .setItems(games){_,which->prepareGen5ToGen3Transfer(bankFile,shown,which+1)}
-                .setNegativeButton("Cancel",null).show()
+            val ids=listOf(1,2,3,4,5,15)
+            val choices=ids.map{it to requireNotNull(gen3CompatibleOriginTitle(it))}
+            AlertDialog.Builder(this).setTitle("Choose documented Gen 3 origin mapping")
+                .setMessage("Origin ${originGameName(source.originGame)} (ID ${source.originGame}) has no documented native PK3 mapping. Choose the exact title and ID to write. This explicit PSE Legalise change does not verify history. Cancel leaves both files unchanged.")
+                .setItems(choices.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
+                    prepareGen5ToGen3Transfer(bankFile,shown,choices[which].first)
+                }.setNegativeButton("Cancel",null).show()
             return
         }
-        if(originGame !in 1..5)return showDialog("Gen 5 → Gen 3 blocked","Choose a valid Generation 3 origin title. Nothing was changed.")
+        val originTitle=gen3CompatibleOriginTitle(originGame)
+            ?:return showDialog("Gen 5 → Gen 3 blocked","Choose a documented Generation 3 origin title and ID. Nothing was changed.")
         gen5ToGen4PreflightRejection(source,originLegalised)?.let{
             return showDialog("Gen 5 → Gen 3 blocked","$it\n\nThe Bank record and destination were left unchanged.")
         }
@@ -14425,9 +14429,10 @@ class MainActivity : Activity() {
                 }
                 val converted3=parsePk3(pk3,0,false)
                     ?:return@inner showDialog("Gen 5 → Gen 3","The prepared PK3 could not be reopened.")
+                val reviewedOriginTitle=gen3CompatibleOriginTitle(originGame)
+                    ?:return@inner showDialog("Gen 5 → Gen 3 blocked","The reviewed origin title and ID are no longer destination-valid. Nothing was changed.")
                 val prepared=Gen5Gen3Prepared(selected,bank,source,destination,meta4,meta3,originGame,originLegalised,pk4,converted4,plan3,pk3,converted3,file,openedUri,openedLabel)
-                val originName=arrayOf("Sapphire","Ruby","Emerald","FireRed","LeafGreen")[originGame-1]
-                val originNotice=if(originLegalised)"Origin Legalise: game ID ${source.originGame} → $originName. This is a user-selected provenance edit and does not verify history." else "Generation 3 origin $originName is preserved."
+                val originNotice=if(originLegalised)"Origin Legalise: ${originGameName(source.originGame)} (ID ${source.originGame}) → $reviewedOriginTitle (ID $originGame). This is a user-selected provenance edit and does not verify history." else "Origin preserved: $reviewedOriginTitle (ID $originGame)."
                 val pidNotice=if(converted3.pid==source.pid)"PID remains ${"%08X".format(source.pid)}." else
                     "PID changes ${"%08X".format(source.pid)} → ${"%08X".format(converted3.pid)} only to satisfy Generation 4/3 PID-derived nature, ability slot, gender and shiny constraints."
                 val preview=buildString{
@@ -14475,7 +14480,7 @@ class MainActivity : Activity() {
     private fun transferGen5BankToGen3(p:Gen5Gen3Prepared,target:Int){
         if(!gen5ToGen3StillBound(p))return showDialog("Gen 5 → Gen 3","The prepared snapshots changed. Reopen PSE Bank.")
         val file=p.destinationFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return
-        var writeStarted=false;var deleteAttempted=false;var backup:File?=null
+        var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
         try{
             require(fresh.contentEquals(p.destination)&&generationForSize(fresh.size)==3&&gen3SaveValid(fresh)){"The Gen 3 destination changed or failed validation."}
             require(target in 0 until 420){"The destination slot is invalid."}
@@ -14510,7 +14515,9 @@ class MainActivity : Activity() {
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen5ToGen3_",".backup",backupsDir());backup=recovery
             recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The recovery backup did not verify."}
             retainGen2ToGen3SafetyBackup(recovery,fresh)
-            require(isBackupKept(recovery)&&gen5ToGen3StillBound(p)){"The retained backup, destination identity or Bank record changed before writing."}
+            val bankCopy=File.createTempFile("PSE_G5ToG3_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
+            bankCopy.writeBytes(p.bankBytes);require(bankCopy.readBytes().contentEquals(p.bankBytes)){"The Bank recovery snapshot did not verify."}
+            require(isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(p.bankBytes)&&gen5ToGen3StillBound(p)){"The retained snapshots, destination identity or Bank record changed before writing."}
             writeStarted=true;file.writeBytes(save);val written=file.readBytes()
             require(written.contentEquals(save)&&gen3SaveValid(written)&&gen2ToGen3DexRegistered(written,converted3.species)){"The persisted Gen 3 save failed verification."}
             require(written.indices.all{it in allowed||written[it]==fresh[it]}){"The reopened save changed outside the reviewed scope."}
@@ -14523,6 +14530,8 @@ class MainActivity : Activity() {
             }
             deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The PK5 Bank record could not be removed after destination verification."}
             require(file.readBytes().contentEquals(save)){"The verified destination changed after Bank cleanup."}
+            require(recovery.readBytes().contentEquals(fresh)&&isBackupKept(recovery)){"The retained destination recovery backup changed after Bank cleanup."}
+            runCatching{bankCopy.delete()}
         }catch(e:Exception){
             val bankRestored=runCatching{
                 if(deleteAttempted&&!p.bankFile.exists()){
@@ -14531,12 +14540,18 @@ class MainActivity : Activity() {
                 }
                 p.bankFile.readBytes().contentEquals(p.bankBytes)
             }.getOrDefault(false)
-            val saveRestored=!writeStarted||(bankRestored&&runCatching{
-                file.writeBytes(fresh);file.readBytes().contentEquals(fresh)&&gen3SaveValid(fresh)
-            }.getOrDefault(false))
-            val recovery=if(bankRestored&&saveRestored)"The exact destination and PK5 Bank record were restored or kept and verified."
-            else "Automatic recovery could not be verified. Keep the recovery backup and remaining files for review."
-            showDialog("Gen 5 → Gen 3 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:""));return
+            val saveRestored=!writeStarted||runCatching{
+                file.writeBytes(fresh);val restored=file.readBytes()
+                restored.contentEquals(fresh)&&gen3SaveValid(restored)
+            }.getOrDefault(false)
+            if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&saveRestored->"The exact Gen 3 destination and PK5 Bank record were restored or kept and verified."
+                bankRestored->"The PK5 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                saveRestored->"The exact Gen 3 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
+                else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
+            }
+            showDialog("Gen 5 → Gen 3 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+(bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery: ${it.name}"}?:""));return
         }
         Toast.makeText(this,"PSE converted Gen 5 → Gen 3 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
         showBank()
