@@ -15290,6 +15290,8 @@ class MainActivity : Activity() {
         val checks=validateGen7CoreChecksums(destination)
         if(!bound()||generationForSize(destination.size)!=7||!checks.first)return showDialog("Gen 4 → Gen 7",checks.second)
         val trainer=analyzeSave(file).trainer?:return showDialog("Gen 4 → Gen 7","PSE could not read the destination trainer identity.")
+        if(trainer.gender!="Male"&&trainer.gender!="Female")
+            return showDialog("Gen 4 → Gen 7 blocked","The destination trainer gender is ${trainer.gender}. PSE will not guess the native PK7 handling-trainer gender.\n\nThe Bank record and destination were left unchanged.")
         val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return showDialog("Gen 4 → Gen 7","The PSE Bank path could not be verified.")
         val selected=runCatching{bankFile.canonicalFile}.getOrNull()?:return showDialog("Gen 4 → Gen 7","The selected Bank path could not be verified.")
         if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk4",true))
@@ -15342,7 +15344,7 @@ class MainActivity : Activity() {
                 append("Preserved: species/form, TID/SID, nickname and OT, EXP, verified ability, nature, gender, shiny state, moves, current PP, PP Ups, IVs, EVs, friendship, Pokérus, Ball, language, source title, met level/date and fateful marker.\n")
                 append("$pidNote\nAbility: source ability #${source.ability} in slot ${source.abilityNumber} remains verified ability #${meta.abilityId}.\n")
                 append("Markings: $markingNote.\n")
-                append("Required format changes: Gen 4 met location $oldMet becomes native transfer marker 30001; Egg location $oldEgg becomes 0. Current handler becomes ${trainer.trainerName}; relearn moves, geographic fields, Resort state and Hyper Training start empty.\n\n")
+                append("Required format changes: Gen 4 met location $oldMet becomes native transfer marker 30001; Egg location $oldEgg becomes 0. Current handler becomes ${trainer.trainerName} (${trainer.gender}); relearn moves, geographic fields, Resort state and Hyper Training start empty.\n\n")
                 append("Held items, Eggs and unsupported values are blocked instead of discarded. The source save stays unchanged. The exact Gen 4 Bank record remains until a retained recovery backup, chosen PK7 slot, Pokédex update, block CRCs, save signature and reopened destination all verify.")
             }
             AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{meta.speciesName}} • Gen 4 → Gen 7").setMessage(preview)
