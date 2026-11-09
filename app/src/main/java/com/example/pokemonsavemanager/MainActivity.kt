@@ -33839,8 +33839,23 @@ class MainActivity : Activity() {
             if(currentBank==null||currentDestination==null||!currentBank.contentEquals(bank)||!currentDestination.contentEquals(destination)){showDialog("Gen 2 → Gen 1","The source or destination changed while conversion data was prepared. Nothing was changed.");return@loadGen1SpeciesMetaAsync}
             val labels=targets.map{"Box ${it.first} • ${it.second} empty slot${if(it.second==1)"" else "s"}"}.toTypedArray()
             destinationPickerOffered=true
-            AlertDialog.Builder(this).setTitle("Transfer ${source.nickname.ifBlank{"Pokémon #${source.species}"}} to Gen 1")
-                .setMessage((if(legalise!=null)"Legalise is confirmed: ${gen2ToGen1LegaliseChanges(legalise)} will be omitted because Gen 1 cannot store it. " else "")+"PSE verified that this Gen 2 Pokémon has a Generation 1 species and moves that can be represented safely. OT/TID, nickname, level, EXP, Stat Exp, DVs, moves and PP Ups will be preserved. The held-item byte is intentionally restored to the Gen 1 catch-rate byte, matching the Time Capsule record layout.\n\nA verified kept recovery backup of the Gen 1 destination is required before writing. If a write fails, PSE attempts and verifies recovery; unverified recovery requires reviewing the retained backup and Bank record. The Gen 2 Bank entry is removed only after the Gen 1 save, PC box, Pokédex and checksums persist and re-read successfully.")
+            val sourcePpUps=IntArray(4){i->(bank[GEN2_BANK_HEADER_SIZE+23+i].toInt() ushr 6) and 3}
+            val destinationStats=gen1CalculatedStats(meta,source.level,source.dvs,source.statExp)
+            val catchRateByte=bank[GEN2_BANK_HEADER_SIZE+1].toInt() and 0xFF
+            val preview=buildString{
+                append("PSE Bank conversion preview\n\n")
+                append("Choose the destination box after confirming this review.\n")
+                append("Native Gen 1 record: species ${meta.name} (internal #${meta.internalIndex}), nickname “${source.nickname}”, OT “${source.otName}”, TID ${source.tid}, level ${source.level}, EXP ${source.experience}.\n")
+                append("Moves: ${source.moves.joinToString("/")}. Current PP: ${source.movePP.joinToString("/")}. PP Ups: ${sourcePpUps.joinToString("/")}.\n")
+                append("Stat Exp: ${source.statExp.joinToString("/")}. DVs: ${source.dvs.joinToString("/")}. Calculated boxed Current HP: ${destinationStats[0]}. Status becomes healthy; native types become #${meta.type1}/#${meta.type2}.\n")
+                append("Time Capsule byte mapping: Gen 2 held-item byte 0x${catchRateByte.toString(16).uppercase().padStart(2,'0')} becomes the Gen 1 catch-rate byte unchanged. It is not claimed as a Gen 1 held item.\n")
+                if(legalise!=null)append("Omitted because Gen 1 has no destination fields: ${gen2ToGen1LegaliseChanges(legalise)}.\n")
+                else append("No Gen 2 happiness, Pokérus or caught/met value requires omission.\n")
+                append("Eggs, post-Gen-1 species or moves, and Mail remain blocked. This is a reviewed backward PSE conversion and does not claim official trade or migration provenance.\n\n")
+                append("The source save stays unchanged. The exact Bank record remains until a Keep-pinned destination backup, native Gen 1 record, unchanged existing box records, Seen/Caught flags, checksums and reopened destination all verify. Failure restores the destination and Bank record independently.")
+            }
+            AlertDialog.Builder(this).setTitle("PSE Convert ${source.nickname.ifBlank{"Pokémon #${source.species}"}} to Gen 1")
+                .setMessage(preview)
                 .setNegativeButton("Cancel",null)
                 .setPositiveButton(if(legalise!=null)"Legalise & transfer" else "Transfer"){_,_->
                     if(transferConfirmationConsumed){showDialog("Gen 2 → Gen 1","This transfer confirmation was already submitted. Reopen PSE Bank.");return@setPositiveButton};transferConfirmationConsumed=true
@@ -33885,14 +33900,15 @@ class MainActivity : Activity() {
             require(bound()){"The destination identity changed after Bank cleanup."}
             require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 1 destination changed after Bank cleanup."}
         }catch(e:Exception){
-            val bankRestored=if(!writeStarted)true else runCatching{
+            val bankRestored=runCatching{
                 if(bankDeleteAttempted&&!bankFile.exists()){
                     require(bankFile.createNewFile()){"The Bank recovery path could not be reserved."}
                     bankFile.writeBytes(expectedBank)
                 }
-                require(bankFile.readBytes().contentEquals(expectedBank)){"The original Gen 2 Bank record could not be verified; no existing record was overwritten."}
+                val restored=bankFile.readBytes()
+                require(restored.contentEquals(expectedBank)&&parseGen2BankPayload(restored)?.let{sameGen2BankRecord(it,expected)}==true){"The original Gen 2 Bank record could not be verified; no existing record was overwritten."}
             }.isSuccess
-            val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false)&&runCatching{file.readBytes().contentEquals(fresh)&&verifyGen1SaveIntegrity(fresh).first}.getOrDefault(false))
+            val destinationRestored=!writeStarted||runCatching{file.writeBytes(fresh);file.readBytes().contentEquals(fresh)&&verifyGen1SaveIntegrity(fresh).first}.getOrDefault(false)
             val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 1 destination and Gen 2 Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
             showDialog("Gen 2 → Gen 1 transfer failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
