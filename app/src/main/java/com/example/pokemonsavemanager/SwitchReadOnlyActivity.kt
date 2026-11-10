@@ -1999,6 +1999,7 @@ class SwitchReadOnlyActivity : Activity() {
                 (it.name.startsWith("pse1_") && it.extension.equals("pse1", true)) ||
                 it.extension.equals("pse2", true) ||
                 it.extension.equals("pk3", true) ||
+                it.extension.equals("pk4", true) ||
                 it.extension.equals("pk7", true) ||
                 (it.name.startsWith("switch_swsh_") && it.extension.equals("pk8", true)) ||
                 (it.name.startsWith("switch_pla_") && it.extension.equals("pa8", true)) ||
@@ -2010,11 +2011,12 @@ class SwitchReadOnlyActivity : Activity() {
                 it.extension.equals("pse1", true) -> 1
                 it.extension.equals("pse2", true) -> 2
                 it.extension.equals("pk3", true) -> 3
-                it.extension.equals("pk7", true) -> 4
-                it.extension.equals("pk8", true) -> 5
-                it.extension.equals("pa8", true) -> 6
-                it.extension.equals("pk9", true) -> 7
-                else -> 8
+                it.extension.equals("pk4", true) -> 4
+                it.extension.equals("pk7", true) -> 5
+                it.extension.equals("pk8", true) -> 6
+                it.extension.equals("pa8", true) -> 7
+                it.extension.equals("pk9", true) -> 8
+                else -> 9
             }
         }, { it.name }))
             .orEmpty()
@@ -2049,6 +2051,17 @@ class SwitchReadOnlyActivity : Activity() {
                     },
                     onFailure = { error ->
                         file.name + " • Gen 3 route blocked • " +
+                            (error.message ?: "unsupported conversion")
+                    }
+                )
+            } else if (file.extension.equals("pk4", true)) {
+                runCatching { Gen4ToSwordShieldPk8.inspectSource(file.readBytes()) }.fold(
+                    onSuccess = { source ->
+                        source.nickname.ifBlank { SwordShieldSpeciesNames.name(source.species) } +
+                            " (#" + source.species + ") • Gen 4 PK4 -> PB8 Legalise"
+                    },
+                    onFailure = { error ->
+                        file.name + " • Gen 4 route blocked • " +
                             (error.message ?: "unsupported conversion")
                     }
                 )
@@ -2118,7 +2131,7 @@ class SwitchReadOnlyActivity : Activity() {
             .setTitle("PSE Bank • " + entries.size + " BDSP routes")
             .setPositiveButton("Close", null)
         if (entries.isEmpty()) {
-            builder.setMessage("No native BDSP PB8, eligible Gen 1 PSE1, Gen 2 PSE2, Gen 3 PK3, Gen 7 PK7, Sword/Shield PK8, Legends: Arceus PA8, Scarlet/Violet PK9, or Legends: Z-A PA9 Bank entries are available.")
+            builder.setMessage("No native BDSP PB8, eligible Gen 1 PSE1, Gen 2 PSE2, Gen 3 PK3, Gen 4 PK4, Gen 7 PK7, Sword/Shield PK8, Legends: Arceus PA8, Scarlet/Violet PK9, or Legends: Z-A PA9 Bank entries are available.")
         } else {
             builder.setItems(labels.toTypedArray()) { _, index ->
                 if (session !== bound) return@setItems
@@ -2127,6 +2140,7 @@ class SwitchReadOnlyActivity : Activity() {
                     selected.extension.equals("pse1", true) -> showBdspGen1BankEntry(bound, selected)
                     selected.extension.equals("pse2", true) -> showBdspGen2BankEntry(bound, selected)
                     selected.extension.equals("pk3", true) -> showBdspGen3BankEntry(bound, selected)
+                    selected.extension.equals("pk4", true) -> showBdspGen4BankEntry(bound, selected)
                     selected.extension.equals("pk7", true) -> showBdspGen7BankEntry(bound, selected)
                     selected.extension.equals("pk8", true) -> showBdspSwordShieldBankEntry(bound, selected)
                     selected.extension.equals("pa8", true) -> showBdspLegendsArceusBankEntry(bound, selected)
@@ -2725,6 +2739,115 @@ class SwitchReadOnlyActivity : Activity() {
                     AlertDialog.Builder(this).setTitle("Gen 3 -> BDSP blocked")
                         .setMessage((it.message ?: "No safe conversion is available.") +
                             "\n\nThe PK3 Bank entry and BDSP save remain unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }
+        }
+    }
+
+    private fun showBdspGen4BankEntry(bound: SwitchReadSession, file: File) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = runCatching { file.canonicalFile }.getOrNull()
+        val opened = runCatching {
+            require(entry != null && entry.parentFile == directory && entry.isFile &&
+                entry.extension.equals("pk4", true)) {
+                "This is not a current Gen 4 PSE Bank entry."
+            }
+            val bytes = entry.readBytes()
+            val source = Gen4ToSwordShieldPk8.inspectSource(bytes)
+            val trainer = BdspTrainerReadOnly.read(bound.snapshot.bytesCopy())
+            require(trainer.languageId == 2) {
+                "This bounded Gen 4 route currently requires an English BDSP destination trainer."
+            }
+            Triple(bytes, source, trainer)
+        }.getOrElse {
+            AlertDialog.Builder(this).setTitle("Gen 4 -> BDSP blocked")
+                .setMessage((it.message ?: "No safe conversion is available.") +
+                    "\n\nThe PK4 Bank entry and BDSP save remain unchanged.")
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val selected = entry ?: return
+        val openedHash = BdspPseBankRestoreEditing.sha256(opened.first)
+        val loading = AlertDialog.Builder(this).setTitle("Prepare Gen 4 -> BDSP")
+            .setMessage("Loading documented species metadata and building a reviewed PB8 preview from the exact selected PK4…")
+            .setCancelable(false).create()
+        loading.show()
+        reader.execute {
+            val prepared = runCatching {
+                val metadata = loadGen4SwordShieldMetadata(
+                    opened.second.species, opened.second.abilitySlot, opened.second.abilityId
+                )
+                require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                val current = selected.readBytes()
+                require(BdspPseBankRestoreEditing.sha256(current) == openedHash) {
+                    "The Gen 4 Bank entry changed during review."
+                }
+                metadata to Gen4ToBdspPb8.review(current, opened.third, metadata)
+            }
+            runOnUiThread {
+                if (loading.isShowing) loading.dismiss()
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                prepared.onSuccess { (metadata, converted) ->
+                    val p = BdspPseBankRestoreEditing.inspectBankRecord(
+                        converted.nativeRecord
+                    )
+                    val message = buildString {
+                        append(SwordShieldSpeciesNames.name(p.species) + " (#" +
+                            p.species + ") • Level " + p.cachedLevel + "\n")
+                        append("Source: " + selected.name +
+                            " • preserved checksum-valid 136-byte PK4\n")
+                        append("Prepared destination: checksum-valid 344-byte native BDSP PB8\n\n")
+                        append("Exact disclosed conversion effects\n• ")
+                        append(converted.effects.joinToString("\n• "))
+                        append("\n\nContinue only if you accept every disclosed Legalise effect.")
+                    }
+                    AlertDialog.Builder(this)
+                        .setTitle("Gen 4 -> BDSP • PSE Legalise review")
+                        .setMessage(message).setNegativeButton("Cancel", null)
+                        .setPositiveButton("Legalise & choose destination") { _, _ ->
+                            try {
+                                require(session === bound) {
+                                    "The active save changed. Reopen PSE Bank."
+                                }
+                                val source = selectedSourceUri
+                                    ?: error("Reopen the selected BDSP save from PSE.")
+                                require(selected.parentFile == directory && selected.isFile &&
+                                    selected.extension.equals("pk4", true)) {
+                                    "The Gen 4 Bank entry changed."
+                                }
+                                val current = selected.readBytes()
+                                require(
+                                    BdspPseBankRestoreEditing.sha256(current) == openedHash
+                                ) {
+                                    "The Gen 4 Bank entry changed. Reopen PSE Bank."
+                                }
+                                Gen4ToBdspPb8.review(current, opened.third, metadata)
+                                startActivity(Intent(
+                                    this,
+                                    SwitchBdspPseBankRestoreActivity::class.java
+                                )
+                                    .setData(source)
+                                    .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                                    .putExtra("pse.bank.entry", selected.name)
+                                    .putExtra("pse.bank.legalise", true)
+                                    .putExtra("pse.gen4.friendship", metadata.baseFriendship)
+                                    .putExtra("pse.gen4.gender_rate", metadata.genderRate)
+                                    .putExtra("pse.gen4.ability_id", metadata.abilityId)
+                                    .putExtra("pse.gen4.ability_number", metadata.abilityNumber)
+                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                            } catch (error: Exception) {
+                                AlertDialog.Builder(this)
+                                    .setTitle("Could not prepare Gen 4 conversion")
+                                    .setMessage(error.message ?: "Both sources remain unchanged.")
+                                    .setPositiveButton("Close", null).show()
+                            }
+                        }.show()
+                }.onFailure {
+                    AlertDialog.Builder(this).setTitle("Gen 4 -> BDSP blocked")
+                        .setMessage((it.message ?: "No safe conversion is available.") +
+                            "\n\nThe PK4 Bank entry and BDSP save remain unchanged.")
                         .setPositiveButton("Close", null).show()
                 }
             }
