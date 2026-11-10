@@ -6,6 +6,22 @@ import java.security.MessageDigest
 
 data class LegendsZaPseBankDestination(val box: Int, val position: Int)
 
+internal data class LegendsZaPseCaughtRegistration(
+    val bytes: ByteArray,
+    val section: LegendsZaDexSection,
+    val number: Int,
+    val form: Int,
+    val gender: Int,
+    val shiny: Boolean,
+    val absoluteOffset: Int,
+    val touchedRanges: List<IntRange>,
+    val changed: Boolean
+) {
+    val absoluteRanges: List<IntRange> = if (changed) touchedRanges.map {
+        (absoluteOffset + it.first)..(absoluteOffset + it.last)
+    } else emptyList()
+}
+
 /** Restores one checksum-valid native PA9 Bank record into a reviewed new Legends: Z-A save copy. */
 object LegendsZaPseBankRestoreEditing {
     private const val MAX_FILE_SIZE = 0x309FB3
@@ -79,11 +95,14 @@ object LegendsZaPseBankRestoreEditing {
     fun stage(
         source: ByteArray,
         expectedSha256: String,
-        bankRecord: ByteArray
+        bankRecord: ByteArray,
+        registerCaught: Boolean = false
     ): LegendsZaPseBankRestoreCopyPlan {
         val destination = emptyDestinations(source).firstOrNull()
             ?: throw IllegalArgumentException("All 960 native Legends: Z-A PC-box slots are occupied.")
-        return stage(source, expectedSha256, bankRecord, destination.box, destination.position)
+        return stage(
+            source, expectedSha256, bankRecord, destination.box, destination.position, registerCaught
+        )
     }
 
     fun stage(
@@ -91,7 +110,8 @@ object LegendsZaPseBankRestoreEditing {
         expectedSha256: String,
         bankRecord: ByteArray,
         box: Int,
-        position: Int
+        position: Int,
+        registerCaught: Boolean = false
     ): LegendsZaPseBankRestoreCopyPlan {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
@@ -107,11 +127,17 @@ object LegendsZaPseBankRestoreEditing {
         val written = LegendsZaSaveValidation.writeBoxRecord(
             original, box, position, supplied
         )
+        val registration = if (registerCaught) {
+            stageCaughtRegistration(written.bytes, pokemon)
+        } else null
+        val edited = registration?.bytes ?: written.bytes
         verify(
-            original, written.bytes, supplied, box, position, written.absoluteOffset
+            original, edited, supplied, pokemon, box, position, written.absoluteOffset,
+            registerCaught
         )
         return LegendsZaPseBankRestoreCopyPlan(
-            original, written.bytes, supplied, pokemon, box, position, written.absoluteOffset
+            original, edited, supplied, pokemon, box, position, written.absoluteOffset,
+            registerCaught, registration
         )
     }
 
@@ -119,10 +145,26 @@ object LegendsZaPseBankRestoreEditing {
         original: ByteArray,
         edited: ByteArray,
         bankRecord: ByteArray,
+        pokemon: LegendsZaPokemonRead,
         box: Int,
         position: Int,
-        absoluteOffset: Int
+        absoluteOffset: Int,
+        registerCaught: Boolean
     ) {
+        val rebuiltBox = LegendsZaSaveValidation.writeBoxRecord(
+            original, box, position, bankRecord
+        )
+        require(rebuiltBox.absoluteOffset == absoluteOffset) {
+            "The reviewed native PA9 destination offset changed."
+        }
+        val rebuiltRegistration = if (registerCaught) {
+            stageCaughtRegistration(rebuiltBox.bytes, pokemon)
+        } else null
+        val expected = rebuiltRegistration?.bytes ?: rebuiltBox.bytes
+        require(edited.contentEquals(expected)) {
+            "The staged copy differs from the reviewed native PA9 and Pokédex writes."
+        }
+
         val before = LegendsZaStorageReadOnly.read(original)
         val after = LegendsZaStorageReadOnly.read(edited)
         require(original.size == edited.size && before.version == after.version &&
@@ -152,10 +194,68 @@ object LegendsZaPseBankRestoreEditing {
         }) { "An unrelated native PC-box byte changed." }
 
         val footerOffset = original.size - FOOTER_SIZE
+        val dexRanges = rebuiltRegistration?.absoluteRanges ?: emptyList()
         require(original.indices.all { index ->
             index in absoluteOffset until absoluteOffset + bankRecord.size ||
+                dexRanges.any { index in it } ||
                 index in footerOffset until original.size || original[index] == edited[index]
         }) { "An unrelated encrypted container byte changed." }
+    }
+
+    private fun stageCaughtRegistration(
+        source: ByteArray,
+        pokemon: LegendsZaPokemonRead
+    ): LegendsZaPseCaughtRegistration {
+        require(pokemon.form in 0..31) {
+            "The converted PA9 form cannot be represented in the native Z-A Pokédex bitfield."
+        }
+        require(pokemon.gender in 0..2) {
+            "The converted PA9 gender cannot be represented in the native Z-A Pokédex."
+        }
+        val beforeDex = LegendsZaPokedexReadOnly.read(source)
+        val target = beforeDex.sections.asSequence().flatMap { section ->
+            section.entries.asSequence().map { section.section to it }
+        }.firstOrNull { it.second.speciesId == pokemon.species }
+            ?: throw IllegalArgumentException(
+                "Species #${pokemon.species} is not present in this Legends: Z-A save's native Pokédex table."
+            )
+        val section = target.first
+        val entry = target.second
+        val relativeOffset = LegendsZaPokedexReadOnly.nativeSpeciesId(entry.speciesId) * 0x84
+        val block = LegendsZaSaveValidation.readDexBlock(source).data
+        val record = block.copyOfRange(relativeOffset, relativeOffset + 0x84)
+        val formBit = 1L shl pokemon.form
+        val genderBit = 1 shl pokemon.gender
+        val touched = mutableListOf(0..3, 4..7, 8..9, 0xB..0xB)
+        writeU32(record, 0, entry.caughtForms or formBit)
+        writeU32(record, 4, entry.seenForms or formBit)
+        writeU16(record, 8, entry.languageFlags or (1 shl 1))
+        record[0xB] = (entry.genderFlags or genderBit).toByte()
+        if (pokemon.shiny) {
+            writeU32(record, 0xC, entry.shinyForms or formBit)
+            touched += 0xC..0xF
+        }
+        val write = LegendsZaSaveValidation.writeDexRecord(source, relativeOffset, record)
+        val changed = !write.bytes.contentEquals(source)
+        if (changed) LegendsZaPokedexEditing.verify(
+            source, write.bytes, section, entry.number, pokemon.form, pokemon.gender,
+            pokemon.shiny, LegendsZaDexEditMode.CAUGHT, 1, write.absoluteOffset, touched
+        )
+        return LegendsZaPseCaughtRegistration(
+            write.bytes, section, entry.number, pokemon.form, pokemon.gender, pokemon.shiny,
+            write.absoluteOffset, touched.toList(), changed
+        )
+    }
+
+    private fun writeU16(bytes: ByteArray, offset: Int, value: Int) {
+        require(value in 0..0xFFFF)
+        bytes[offset] = value.toByte()
+        bytes[offset + 1] = (value ushr 8).toByte()
+    }
+
+    private fun writeU32(bytes: ByteArray, offset: Int, value: Long) {
+        require(value in 0L..0xFFFFFFFFL)
+        repeat(4) { bytes[offset + it] = (value ushr (it * 8)).toByte() }
     }
 
     fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes)
@@ -169,11 +269,18 @@ class LegendsZaPseBankRestoreCopyPlan internal constructor(
     val pokemon: LegendsZaPokemonRead,
     val box: Int,
     val position: Int,
-    val absoluteOffset: Int
+    val absoluteOffset: Int,
+    private val registerCaught: Boolean,
+    registration: LegendsZaPseCaughtRegistration?
 ) {
     private val original = original.copyOf()
     private val edited = edited.copyOf()
     private val bankRecord = bankRecord.copyOf()
+    val caughtRegistrationReviewed: Boolean = registerCaught
+    val addedCaughtRegistration: Boolean = registration?.changed == true
+    val dexSection: LegendsZaDexSection? = registration?.section
+    val dexNumber: Int? = registration?.number
+    val dexAbsoluteRanges: List<IntRange> = registration?.absoluteRanges?.toList() ?: emptyList()
     val sourceSha256 = LegendsZaPseBankRestoreEditing.sha256(this.original)
     val bankSha256 = LegendsZaPseBankRestoreEditing.sha256(this.bankRecord)
     val editedSha256 = LegendsZaPseBankRestoreEditing.sha256(this.edited)
@@ -211,7 +318,8 @@ class LegendsZaPseBankRestoreCopyPlan internal constructor(
         var started = false
         try {
             LegendsZaPseBankRestoreEditing.verify(
-                original, edited, bankRecord, box, position, absoluteOffset
+                original, edited, bankRecord, pokemon, box, position, absoluteOffset,
+                registerCaught
             )
             started = true
             writeDestination(edited.copyOf())
@@ -220,7 +328,8 @@ class LegendsZaPseBankRestoreCopyPlan internal constructor(
                 "The saved copy differs from the reviewed PSE Bank restore."
             }
             LegendsZaPseBankRestoreEditing.verify(
-                original, persisted, bankRecord, box, position, absoluteOffset
+                original, persisted, bankRecord, pokemon, box, position, absoluteOffset,
+                registerCaught
             )
             requireSource()
             requireBank()

@@ -18,7 +18,8 @@ private data class LegendsZaBankPreparation(
     val destinations: List<LegendsZaPseBankDestination>,
     val sourceBankHash: String,
     val nativeRecordHash: String,
-    val effects: List<String>
+    val effects: List<String>,
+    val registerCaught: Boolean
 )
 
 /** Restores one native PA9 or explicitly reviewed cross-generation conversion into a new Z-A save copy. */
@@ -30,6 +31,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
     private var bankEntryName: String? = null
     private var expectedBankSourceHash: String? = null
     private var conversionEffects: List<String> = emptyList()
+    private var registerGen7Caught = false
     private var readyDestinations: List<LegendsZaPseBankDestination> = emptyList()
     private var readyPlan: LegendsZaPseBankRestoreCopyPlan? = null
     private var pendingPlan: LegendsZaPseBankRestoreCopyPlan? = null
@@ -106,7 +108,8 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                 }
                 LegendsZaBankPreparation(
                     pokemon, destinations, bankSourceHash,
-                    LegendsZaPseBankRestoreEditing.sha256(prepared.first), prepared.second
+                    LegendsZaPseBankRestoreEditing.sha256(prepared.first), prepared.second,
+                    bankFile().extension.equals("pk7", true)
                 )
             }
             runOnUiThread {
@@ -114,6 +117,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                 result.onSuccess { prepared ->
                     readyDestinations = prepared.destinations
                     conversionEffects = prepared.effects
+                    registerGen7Caught = prepared.registerCaught
                     val p = prepared.pokemon
                     status.text = "Native source and Bank integrity verified\n" +
                         "${ScarletVioletSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n" +
@@ -169,7 +173,8 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                 val hash = expectedHash ?: error("Reopen the source from PSE.")
                 val bank = readBankRecord(source)
                 LegendsZaPseBankRestoreEditing.stage(
-                    source, hash, bank, destination.box, destination.position
+                    source, hash, bank, destination.box, destination.position,
+                    registerCaught = registerGen7Caught
                 )
             }
             runOnUiThread {
@@ -299,6 +304,18 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         val moves = p.moves.filter { it.id != 0 }.joinToString { "#${it.id} (PP ${it.pp})" }.ifBlank { "None" }
         val effects = if (conversionEffects.isEmpty()) "" else
             "\n\nExplicit ${conversionSourceName()} Legalise effects\n• " + conversionEffects.joinToString("\n• ")
+        val dexScope = when {
+            !plan.caughtRegistrationReviewed -> ""
+            plan.addedCaughtRegistration -> {
+                val ranges = plan.dexAbsoluteRanges.joinToString { range ->
+                    if (range.first == range.last) "0x${range.first.toString(16).uppercase()}"
+                    else "0x${range.first.toString(16).uppercase()}–0x${range.last.toString(16).uppercase()}"
+                }
+                " plus Z-A Pokédex #${plan.dexNumber} (${plan.dexSection?.displayName}) native caught/default-form, " +
+                    "gender, shiny when applicable, and English fields at $ranges"
+            }
+            else -> " while the complete existing Z-A caught registration remains exact"
+        }
         AlertDialog.Builder(this).setTitle(
             if (conversionEffects.isEmpty()) "Restore this Bank Pokémon to a new copy?"
             else "Legalise ${conversionSourceName()} and restore to a new copy?"
@@ -308,8 +325,8 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                     "Nickname: ${p.nickname.ifBlank { "None" }} • Shiny: ${if (p.shiny) "Yes" else "No"} • Alpha: ${if (p.isAlpha) "Yes" else "No"}\n" +
                     "OT ${p.originalTrainer} • TID ${p.tid} / SID ${p.sid}\nMoves: $moves\n\n" +
                     "Destination: native Box ${plan.box}, slot ${plan.position}\n" +
-                    "Allowed native byte scope: the 344-byte PA9 body of one previously empty PC-box slot at 0x${plan.absoluteOffset.toString(16).uppercase()} " +
-                    "plus the native SHA-256 footer. The target slot's 64-byte native footer, every existing PC-box slot, all party data, the save revision, and all unrelated bytes remain exact. " +
+                    "Allowed native byte scope: the 344-byte PA9 body of one previously empty PC-box slot at 0x${plan.absoluteOffset.toString(16).uppercase()}" +
+                    dexScope + " plus the native SHA-256 footer. Mega, Alpha, display and unknown Pokédex fields, the target slot's 64-byte native footer, every existing PC-box slot, all party data, the save revision, and all unrelated bytes remain exact. " +
                     "PSE verifies the unchanged source and Bank entry, retains a verified recovery backup, reopens the persisted copy, and removes a failed copy when possible. " +
                     "The Bank entry remains available. Choose a NEW empty document." + effects
             )
