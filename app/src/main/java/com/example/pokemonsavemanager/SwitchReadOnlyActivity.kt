@@ -5974,9 +5974,9 @@ class SwitchReadOnlyActivity : Activity() {
             require(review.sourceSpecies in ScarletVioletPokedexReadOnly.supportedSpecies(destination)) {
                 "Species #${review.sourceSpecies} is not present in this Scarlet/Violet save's native Pokédex table."
             }
-            review
+            review to bankHash
         }
-        val review = reviewed.getOrElse { error ->
+        val opened = reviewed.getOrElse { error ->
             AlertDialog.Builder(this).setTitle("Legends: Z-A → Scarlet/Violet blocked")
                 .setMessage(
                     (error.message ?: "This PA9 cannot be converted without unsupported loss.") +
@@ -5985,11 +5985,13 @@ class SwitchReadOnlyActivity : Activity() {
                 .setPositiveButton("Close", null).show()
             return
         }
+        val (review, openedHash) = opened
         val detail = buildString {
             append(
                 review.sourceNickname.ifBlank { ScarletVioletSpeciesNames.name(review.sourceSpecies) } +
-                    " (#${review.sourceSpecies})\n\n"
+                    " (#${review.sourceSpecies})\n"
             )
+            append("Reviewed Bank SHA-256: " + openedHash + "\n\n")
             append("Explicit PSE Legalise effects\n• ")
             append(review.effects.joinToString("\n• "))
             append(
@@ -6019,8 +6021,9 @@ class SwitchReadOnlyActivity : Activity() {
                     ) { "This is not a current Legends: Z-A PSE Bank entry." }
                     val bank = entry.readBytes()
                     val bankHash = ScarletVioletPseBankRestoreEditing.sha256(bank)
-                    require(entry.name == "switch_za_${bankHash}.pa9") {
-                        "The PSE Bank entry changed. Reopen PSE Bank."
+                    require(bankHash == openedHash &&
+                        entry.name == "switch_za_${bankHash}.pa9") {
+                        "The exact reviewed PSE Bank entry changed. Reopen PSE Bank."
                     }
                     val current = readSelectedSwitchSource(destinationUri)
                     require(ScarletVioletPseBankRestoreEditing.sha256(current) == bound.snapshot.sourceSha256) {
@@ -6036,6 +6039,7 @@ class SwitchReadOnlyActivity : Activity() {
                             .setData(destinationUri)
                             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
                             .putExtra("pse.bank.entry", entry.name)
+                            .putExtra("pse.bank.sha256", openedHash)
                             .putExtra("pse.bank.legalise", true)
                             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     )
