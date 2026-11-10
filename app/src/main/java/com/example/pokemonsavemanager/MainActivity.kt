@@ -2162,6 +2162,53 @@ class MainActivity : Activity() {
         return nav
     }
 
+    private fun addPokemonViewerHeader(
+        root: LinearLayout,
+        subtitle: String,
+        onBack: () -> Unit
+    ) {
+        root.addView(TextView(this).apply {
+            text = "Pokémon Boxes"
+            textSize = 28f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(TEXT)
+        })
+        root.addView(TextView(this).apply {
+            text = subtitle
+            textSize = 14f
+            setTextColor(MUTED)
+            setPadding(0, dp(4), 0, dp(12))
+        })
+        addButton(root, "←  Back to PSE", onBack)
+    }
+
+    private fun addPokemonViewerTabs(
+        root: LinearLayout,
+        activeTab: String,
+        onParty: () -> Unit,
+        onBoxes: () -> Unit
+    ) {
+        val tabs = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = 2f
+        }
+        fun tabButton(label: String, selected: Boolean, action: () -> Unit) = Button(this).apply {
+            text = label
+            setAllCaps(false)
+            setTextColor(TEXT)
+            setBackgroundColor(if (selected) Color.rgb(25, 115, 205) else Color.rgb(45, 45, 45))
+            setOnClickListener(action)
+        }
+        tabs.addView(tabButton("Party", activeTab == "party", onParty),
+            LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(4) })
+        tabs.addView(tabButton("PC Boxes", activeTab == "boxes", onBoxes),
+            LinearLayout.LayoutParams(0, dp(52), 1f).apply { leftMargin = dp(4) })
+        root.addView(tabs, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(8)
+            bottomMargin = dp(10)
+        })
+    }
+
     private fun roundedBg(fill: Int, stroke: Int? = null, radiusDp: Int = 14): GradientDrawable =
         GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
@@ -3132,7 +3179,7 @@ class MainActivity : Activity() {
             val trainer = parseTrainerGen4(data)
             val analysis = SaveAnalysis(
                 "Nintendo DS • Gen 4/5", true, SIZE_G4, SIZE_G4, true, sha256(data),
-                "Generation 4 Nintendo DS save validated as ${profile.family}. PK4 Party + PC Box viewing is enabled read-only in Stage 3 verification.", trainer
+                "Generation 4 Nintendo DS save validated as ${profile.family}. PK4 Party and PC Boxes are available in read-only mode with block CRC and Pokémon integrity checks.", trainer
             )
             ScannedSave(uri, displayName, path, analysis, game, 4)
         } catch (_: Exception) { null }
@@ -8372,7 +8419,7 @@ class MainActivity : Activity() {
             }
             size == 0x20000 -> "Valid Generation 3 Game Boy Advance battery save. Ruby, Sapphire, Emerald, FireRed and LeafGreen use the shared Gen 3 engine; available operations are shown after the save is loaded."
             size == SIZE_G4 && detectGen5Profile(data) != null -> "Generation 5 Nintendo DS save detected. PK5 Party + all 24 PC Boxes are enabled in this first Gen 5 implementation."
-            size == SIZE_G4 -> "Generation 4 Nintendo DS save detected. Stage 3 enables read-only PK4 Party + all 18 PC Box viewing with active save-block selection, block CRC verification and PK4 integrity checks; write operations remain safety-locked."
+            size == SIZE_G4 -> "Generation 4 Nintendo DS save detected. Read-only PK4 Party and all 18 PC Boxes are available with active save-block selection, CRC verification and Pokémon integrity checks; writes remain locked."
             size == SIZE_G7_SM || size == SIZE_G7_USUM -> if (trainer?.gameMatchesFamily == true) "Structurally valid ${trainer.exactGame} save. Gen 7 boxed and party Pokémon management is available." else "Gen 7 save detected, but the stored game ID needs attention."
             !supported -> "This file does not match a currently recognised decrypted Pokémon 3DS save size."
             !footerValid -> "The size matches a supported 3DS Pokémon save, but the standard BEEF footer signature was not found. The file may be encrypted, truncated, or not a normal decrypted 'main' save."
@@ -9372,7 +9419,7 @@ class MainActivity : Activity() {
         val scroll=ScrollView(this).apply{setBackgroundColor(BG)}
         val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(16),dp(58),dp(16),dp(28));setBackgroundColor(BG)};scroll.addView(root)
         root.addView(TextView(this).apply{text="Edit ${pokemon.nickname.ifBlank{"Species #${pokemon.species}"}}";textSize=27f;typeface=Typeface.DEFAULT_BOLD;setTextColor(TEXT)})
-        addMutedLine(root,"$location • Gen 5 Stage 7 ${if(isParty)"party" else "boxed"} PK5 editor")
+        addMutedLine(root,"$location • Gen 5 • ${if(isParty)"Party" else "PC box"} Pokémon editor")
         addButton(root,"←  Cancel"){showPokemonDetails(location,pokemon)}
         val nick=inputField("Nickname (max 10)",pokemon.nickname).also{root.addView(it.first)}.second
         val ot=inputField("OT name (max 7)",pokemon.otName).also{root.addView(it.first)}.second
@@ -9411,7 +9458,7 @@ class MainActivity : Activity() {
         addSectionTitle(root,"IVs");val ivF=ArrayList<EditText>();for(i in 0..5)ivF.add(inputField("${labels[i]} IV (0–31)",pokemon.ivs[i].toString(),true).also{root.addView(it.first)}.second)
         addSectionTitle(root,"EVs");val evF=ArrayList<EditText>();for(i in 0..5)evF.add(inputField("${labels[i]} EV (0–255)",pokemon.evs[i].toString(),true).also{root.addView(it.first)}.second)
         if(isParty){
-            addMutedLine(root,"Stage 7 Party stat rebuild: EXP determines Level automatically. Nature, IV and EV edits recalculate Max HP, Attack, Defense, Speed, Sp. Atk and Sp. Def. Non-default forms remain locked rather than guessing form-specific base stats.")
+            addMutedLine(root,"EXP sets the Level automatically. Nature, IV and EV edits recalculate battle stats. Non-default forms remain locked when their form-specific base stats cannot be verified.")
         }
         addButton(root,"💾  Save Changes") save@{
             val v=try{Gen5EditValues(nick.text.toString().trim(),ot.text.toString().trim(),exp.text.toString().toLong(),held.text.toString().toInt(),friendship.text.toString().toInt(),nature.selectedItemPosition,moveIds.copyOf(),IntArray(4){ppF[it].text.toString().toInt()},IntArray(6){ivF[it].text.toString().toInt()},IntArray(6){evF[it].text.toString().toInt()},shiny.isChecked,ability.text.toString().toInt(),when(abilityNumber.selectedItemPosition){1->2;2->4;else->1},form.text.toString().toInt(),originGame.text.toString().toInt(),eggLocation.text.toString().toInt(),metLocation.text.toString().toInt(),ball.text.toString().toInt(),metLevel.text.toString().toInt(),otGender.selectedItemPosition,fateful.isChecked)}catch(_:Exception){showDialog("Invalid values","One or more fields are not valid numbers.");return@save}
@@ -9419,7 +9466,7 @@ class MainActivity : Activity() {
             if(err!=null){showDialog("Invalid values",err);return@save}
             if(isParty)prepareGen5PartyEdit(location,pokemon,v) else AlertDialog.Builder(this).setTitle("Save Gen 5 Pokémon changes?").setMessage("PSE will rebuild the encrypted PK5, update the correct Gen 5 save-block CRC and mirrored checksum table, re-read the edited slot, and verify every changed field. If anything fails, the original working copy is restored automatically. Your emulator save is still untouched until Save & Replace Current Save.").setNegativeButton("Cancel",null).setPositiveButton("Save"){_,_->applyGen5PokemonEdit(location,pokemon,v,null)}.show()
         }
-        addMutedLine(root,"Stage 7 writes only the selected PK5 in PSE's working copy. Boxed editing remains fully enabled. Default-form Party Pokémon now support shiny, ability, origin/encounter, EXP/level, nature, IV and EV edits; boxed Pokémon also support form IDs with cached-stat rebuilding, checksum/reparse verification and rollback.")
+        addMutedLine(root,"PSE edits only the selected PK5 in its working copy. Boxed editing is enabled. Party edits support shiny, ability, origin/encounter, EXP/level, nature, IV and EV values with cached-stat rebuilding, checksum verification and rollback.")
         setContentView(scroll)
     }
 
@@ -9526,19 +9573,13 @@ class MainActivity : Activity() {
         val profile=detectGen5Profile(data) ?: return showDialog("Gen 5","PSE could not validate this Gen 5 save layout.")
         val safeBox=boxIndex.coerceIn(0,23)
         val scroll=ScrollView(this).apply{setBackgroundColor(BG)}
-        val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(12),dp(54),dp(12),dp(24));setBackgroundColor(BG)}
+        val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(16),dp(58),dp(16),dp(28));setBackgroundColor(BG)}
         scroll.addView(root)
-        root.addView(TextView(this).apply{text="My Pokémon";textSize=26f;typeface=Typeface.DEFAULT_BOLD;setTextColor(TEXT)})
         val exactGame = gen5GameNameFromPath(currentSourceLabel ?: file.name, profile).removePrefix("Pokémon ")
-        root.addView(TextView(this).apply{text="Nintendo DS • Gen 5 • $exactGame • Stage 7";textSize=14f;setTextColor(MUTED);setPadding(0,dp(4),0,dp(12))})
-        val tabs=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-        fun tabButton(label:String,active:Boolean,go:()->Unit)=Button(this).apply {
-            text=label; setAllCaps(false); isEnabled=true; alpha=if(active)1f else 0.62f
-            setOnClickListener { if(!active) go() }
-        }
-        tabs.addView(tabButton("Party",tab=="party"){showGen5PokemonViewer("party",safeBox)},LinearLayout.LayoutParams(0,dp(52),1f))
-        tabs.addView(tabButton("PC Boxes",tab!="party"){showGen5PokemonViewer("boxes",safeBox)},LinearLayout.LayoutParams(0,dp(52),1f))
-        root.addView(tabs)
+        addPokemonViewerHeader(root,"Pokémon $exactGame • Viewer • Bank transfers enabled") { resetPokemonSelection(); showHome() }
+        addPokemonViewerTabs(root,if(tab=="party")"party" else "boxes",
+            onParty={showGen5PokemonViewer("party",safeBox)},
+            onBoxes={showGen5PokemonViewer("boxes",safeBox)})
 
         // Stage 3 verification summary: parse every native PK5 slot up front so a real
         // BW/B2W2 save can immediately prove that party + full PC storage mapping is sound.
@@ -9559,7 +9600,6 @@ class MainActivity : Activity() {
             "Parsed: $partyCount / 6 Party • $boxedCount / 720 PC • PK5 checksums OK"
         else
             "Parsed: $partyCount / 6 Party • $boxedCount / 720 PC • ⚠ $badPk5Checksums PK5 checksum issue(s)"
-        addMutedLine(root, summary)
         if(tab=="party") {
             val mons=partyPreview
             mons.forEachIndexed{i,p-> if(p!=null) root.addView(pokemonRow("Party Slot ${i+1}",p)) else root.addView(emptyPokemonRow("Party Slot ${i+1}")) }
@@ -9582,7 +9622,8 @@ class MainActivity : Activity() {
             mons.forEachIndexed{i,p->grid.addView(boxGridCell(safeBox,i,p,safeBox*30+i,false,false))}
             root.addView(grid); addMutedLine(root,"${mons.count{it!=null && it.checksumValid}} / 30 occupied slots in Box ${safeBox+1}.")
         }
-        addMutedLine(root,"Gen 5 Stage 7: boxed PK5 editing remains enabled. Default-form Party Pokémon now support EXP/level, nature, IVs and EVs with cached battle-stat rebuilding. Current stats are validated before editing; Party-block CRC + checksum-table mirrors are rebuilt and verified.")
+        addMutedLine(root, summary)
+        addMutedLine(root,"Gen 5 boxed edits, Duplicate, Delete and Bank transfers are enabled. Party stat edits validate current stats, rebuild cached values, and verify the Party-block CRC and checksum-table mirrors.")
         val shell=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(BG)}
         shell.addView(scroll,LinearLayout.LayoutParams(-1,0,1f));shell.addView(buildBottomNav("pokemon"),LinearLayout.LayoutParams(-1,-2));setContentView(shell)
     }
@@ -15422,26 +15463,12 @@ class MainActivity : Activity() {
         val scroll=ScrollView(this).apply{setBackgroundColor(BG)}
         val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(16),dp(58),dp(16),dp(28));setBackgroundColor(BG)}
         scroll.addView(root)
-        root.addView(TextView(this).apply{text="My Pokémon";textSize=28f;typeface=Typeface.DEFAULT_BOLD;setTextColor(TEXT)})
-        root.addView(TextView(this).apply{text="Nintendo DS • Gen 4/5 • ${profile.family} • Stage 5 boxed edit / duplicate / delete";textSize=14f;setTextColor(MUTED);setPadding(0,dp(4),0,dp(12))})
-        addButton(root,"←  Back to PSE"){showHome()}
+        val gen4Game = detectGen4GameFromPath(currentSourceLabel ?: file.name)
+        addPokemonViewerHeader(root,"$gen4Game • Viewer • Bank transfers enabled") { showHome() }
         val verification=gen4Validation(data,profile)
-        addSectionTitle(root,"SAVE VALIDATION")
-        addDetailLine(root,"Active general block","Copy ${verification.activeGeneral+1} • ${if(verification.generalChecksum) "CRC PASS" else "CRC FAIL"}")
-        addDetailLine(root,"Active storage block","Copy ${verification.activeStorage+1} • ${if(verification.storageChecksum) "CRC PASS" else "CRC FAIL"}")
-        addDetailLine(root,"PK4 integrity","${verification.goodPk4} valid • ${verification.badPk4} checksum warning • ${verification.emptyPk4} empty slots")
-        if(verification.generalChecksum && verification.storageChecksum && verification.badPk4==0)
-            addMutedLine(root,"✓ Gen 4 active blocks and every detected Pokémon passed validation. Boxed PK4 editing, Duplicate, Delete and Bank are enabled; party writes remain locked.")
-        else
-            addMutedLine(root,"⚠ PSE found a validation warning. Gen 4 editing is disabled until the save validates cleanly.")
-        val tabs=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-        fun tabButton(label:String,active:Boolean,go:()->Unit)=Button(this).apply {
-            text=label; setAllCaps(false); isEnabled=true; alpha=if(active)1f else 0.62f
-            setOnClickListener { if(!active) go() }
-        }
-        tabs.addView(tabButton("Party",tab=="party"){showGen4PokemonViewer("party",safeBox)},LinearLayout.LayoutParams(0,dp(52),1f))
-        tabs.addView(tabButton("PC Boxes",tab!="party"){showGen4PokemonViewer("boxes",safeBox)},LinearLayout.LayoutParams(0,dp(52),1f))
-        root.addView(tabs)
+        addPokemonViewerTabs(root,if(tab=="party")"party" else "boxes",
+            onParty={showGen4PokemonViewer("party",safeBox)},
+            onBoxes={showGen4PokemonViewer("boxes",safeBox)})
         if(tab=="party"){
             addSectionTitle(root,"PARTY")
             val party=gen4Party(data,profile)
@@ -15459,6 +15486,14 @@ class MainActivity : Activity() {
             root.addView(grid)
             addMutedLine(root,"${mons.count{it!=null}} / 30 occupied slots in Box ${safeBox+1}.")
         }
+        addSectionTitle(root,"SAVE VALIDATION")
+        addDetailLine(root,"Active general block","Copy ${verification.activeGeneral+1} • ${if(verification.generalChecksum) "CRC PASS" else "CRC FAIL"}")
+        addDetailLine(root,"Active storage block","Copy ${verification.activeStorage+1} • ${if(verification.storageChecksum) "CRC PASS" else "CRC FAIL"}")
+        addDetailLine(root,"PK4 integrity","${verification.goodPk4} valid • ${verification.badPk4} checksum warning • ${verification.emptyPk4} empty slots")
+        if(verification.generalChecksum && verification.storageChecksum && verification.badPk4==0)
+            addMutedLine(root,"✓ Gen 4 active blocks and every detected Pokémon passed validation. Boxed PK4 editing, Duplicate, Delete and Bank are enabled; party writes remain locked.")
+        else
+            addMutedLine(root,"⚠ PSE found a validation warning. Gen 4 editing is disabled until the save validates cleanly.")
         addMutedLine(root,"Gen 4: boxed editing, Duplicate, Delete, PSE Bank deposit/withdraw, Gen 4 → Gen 5 Bank transfer and Gen 4 → Gen 7 forward transfer are enabled. Party editing remains locked for now.")
         val shell=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(BG)}
         shell.addView(scroll,LinearLayout.LayoutParams(-1,0,1f));shell.addView(buildBottomNav("pokemon"),LinearLayout.LayoutParams(-1,-2));setContentView(shell)
@@ -15531,41 +15566,14 @@ class MainActivity : Activity() {
         }
         scroll.addView(root)
 
-        root.addView(TextView(this).apply {
-            text = "Pokémon Boxes"
-            textSize = 28f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(TEXT)
-        })
-        root.addView(TextView(this).apply {
-            text = "${analysis.trainer?.exactGame ?: analysis.family} • ${if (gen == 7) "Gen 7 viewer • boxed editing enabled" else "Viewer • Bank transfers enabled"}"
-            textSize = 14f
-            setTextColor(MUTED)
-            setPadding(0, 4, 0, 12)
-        })
-        addButton(root, "←  Back to PSE") { resetPokemonSelection(); showHome() }
-
-        val tabs = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            weightSum = 2f
-        }
-        val partyButton = Button(this).apply {
-            text = "Party"
-            setAllCaps(false)
-            setTextColor(TEXT)
-            setBackgroundColor(if (tab == "party") Color.rgb(25, 115, 205) else Color.rgb(45, 45, 45))
-            setOnClickListener { resetPokemonSelection(); showPokemonViewer("party", safeBox) }
-        }
-        val boxButton = Button(this).apply {
-            text = "PC Boxes"
-            setAllCaps(false)
-            setTextColor(TEXT)
-            setBackgroundColor(if (tab == "boxes") Color.rgb(25, 115, 205) else Color.rgb(45, 45, 45))
-            setOnClickListener { showPokemonViewer("boxes", safeBox) }
-        }
-        tabs.addView(partyButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(4) })
-        tabs.addView(boxButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { leftMargin = dp(4) })
-        root.addView(tabs, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8); bottomMargin = dp(10) })
+        val gameName = analysis.trainer?.exactGame ?: analysis.family
+        addPokemonViewerHeader(
+            root,
+            "$gameName • Viewer • Bank transfers enabled"
+        ) { resetPokemonSelection(); showHome() }
+        addPokemonViewerTabs(root,tab,
+            onParty={resetPokemonSelection();showPokemonViewer("party",safeBox)},
+            onBoxes={showPokemonViewer("boxes",safeBox)})
 
         if (tab == "party") {
             var found = 0
@@ -25845,19 +25853,13 @@ class MainActivity : Activity() {
         val scroll = ScrollView(this).apply { setBackgroundColor(BG) }
         val root = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(16),dp(58),dp(16),dp(28)); setBackgroundColor(BG) }
         scroll.addView(root)
-        root.addView(TextView(this).apply { text="Pokémon Boxes"; textSize=28f; typeface=Typeface.DEFAULT_BOLD; setTextColor(TEXT) })
-        root.addView(TextView(this).apply { text="$game • Generation 3 • Game Boy Advance"; textSize=14f; setTextColor(MUTED); setPadding(0,4,0,12) })
-        addButton(root,"←  Back to PSE"){ showHome() }
-        addButton(root, "🔎  Search all PC boxes") {
-            showGen3PcSearch(file, data, openedSourceUri, openedSourceLabel)
+        addPokemonViewerHeader(root,"$game • Viewer • Bank transfers enabled") {
+            resetGen3BoxSelection()
+            showHome()
         }
-        addButton(root, "📦  PC box overview") {
-            showGen3PcOverview(file, data, openedSourceUri, openedSourceLabel)
-        }
-        val tabs=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;weightSum=2f}
-        tabs.addView(Button(this).apply{text="Party";setAllCaps(false);setTextColor(TEXT);setBackgroundColor(if(tab=="party") Color.rgb(25,115,205) else Color.rgb(45,45,45));setOnClickListener{resetGen3BoxSelection();showGen3PokemonViewer("party",safeBox)}},LinearLayout.LayoutParams(0,dp(52),1f).apply{rightMargin=dp(4)})
-        tabs.addView(Button(this).apply{text="PC Boxes";setAllCaps(false);setTextColor(TEXT);setBackgroundColor(if(tab=="boxes") Color.rgb(25,115,205) else Color.rgb(45,45,45));setOnClickListener{showGen3PokemonViewer("boxes",safeBox)}},LinearLayout.LayoutParams(0,dp(52),1f).apply{leftMargin=dp(4)})
-        root.addView(tabs,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(8);bottomMargin=dp(10)})
+        addPokemonViewerTabs(root,tab,
+            onParty={resetGen3BoxSelection();showGen3PokemonViewer("party",safeBox)},
+            onBoxes={showGen3PokemonViewer("boxes",safeBox)})
         if(tab=="party"){
             val partyOff=gen3PartyOffset(data,game)
             if(partyOff==null){addMutedLine(root,"Party block could not be located.")} else {
@@ -26205,9 +26207,15 @@ class MainActivity : Activity() {
                     root,
                     "$found / 30 occupied slots in $currentBoxName (Box ${safeBox + 1})."
                 )
+                addButton(root, "🔎  Search all PC boxes") {
+                    showGen3PcSearch(file, data, openedSourceUri, openedSourceLabel)
+                }
+                addButton(root, "📦  PC box overview") {
+                    showGen3PcOverview(file, data, openedSourceUri, openedSourceLabel)
+                }
             }
         }
-        addMutedLine(root,"Gen 3 Stage 7: boxed editing includes verified multi-select party transfers, duplication, moves, deletion and all-or-nothing PSE Bank batches with exact-slot writes, recovery backups and automatic rollback. Party Pokémon support EXP/level, nature, IVs and EVs with cached battle-stat rebuilding. Deoxys Party stat edits remain locked because its Gen 3 base stats are game-specific.")
+        addMutedLine(root,"Gen 3 supports boxed editing, Duplicate, Move, Delete and PSE Bank transfers with checksum verification and rollback. Party stat edits recalculate cached stats; Deoxys remains restricted where its game-specific base stats cannot be verified.")
         val shell=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(BG)}
         shell.addView(scroll,LinearLayout.LayoutParams(-1,0,1f));shell.addView(buildBottomNav("pokemon"),LinearLayout.LayoutParams(-1,-2));setContentView(shell)
     }
@@ -29180,7 +29188,7 @@ class MainActivity : Activity() {
             if (detailGlobal != null && detailGlobal < 18*30) addButton(root, "📑  Duplicate Pokémon") { chooseGen4DuplicateDestination(location, p) } else addButton(root, "📑  Duplicate Pokémon") { gen4LockedAction("Duplicate Pokémon") }
             if (detailGlobal != null && detailGlobal < 18*30) addButton(root, "🏦  Move to PSE Bank") { confirmGen4DepositToBank(location, p) } else addButton(root, "🏦  Move to PSE Bank") { gen4LockedAction("PSE Bank") }
             if (detailGlobal != null && detailGlobal < 18*30) addButton(root, "🗑️  Delete Pokémon") { confirmGen4Delete(location, p) } else addButton(root, "🗑️  Delete Pokémon") { gen4LockedAction("Delete Pokémon") }
-            addMutedLine(root, "Gen 4 Stage 7: boxed PK4 editing (including named move selection), Duplicate, Delete, PSE Bank deposit/withdraw, Gen 4 → Gen 7 transfer and Deep Legality Check are enabled. Party writes remain locked for now.")
+            addMutedLine(root, "Gen 4 boxed PK4 editing, Duplicate, Delete, Bank deposit/withdraw, Gen 4 → Gen 7 transfer and Deep Legality Check are enabled. Party writes remain locked.")
         } else if (detailGen == 3) {
             fun gen3LockedAction(name: String) {
                 showDialog(name, "This Gen 3 action is still safety-locked for party Pokémon. Party duplication, party-position swapping, HP/status recovery, PC-to-party movement, Party-to-PC movement, verified Party removal, boxed editing, Duplicate, Delete, PSE Bank and Deep Legality are enabled.")
@@ -29459,7 +29467,7 @@ class MainActivity : Activity() {
 
         addMutedLine(root, when (detailGen) {
             3 -> "\nPSE Gen 3 • PK3 parsing/editing and PC movement use PK3 checksum verification, exact-slot byte checks, full active section-checksum verification and rollback. Emulator saves are still only changed through Save & Replace Current Save."
-            5 -> "\nPSE Gen 5 Stage 7 • Boxed editing remains enabled; default-form Party PK5 EXP/level, nature, IV and EV edits now rebuild cached battle stats with checksum/reparse verification and rollback. Emulator saves are still only changed through Save & Replace Current Save."
+            5 -> "\nGen 5 boxed editing is enabled. Party EXP/level, nature, IV and EV edits rebuild cached battle stats with checksum verification and rollback. Emulator saves are changed only through Save & Replace Current Save."
             else -> "\nPSE Gen 6/7 editor • boxed and party management use post-write verification. Emulator saves are still only changed through Save & Replace Current Save."
         })
         val shell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(BG) }
@@ -32951,7 +32959,7 @@ class MainActivity : Activity() {
         if(!isParty)addButton(root,"📦  Move to another PC box"){if(currentSourceUri!=openedEvolutionUri||currentSourceLabel!=openedEvolutionLabel){showDialog("Gen 2 action blocked","The original save identity changed while these details were open. Reopen the Pokémon or Egg. Nothing was changed.");return@addButton};if(!verifiedDetailSnapshot())return@addButton;if(openedEvolutionFile==null||importedFile?.absolutePath!=openedEvolutionFile.absolutePath){showDialog("Move Gen 2 Pokémon","The working save changed while these details were open. Reopen the Pokémon in the current save. Nothing was changed.")}else{confirmSelectedGen2CrossBoxMove(listOf(mon),box)}}
         if(!mon.isEgg)addButton(root,"🏦  Move to PSE Bank"){if(currentSourceUri!=openedEvolutionUri||currentSourceLabel!=openedEvolutionLabel){showDialog("Gen 2 action blocked","The original save identity changed while these details were open. Reopen the Pokémon or Egg. Nothing was changed.");return@addButton};if(!verifiedDetailSnapshot())return@addButton;if(openedEvolutionFile==null||importedFile?.absolutePath!=openedEvolutionFile.absolutePath){showDialog("Move to PSE Bank","The active save changed since this Pokémon was opened. Reopen the Pokémon before banking. Nothing was changed.")}else{confirmGen2DepositToBank(mon,location)}}else addMutedLine(root,"PSE Bank is unavailable for this Egg because the current PSE2 format cannot preserve its Egg marker and hatch cycles.")
         addButton(root,"🗑️  Delete Pokémon"){if(currentSourceUri!=openedEvolutionUri||currentSourceLabel!=openedEvolutionLabel){showDialog("Gen 2 action blocked","The original save identity changed while these details were open. Reopen the Pokémon or Egg. Nothing was changed.");return@addButton};if(!verifiedDetailSnapshot())return@addButton;if(openedEvolutionFile==null||importedFile?.absolutePath!=openedEvolutionFile.absolutePath){showDialog("Delete Gen 2 Pokémon","The active save changed since this Pokémon was opened. Reopen the Pokémon before deleting. Nothing was changed.")}else{confirmGen2Delete(mon,location)}}
-        addMutedLine(root,"Gen 2 Stage 2: advanced editing, verified held-item trade evolutions, Duplicate/Delete and PSE Bank are enabled with checksum/reparse verification and automatic rollback.")
+        addMutedLine(root,"Gen 2 supports verified held-item trade evolutions, Duplicate, Delete and PSE Bank transfers with checksum verification and rollback.")
         val artCard=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER;setPadding(dp(12),dp(12),dp(12),dp(12));background=roundedBg(CARD,Color.rgb(20,95,135),16)}
         val art=ImageView(this).apply{scaleType=ImageView.ScaleType.FIT_CENTER;adjustViewBounds=true;contentDescription=name};artCard.addView(art,LinearLayout.LayoutParams(-1,dp(250)));loadGen2Artwork(art,mon.species)
         artCard.addView(TextView(this).apply{text=if(mon.isEgg)"Egg • unhatched" else "$name • Lv.${mon.level}${if(mon.shiny)" ✨" else ""}";textSize=20f;typeface=Typeface.DEFAULT_BOLD;gravity=Gravity.CENTER;setTextColor(TEXT)});root.addView(artCard,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(8);bottomMargin=dp(8)})
@@ -33003,8 +33011,13 @@ class MainActivity : Activity() {
         phoneBackAction={showHome()};val f=importedFile?:return;val d=runCatching{f.readBytes()}.getOrDefault(ByteArray(0));val p=detectGen2Profile(d)?:run{showDialog("My Pokémon","This file did not pass the supported Gen 2 checksum profiles.");return};val game=detectGen2GameFromPath(currentSourceLabel?:f.name,p).removePrefix("Pokémon ")
         fun verifiedListSource():Boolean{if(importedFile?.absolutePath==f.absolutePath&&currentSourceUri==boxNameSource&&currentSourceLabel==boxNameLabel&&gen2ListSnapshotMatches(f,d,boxNameSource,boxNameLabel))return true;showDialog("My Gen 2 Pokémon","The working save changed while this list was open. Reopen the list in the current save. Nothing was changed.");return false}
         val scroll=ScrollView(this).apply{setBackgroundColor(BG)};val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(16),dp(58),dp(16),dp(28));setBackgroundColor(BG)}
-        root.addView(TextView(this).apply{text="My Pokémon";textSize=28f;typeface=Typeface.DEFAULT_BOLD;setTextColor(TEXT)});root.addView(TextView(this).apply{text="Generation 2 • $game • EDITING TEST";textSize=15f;setTextColor(MUTED);setPadding(0,dp(4),0,dp(14))})
-        val tabs=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL};tabs.addView(Button(this).apply{text="PARTY";setOnClickListener{if(!verifiedListSource())return@setOnClickListener;gen2BoxMultiSelectMode=false;selectedGen2BoxSlots.clear();gen2PartyMultiSelectMode=false;selectedGen2PartySlots.clear();showGen2PokemonViewer("party")}},LinearLayout.LayoutParams(0,dp(52),1f));tabs.addView(Button(this).apply{text="PC BOXES";setOnClickListener{if(!verifiedListSource())return@setOnClickListener;chooseGen2BoxForViewing(f,d,boxNameSource,boxNameLabel)}},LinearLayout.LayoutParams(0,dp(52),1f));root.addView(tabs)
+        addPokemonViewerHeader(root,"Pokémon $game • Viewer • Bank transfers enabled") {
+            gen2BoxMultiSelectMode=false;selectedGen2BoxSlots.clear();gen2PartyMultiSelectMode=false;selectedGen2PartySlots.clear();showHome()
+        }
+        addPokemonViewerTabs(root,tab,
+            onParty={if(verifiedListSource()){gen2BoxMultiSelectMode=false;selectedGen2BoxSlots.clear();gen2PartyMultiSelectMode=false;selectedGen2PartySlots.clear();showGen2PokemonViewer("party")}},
+            onBoxes={if(verifiedListSource())chooseGen2BoxForViewing(f,d,boxNameSource,boxNameLabel)}
+        )
         if(tab=="party"){
             val mons=parseGen2Party(d,p);addMutedLine(root,"PARTY • ${mons.size}/6 • Primary checksum PASS")
             if(mons.size>1)addButton(root,"↕  Reorder Party"){chooseGen2ReorderSource(f,d,boxNameSource,boxNameLabel,null)}
@@ -33021,7 +33034,7 @@ class MainActivity : Activity() {
             val selectBar=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL};selectBar.addView(Button(this).apply{text=if(gen2BoxMultiSelectMode)"Cancel" else "Multi-select • Move to PSE Bank";setAllCaps(false);setTextColor(Color.WHITE);if(!gen2BoxMultiSelectMode)setBackgroundColor(Color.rgb(35,150,75));setOnClickListener{if(!verifiedListSource())return@setOnClickListener;gen2BoxMultiSelectMode=!gen2BoxMultiSelectMode;selectedGen2BoxSlots.clear();showGen2PokemonViewer("boxes",b)}},LinearLayout.LayoutParams(0,dp(48),1f));if(gen2BoxMultiSelectMode){val selectedBoxForBank=mons.filter{selectedGen2BoxSlots.contains(it.slot)};val selectedBoxHasEgg=selectedBoxForBank.any{it.isEgg};selectBar.addView(Button(this).apply{text=if(selectedBoxHasEgg)"Bank • Egg blocked" else "Bank (${selectedGen2BoxSlots.size})";setAllCaps(false);setTextColor(Color.WHITE);isEnabled=selectedBoxForBank.isNotEmpty()&&!selectedBoxHasEgg;setBackgroundColor(Color.rgb(35,150,75));setOnClickListener{if(currentSourceUri!=boxNameSource||currentSourceLabel!=boxNameLabel){showDialog("Gen 2 selection blocked","The original save identity changed while this selection was open. Reopen the party or PC list. Nothing was changed.");return@setOnClickListener};if(!gen2ListSnapshotMatches(f,d,boxNameSource,boxNameLabel)){showDialog("Gen 2 selection blocked","The save bytes or integrity changed while this selection was open. Reopen the party or PC list. Nothing was changed.");return@setOnClickListener};if(importedFile?.absolutePath!=f.absolutePath){showDialog("Move selected to PSE Bank","The working save changed while this box list was open. Reopen the selection in the current save. Nothing was changed.")}else{confirmSelectedGen2BoxToBank(b,selectedBoxForBank)}}},LinearLayout.LayoutParams(0,dp(48),1f));selectBar.addView(Button(this).apply{text="Delete (${selectedGen2BoxSlots.size})";setAllCaps(false);setTextColor(Color.WHITE);setBackgroundColor(Color.rgb(175,55,55));setOnClickListener{if(currentSourceUri!=boxNameSource||currentSourceLabel!=boxNameLabel){showDialog("Gen 2 selection blocked","The original save identity changed while this selection was open. Reopen the party or PC list. Nothing was changed.");return@setOnClickListener};if(!gen2ListSnapshotMatches(f,d,boxNameSource,boxNameLabel)){showDialog("Gen 2 selection blocked","The save bytes or integrity changed while this selection was open. Reopen the party or PC list. Nothing was changed.");return@setOnClickListener};if(importedFile?.absolutePath!=f.absolutePath){showDialog("Delete selected Gen 2 Pokémon","The working save changed while this box list was open. Reopen the selection in the current save. Nothing was changed.")}else{confirmSelectedGen2Delete(mons.filter{selectedGen2BoxSlots.contains(it.slot)},"Box $b")}}},LinearLayout.LayoutParams(0,dp(48),1f));selectBar.addView(Button(this).apply{text="Copy (${selectedGen2BoxSlots.size})";setAllCaps(false);setTextColor(Color.WHITE);setBackgroundColor(Color.rgb(75,95,180));setOnClickListener{if(currentSourceUri!=boxNameSource||currentSourceLabel!=boxNameLabel){showDialog("Gen 2 selection blocked","The original save identity changed while this selection was open. Reopen the party or PC list. Nothing was changed.");return@setOnClickListener};if(!gen2ListSnapshotMatches(f,d,boxNameSource,boxNameLabel)){showDialog("Gen 2 selection blocked","The save bytes or integrity changed while this selection was open. Reopen the party or PC list. Nothing was changed.");return@setOnClickListener};if(importedFile?.absolutePath!=f.absolutePath){showDialog("Copy selected Gen 2 Pokémon","The working save changed while this box list was open. Reopen the selection in the current save. Nothing was changed.")}else{confirmSelectedGen2Duplicate(mons.filter{selectedGen2BoxSlots.contains(it.slot)},"Box $b")}}},LinearLayout.LayoutParams(0,dp(48),1f));selectBar.addView(Button(this).apply{text="Move (${selectedGen2BoxSlots.size})";setAllCaps(false);setTextColor(Color.WHITE);setBackgroundColor(Color.rgb(35,125,150));setOnClickListener{if(currentSourceUri!=boxNameSource||currentSourceLabel!=boxNameLabel){showDialog("Gen 2 selection blocked","The original save identity changed while this selection was open. Reopen the party or PC list. Nothing was changed.");return@setOnClickListener};if(!gen2ListSnapshotMatches(f,d,boxNameSource,boxNameLabel)){showDialog("Gen 2 selection blocked","The save bytes or integrity changed while this selection was open. Reopen the party or PC list. Nothing was changed.");return@setOnClickListener};if(importedFile?.absolutePath!=f.absolutePath){showDialog("Move selected Gen 2 Pokémon","The working save changed while this box list was open. Reopen the selection in the current save. Nothing was changed.")}else{chooseSelectedGen2BoxMove(mons.filter{selectedGen2BoxSlots.contains(it.slot)},b)}}},LinearLayout.LayoutParams(0,dp(48),1f));selectBar.addView(Button(this).apply{text=if(selectedBoxHasEgg)"Level • Egg blocked" else "Level (${selectedGen2BoxSlots.size})";setAllCaps(false);setTextColor(Color.WHITE);isEnabled=selectedBoxForBank.isNotEmpty()&&!selectedBoxHasEgg;setBackgroundColor(Color.rgb(125,85,170));setOnClickListener{if(currentSourceUri!=boxNameSource||currentSourceLabel!=boxNameLabel){showDialog("Gen 2 selection blocked","The original save identity changed while this selection was open. Reopen the party or PC list. Nothing was changed.");return@setOnClickListener};if(!gen2ListSnapshotMatches(f,d,boxNameSource,boxNameLabel)){showDialog("Gen 2 selection blocked","The save bytes or integrity changed while this selection was open. Reopen the party or PC list. Nothing was changed.");return@setOnClickListener};if(importedFile?.absolutePath!=f.absolutePath){showDialog("Set selected Gen 2 level","The working save changed while this box list was open. Reopen the selection in the current save. Nothing was changed.")}else{editSelectedGen2Levels(selectedBoxForBank,"Box $b")}}},LinearLayout.LayoutParams(0,dp(48),1f))};addGen2SelectionControls(root,selectBar);if(gen2BoxMultiSelectMode&&mons.any{selectedGen2BoxSlots.contains(it.slot)&&it.isEgg})addMutedLine(root,"PSE Bank and level editing are unavailable while the selection contains a Gen 2 Egg; Egg-safe copy, move, and delete actions remain available.")
             val grid=GridLayout(this).apply{columnCount=4;alignmentMode=GridLayout.ALIGN_BOUNDS;useDefaultMargins=false};for(slot in 0 until 20)grid.addView(gen2GridCell(mons.getOrNull(slot),b,slot,f,boxNameSource,boxNameLabel,d));root.addView(grid)
         }
-        addMutedLine(root,"Gen 2 Stage 2: advanced editing plus Duplicate/Delete enabled with dependent-data recalculation, checksum/reparse verification and automatic rollback.");scroll.addView(root);val shell=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(BG)};shell.addView(scroll,LinearLayout.LayoutParams(-1,0,1f));shell.addView(buildBottomNav("pokemon"),LinearLayout.LayoutParams(-1,-2));setContentView(shell)
+        addMutedLine(root,"Gen 2 supports advanced Pokémon editing, Duplicate and Delete with dependent-data recalculation, checksum verification and rollback.");scroll.addView(root);val shell=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(BG)};shell.addView(scroll,LinearLayout.LayoutParams(-1,0,1f));shell.addView(buildBottomNav("pokemon"),LinearLayout.LayoutParams(-1,-2));setContentView(shell)
     }
 
     private fun addGen2SelectionControls(root:LinearLayout,controls:LinearLayout) {
@@ -38726,41 +38739,27 @@ private data class Gen2ToGen5LegalisePlan(
         val data = try { file.readBytes() } catch (_: Exception) { ByteArray(0) }
         val integrity=verifyGen1SaveIntegrity(data)
         if(!integrity.first){
-            showDialog("My Pokémon",integrity.second)
+            showDialog("Pokémon Boxes",integrity.second)
             return
         }
 
         val scroll = ScrollView(this).apply { setBackgroundColor(BG) }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(72), dp(16), dp(28))
+            setPadding(dp(16), dp(58), dp(16), dp(28))
             setBackgroundColor(BG)
         }
-        root.addView(TextView(this).apply {
-            text = "Pokémon Boxes"
-            textSize = 28f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(TEXT)
-        })
-        root.addView(TextView(this).apply {
-            text = "Generation 1 • Red / Blue / Yellow"
-            textSize = 15f
-            setTextColor(MUTED)
-            setPadding(0, dp(4), 0, dp(14))
-        })
-
-        val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val partyButton = Button(this).apply {
-            text = "PARTY"
-            setTextColor(Color.WHITE)
-            setBackgroundColor(if (tab == "party") Color.rgb(25, 115, 205) else Color.rgb(45, 45, 45))
-            setOnClickListener { gen1BoxMultiSelectMode=false;selectedGen1BoxSlots.clear();showGen1PokemonViewer("party") }
+        addPokemonViewerHeader(
+            root,
+            "${detectGen1GameFromPath(currentSourceLabel ?: file.name)} • Viewer • Bank transfers enabled"
+        ) {
+            gen1BoxMultiSelectMode = false
+            selectedGen1BoxSlots.clear()
+            showHome()
         }
-        val boxesButton = Button(this).apply {
-            text = "PC BOXES"
-            setTextColor(Color.WHITE)
-            setBackgroundColor(if (tab == "boxes") Color.rgb(25, 115, 205) else Color.rgb(45, 45, 45))
-            setOnClickListener {
+        addPokemonViewerTabs(root, tab,
+            onParty = { gen1BoxMultiSelectMode=false;selectedGen1BoxSlots.clear();showGen1PokemonViewer("party") },
+            onBoxes = {
                 val labels = (1..12).map { boxNumber ->
                     val result = parseGen1Box(data, boxNumber)
                     val state = when {
@@ -38777,10 +38776,7 @@ private data class Gen2ToGen5LegalisePlan(
                     .setNegativeButton("Cancel", null)
                     .show()
             }
-        }
-        tabs.addView(partyButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(4) })
-        tabs.addView(boxesButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { leftMargin = dp(4) })
-        root.addView(tabs)
+        )
 
         if (tab == "party") {
             val party = parseGen1Party(data)

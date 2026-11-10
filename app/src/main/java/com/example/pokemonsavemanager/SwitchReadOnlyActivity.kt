@@ -382,7 +382,13 @@ class SwitchReadOnlyActivity : Activity() {
         root.addView(menuSelectionButton)
         root.addView(label("Inspection stays read-only. Supported edit actions open a separate before/after review and write only to a verified new copy. The preview is held in memory and closes when you leave this screen."))
         root.addView(Button(this).apply { text = "Back to PSE"; setOnClickListener { finish() } })
-        setContentView(scroll)
+        val shell = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.rgb(7, 16, 24))
+        }
+        shell.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        shell.addView(buildBottomNav(), LinearLayout.LayoutParams(-1, -2))
+        setContentView(shell)
         val source = intent?.data
         val family = intent?.getStringExtra("pse.switch.family")?.let { value -> SwitchGameFamily.values().firstOrNull { it.name == value } }
         if (source != null && family != null) {
@@ -393,6 +399,48 @@ class SwitchReadOnlyActivity : Activity() {
             setBusy(true)
             onActivityResult(pickRequest, RESULT_OK, Intent().setData(source))
         }
+    }
+
+    private fun buildBottomNav(): LinearLayout {
+        val nav = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER
+            minimumHeight = (64 * resources.displayMetrics.density).toInt()
+            setPadding((8 * resources.displayMetrics.density).toInt(), (5 * resources.displayMetrics.density).toInt(), (8 * resources.displayMetrics.density).toInt(), (5 * resources.displayMetrics.density).toInt())
+            setBackgroundColor(Color.rgb(9, 25, 36))
+        }
+        fun item(icon: String, label: String, active: Boolean, action: () -> Unit) {
+            val box = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = android.view.Gravity.CENTER
+                setOnClickListener { action() }
+            }
+            box.addView(TextView(this).apply {
+                text = icon
+                textSize = 20f
+                gravity = android.view.Gravity.CENTER
+                setTextColor(if (active) Color.rgb(45, 185, 255) else Color.rgb(125, 145, 158))
+            })
+            box.addView(TextView(this).apply {
+                text = label
+                textSize = 10f
+                gravity = android.view.Gravity.CENTER
+                typeface = if (active) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
+                setTextColor(if (active) Color.rgb(70, 190, 255) else Color.rgb(145, 160, 170))
+            })
+            nav.addView(box, LinearLayout.LayoutParams(0, -1, 1f))
+        }
+        item("⌂", "Home", false) { finish() }
+        item("◉", "Pokémon", true) {
+            session?.let { openSwitchParty(it) } ?: pickSource()
+        }
+        item("▣", "Bank", false) {
+            session?.let { showSwitchBank(it) } ?: finish()
+        }
+        item("▤", "Backups", false) {
+            session?.let { showSwitchSafeBackups(it) } ?: finish()
+        }
+        return nav
     }
 
     private fun setBusy(busy: Boolean) {
