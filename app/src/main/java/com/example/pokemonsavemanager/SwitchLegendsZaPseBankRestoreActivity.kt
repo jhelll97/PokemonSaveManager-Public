@@ -60,7 +60,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid native PA9 to an empty PC-box slot you choose in a new save copy. " +
-                "Native PA9 entries remain byte-exact. Eligible Gen 1 PSE1, Gen 2 PSE2, Gen 3 PK3, Gen 4 PK4, Gen 5 PK5, Gen 6 PK6, Generation 7 PK7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, and Scarlet/Violet PK9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Native PA9 entries remain byte-exact. Eligible Gen 1 PSE1, Gen 2 PSE2, Gen 3 PK3, Gen 4 PK4, Gen 5 PK5, Gen 6 PK6, Generation 7 PK7, Let's Go PB7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, and Scarlet/Violet PK9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
                 "Unsupported species, forms, items, moves, limits, or text remain blocked; these PSE conversions do not certify encounter, ability, Mega, or moveset legality."
             textSize = 16f
         })
@@ -115,7 +115,8 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                         bankFile().extension.equals("pk3", true) ||
                         bankFile().extension.equals("pk4", true) ||
                         bankFile().extension.equals("pk5", true) ||
-                        bankFile().extension.equals("pk7", true)
+                        bankFile().extension.equals("pk7", true) ||
+                        bankFile().extension.equals("pb7", true)
                 )
             }
             runOnUiThread {
@@ -218,6 +219,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         bankEntryName?.endsWith(".pk5", true) == true -> "Generation 5"
         bankEntryName?.endsWith(".pk6", true) == true -> "Generation 6"
         bankEntryName?.endsWith(".pk7", true) == true -> "Generation 7"
+        bankEntryName?.endsWith(".pb7", true) == true -> "Let's Go"
         bankEntryName?.endsWith(".pk9", true) == true -> "Scarlet/Violet"
         bankEntryName?.endsWith(".pk8", true) == true -> "Sword/Shield"
         bankEntryName?.endsWith(".pb8", true) == true -> "BDSP"
@@ -237,15 +239,16 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         val gen5 = entry.extension.equals("pk5", true)
         val gen6 = entry.extension.equals("pk6", true)
         val gen7 = entry.extension.equals("pk7", true)
+        val letsGo = entry.name.startsWith("switch_lgpe_") && entry.extension.equals("pb7", true)
         val scarletViolet = entry.name.startsWith("switch_sv_") && entry.extension.equals("pk9", true)
         val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
         val bdsp = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
         val legendsArceus = entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)
         require(entry.parentFile == directory && entry.isFile &&
-            (native || gen1 || gen2 || gen3 || gen4 || gen5 || gen6 || gen7 || swordShield || bdsp || legendsArceus || scarletViolet)) {
-            "This is not a current Legends: Z-A, Gen 1, Gen 2, Gen 3, Gen 4, Gen 5, Gen 6, Generation 7, Sword/Shield, BDSP, Legends: Arceus, or Scarlet/Violet PSE Bank entry."
+            (native || gen1 || gen2 || gen3 || gen4 || gen5 || gen6 || gen7 || letsGo || swordShield || bdsp || legendsArceus || scarletViolet)) {
+            "This is not a current Legends: Z-A, Gen 1, Gen 2, Gen 3, Gen 4, Gen 5, Gen 6, Generation 7, Let's Go, Sword/Shield, BDSP, Legends: Arceus, or Scarlet/Violet PSE Bank entry."
         }
-        if (gen1 || gen2 || gen3 || gen4 || gen5 || gen6 || gen7 || swordShield || bdsp || legendsArceus || scarletViolet) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+        if (gen1 || gen2 || gen3 || gen4 || gen5 || gen6 || gen7 || letsGo || swordShield || bdsp || legendsArceus || scarletViolet) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
             "Review and explicitly choose the disclosed ${conversionSourceName()} Legalise conversion from PSE Bank."
         }
         return entry
@@ -254,6 +257,11 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
     private fun readBankSource(): ByteArray {
         val entry = bankFile()
         when {
+            entry.name.startsWith("switch_lgpe_") && entry.extension.equals("pb7", true) -> {
+                require(!expectedBankSourceHash.isNullOrBlank()) {
+                    "The reviewed Let's Go Bank hash is missing. Reopen PSE Bank."
+                }
+            }
             entry.extension.equals("pk7", true) -> {
                 require(!expectedBankSourceHash.isNullOrBlank()) {
                     "The reviewed Gen 7 Bank hash is missing. Reopen PSE Bank."
@@ -347,6 +355,22 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                 intent.getIntExtra("pse.gen6.ability_number", 0)
             )
             val converted = Gen6ToLegendsZaPa9.review(
+                source, LegendsZaTrainerReadOnly.read(destination), metadata
+            )
+            return converted.nativeRecord to converted.effects
+        }
+        if (entry.extension.equals("pb7", true)) {
+            val hash = LegendsZaPseBankRestoreEditing.sha256(source)
+            require(entry.name == "switch_lgpe_${hash}.pb7") {
+                "The PSE Bank filename no longer matches its native PB7 bytes."
+            }
+            val metadata = Gen1ToSwordShieldMetadata(
+                intent.getIntExtra("pse.lets_go.friendship", -1),
+                intent.getIntExtra("pse.lets_go.gender_rate", -2),
+                intent.getIntExtra("pse.lets_go.ability_id", 0),
+                intent.getIntExtra("pse.lets_go.ability_number", 0)
+            )
+            val converted = LetsGoToLegendsZaPa9.review(
                 source, LegendsZaTrainerReadOnly.read(destination), metadata
             )
             return converted.nativeRecord to converted.effects
