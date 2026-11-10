@@ -1257,3 +1257,16 @@ The explicit Legalise review discloses the PSE provenance boundary, Normal origi
 The selected PK6 Bank entry and Scarlet/Violet source remain unchanged while the user reviews one chosen empty native box slot. The existing transaction retains the recovery copy, updates native integrity and the matched caught registration, persists and reopens the written save, verifies the native PK9, and restores both sides on failure. This PSE conversion does not claim an official HOME transfer, in-game trade, encounter legality, moveset legality, Tera legality, or verified provenance.
 
 Next bounded route: Gen 6 PK6 -> Legends: Z-A PA9.
+
+
+## Gen 6 -> Legends: Z-A individual PSE Bank conversion
+
+The Legends: Z-A Bank route now reads the exact selected checksum-valid 232-byte PK6 record and prepares a title-specific 344-byte native PA9 record. Route inventory alone is not treated as implemented conversion support.
+
+The bounded adapter accepts English, non-Egg, default-form Generation 6 records only when the selected Legends: Z-A revision exposes the species in its native Pokédex table, the destination has a verified personal profile, the held item is empty, the origin and ball are reviewed, and all current and relearn moves are usable in Legends: Z-A. Documented metadata must exactly match the PK6 ability ID and slot and destination-valid gender mapping. Unsupported species, forms, text, moves, abilities, ratios, values, and records remain blocked before any save write.
+
+The explicit Legalise review discloses the PSE provenance boundary, clear Hyper Training, cleared Generation 6 markings and ribbons, normalized text, rebuilt full HP and native cached stats, Alpha/Scale/Mega and other PA9-only defaults, and every named PK6 metadata byte range omitted by this conversion.
+
+The selected PK6 Bank entry and Legends: Z-A source remain unchanged while the user reviews one chosen empty native box slot. The existing transaction retains the recovery copy, updates native integrity and revision-aware caught/default-form, gender, shiny, and English Pokédex registration, persists and reopens the written save, verifies the native PA9, and restores both sides on failure. This PSE conversion does not claim an official HOME transfer, in-game trade, encounter legality, moveset legality, Mega legality, or verified provenance.
+
+Next bounded route: Gen 7 PK7 -> Sword/Shield PK8 recovery and integrity hardening.
