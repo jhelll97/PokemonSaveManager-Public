@@ -10915,7 +10915,7 @@ class MainActivity : Activity() {
         out[0x5F]=p.originGame.toByte()
         writeGen5String(out,0x68,16,p.otName,7)
         out[0x82]=(((p.pokerusStrain and 0xF) shl 4) or (p.pokerusDays and 0xF)).toByte()
-        out[0x83]=4 // PK3 has no Ball field; Gen 3 migration writes a Poké Ball.
+        out[0x83]=if(p.originGame in 1..5) p.ball.toByte() else 4
         out[0x84]=((p.metLevel and 0x7F) or ((p.otGender and 1) shl 7)).toByte()
         // Gen 4 map-location IDs do not identify the same places in Gen 5.
         writeU16LE(out,0x80,0)
