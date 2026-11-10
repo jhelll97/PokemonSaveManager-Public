@@ -31111,21 +31111,52 @@ class MainActivity : Activity() {
         val openedSource=currentSourceUri;val openedLabel=currentSourceLabel
         val file=importedFile?:return
         val data=runCatching{file.readBytes()}.getOrNull()?:return
-        val profile=detectGen2Profile(data)?:run{showDialog("Transfer to Gen 2","Load a valid Gold, Silver or Crystal save first.");return}
+        val profile=detectGen2Profile(data)?:run{showDialog("Gen 1 → Gen 2 PSE conversion","Load a valid Gold, Silver or Crystal save first.");return}
+        val bankBytes=runCatching{bankFile.readBytes()}.getOrElse{
+            showDialog("Gen 1 → Gen 2 PSE conversion blocked","The selected Gen 1 Bank record could not be read. Both sides remain unchanged.");return
+        }
+        val source=parseGen1BankPayload(bankBytes)
+        if(source==null||!sameGen1TransferRecord(source,p)){
+            showDialog("Gen 1 → Gen 2 PSE conversion blocked","The exact selected Gen 1 Bank record changed. Reopen PSE Bank; both sides remain unchanged.");return
+        }
+        val prepared=runCatching{buildGen1BankToGen2Record(bankBytes,source)}
+        if(prepared.isFailure){
+            showDialog("Gen 1 → Gen 2 PSE conversion blocked",(prepared.exceptionOrNull()?.message?:"No documented native mapping is available.")+"\n\nThe Gen 1 Bank record and Gen 2 save remain unchanged.");return
+        }
         val targets=availableGen2BoxTargets(data)
-        if(targets.isEmpty()){showDialog("Transfer to Gen 2","All 14 Gen 2 PC boxes are full or unavailable.");return}
-        val labels=targets.map{gen2BoxDestinationLabel(it.first,it.second,file,profile,currentSourceUri,data)}.toTypedArray()
+        if(targets.isEmpty()){showDialog("Gen 1 → Gen 2 PSE conversion","All 14 Gen 2 PC boxes are full or unavailable.");return}
+        val labels=targets.map{(box,empty)->
+            val nativeSlot=20-empty+1
+            gen2BoxDestinationLabel(box,empty,file,profile,currentSourceUri,data)+" • writes native Slot $nativeSlot"
+        }.toTypedArray()
+        val heldItem=bankBytes[GEN1_BANK_HEADER_SIZE+7].toInt() and 0xFF
+        val moveEffects=(0..3).joinToString("\n"){slot->
+            val move=source.moves[slot];val pp=source.movePP[slot];val ups=source.movePpUps[slot]
+            if(move==0)"• Move slot ${slot+1}: empty • PP $pp • PP Ups $ups"
+            else "• Move slot ${slot+1}: move #$move • PP $pp • PP Ups $ups"
+        }
+        val message=buildString{
+            append("Exact disclosed conversion effects\n")
+            append("• Species ${source.nickname.ifBlank{gen1SpeciesNameFromInternal(source.species)}} maps to Gen 2 Pokédex #${gen1DexFromInternalIndex(source.species)}; nickname, OT, TID, level, EXP, Stat Exp and DVs are retained.\n")
+            append("$moveEffects\n")
+            append("• Gen 1 catch-rate byte $heldItem becomes Gen 2 held-item ID $heldItem through the documented Time Capsule-shaped field mapping.\n")
+            append("• Gen 2 friendship becomes 70. Pokérus becomes 0 and caught-data becomes 0 because Generation 1 stores none of those fields.\n")
+            append("• The original Gen 1 save remains unchanged. The exact selected Bank bytes remain preserved until one chosen packed Gen 2 box slot, Seen/Owned flags and primary checksum persist and reopen successfully.\n")
+            append("• PSE retains exact destination and Bank recovery snapshots, restores both sides independently on failure, and keeps the destination backup after success.\n\n")
+            append("This is a PSE native-format conversion. It does not claim an official trade, verified Time Capsule history, encounter legality, or provenance.\n\n")
+            append("Continue to choose the destination PC Box. Each choice names the exact next empty native slot.")
+        }
         var consumed=false
         AlertDialog.Builder(this)
-            .setTitle("Transfer ${p.nickname.ifBlank{gen1SpeciesNameFromInternal(p.species)}} to ${profile.displayName}")
-            .setMessage("PSE will convert the preserved RBY record to the compatible Generation II box structure, preserve OT/TID, nickname, EXP, Stat Exp, DVs, moves and PP Ups, apply the Time Capsule held-item interpretation, then re-read and verify the destination before removing the Gen 1 Bank copy.\n\nContinue to choose the destination PC Box.")
-            .setPositiveButton("Choose Gen 2 Box") { _, _ ->
+            .setTitle("PSE Convert ${source.nickname.ifBlank{gen1SpeciesNameFromInternal(source.species)}} to ${profile.displayName}")
+            .setMessage(message)
+            .setPositiveButton("Choose empty Gen 2 slot") { _, _ ->
                 AlertDialog.Builder(this)
-                    .setTitle("Choose Gen 2 PC Box")
+                    .setTitle("Choose one empty Gen 2 slot")
                     .setItems(labels){_,which->
-                        if(consumed||which !in targets.indices){showDialog("Transfer to Gen 2","This destination choice was already handled or is invalid. Reopen the Bank entry. Nothing was changed.");return@setItems}
+                        if(consumed||which !in targets.indices){showDialog("Gen 1 → Gen 2 PSE conversion","This destination choice was already handled or is invalid. Reopen the Bank entry. Nothing was changed.");return@setItems}
                         consumed=true
-                        transferGen1BankToGen2(bankFile,p,targets[which].first,file,data,openedSource,openedLabel,profile.key)
+                        transferGen1BankToGen2(bankFile,source,bankBytes,targets[which].first,file,data,openedSource,openedLabel,profile.key)
                     }
                     .setNegativeButton("Cancel",null)
                     .show()
@@ -31134,7 +31165,7 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun transferGen1BankToGen2(bankFile:File,p:Gen1Pokemon,targetBox:Int,openedFile:File,openedDestination:ByteArray,openedSource:Uri?,openedLabel:String?,profileKey:String){
+    private fun transferGen1BankToGen2(bankFile:File,p:Gen1Pokemon,openedBank:ByteArray,targetBox:Int,openedFile:File,openedDestination:ByteArray,openedSource:Uri?,openedLabel:String?,profileKey:String){
         val file=openedFile
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedSource&&currentSourceLabel==openedLabel
         val fresh=runCatching{file.readBytes()}.getOrElse{showDialog("Gen 1 → Gen 2 PSE conversion failed","The fresh destination save could not be read. Nothing was changed.");return}
@@ -31153,7 +31184,7 @@ class MainActivity : Activity() {
             require(before.size==beforeCount){"Box $targetBox contains an invalid Pokémon record."}
             val bankBytes=runCatching{bankFile.readBytes()}.getOrElse{error("The selected Gen 1 Bank record could not be read.")}
             val source=parseGen1BankPayload(bankBytes)?:error("The selected Gen 1 Bank record failed validation.")
-            require(sameGen1TransferRecord(source,p)){"The selected Gen 1 Bank record changed before transfer. Nothing was changed."}
+            require(bankBytes.contentEquals(openedBank)&&sameGen1TransferRecord(source,p)){"The exact selected Gen 1 Bank bytes changed after review. Reopen PSE Bank; nothing was changed."}
             recoveryBankBytes=bankBytes.copyOf()
             val (mon,ot,nick)=buildGen1BankToGen2Record(bankBytes,source)
             val work=fresh.copyOf()
@@ -31196,12 +31227,12 @@ class MainActivity : Activity() {
             require((written[verifyOwned+dexByte].toInt() and dexMask)!=0&&(written[verifySeen+dexByte].toInt() and dexMask)!=0){"The transferred Pokémon did not register as Seen and Owned in the Gen 2 Pokédex."}
             require(gen2ChecksumValid(written,writtenProfile)){"The Gen 2 save checksum did not remain valid."}
             val committedBank=bankFile.readBytes();require(committedBank.contentEquals(bankBytes) && parseGen1BankPayload(committedBank)?.let{sameGen1TransferRecord(it,source)}==true){"The selected Gen 1 Bank record changed before cleanup; Bank removal was stopped."}
-            require(bound()&&file.readBytes().contentEquals(written)){"The destination changed before Bank cleanup."}
+            require(bound()&&file.readBytes().contentEquals(written)&&backup.readBytes().contentEquals(fresh)&&isBackupKept(backup)&&bankCopy.readBytes().contentEquals(bankBytes)){"The verified destination or retained recovery snapshots changed before Bank cleanup."}
             bankDeleteAttempted=true
             require(bankFile.delete()){"The verified destination was written, but Bank cleanup failed."}
             require(!bankFile.exists()){"The Bank deletion could not be verified."}
             require(bound()&&file.readBytes().contentEquals(written)){"The verified Gen 2 destination changed after Bank cleanup."}
-            require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 recovery backup changed after Bank cleanup."}
+            require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){"A retained Gen 2 or Bank recovery snapshot changed after Bank cleanup."}
             runCatching{bankCopy.delete()}
             committedSlot=slot
         }catch(e:Exception){
@@ -38497,13 +38528,13 @@ private data class Gen2ToGen5LegalisePlan(
             append("\n\n")
             when (currentGen) {
                 1 -> append("A Gen 1 save is loaded. You can withdraw this Pokémon back into an initialized PC box.")
-                2 -> append("A Gen 2 save is loaded. You can transfer this preserved Gen 1 Pokémon into a Gold, Silver or Crystal PC box using the Generation I → II Time Capsule record conversion.")
+                2 -> append("A Gen 2 save is loaded. You can review a PSE native Gen 1 → Gen 2 conversion shaped by the Time Capsule record format. It does not claim an official trade, Time Capsule history, or verified provenance.")
                 3 -> append("A Gen 3 save is loaded. You can review a PSE conversion into one native PK3 slot. No official Gen 1/2 → Gen 3 transfer route existed; the preserved Bank record remains until the destination write and reopen verification succeed.")
                 4 -> append("A Gen 4 save is loaded. You can create a native PK4 conversion and place it in validated PC storage.")
                 5 -> append("A Gen 5 save is loaded. You can create a native PK5 conversion and place it in validated PC storage.")
                 7 -> append("A Gen 7 save is loaded. You can transfer this preserved Gen 1 Pokémon forward using the Virtual Console → Poké Transporter / Bank conversion path.")
                 6 -> append("A Gen 6 save is loaded. You can create a PSE native PK6 direct re-home and place it in validated PC storage.")
-                else -> append("Load a Gen 1 save to withdraw it, Gen 2 for Time Capsule record conversion, Gen 3 for a reviewed native PK3 PSE conversion, Gen 4–6 for reviewed native-format conversions, or Gen 7 for the Virtual Console transfer path.")
+                else -> append("Load a Gen 1 save to withdraw it, Gen 2 for a reviewed native PSE conversion, Gen 3 for a reviewed native PK3 PSE conversion, Gen 4–6 for reviewed native-format conversions, or Gen 7 for the Virtual Console transfer path.")
             }
         }
 
@@ -38526,7 +38557,7 @@ private data class Gen2ToGen5LegalisePlan(
             1 -> builder.setPositiveButton("Withdraw to Save") { _, _ ->
                 withdrawGen1BankToBox(bankFile,openedRaw,opened)
             }
-            2 -> builder.setPositiveButton("Transfer to Gen 2") { _, _ ->
+            2 -> builder.setPositiveButton("PSE Convert to Gen 2") { _, _ ->
                 chooseGen1BankToGen2Destination(bankFile, p)
             }
             3 -> builder.setPositiveButton("PSE Convert to Gen 3") { _, _ ->
