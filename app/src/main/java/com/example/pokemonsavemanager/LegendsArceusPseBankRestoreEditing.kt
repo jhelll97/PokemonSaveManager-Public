@@ -297,11 +297,16 @@ class LegendsArceusPseBankRestoreCopyPlan internal constructor(
             requireSource()
             requireBank()
         } catch (failure: Exception) {
-            val removed = started && runCatching { discardDestination() }.getOrDefault(false)
+            if (started) runCatching { discardDestination() }
+            val destinationEmpty = runCatching { readDestination().isEmpty() }.getOrDefault(false)
+            val recoveryStatus = when {
+                destinationEmpty && started -> " The failed new copy was cleared and verified empty; the recovery backup is retained."
+                destinationEmpty -> " The new copy remained empty and was independently verified; the recovery backup is retained."
+                else -> " The new copy could not be verified empty. Do not use it; the recovery backup is retained."
+            }
             throw IllegalStateException(
                 (failure.message ?: "PSE Bank restore verification failed.") +
-                    if (removed) " The failed new copy was removed; the recovery backup is retained."
-                    else " The new copy could not be removed. Do not use it; the recovery backup is retained.",
+                    recoveryStatus,
                 failure
             )
         }
