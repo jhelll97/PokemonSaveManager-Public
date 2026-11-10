@@ -11,7 +11,7 @@ object BdspPokedexEditing {
     private const val DEX = 0x7A328
     private const val HASH_OFFSET = 0xE9818
     private const val HASH_LENGTH = 16
-    private val variantOffsets = listOf(0x171C, 0x1ED0, 0x7B4, 0xF68)
+    private val variantOffsets = listOf(0x7B4, 0xF68, 0x171C, 0x1ED0)
     val languages: List<String> = listOf(
         "Japanese", "English", "French", "Italian", "German", "Spanish", "Korean",
         "Chinese (Simplified)", "Chinese (Traditional)"

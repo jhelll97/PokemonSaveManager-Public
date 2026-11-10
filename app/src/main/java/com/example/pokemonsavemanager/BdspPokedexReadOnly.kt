@@ -44,7 +44,7 @@ object BdspPokedexReadOnly {
             val index = species - 1
             val stateId = u32(source, DEX + index * 4)
             require(stateId in 0L..3L) { "The saved BDSP Pokédex state for species #$species is outside the native range." }
-            val gender = listOf(0x171C, 0x1ED0, 0x7B4, 0xF68).map { BdspDexFlag(u32(source, DEX + it + index * 4)) }
+            val gender = listOf(0x7B4, 0xF68, 0x171C, 0x1ED0).map { BdspDexFlag(u32(source, DEX + it + index * 4)) }
             val language = u32(source, DEX + 0x28FC + index * 4)
             val forms = offsets[species]?.let { (offset, count) -> (0 until count).map { form ->
                 BdspDexFormRead(form, BdspDexFlag(u32(source, DEX + offset + form * 4)),
