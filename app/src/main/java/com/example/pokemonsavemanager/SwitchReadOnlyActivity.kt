@@ -6442,6 +6442,7 @@ class SwitchReadOnlyActivity : Activity() {
                 it.extension.equals("pse2", true) ||
                 it.extension.equals("pk3", true) ||
                 it.extension.equals("pk4", true) ||
+                it.extension.equals("pk5", true) ||
                 it.extension.equals("pk7", true) ||
                 (it.name.startsWith("switch_bdsp_") && it.extension.equals("pb8", true)) ||
                 (it.name.startsWith("switch_pla_") && it.extension.equals("pa8", true)) ||
@@ -6454,11 +6455,12 @@ class SwitchReadOnlyActivity : Activity() {
                 it.extension.equals("pse2", true) -> 2
                 it.extension.equals("pk3", true) -> 3
                 it.extension.equals("pk4", true) -> 4
-                it.extension.equals("pk7", true) -> 5
-                it.extension.equals("pb8", true) -> 6
-                it.extension.equals("pa8", true) -> 7
-                it.extension.equals("pk9", true) -> 8
-                else -> 9
+                it.extension.equals("pk5", true) -> 5
+                it.extension.equals("pk7", true) -> 6
+                it.extension.equals("pb8", true) -> 7
+                it.extension.equals("pa8", true) -> 8
+                it.extension.equals("pk9", true) -> 9
+                else -> 10
             }
         }, { it.name })).orEmpty()
         val labels = entries.map { file ->
@@ -6503,6 +6505,17 @@ class SwitchReadOnlyActivity : Activity() {
                     },
                     onFailure = { error ->
                         file.name + " • Gen 4 route blocked • " +
+                            (error.message ?: "unsupported conversion")
+                    }
+                )
+            } else if (file.extension.equals("pk5", true)) {
+                runCatching { Gen5ToSwordShieldPk8.inspectSource(file.readBytes()) }.fold(
+                    onSuccess = { source ->
+                        source.nickname.ifBlank { SwordShieldSpeciesNames.name(source.species) } +
+                            " (#" + source.species + ") • Gen 5 PK5 -> PK8 Legalise"
+                    },
+                    onFailure = { error ->
+                        file.name + " • Gen 5 route blocked • " +
                             (error.message ?: "unsupported conversion")
                     }
                 )
@@ -6572,7 +6585,7 @@ class SwitchReadOnlyActivity : Activity() {
             .setTitle("PSE Bank • " + entries.size + " Sword/Shield routes")
             .setPositiveButton("Close", null)
         if (entries.isEmpty()) {
-            builder.setMessage("No native Sword/Shield PK8, eligible Gen 1 PSE1, Gen 2 PSE2, Gen 3 PK3, Gen 4 PK4, Gen 7 PK7, BDSP PB8, Legends: Arceus PA8, Scarlet/Violet PK9, or Legends: Z-A PA9 Bank entries are available.")
+            builder.setMessage("No native Sword/Shield PK8, eligible Gen 1 PSE1, Gen 2 PSE2, Gen 3 PK3, Gen 4 PK4, Gen 5 PK5, Gen 7 PK7, BDSP PB8, Legends: Arceus PA8, Scarlet/Violet PK9, or Legends: Z-A PA9 Bank entries are available.")
         } else {
             builder.setItems(labels.toTypedArray()) { _, index ->
                 if (session !== bound) return@setItems
@@ -6582,6 +6595,7 @@ class SwitchReadOnlyActivity : Activity() {
                     entry.extension.equals("pse2", true) -> showSwordShieldGen2BankEntry(bound, entry)
                     entry.extension.equals("pk3", true) -> showSwordShieldGen3BankEntry(bound, entry)
                     entry.extension.equals("pk4", true) -> showSwordShieldGen4BankEntry(bound, entry)
+                    entry.extension.equals("pk5", true) -> showSwordShieldGen5BankEntry(bound, entry)
                     entry.extension.equals("pk7", true) -> showSwordShieldGen7BankEntry(bound, entry)
                     entry.extension.equals("pb8", true) -> showSwordShieldBdspBankEntry(bound, entry)
                     entry.extension.equals("pa8", true) -> showSwordShieldLegendsArceusBankEntry(bound, entry)
@@ -7003,6 +7017,45 @@ class SwitchReadOnlyActivity : Activity() {
         )
     }
 
+    private fun loadGen5SwordShieldMetadata(
+        species: Int,
+        sourceAbilitySlot: Int,
+        sourceAbilityId: Int
+    ): Gen1ToSwordShieldMetadata {
+        require(sourceAbilitySlot in setOf(1, 2, 4)) { "The PK5 ability slot is invalid." }
+        val speciesJson = fetchGen1SwordShieldJson(
+            "https://pokeapi.co/api/v2/pokemon-species/" + species
+        )
+        val pokemonJson = fetchGen1SwordShieldJson(
+            "https://pokeapi.co/api/v2/pokemon/" + species
+        )
+        val friendship = speciesJson.optInt("base_happiness", -1)
+        val genderRate = speciesJson.optInt("gender_rate", -2)
+        require(friendship in 0..255) { "The documented base friendship is unavailable." }
+        require(genderRate in -1..8) { "The documented gender ratio is unavailable." }
+        var abilityId = 0
+        val abilities = pokemonJson.optJSONArray("abilities")
+            ?: error("The documented ability list is unavailable.")
+        for (index in 0 until abilities.length()) {
+            val item = abilities.optJSONObject(index) ?: continue
+            val documentedSlot = if (item.optBoolean("is_hidden", false)) 4
+                else item.optInt("slot", 0)
+            if (documentedSlot != sourceAbilitySlot) continue
+            val ability = item.optJSONObject("ability") ?: continue
+            abilityId = gen1SwordShieldApiId(ability.optString("url")) ?: 0
+            if (abilityId != 0) break
+        }
+        require(abilityId in 1..255) {
+            "No documented Sword/Shield ability matches PK5 ability slot $sourceAbilitySlot."
+        }
+        require(abilityId == sourceAbilityId) {
+            "PK5 ability #$sourceAbilityId does not match documented Sword/Shield slot $sourceAbilitySlot ability #$abilityId."
+        }
+        return Gen1ToSwordShieldMetadata(
+            friendship, genderRate, abilityId, sourceAbilitySlot
+        )
+    }
+
     private fun showSwordShieldGen1BankEntry(bound: SwitchReadSession, file: File) {
         if (session !== bound) return
         val directory = File(filesDir, "pse_bank").canonicalFile
@@ -7418,6 +7471,116 @@ class SwitchReadOnlyActivity : Activity() {
                     AlertDialog.Builder(this).setTitle("Gen 4 -> Sword/Shield blocked")
                         .setMessage((it.message ?: "No safe conversion is available.") +
                             "\n\nThe PK4 Bank entry and Sword/Shield save remain unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }
+        }
+    }
+
+    private fun showSwordShieldGen5BankEntry(bound: SwitchReadSession, file: File) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = runCatching { file.canonicalFile }.getOrNull()
+        val opened = runCatching {
+            require(entry != null && entry.parentFile == directory && entry.isFile &&
+                entry.extension.equals("pk5", true)) {
+                "This is not a current Gen 5 PSE Bank entry."
+            }
+            val bytes = entry.readBytes()
+            val source = Gen5ToSwordShieldPk8.inspectSource(bytes)
+            val trainer = SwordShieldTrainerReadOnly.read(bound.snapshot.bytesCopy())
+            require(trainer.languageId == 2) {
+                "This bounded Gen 5 route currently requires an English Sword/Shield destination trainer."
+            }
+            Triple(bytes, source, trainer)
+        }.getOrElse {
+            AlertDialog.Builder(this).setTitle("Gen 5 -> Sword/Shield blocked")
+                .setMessage((it.message ?: "No safe conversion is available.") +
+                    "\n\nThe PK5 Bank entry and Sword/Shield save remain unchanged.")
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val selected = entry ?: return
+        val openedHash = SwordShieldPseBankRestoreEditing.sha256(opened.first)
+        val loading = AlertDialog.Builder(this).setTitle("Prepare Gen 5 -> Sword/Shield")
+            .setMessage("Loading documented species metadata and building a reviewed PK8 preview from the exact selected PK5…")
+            .setCancelable(false).create()
+        loading.show()
+        reader.execute {
+            val prepared = runCatching {
+                val metadata = loadGen5SwordShieldMetadata(
+                    opened.second.species, opened.second.abilitySlot, opened.second.abilityId
+                )
+                require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                val current = selected.readBytes()
+                require(SwordShieldPseBankRestoreEditing.sha256(current) == openedHash) {
+                    "The Gen 5 Bank entry changed during review."
+                }
+                metadata to Gen5ToSwordShieldPk8.review(current, opened.third, metadata)
+            }
+            runOnUiThread {
+                if (loading.isShowing) loading.dismiss()
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                prepared.onSuccess { (metadata, converted) ->
+                    val p = SwordShieldPseBankRestoreEditing.inspectBankRecord(
+                        converted.nativeRecord
+                    )
+                    val message = buildString {
+                        append(SwordShieldSpeciesNames.name(p.species) + " (#" +
+                            p.species + ") • Level " + p.cachedLevel + "\n")
+                        append("Source: " + selected.name +
+                            " • preserved checksum-valid 136-byte PK5\n")
+                        append("Prepared destination: checksum-valid 344-byte native Sword/Shield PK8\n\n")
+                        append("Exact disclosed conversion effects\n• ")
+                        append(converted.effects.joinToString("\n• "))
+                        append("\n\nContinue only if you accept every disclosed Legalise effect.")
+                    }
+                    AlertDialog.Builder(this)
+                        .setTitle("Gen 5 -> Sword/Shield • PSE Legalise review")
+                        .setMessage(message).setNegativeButton("Cancel", null)
+                        .setPositiveButton("Legalise & choose destination") { _, _ ->
+                            try {
+                                require(session === bound) {
+                                    "The active save changed. Reopen PSE Bank."
+                                }
+                                val source = selectedSourceUri ?: error(
+                                    "Reopen the selected Sword/Shield save from PSE."
+                                )
+                                require(selected.parentFile == directory && selected.isFile &&
+                                    selected.extension.equals("pk5", true)) {
+                                    "The Gen 5 Bank entry changed."
+                                }
+                                val current = selected.readBytes()
+                                require(
+                                    SwordShieldPseBankRestoreEditing.sha256(current) == openedHash
+                                ) {
+                                    "The Gen 5 Bank entry changed. Reopen PSE Bank."
+                                }
+                                Gen5ToSwordShieldPk8.review(current, opened.third, metadata)
+                                startActivity(Intent(
+                                    this,
+                                    SwitchSwordShieldPseBankRestoreActivity::class.java
+                                )
+                                    .setData(source)
+                                    .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                                    .putExtra("pse.bank.entry", selected.name)
+                                    .putExtra("pse.bank.legalise", true)
+                                    .putExtra("pse.gen5.friendship", metadata.baseFriendship)
+                                    .putExtra("pse.gen5.gender_rate", metadata.genderRate)
+                                    .putExtra("pse.gen5.ability_id", metadata.abilityId)
+                                    .putExtra("pse.gen5.ability_number", metadata.abilityNumber)
+                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                            } catch (error: Exception) {
+                                AlertDialog.Builder(this)
+                                    .setTitle("Could not prepare Gen 5 conversion")
+                                    .setMessage(error.message ?: "Both sources remain unchanged.")
+                                    .setPositiveButton("Close", null).show()
+                            }
+                        }.show()
+                }.onFailure {
+                    AlertDialog.Builder(this).setTitle("Gen 5 -> Sword/Shield blocked")
+                        .setMessage((it.message ?: "No safe conversion is available.") +
+                            "\n\nThe PK5 Bank entry and Sword/Shield save remain unchanged.")
                         .setPositiveButton("Close", null).show()
                 }
             }
