@@ -57,7 +57,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pastures"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid native PA8 stored core to an empty pasture slot you choose in a new save copy. " +
-                "Native PA8 entries remain byte-exact. Eligible Gen 7 PK7, Sword/Shield PK8, and BDSP PB8 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Native PA8 entries remain byte-exact. Eligible Gen 7 PK7, Sword/Shield PK8, BDSP PB8, and Scarlet/Violet PK9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
                 "Unsupported species, forms, items, moves, limits, or text remain blocked; this PSE conversion does not certify encounter, ability, or moveset legality."
             textSize = 16f
         })
@@ -202,10 +202,13 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         val gen7 = entry.extension.equals("pk7", true)
         val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
         val bdsp = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
-        require(entry.parentFile == directory && entry.isFile && (native || gen7 || swordShield || bdsp)) {
-            "This is not a current Legends: Arceus, Gen 7, Sword/Shield, or BDSP PSE Bank entry."
+        val scarletViolet = entry.name.startsWith("switch_sv_") && entry.extension.equals("pk9", true)
+        require(entry.parentFile == directory && entry.isFile &&
+            (native || gen7 || swordShield || bdsp || scarletViolet)
+        ) {
+            "This is not a current Legends: Arceus, Gen 7, Sword/Shield, BDSP, or Scarlet/Violet PSE Bank entry."
         }
-        if (gen7 || swordShield || bdsp) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+        if (gen7 || swordShield || bdsp || scarletViolet) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
             "Review and explicitly choose the disclosed PSE Legalise conversion from PSE Bank."
         }
         return entry
@@ -240,6 +243,13 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 "The PSE Bank filename no longer matches its native PB8 bytes."
             }
             val converted = BdspToLegendsArceusPa8.review(source)
+            return converted.nativeRecord to converted.effects
+        }
+        if (entry.extension.equals("pk9", true)) {
+            require(entry.name == "switch_sv_${hash}.pk9") {
+                "The PSE Bank filename no longer matches its native PK9 bytes."
+            }
+            val converted = ScarletVioletToLegendsArceusPa8.review(source)
             return converted.nativeRecord to converted.effects
         }
         require(entry.name == "switch_pla_${hash}.pa8") {
