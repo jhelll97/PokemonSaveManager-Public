@@ -229,15 +229,16 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
         val gen5 = entry.extension.equals("pk5", true)
         val gen6 = entry.extension.equals("pk6", true)
         val gen7 = entry.extension.equals("pk7", true)
+        val letsGo = entry.name.startsWith("switch_lgpe_") && entry.extension.equals("pb7", true)
         val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
         val bdsp = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
         val legendsArceus = entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)
         val legendsZa = entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true)
         require(entry.parentFile == directory && entry.isFile &&
-            (native || gen1 || gen2 || gen3 || gen4 || gen5 || gen6 || gen7 || swordShield || bdsp || legendsArceus || legendsZa)) {
-            "This is not a current Scarlet/Violet, Gen 1, Gen 2, Gen 3, Gen 4, Gen 5, Gen 6, Generation 7, Sword/Shield, BDSP, Legends: Arceus, or Legends: Z-A PSE Bank entry."
+            (native || gen1 || gen2 || gen3 || gen4 || gen5 || gen6 || gen7 || letsGo || swordShield || bdsp || legendsArceus || legendsZa)) {
+            "This is not a current Scarlet/Violet, Gen 1, Gen 2, Gen 3, Gen 4, Gen 5, Gen 6, Generation 7, Let's Go, Sword/Shield, BDSP, Legends: Arceus, or Legends: Z-A PSE Bank entry."
         }
-        if (gen1 || gen2 || gen3 || gen4 || gen5 || gen6 || gen7 || swordShield || bdsp || legendsArceus || legendsZa) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+        if (gen1 || gen2 || gen3 || gen4 || gen5 || gen6 || gen7 || letsGo || swordShield || bdsp || legendsArceus || legendsZa) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
             "Review and explicitly choose the disclosed cross-generation Legalise conversion from PSE Bank."
         }
         return entry
@@ -246,6 +247,11 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
     private fun readBankSource(): ByteArray {
         val entry = bankFile()
         when {
+            entry.name.startsWith("switch_lgpe_") && entry.extension.equals("pb7", true) -> {
+                require(!expectedBankSourceHash.isNullOrBlank()) {
+                    "The reviewed Let's Go Bank hash is missing. Reopen PSE Bank."
+                }
+            }
             entry.extension.equals("pk7", true) -> {
                 require(!expectedBankSourceHash.isNullOrBlank()) {
                     "The reviewed Gen 7 Bank hash is missing. Reopen PSE Bank."
@@ -343,6 +349,22 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
             )
             return converted.nativeRecord to converted.effects
         }
+        if (entry.extension.equals("pb7", true)) {
+            val hash = ScarletVioletPseBankRestoreEditing.sha256(source)
+            require(entry.name == "switch_lgpe_${hash}.pb7") {
+                "The PSE Bank filename no longer matches its native PB7 bytes."
+            }
+            val metadata = Gen1ToSwordShieldMetadata(
+                intent.getIntExtra("pse.lets_go.friendship", -1),
+                intent.getIntExtra("pse.lets_go.gender_rate", -2),
+                intent.getIntExtra("pse.lets_go.ability_id", 0),
+                intent.getIntExtra("pse.lets_go.ability_number", 0)
+            )
+            val converted = LetsGoToScarletVioletPk9.review(
+                source, ScarletVioletTrainerReadOnly.read(destination), metadata
+            )
+            return converted.nativeRecord to converted.effects
+        }
         if (entry.extension.equals("pk7", true)) {
             val metadata = Gen1ToSwordShieldMetadata(
                 intent.getIntExtra("pse.gen7.friendship", -1),
@@ -401,6 +423,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
             extension.equals("pk5", true) ||
             extension.equals("pk6", true) ||
             extension.equals("pk7", true) ||
+            extension.equals("pb7", true) ||
             extension.equals("pa9", true)
         ) {
             val pokemon = ScarletVioletPseBankRestoreEditing.inspectBankRecord(record)
