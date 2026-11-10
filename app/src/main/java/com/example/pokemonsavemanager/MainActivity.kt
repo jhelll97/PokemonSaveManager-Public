@@ -13130,18 +13130,34 @@ class MainActivity : Activity() {
         var submitted:Boolean=false
     )
 
+    private data class LetsGoGen3Prepared(
+        val bankFile:File,val bankBytes:ByteArray,val source:LetsGoPokemonRead,
+        val destination:ByteArray,val pk7:ByteArray,val bridge7:PokemonEntry,
+        val originGame:Int,val pk6:ByteArray,val bridge6:PokemonEntry,
+        val plan5:Gen6Gen5Plan,val pk5:ByteArray,val bridge5:PokemonEntry,
+        val meta4:Gen3ToGen4Meta,val pk4:ByteArray,val bridge4:PokemonEntry,
+        val meta3:Gen3ToGen4Meta,val plan3:Gen4ToGen3Plan,
+        val pk3:ByteArray,val converted3:PokemonEntry,val destinationFile:File,
+        val sourceUri:Uri?,val sourceLabel:String?,val effects:List<String>,
+        var submitted:Boolean=false
+    )
+
     private fun showLetsGoGen7BankEntry(bankFile:File,p:LetsGoPokemonRead){
         val currentGen=importedFile?.let{generationForSize(it.length().toInt())}?:0
         val message=when(currentGen){
+            3->"Native 260-byte Let's Go PB7 preserved. Review a backward PSE Legalise conversion into one empty native PK3 slot in the loaded Ruby, Sapphire, Emerald, FireRed or LeafGreen save. The PB7 Bank entry and original Let's Go save remain unchanged."
             4->"Native 260-byte Let's Go PB7 preserved. Review a backward PSE Legalise conversion into one empty native PK4 slot in the loaded Diamond, Pearl, Platinum, HeartGold or SoulSilver save. The PB7 Bank entry and original Let's Go save remain unchanged."
             5->"Native 260-byte Let's Go PB7 preserved. Review a backward PSE Legalise conversion into one empty native PK5 slot in the loaded Black, White, Black 2 or White 2 save. The PB7 Bank entry and original Let's Go save remain unchanged."
             6->"Native 260-byte Let's Go PB7 preserved. Review a backward PSE Legalise conversion into one empty native PK6 slot in the loaded Pokémon X, Y, Omega Ruby or Alpha Sapphire save. The PB7 Bank entry and original Let's Go save remain unchanged."
             7->"Native 260-byte Let's Go PB7 preserved. Review an explicit Legalise conversion into one empty native PK7 slot in the loaded Sun, Moon, Ultra Sun or Ultra Moon save. The PB7 Bank entry and original Let's Go save remain unchanged."
-            else->"Native 260-byte Let's Go PB7 preserved. Load a valid Generation 4, Generation 5, Generation 6 or Generation 7 destination to review this individual-Pokémon conversion."
+            else->"Native 260-byte Let's Go PB7 preserved. Load a valid Generation 3, Generation 4, Generation 5, Generation 6 or Generation 7 destination to review this individual-Pokémon conversion."
         }
         val b=AlertDialog.Builder(this)
             .setTitle("${p.nickname.ifBlank{"Pokémon #${p.species}"}} • Let's Go PB7")
             .setMessage(message).setNegativeButton("Close",null)
+        if(currentGen==3)b.setPositiveButton("Review PB7 → PK3 Legalise"){_,_->
+            prepareLetsGoToGen3Transfer(bankFile,p,null)
+        }
         if(currentGen==4)b.setPositiveButton("Review PB7 → PK4 Legalise"){_,_->
             prepareLetsGoToGen4Transfer(bankFile,p,null)
         }
@@ -14558,6 +14574,469 @@ class MainActivity : Activity() {
         }
         Toast.makeText(this,
             "PSE converted Let's Go PB7 → Gen 4 PK4 to Box ${target/30+1} • Slot ${target%30+1}; PB7 preserved",
+            Toast.LENGTH_LONG).show()
+        showBank()
+    }
+
+
+
+    private fun letsGoGen3SnapshotsMatch(
+        p:LetsGoGen3Prepared,requireOpen:Boolean=true
+    ):Boolean=(!requireOpen||!p.submitted)&&
+        importedFile?.absolutePath==p.destinationFile.absolutePath&&
+        currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&runCatching{
+            p.destinationFile.readBytes().contentEquals(p.destination)&&
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_lgpe_${sha256(p.bankBytes)}.pb7"
+        }.getOrDefault(false)
+
+    private fun prepareLetsGoToGen3Transfer(
+        bankFile:File,shown:LetsGoPokemonRead,requestedOriginGame:Int?
+    ){
+        val title="Let's Go PB7 → Gen 3 PK3"
+        val file=importedFile?:return showDialog(title,
+            "Load a valid Ruby, Sapphire, Emerald, FireRed or LeafGreen destination first.")
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&
+            currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val destination=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The destination save could not be read.")
+        if(!bound()||generationForSize(destination.size)!=3||!gen3SaveValid(destination))
+            return showDialog(title,
+                "The loaded destination is not a valid bound Generation 3 save.")
+        val destinationGame=detectGen3GameFromData(destination,file.name)
+
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The PSE Bank path could not be verified.")
+        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The selected PB7 path could not be verified.")
+        if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pb7",true))
+            return showDialog(title,"The selected record is outside the Let's Go PSE Bank.")
+        val bank=runCatching{selected.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The preserved PB7 record could not be read.")
+        if(selected.name!="switch_lgpe_${sha256(bank)}.pb7")
+            return showDialog(title,
+                "The PB7 filename does not match its exact SHA-256 content binding. Nothing was changed.")
+        val source=(LetsGoPokemonReadOnly.read(bank) as? LetsGoSlotRead.Pokemon)?.value
+            ?:return showDialog(title,"The selected Bank record is not a checksum-valid native PB7.")
+        if(!letsGoGen7SourceMatches(source,shown))
+            return showDialog(title,
+                "The selected PB7 changed since the Bank screen opened. Reopen PSE Bank.")
+
+        val pb7Review=try{LetsGoToGen7Pk7.review(bank)}catch(e:Exception){
+            return showDialog("PB7 → PK3 blocked",
+                (e.message?:"No safe PB7 core mapping is available.")+
+                    "\n\nThe PB7 and Generation 3 destination were left unchanged.")
+        }
+        val bridge7=parsePk6(pb7Review.nativeRecord,0,PK6_STORED_SIZE,false,807)
+            ?:return showDialog(title,"The PB7 core could not reopen as a native PK7 bridge.")
+        if(!bridge7.checksumValid||bridge7.species!=source.species||
+            bridge7.pid!=source.pid||bridge7.tid!=source.tid||bridge7.sid!=source.sid)
+            return showDialog(title,"The PB7 core bridge did not preserve the selected identity.")
+
+        val originGame=requestedOriginGame
+        if(originGame==null){
+            val choices=listOf(
+                1 to "Pokémon Sapphire",2 to "Pokémon Ruby",3 to "Pokémon Emerald",
+                4 to "Pokémon FireRed",5 to "Pokémon LeafGreen",
+                15 to "Pokémon Colosseum / XD"
+            )
+            AlertDialog.Builder(this).setTitle("Choose documented Gen 3 origin mapping")
+                .setMessage("Source ${originGameName(bridge7.originGame)} (ID ${bridge7.originGame}) cannot be represented as native Generation 3 provenance. Choose the exact title and ID to write in PK3. This explicit Legalise choice changes provenance and does not verify history. Destination: $destinationGame. Cancel leaves both files unchanged.")
+                .setItems(choices.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
+                    prepareLetsGoToGen3Transfer(bankFile,shown,choices[which].first)
+                }.setNegativeButton("Cancel",null).show()
+            return
+        }
+        val originTitle=gen3CompatibleOriginTitle(originGame)
+            ?:return showDialog("PB7 → PK3 blocked",
+                "The selected origin title is not a documented native Generation 3 mapping.")
+
+        gen7ToGen6PreflightRejection(bridge7,pb7Review.nativeRecord,originGame)?.let{
+            return showDialog("PB7 → PK3 blocked",
+                "$it\n\nThe PB7 and Generation 3 destination were left unchanged.")
+        }
+        val pk6=try{
+            buildGen7ToGen6Pk6(pb7Review.nativeRecord,bridge7,originGame)
+        }catch(e:Exception){
+            return showDialog("PB7 → PK3 blocked",
+                (e.message?:"No safe Generation 6 bridge is available.")+"\n\nNothing was changed.")
+        }
+        val bridge6=parsePk6(pk6,0,PK6_STORED_SIZE,false,721)
+            ?:return showDialog(title,"The Generation 6 bridge could not be reopened.")
+        gen6ToGen5PreflightRejection(bridge6)?.let{
+            return showDialog("PB7 → PK3 blocked","$it\n\nNothing was changed.")
+        }
+        val plan5=Gen6Gen5Plan(
+            originGame,"user-selected $originTitle (ID $originGame)",false
+        )
+        val pk5=try{
+            buildGen6ToGen5Pk5(pk6,bridge6,ByteArray(0),plan5,true)
+        }catch(e:Exception){
+            return showDialog("PB7 → PK3 blocked",
+                (e.message?:"No safe Generation 5 bridge is available.")+"\n\nNothing was changed.")
+        }
+        val bridge5=parsePk5(pk5,false)
+            ?:return showDialog(title,"The Generation 5 bridge could not be reopened.")
+        if(!gen6Pk6PpUps(pk6).contentEquals(gen6Pk6PpUps(pb7Review.nativeRecord))||
+            !gen5Pk5PpUps(pk5).contentEquals(gen6Pk6PpUps(pk6)))
+            return showDialog(title,
+                "The Generation 5 bridge did not preserve reviewed PP Ups. Nothing was changed.")
+        gen5ToGen4PreflightRejection(bridge5,false)?.let{
+            return showDialog("PB7 → PK3 blocked","$it\n\nNothing was changed.")
+        }
+
+        fun snapshotsMatch()=bound()&&runCatching{
+            file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)&&
+                selected.name=="switch_lgpe_${sha256(bank)}.pb7"
+        }.getOrDefault(false)
+        if(!snapshotsMatch())return showDialog(title,
+            "The destination or PB7 changed during preparation. Nothing was changed.")
+
+        val loading=AlertDialog.Builder(this).setTitle("Prepare PB7 → PK3")
+            .setMessage("Verifying the Generation 4 bridge, historical ability slots and native PK3 mapping…")
+            .setCancelable(false).create()
+        loading.show()
+        loadGen3ToGen4MetaAsync(bridge5,4,5) outer@{meta4,reason4->
+            if(!snapshotsMatch()){
+                loading.dismiss()
+                return@outer showDialog(title,
+                    "The destination or PB7 changed during preparation.")
+            }
+            if(meta4==null){
+                loading.dismiss()
+                return@outer showDialog("PB7 → PK3 blocked",
+                    (reason4?:"Generation 4 bridge data could not be verified.")+
+                        "\n\nNothing was changed.")
+            }
+            val pk4=try{
+                buildGen5ToGen4Pk4(pk5,bridge5,ByteArray(0),meta4,
+                    originGame,false,true)
+            }catch(e:Exception){
+                loading.dismiss()
+                return@outer showDialog("PB7 → PK3 blocked",
+                    (e.message?:"No safe Generation 4 bridge is available.")+
+                        "\n\nNothing was changed.")
+            }
+            val bridge4=parsePk4(pk4,false)?:run{
+                loading.dismiss()
+                return@outer showDialog(title,
+                    "The Generation 4 bridge could not be reopened.")
+            }
+            gen4ToGen3PreflightRejection(bridge4,true)?.let{
+                loading.dismiss()
+                return@outer showDialog("PB7 → PK3 blocked",
+                    "$it\n\nNothing was changed.")
+            }
+
+            loadGen3ToGen4MetaAsync(bridge4,3,4) inner@{meta3,reason3->
+                loading.dismiss()
+                if(!snapshotsMatch())return@inner showDialog(title,
+                    "The destination or PB7 changed during preparation.")
+                if(meta3==null)return@inner showDialog("PB7 → PK3 blocked",
+                    (reason3?:"Generation 3 ability data could not be verified.")+
+                        "\n\nNothing was changed.")
+                val plan3=Gen4ToGen3Plan(meta3,originGame,true)
+                val pk3=try{
+                    buildGen4ToGen3Pk3(pk4,bridge4,destination,plan3)
+                }catch(e:Exception){
+                    return@inner showDialog("PB7 → PK3 blocked",
+                        (e.message?:"No safe native PK3 mapping is available.")+
+                            "\n\nNothing was changed.")
+                }
+                val converted3=parsePk3(pk3,0,false)
+                    ?:return@inner showDialog(title,
+                        "The prepared native PK3 could not be reopened.")
+                if(!converted3.checksumValid||converted3.species!=source.species||
+                    converted3.tid!=source.tid||converted3.sid!=source.sid)
+                    return@inner showDialog(title,
+                        "The prepared PK3 did not preserve the reviewed identity.")
+
+                val markingNote=gen7ToGen6Markings(bridge7.markingValue).second
+                val omitted=gen6ToGen5OmittedMetadata(pk6,bridge6)
+                val pidNote=if(converted3.pid==bridge7.pid)
+                    "PID remains ${"%08X".format(bridge7.pid)}."
+                else "PID changes ${"%08X".format(bridge7.pid)} → ${"%08X".format(converted3.pid)} only to satisfy native Generation 5/4/3 shiny, nature, gender and normal ability-slot rules."
+                val partyHex=bank.copyOfRange(0xE8,0x104)
+                    .joinToString(""){"%02X".format(it)}
+                val effects=listOf(
+                    "Explicit Legalise: backward PSE Let's Go PB7 → Generation 3 PK3 conversion into $destinationGame; not an official trade, migration, Pokémon Bank transfer, encounter record, legality certification or verified provenance.",
+                    "Preserved where native PK3 can represent it: species, default form, TID/SID, nickname and OT, EXP, zero EVs, IVs, nature, gender, shiny state, verified normal ability slot, active friendship, Pokérus, Ball, met level, markings, moves, current PP and PP Ups. $pidNote",
+                    "Let's Go Awakening Values ${source.awakened.joinToString("/")} are omitted by this Legalise choice; PB7 hidden EV bytes must be zero and native PK3 EVs remain zero.",
+                    "PB7 party cache 0xE8-0x103 ($partyHex), cached level ${source.cachedLevel}, HP, battle stats and combat power are omitted; the Generation 3 game rebuilds party data from the stored PK3.",
+                    markingNote+". Generation 3 has four markings; any converted value outside 0x0–0xF is blocked rather than truncated.",
+                    "Origin Legalise: ${originGameName(bridge7.originGame)} (ID ${bridge7.originGame}) → $originTitle (ID $originGame). PK3 met location becomes explicit unspecified value 0. This is user-selected provenance, not verified history.",
+                    "Generation 3 stores no encounter dates, current handler, relearn moves, geography, affection, memory, Resort, Hyper Training or fateful-event flag. Fateful records are blocked; dates and the exact PK6 bridge metadata are disclosed omissions: $omitted.",
+                    "Native PK3 derives nature, gender and the normal ability slot from PID. Hidden abilities, Eggs, Deoxys, alternate forms, held items, post-Gen-3 species, moves or abilities, unsupported Balls, non-English or unrepresentable text, ribbons and ambiguous states are blocked.",
+                    "The PB7 Bank entry and original Let's Go save stay unchanged. PSE writes one reviewed empty PK3 slot, updates required Pokédex mirrors and affected section checksums, retains exact recovery snapshots, and reopens the persisted destination."
+                )
+                val prepared=LetsGoGen3Prepared(selected,bank,source,destination,
+                    pb7Review.nativeRecord,bridge7,originGame,pk6,bridge6,plan5,
+                    pk5,bridge5,meta4,pk4,bridge4,meta3,plan3,pk3,converted3,
+                    file,openedUri,openedLabel,effects)
+                val preview=buildString{
+                    append("Exact PB7 SHA-256: ${sha256(bank)}\n")
+                    append("Destination: $destinationGame\n\n")
+                    effects.forEach{append("• ").append(it).append("\n\n")}
+                    append("Choose Legalise only if every disclosed transformation is acceptable. Cancel leaves both sides byte-for-byte unchanged.")
+                }
+                AlertDialog.Builder(this)
+                    .setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • PB7 → PK3")
+                    .setMessage(preview).setNegativeButton("Cancel",null)
+                    .setPositiveButton("Legalise and choose destination"){_,_->
+                        if(letsGoGen3SnapshotsMatch(prepared))
+                            chooseLetsGoToGen3Destination(prepared)
+                        else showDialog(title,
+                            "The destination or PB7 changed after review. Nothing was changed.")
+                    }.show()
+            }
+        }
+    }
+
+    private fun chooseLetsGoToGen3Destination(p:LetsGoGen3Prepared){
+        val title="Let's Go PB7 → Gen 3 PK3"
+        if(!letsGoGen3SnapshotsMatch(p))
+            return showDialog(title,"The destination or PB7 changed. Reopen PSE Bank.")
+        val pc=gen3PcBuffer(p.destination)
+            ?:return showDialog(title,"PSE could not reconstruct Generation 3 PC storage.")
+        val empty=(0 until 420).filter{parsePk3(pc,4+it*80,false)==null}
+        if(empty.isEmpty())return showDialog(title,
+            "No empty native Generation 3 PC slot is available.")
+        val first=empty.first()
+        AlertDialog.Builder(this).setTitle("Choose native Gen 3 destination")
+            .setMessage("PSE will write the reviewed PK3 to one empty slot, update only required Pokédex mirrors and section checksums, retain a recovery backup, and keep the PB7 Bank entry.")
+            .setNegativeButton("Cancel",null)
+            .setPositiveButton("First Empty • Box ${first/30+1} • Slot ${first%30+1}"){_,_->
+                transferLetsGoBankToGen3(p,first)
+            }
+            .setNeutralButton("Choose Box / Slot"){_,_->
+                showLetsGoToGen3BoxPicker(p,pc)
+            }.show()
+    }
+
+    private fun showLetsGoToGen3BoxPicker(p:LetsGoGen3Prepared,pc:ByteArray){
+        val title="Let's Go PB7 → Gen 3 PK3"
+        if(!letsGoGen3SnapshotsMatch(p))
+            return showDialog(title,"The destination or PB7 changed. Reopen PSE Bank.")
+        val boxes=(0 until 14).filter{box->(0 until 30).any{slot->
+            parsePk3(pc,4+(box*30+slot)*80,false)==null
+        }}
+        if(boxes.isEmpty())return showDialog(title,"All native Generation 3 PC boxes are full.")
+        AlertDialog.Builder(this).setTitle("Choose Gen 3 destination box")
+            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+                val box=boxes[which]
+                val slots=(0 until 30).filter{slot->
+                    parsePk3(pc,4+(box*30+slot)*80,false)==null
+                }
+                AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
+                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
+                        transferLetsGoBankToGen3(p,box*30+slots[slotIndex])
+                    }.setNegativeButton("Cancel",null).show()
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun transferLetsGoBankToGen3(p:LetsGoGen3Prepared,target:Int){
+        val title="Let's Go PB7 → Gen 3 PK3"
+        if(!letsGoGen3SnapshotsMatch(p)||p.submitted)
+            return showDialog(title,
+                "The destination or PB7 changed, or this conversion was already submitted. Reopen PSE Bank.")
+        val file=p.destinationFile
+        val original=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The destination save could not be read. Nothing was changed.")
+        p.submitted=true
+        var writeStarted=false
+        var backup:File?=null
+        var bankRecovery:File?=null
+        try{
+            require(original.contentEquals(p.destination)&&generationForSize(original.size)==3&&
+                gen3SaveValid(original)&&target in 0 until 420){
+                "The prepared Generation 3 destination changed or selected slot is invalid."
+            }
+            val bank=p.bankFile.readBytes()
+            require(bank.contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_lgpe_${sha256(bank)}.pb7"){
+                "The exact content-addressed PB7 Bank record changed."
+            }
+            val source=(LetsGoPokemonReadOnly.read(bank) as? LetsGoSlotRead.Pokemon)?.value
+                ?:error("The selected PB7 no longer reopens with a valid native checksum.")
+            require(letsGoGen7SourceMatches(source,p.source)){
+                "The selected PB7 no longer matches the reviewed Pokémon."
+            }
+            val regenerated=LetsGoToGen7Pk7.review(bank)
+            require(regenerated.nativeRecord.contentEquals(p.pk7)){
+                "The reviewed PB7 core mapping changed before writing."
+            }
+            val bridge7=parsePk6(regenerated.nativeRecord,0,PK6_STORED_SIZE,false,807)
+                ?:error("The regenerated PK7 bridge could not be parsed.")
+            require(bridge7.checksumValid&&bridge7.species==p.bridge7.species&&
+                bridge7.pid==p.bridge7.pid&&bridge7.tid==p.bridge7.tid&&
+                bridge7.sid==p.bridge7.sid){
+                "The regenerated PK7 bridge differs from the reviewed identity."
+            }
+            val pk6=buildGen7ToGen6Pk6(regenerated.nativeRecord,bridge7,p.originGame)
+            val bridge6=parsePk6(pk6,0,PK6_STORED_SIZE,false,721)
+                ?:error("The refreshed Generation 6 bridge could not be parsed.")
+            require(pk6.contentEquals(p.pk6)&&sameGen6ToGen7Pk7(bridge6,p.bridge6)&&
+                gen6Pk6PpUps(pk6).contentEquals(gen6Pk6PpUps(regenerated.nativeRecord))){
+                "The reviewed Generation 6 bridge changed before writing."
+            }
+            val pk5=buildGen6ToGen5Pk5(pk6,bridge6,ByteArray(0),p.plan5,true)
+            val bridge5=parsePk5(pk5,false)
+                ?:error("The refreshed Generation 5 bridge could not be parsed.")
+            require(pk5.contentEquals(p.pk5)&&sameGen6ToGen5Pk5(bridge5,p.bridge5)&&
+                gen5Pk5PpUps(pk5).contentEquals(gen6Pk6PpUps(pk6))){
+                "The reviewed Generation 5 bridge changed before writing."
+            }
+            val pk4=buildGen5ToGen4Pk4(pk5,bridge5,ByteArray(0),p.meta4,
+                p.originGame,false,true)
+            val bridge4=parsePk4(pk4,false)
+                ?:error("The refreshed Generation 4 bridge could not be parsed.")
+            require(pk4.contentEquals(p.pk4)&&sameGen5ToGen4Pk4(bridge4,p.bridge4)&&
+                gen4Pk4PpUps(pk4).contentEquals(gen5Pk5PpUps(pk5))){
+                "The reviewed Generation 4 bridge changed before writing."
+            }
+            val pk3=buildGen4ToGen3Pk3(pk4,bridge4,original,p.plan3)
+            val converted3=parsePk3(pk3,0,false)
+                ?:error("The refreshed PK3 could not be parsed.")
+            require(pk3.contentEquals(p.pk3)&&sameGen4ToGen3Pk3(converted3,p.converted3)){
+                "The reviewed native PK3 changed before writing."
+            }
+
+            val save=original.copyOf()
+            val pc=gen3PcBuffer(save)
+                ?:error("Could not reconstruct Generation 3 PC storage.")
+            val beforePc=pc.copyOf()
+            val off=4+target*80
+            require(parsePk3(pc,off,false)==null){
+                "The selected Generation 3 slot is no longer empty."
+            }
+            pk3.copyInto(pc,off)
+            val staged=parsePk3(pc,off,false)
+                ?:error("The staged PK3 could not be parsed.")
+            require(sameGen4ToGen3Pk3(staged,converted3)){
+                "The staged PK3 differs from the reviewed conversion."
+            }
+            require(pc.indices.all{it in off until off+80||pc[it]==beforePc[it]}){
+                "The conversion changed unrelated Generation 3 PC data."
+            }
+            writeGen1ToGen3PcAndDexFrozen(save,pc,converted3.species)
+            require(gen3SaveValid(save)&&gen2ToGen3DexRegistered(save,converted3.species)){
+                "The staged Generation 3 save failed Pokédex or section-checksum verification."
+            }
+
+            val map=gen3ActiveSectionMap(original)
+                ?:error("Could not map the original Generation 3 sections.")
+            val allowed=HashSet<Int>()
+            var cursor=0
+            for(id in 5..13){
+                val base=map[id]
+                val len=gen3SectionLengths[id]
+                val a=maxOf(off,cursor)
+                val z=minOf(off+80,cursor+len)
+                for(i in a until z)allowed.add(base+i-cursor)
+                allowed.add(base+0xFF6)
+                allowed.add(base+0xFF7)
+                cursor+=len
+            }
+            val layout=gen3PokedexLayout(original)
+                ?:error("Could not map Generation 3 Pokédex mirrors.")
+            val dexByte=(converted3.species-1)/8
+            for(base in layout.mirrors)allowed.add(base+dexByte)
+            for(base in intArrayOf(layout.section0,layout.section1,layout.seenSection)){
+                allowed.add(base+0xFF6)
+                allowed.add(base+0xFF7)
+            }
+            require(save.indices.all{it in allowed||save[it]==original[it]}){
+                "The conversion changed data outside the selected PK3, Pokédex mirrors and required section checksums."
+            }
+
+            val recovery=File.createTempFile(
+                backupGameName(file)+"_PreLetsGoToGen3_",".backup",backupsDir()
+            )
+            backup=recovery
+            recovery.writeBytes(original)
+            require(recovery.readBytes().contentEquals(original)){
+                "The Generation 3 recovery backup did not verify."
+            }
+            retainGen2ToGen3SafetyBackup(recovery,original)
+            val bankCopy=File.createTempFile(
+                "PSE_LetsGoToG3_BankRecovery_",".tmp",bankDir()
+            )
+            bankRecovery=bankCopy
+            bankCopy.writeBytes(p.bankBytes)
+            require(bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The PB7 recovery snapshot did not verify."
+            }
+            require(letsGoGen3SnapshotsMatch(p,false)&&
+                file.readBytes().contentEquals(original)&&isBackupKept(recovery)&&
+                recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The source identity or retained recovery snapshots changed before writing."
+            }
+
+            writeStarted=true
+            file.writeBytes(save)
+            val written=file.readBytes()
+            require(written.contentEquals(save)&&gen3SaveValid(written)&&
+                gen2ToGen3DexRegistered(written,converted3.species)&&
+                written.indices.all{it in allowed||written[it]==original[it]}){
+                "The persisted Generation 3 save differs from the reviewed write scope."
+            }
+            val writtenPc=gen3PcBuffer(written)
+                ?:error("The persisted Generation 3 PC storage could not be reopened.")
+            val actual=writtenPc.copyOfRange(off,off+80)
+            val reopened=parsePk3(actual,0,false)
+                ?:error("The persisted PK3 could not be reopened.")
+            require(actual.contentEquals(pk3)&&sameGen4ToGen3Pk3(reopened,converted3)){
+                "The exact converted PK3 did not persist after reopening."
+            }
+            require(importedFile?.absolutePath==file.absolutePath&&
+                currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_lgpe_${sha256(p.bankBytes)}.pb7"&&
+                file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&
+                recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The preserved PB7, destination or retained recovery snapshots changed after persistence."
+            }
+            runCatching{bankCopy.delete()}
+        }catch(e:Exception){
+            val bankRestored=runCatching{
+                val current=runCatching{p.bankFile.readBytes()}.getOrNull()
+                if(current==null||!current.contentEquals(p.bankBytes))
+                    p.bankFile.writeBytes(p.bankBytes)
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                    p.bankFile.name=="switch_lgpe_${sha256(p.bankBytes)}.pb7"&&
+                    (LetsGoPokemonReadOnly.read(p.bankBytes) as? LetsGoSlotRead.Pokemon)?.value
+                        ?.let{letsGoGen7SourceMatches(it,p.source)}==true
+            }.getOrDefault(false)
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(original)
+                val restored=file.readBytes()
+                restored.contentEquals(original)&&generationForSize(restored.size)==3&&
+                    gen3SaveValid(restored)
+            }.getOrDefault(false)
+            if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&saveRestored->
+                    "The exact Generation 3 destination and PB7 Bank record were restored or kept and verified."
+                bankRestored->
+                    "The PB7 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                saveRestored->
+                    "The exact Generation 3 destination was restored, but PB7 restoration was not verified. Keep the Bank recovery snapshot for review."
+                else->
+                    "Automatic recovery could not be verified. Keep the retained destination backup and PB7 recovery snapshot for review."
+            }
+            showDialog("Let's Go PB7 → Gen 3 PK3 failed",
+                (e.message?:"Unknown error")+"\n\n"+recovery+
+                    (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                    (bankRecovery?.takeIf{it.exists()}?.let{
+                        "\nPB7 recovery snapshot: ${it.name}"
+                    }?:""))
+            return
+        }
+        Toast.makeText(this,
+            "PSE converted Let's Go PB7 → Gen 3 PK3 to Box ${target/30+1} • Slot ${target%30+1}; PB7 preserved",
             Toast.LENGTH_LONG).show()
         showBank()
     }
