@@ -218,16 +218,17 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         val gen5 = entry.extension.equals("pk5", true)
         val gen6 = entry.extension.equals("pk6", true)
         val gen7 = entry.extension.equals("pk7", true)
+        val letsGo = entry.name.startsWith("switch_lgpe_") && entry.extension.equals("pb7", true)
         val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
         val bdsp = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
         val scarletViolet = entry.name.startsWith("switch_sv_") && entry.extension.equals("pk9", true)
         val legendsZa = entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true)
         require(entry.parentFile == directory && entry.isFile &&
-            (native || gen1 || gen2 || gen3 || gen4 || gen5 || gen6 || gen7 || swordShield || bdsp || scarletViolet || legendsZa)
+            (native || gen1 || gen2 || gen3 || gen4 || gen5 || gen6 || gen7 || letsGo || swordShield || bdsp || scarletViolet || legendsZa)
         ) {
-            "This is not a current Legends: Arceus, Gen 1, Gen 2, Gen 3, Gen 4, Gen 5, Gen 6, Gen 7, Sword/Shield, BDSP, Scarlet/Violet, or Legends: Z-A PSE Bank entry."
+            "This is not a current Legends: Arceus, Gen 1, Gen 2, Gen 3, Gen 4, Gen 5, Gen 6, Gen 7, Let's Go, Sword/Shield, BDSP, Scarlet/Violet, or Legends: Z-A PSE Bank entry."
         }
-        if (gen1 || gen2 || gen3 || gen4 || gen5 || gen6 || gen7 || swordShield || bdsp || scarletViolet || legendsZa) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+        if (gen1 || gen2 || gen3 || gen4 || gen5 || gen6 || gen7 || letsGo || swordShield || bdsp || scarletViolet || legendsZa) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
             "Review and explicitly choose the disclosed PSE Legalise conversion from PSE Bank."
         }
         return entry
@@ -235,9 +236,11 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
 
     private fun readBankSource(): ByteArray {
         val entry = bankFile()
+        val letsGo = entry.name.startsWith("switch_lgpe_") &&
+            entry.extension.equals("pb7", true)
         val swordShield = entry.name.startsWith("switch_swsh_") &&
             entry.extension.equals("pk8", true)
-        if (entry.extension.equals("pk7", true) || swordShield) {
+        if (entry.extension.equals("pk7", true) || letsGo || swordShield) {
             require(!expectedBankSourceHash.isNullOrBlank()) {
                 "The reviewed PSE Bank hash is missing. Reopen PSE Bank."
             }
@@ -324,6 +327,22 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 intent.getIntExtra("pse.gen6.ability_number", 0)
             )
             val converted = Gen6ToLegendsArceusPa8.review(
+                source, LegendsArceusTrainerReadOnly.read(destination), metadata
+            )
+            return converted.nativeRecord to converted.effects
+        }
+        if (entry.extension.equals("pb7", true)) {
+            val hash = LegendsArceusPseBankRestoreEditing.sha256(source)
+            require(entry.name == "switch_lgpe_${hash}.pb7") {
+                "The PSE Bank filename no longer matches its native PB7 bytes."
+            }
+            val metadata = Gen1ToSwordShieldMetadata(
+                intent.getIntExtra("pse.lets_go.friendship", -1),
+                intent.getIntExtra("pse.lets_go.gender_rate", -2),
+                intent.getIntExtra("pse.lets_go.ability_id", 0),
+                intent.getIntExtra("pse.lets_go.ability_number", 0)
+            )
+            val converted = LetsGoToLegendsArceusPa8.review(
                 source, LegendsArceusTrainerReadOnly.read(destination), metadata
             )
             return converted.nativeRecord to converted.effects

@@ -3483,6 +3483,7 @@ class SwitchReadOnlyActivity : Activity() {
                 it.extension.equals("pk5", true) ||
                 it.extension.equals("pk6", true) ||
                 it.extension.equals("pk7", true) ||
+                (it.name.startsWith("switch_lgpe_") && it.extension.equals("pb7", true)) ||
                 (it.name.startsWith("switch_swsh_") && it.extension.equals("pk8", true)) ||
                 (it.name.startsWith("switch_bdsp_") && it.extension.equals("pb8", true)) ||
                 (it.name.startsWith("switch_sv_") && it.extension.equals("pk9", true)) ||
@@ -3497,10 +3498,11 @@ class SwitchReadOnlyActivity : Activity() {
                 it.extension.equals("pk5", true) -> 5
                 it.extension.equals("pk6", true) -> 6
                 it.extension.equals("pk7", true) -> 7
-                it.extension.equals("pk8", true) -> 8
-                it.extension.equals("pb8", true) -> 9
-                it.extension.equals("pk9", true) -> 10
-                else -> 11
+                it.extension.equals("pb7", true) -> 8
+                it.extension.equals("pk8", true) -> 9
+                it.extension.equals("pb8", true) -> 10
+                it.extension.equals("pk9", true) -> 11
+                else -> 12
             }
         }, { it.name })).orEmpty()
         val labels = entries.map { file ->
@@ -3586,6 +3588,19 @@ class SwitchReadOnlyActivity : Activity() {
                     },
                     onFailure = { file.name + " • Gen 7 route blocked • " + (it.message ?: "unreadable") }
                 )
+            } else if (file.extension.equals("pb7", true) &&
+                file.name.startsWith("switch_lgpe_")) {
+                runCatching { LetsGoToLegendsArceusPa8.review(file.readBytes()) }.fold(
+                    onSuccess = { review ->
+                        review.sourceNickname.ifBlank {
+                            LegendsArceusSpeciesNames.name(review.sourceSpecies)
+                        } + " (#" + review.sourceSpecies + ") • Let's Go PB7 -> PA8 Legalise"
+                    },
+                    onFailure = { error ->
+                        file.name + " • Let's Go route blocked • " +
+                            (error.message ?: "unsupported conversion")
+                    }
+                )
             } else if (file.extension.equals("pk8", true)) {
                 runCatching { SwordShieldToLegendsArceusPa8.review(file.readBytes()) }.fold(
                     onSuccess = { review ->
@@ -3643,7 +3658,7 @@ class SwitchReadOnlyActivity : Activity() {
             .setTitle("PSE Bank • " + entries.size + " Legends: Arceus routes")
             .setPositiveButton("Close", null)
         if (entries.isEmpty()) {
-            builder.setMessage("No native Legends: Arceus PA8, eligible Gen 1 PSE1, Gen 2 PSE2, Gen 3 PK3, Gen 4 PK4, Gen 5 PK5, Gen 6 PK6, Gen 7 PK7, Sword/Shield PK8, BDSP PB8, Scarlet/Violet PK9, or Legends: Z-A PA9 Bank entries are available.")
+            builder.setMessage("No native Legends: Arceus PA8, eligible Gen 1 PSE1, Gen 2 PSE2, Gen 3 PK3, Gen 4 PK4, Gen 5 PK5, Gen 6 PK6, Gen 7 PK7, Let's Go PB7, Sword/Shield PK8, BDSP PB8, Scarlet/Violet PK9, or Legends: Z-A PA9 Bank entries are available.")
         } else {
             builder.setItems(labels.toTypedArray()) { _, index ->
                 if (session !== bound) return@setItems
@@ -3662,6 +3677,7 @@ class SwitchReadOnlyActivity : Activity() {
                     selected.extension.equals("pk6", true) ->
                         showLegendsArceusGen6BankEntry(bound, selected)
                     selected.extension.equals("pk7", true) -> showLegendsArceusGen7BankEntry(bound, selected)
+                    selected.extension.equals("pb7", true) -> showLegendsArceusLetsGoBankEntry(bound, selected)
                     selected.extension.equals("pk8", true) -> showLegendsArceusSwordShieldBankEntry(bound, selected)
                     selected.extension.equals("pb8", true) -> showLegendsArceusBdspBankEntry(bound, selected)
                     selected.extension.equals("pk9", true) -> showLegendsArceusScarletVioletBankEntry(bound, selected)
@@ -4772,6 +4788,135 @@ class SwitchReadOnlyActivity : Activity() {
                     AlertDialog.Builder(this).setTitle("Gen 7 -> Legends: Arceus blocked")
                         .setMessage((it.message ?: "No safe conversion is available.") +
                             "\n\nThe PK7 Bank entry and Legends: Arceus save remain unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }
+        }
+    }
+
+    private fun showLegendsArceusLetsGoBankEntry(
+        bound: SwitchReadSession,
+        file: File
+    ) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = runCatching { file.canonicalFile }.getOrNull()
+        val opened = runCatching {
+            require(entry != null && entry.parentFile == directory && entry.isFile &&
+                entry.name.startsWith("switch_lgpe_") && entry.extension.equals("pb7", true)) {
+                "This is not a current Let's Go PSE Bank entry."
+            }
+            val bytes = entry.readBytes()
+            val hash = LegendsArceusPseBankRestoreEditing.sha256(bytes)
+            require(entry.name == "switch_lgpe_${hash}.pb7") {
+                "The PSE Bank filename no longer matches its native PB7 bytes."
+            }
+            val source = LetsGoToLegendsArceusPa8.inspectSource(bytes)
+            val trainer = LegendsArceusTrainerReadOnly.read(bound.snapshot.bytesCopy())
+            require(trainer.languageId == 2) {
+                "This bounded Let's Go route currently requires an English Legends: Arceus destination trainer."
+            }
+            Triple(bytes, source, trainer)
+        }.getOrElse {
+            AlertDialog.Builder(this).setTitle("Let's Go -> Legends: Arceus blocked")
+                .setMessage((it.message ?: "No safe conversion is available.") +
+                    "\n\nThe PB7 Bank entry and Legends: Arceus save remain unchanged.")
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val selected = entry ?: return
+        val openedHash = LegendsArceusPseBankRestoreEditing.sha256(opened.first)
+        val loading = AlertDialog.Builder(this)
+            .setTitle("Prepare Let's Go -> Legends: Arceus")
+            .setMessage("Loading documented species metadata and building a reviewed PA8 preview from the exact selected PB7…")
+            .setCancelable(false).create()
+        loading.show()
+        reader.execute {
+            val prepared = runCatching {
+                val metadata = loadLegendsArceusSpeciesMetadata(
+                    opened.second.species, opened.second.abilityNumber,
+                    opened.second.abilityId
+                )
+                require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                val current = selected.readBytes()
+                require(LegendsArceusPseBankRestoreEditing.sha256(current) == openedHash &&
+                    selected.name == "switch_lgpe_${openedHash}.pb7") {
+                    "The Let's Go Bank entry changed during review."
+                }
+                metadata to LetsGoToLegendsArceusPa8.review(
+                    current, opened.third, metadata
+                )
+            }
+            runOnUiThread {
+                if (loading.isShowing) loading.dismiss()
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                prepared.onSuccess { (metadata, converted) ->
+                    val pokemon = LegendsArceusPseBankRestoreEditing
+                        .inspectBankRecord(converted.nativeRecord)
+                    val message = buildString {
+                        append(LegendsArceusSpeciesNames.name(pokemon.species) + " (#" +
+                            pokemon.species + ") • EXP " + pokemon.experience + "\n")
+                        append("Source: " + selected.name +
+                            " • preserved checksum-valid 260-byte native PB7\n")
+                        append("Reviewed Bank SHA-256: " + openedHash + "\n")
+                        append("Prepared destination: checksum-valid 360-byte native Legends: Arceus PA8\n\n")
+                        append("Exact disclosed conversion effects\n• ")
+                        append(converted.effects.joinToString("\n• "))
+                        append("\n\nContinue only if you accept every disclosed Legalise effect.")
+                    }
+                    AlertDialog.Builder(this)
+                        .setTitle("Let's Go -> Legends: Arceus • PSE Legalise review")
+                        .setMessage(message).setNegativeButton("Cancel", null)
+                        .setPositiveButton("Legalise & choose destination") { _, _ ->
+                            try {
+                                require(session === bound) {
+                                    "The active save changed. Reopen PSE Bank."
+                                }
+                                val source = selectedSourceUri ?: error(
+                                    "Reopen the selected Legends: Arceus save from PSE."
+                                )
+                                require(selected.parentFile == directory && selected.isFile &&
+                                    selected.name.startsWith("switch_lgpe_") &&
+                                    selected.extension.equals("pb7", true)) {
+                                    "The Let's Go Bank entry changed."
+                                }
+                                val current = selected.readBytes()
+                                require(
+                                    LegendsArceusPseBankRestoreEditing.sha256(current) ==
+                                        openedHash &&
+                                        selected.name == "switch_lgpe_${openedHash}.pb7"
+                                ) {
+                                    "The Let's Go Bank entry changed. Reopen PSE Bank."
+                                }
+                                LetsGoToLegendsArceusPa8.review(
+                                    current, opened.third, metadata
+                                )
+                                startActivity(Intent(
+                                    this,
+                                    SwitchLegendsArceusPseBankRestoreActivity::class.java
+                                )
+                                    .setData(source)
+                                    .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                                    .putExtra("pse.bank.entry", selected.name)
+                                    .putExtra("pse.bank.sha256", openedHash)
+                                    .putExtra("pse.bank.legalise", true)
+                                    .putExtra("pse.lets_go.friendship", metadata.baseFriendship)
+                                    .putExtra("pse.lets_go.gender_rate", metadata.genderRate)
+                                    .putExtra("pse.lets_go.ability_id", metadata.abilityId)
+                                    .putExtra("pse.lets_go.ability_number", metadata.abilityNumber)
+                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                            } catch (error: Exception) {
+                                AlertDialog.Builder(this)
+                                    .setTitle("Could not prepare Let's Go conversion")
+                                    .setMessage(error.message ?: "Both sources remain unchanged.")
+                                    .setPositiveButton("Close", null).show()
+                            }
+                        }.show()
+                }.onFailure {
+                    AlertDialog.Builder(this)
+                        .setTitle("Let's Go -> Legends: Arceus blocked")
+                        .setMessage((it.message ?: "No safe conversion is available.") +
+                            "\n\nThe PB7 Bank entry and Legends: Arceus save remain unchanged.")
                         .setPositiveButton("Close", null).show()
                 }
             }
@@ -8759,6 +8904,46 @@ class SwitchReadOnlyActivity : Activity() {
         }
         require(abilityId == sourceAbilityId) {
             "PK6 ability #$sourceAbilityId does not match documented Sword/Shield slot $sourceAbilitySlot ability #$abilityId."
+        }
+        return Gen1ToSwordShieldMetadata(
+            friendship, genderRate, abilityId, sourceAbilitySlot
+        )
+    }
+
+    private fun loadLegendsArceusSpeciesMetadata(
+        species: Int,
+        sourceAbilitySlot: Int,
+        sourceAbilityId: Int
+    ): Gen1ToSwordShieldMetadata {
+        require(sourceAbilitySlot in setOf(1, 2, 4)) { "The source ability slot is invalid." }
+        val speciesJson = fetchGen1SwordShieldJson(
+            "https://pokeapi.co/api/v2/pokemon-species/" + species
+        )
+        val pokemonJson = fetchGen1SwordShieldJson(
+            "https://pokeapi.co/api/v2/pokemon/" + species
+        )
+        val friendship = speciesJson.optInt("base_happiness", -1)
+        val genderRate = speciesJson.optInt("gender_rate", -2)
+        require(friendship in 0..255) { "The documented base friendship is unavailable." }
+        require(genderRate in -1..8) { "The documented gender ratio is unavailable." }
+        var abilityId = 0
+        val abilities = pokemonJson.optJSONArray("abilities")
+            ?: error("The documented ability list is unavailable.")
+        for (index in 0 until abilities.length()) {
+            val item = abilities.optJSONObject(index) ?: continue
+            val documentedSlot = if (item.optBoolean("is_hidden", false)) 4
+                else item.optInt("slot", 0)
+            if (documentedSlot != sourceAbilitySlot) continue
+            val ability = item.optJSONObject("ability") ?: continue
+            abilityId = gen1SwordShieldApiId(ability.optString("url")) ?: 0
+            if (abilityId != 0) break
+        }
+        require(abilityId in 1..267) {
+            "No documented Legends: Arceus ability storage matches source slot $sourceAbilitySlot."
+        }
+        require(abilityId == sourceAbilityId) {
+            "Source ability #$sourceAbilityId does not match documented Legends: Arceus " +
+                "storage slot $sourceAbilitySlot ability #$abilityId."
         }
         return Gen1ToSwordShieldMetadata(
             friendship, genderRate, abilityId, sourceAbilitySlot
