@@ -253,9 +253,16 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
 
     private fun readBankSource(): ByteArray {
         val entry = bankFile()
-        if (entry.extension.equals("pk7", true)) {
-            require(!expectedBankSourceHash.isNullOrBlank()) {
-                "The reviewed Gen 7 Bank hash is missing. Reopen PSE Bank."
+        when {
+            entry.extension.equals("pk7", true) -> {
+                require(!expectedBankSourceHash.isNullOrBlank()) {
+                    "The reviewed Gen 7 Bank hash is missing. Reopen PSE Bank."
+                }
+            }
+            entry.name.startsWith("switch_sv_") && entry.extension.equals("pk9", true) -> {
+                require(!expectedBankSourceHash.isNullOrBlank()) {
+                    "The reviewed Scarlet/Violet Bank hash is missing. Reopen PSE Bank."
+                }
             }
         }
         val bytes = entry.readBytes()

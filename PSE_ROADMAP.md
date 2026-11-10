@@ -1322,3 +1322,13 @@ The route now validates the selected Legends: Z-A trainer language and requires 
 The chosen empty native PA9 PC-box slot, revision-specific native caught registration and container integrity updates, verified recovery backup, persisted reopen verification, preserved source save and Bank entry, and failed-copy cleanup remain in one transaction. The conversion does not claim an official HOME transfer, in-game trade, encounter legality, ability legality, Alpha or Mega state, moveset legality, or verified provenance.
 
 Next bounded route: Scarlet/Violet PK9 -> Legends: Z-A PA9 recovery and integrity hardening.
+
+## Scarlet/Violet -> Legends: Z-A recovery and integrity hardening
+
+The Scarlet/Violet PK9 -> Legends: Z-A PA9 review now binds the exact selected checksum-valid 344-byte native PK9 by SHA-256 when the Bank entry opens, when the user accepts Legalise, and again on first entry to the restore activity. The hash-derived Bank filename remains independently checked. A replacement PK9 cannot inherit an earlier conversion review even if the Bank path is retained, and the reviewed hash is visible before destination selection.
+
+The converter continues to require a destination-supported default-form species, verified Z-A personal profile, empty held-item field, destination-available moves and relearn moves, reviewed ability storage, English text, valid origin, Ball, handler, Tera, obedience, date, EV, PP and PP-Up ranges. Its native PA9 reopen check now covers EC, trainer IDs, shiny state, nature and stat nature, trainer friendships and handler fields, exact moves/PP/PP Ups, IVs, EVs, Hyper Training, relearn moves, ability slot, cached level/stats, full HP, Ball, obedience, Scale, and Alpha false. The Legalise review discloses the exact remaining PK9 metadata byte ranges and values omitted from PA9 alongside the existing Tera, size, ribbon/mark, machine, battle, tracker, Mega, provenance and rebuilt-stat effects.
+
+The selected empty native PA9 PC-box slot, revision-specific caught registration and container integrity updates, verified recovery backup, persisted exact reopen verification, preserved Legends: Z-A source and PK9 Bank entry, and failed-copy cleanup remain one transaction with two-sided rollback. This PSE conversion does not claim an official HOME transfer, in-game trade, encounter legality, ability legality, Alpha or Mega state, moveset legality, natural Tera type, or verified provenance.
+
+Next bounded route: Legends: Z-A PA9 -> Scarlet/Violet PK9 recovery and integrity hardening.

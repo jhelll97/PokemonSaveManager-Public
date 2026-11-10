@@ -56,6 +56,7 @@ object ScarletVioletToLegendsZaPa9 {
         val moves=source.moves.map{it.id}.toIntArray()
         val pp=source.moves.map{it.pp}.toIntArray()
         val ups=source.moves.map{it.ppUps}.toIntArray()
+        require(ups.all{it in 0..3}){"A PK9 move slot contains unsupported PP-Up bits."}
         for(i in 0..3){
             val move=moves[i]
             if(move==0) require(pp[i]==0 && ups[i]==0){"Empty move slot ${i+1} contains PP or PP-Up data."}
@@ -102,12 +103,25 @@ object ScarletVioletToLegendsZaPa9 {
         val native=encrypt(o)
         val p=(LegendsZaPokemonReadOnly.read(native) as? LegendsZaSlotRead.Pokemon)?.value
             ?:error("The converted PA9 did not reopen with a valid native checksum.")
+        val reopenedPlain=plainPk9(native)
         require(p.species==species&&p.form==form&&p.gender==sourceGender&&
-            p.fatefulEncounter==source.fatefulEncounter&&p.pid==source.pid&&p.experience==exp&&
+            p.fatefulEncounter==source.fatefulEncounter&&p.pid==source.pid&&
+            p.encryptionConstant==source.encryptionConstant&&p.tid==source.tid&&p.sid==source.sid&&
+            p.shiny==source.shiny&&p.experience==exp&&p.nature==nature&&p.statNature==statNature&&
             p.cachedLevel==level&&p.maximumHp==hp&&p.currentHp==hp&&
             p.cachedStats==listOf(atk,def,spe,spa,spd)&&!p.isAlpha&&p.scale==sourceScale&&
-            p.ball==ball&&p.obedienceLevel==obedience&&p.ability==ability) {
-            "The converted PA9 did not reopen with the reviewed identity, stats, and Legends: Z-A defaults."
+            p.ball==ball&&p.obedienceLevel==obedience&&p.ability==ability&&
+            p.originalTrainerFriendship==source.originalTrainerFriendship&&
+            p.handlingTrainerFriendship==source.handlingTrainerFriendship&&
+            p.currentHandler==currentHandler&&p.nickname==nickname&&p.originalTrainer==ot&&
+            p.moves.map{Triple(it.id,it.pp,it.ppUps)}==
+                source.moves.map{Triple(it.id,it.pp,it.ppUps)}&&
+            p.ivs==source.ivs&&p.evs==source.evs&&p.hyperTrainingFlags==hyper&&
+            p.relearnMoves==source.relearnMoves&&
+            (byte(reopenedPlain,0x16) and 7)==abilityNumber&&
+            byte(reopenedPlain,0xC2)==source.handlingTrainerGender&&
+            byte(reopenedPlain,0xC3)==source.handlingTrainerLanguage) {
+            "The converted PA9 did not reopen with every reviewed identity, trainer, move, stat, and Legends: Z-A default field."
         }
         LegendsZaPseBankRestoreEditing.inspectBankRecord(native)
 
@@ -115,6 +129,14 @@ object ScarletVioletToLegendsZaPa9 {
         val heightScalar=source.sizeScalars.getOrElse(0){0}
         val weightScalar=source.sizeScalars.getOrElse(1){0}
         val machineCount=source.technicalMachineFlags.count{it}
+        val omittedMetadata=listOf(
+            "0x17="+hex(s,0x17,0x18), "0x23="+hex(s,0x23,0x24),
+            "0x25="+hex(s,0x25,0x26), "0x33="+hex(s,0x33,0x34),
+            "0x4B-0x57="+hex(s,0x4B,0x58), "0x96-0xA7="+hex(s,0x96,0xA8),
+            "0xC5-0xC7="+hex(s,0xC5,0xC8), "0xC9-0xCD="+hex(s,0xC9,0xCE),
+            "0xD6-0xF7="+hex(s,0xD6,0xF8), "0x113-0x118="+hex(s,0x113,0x119),
+            "0x127-0x147="+hex(s,0x127,0x148), "0x156-0x157="+hex(s,0x156,0x158)
+        ).joinToString(", ")
         val effects=listOf(
             "Explicit Legalise: PSE Scarlet/Violet PK9 -> Legends: Z-A PA9 conversion; not an official HOME transfer, in-game trade, or verified provenance.",
             "Species, exact default form, PID, EC, TID/SID, EXP, IVs, EVs, nature, stat nature, gender, shiny state, friendship, Pokerus, contest values, origin, dates, locations, ball, fateful flag, Hyper Training, moves, PP, PP Ups, relearn moves, display Scale and Obedience Level are retained.",
@@ -127,6 +149,7 @@ object ScarletVioletToLegendsZaPa9 {
             if(markings and 0xF000==0)"All 12 supported marking bits are retained." else "High marking bits 0x${(markings and 0xF000).toString(16).uppercase()} are cleared; low 12 bits are retained.",
             if(ribbonBytes.all{it==0.toByte()} && source.affixedRibbon<0)"No Scarlet/Violet ribbon, mark or affixed-ribbon data requires omission." else "Ribbon/mark bytes ${ribbonBytes.joinToString(" "){"%02X".format(it)}} and affixed ribbon ${source.affixedRibbon} are cleared; this bounded adapter has no reviewed PK9 -> PA9 ribbon mapping.",
             "Technical Machine flags set: $machineCount. Battle Version ${source.battleVersion}, Form Argument ${source.formArgument} and status condition 0x${source.statusCondition.toString(16).uppercase()} are cleared with other unmapped PK9 and PA9-only metadata.",
+            "Unmapped PK9 metadata bytes are omitted only by this explicit Legalise choice: $omittedMetadata.",
             if(source.homeTrackerLow==0L&&source.homeTrackerHigh==0L)"No source HOME tracker bytes require omission." else "Source HOME tracker values 0x${source.homeTrackerHigh.toString(16).uppercase()}:${source.homeTrackerLow.toString(16).uppercase()} are cleared; PSE does not invent or claim an official HOME identity.",
             "The PK9 Bank entry and Legends: Z-A source remain unchanged. One user-chosen empty native PA9 slot in a new copy is written with retained recovery, persisted reopen verification, and two-sided rollback."
         )
@@ -146,6 +169,7 @@ object ScarletVioletToLegendsZaPa9 {
         val v=String(b,o,end-o,StandardCharsets.UTF_16LE)
         require(v.length<=12&&v.all{it.code !in 0xD800..0xDFFF&&it.code>=0x20&&it.code !in 0xE000..0xF8FF}){"The $label contains an unmapped glyph."};return v}
     private fun putText(b:ByteArray,o:Int,v:String){val x=v.toByteArray(StandardCharsets.UTF_16LE);require(x.size<=24){"Converted text exceeds 12 characters."};x.copyInto(b,o)}
+    private fun hex(b:ByteArray,from:Int,end:Int)=b.copyOfRange(from,end).joinToString(""){"%02X".format(it)}
     private fun date(y:Int,m:Int,d:Int)=if(y==0&&m==0&&d==0)true else y in 0..99&&m in 1..12&&d in 1..31&&runCatching{java.time.LocalDate.of(2000+y,m,d)}.isSuccess
     private fun minExp(l:Int,g:Int):Long{if(l<=1)return 0;val n=l.toLong();val c=n*n*n;return when(g){0->c;1->when{l<=50->c*(100-n)/50;l<=68->c*(150-n)/100;l<=98->{val r=n%3;c*(1274+r*r-9*r-20*(n/3))/1000};else->c*(160-n)/100};2->when{l<=15->c*(24+(n+1)/3)/50;l<=35->c*(14+n)/50;else->c*(32+n/2)/50};3->maxOf(0L,6*c/5-15*n*n+100*n-140);4->4*c/5;5->5*c/4;else->error("Unsupported growth group.")}}
     private fun level(e:Long,g:Int):Int{var l=1;for(i in 2..100){if(e<minExp(i,g))break;l=i};return l}
