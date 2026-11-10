@@ -214,6 +214,48 @@ object Gen1ToSwordShieldPk8 {
         )
     }
 
+    internal fun buildLegendsArceusBridge(
+        record: ByteArray,
+        trainer: LegendsArceusTrainerRead,
+        metadata: Gen1ToSwordShieldMetadata
+    ): Gen1ToPk7Bridge {
+        val source = inspectSource(record)
+        require(trainer.languageId == 2) {
+            "This bounded route currently requires an English Legends: Arceus destination trainer."
+        }
+        validateMetadata(metadata)
+        require(source.species in LegendsArceusPokedexReadOnly.supportedSpecies) {
+            "Species #" + source.species +
+                " is not available in the reviewed Legends: Arceus destination catalogue."
+        }
+        val profile = LegendsArceusPersonalCatalogue.profiles(source.species, 0)
+            .distinctBy {
+                listOf(
+                    it.hp, it.attack, it.defense, it.speed,
+                    it.specialAttack, it.specialDefense, it.growth
+                )
+            }
+            .singleOrNull()
+            ?: error("This species has no single verified default Legends: Arceus profile.")
+        val normalizedPp = IntArray(4)
+        source.moves.forEachIndexed { index, move ->
+            if (move != 0) {
+                require(LegendsArceusMoveCatalog.choice(move) != null) {
+                    "Move #" + move + " is not usable in Legends: Arceus."
+                }
+                normalizedPp[index] = LegendsArceusMoveCatalog.maximumPp(move)
+            }
+        }
+        val pk7 = buildPk7Bridge(
+            record, source.copy(ppUps = IntArray(4)),
+            trainer.name, trainer.gender, trainer.languageId,
+            metadata, profile.growth, normalizedPp
+        )
+        return Gen1ToPk7Bridge(
+            source, pk7, normalizedPp, minimumExperience(source.level, profile.growth)
+        )
+    }
+
     private fun validateMetadata(metadata: Gen1ToSwordShieldMetadata) {
         require(metadata.baseFriendship in 0..255) { "The reviewed base friendship is invalid." }
         require(metadata.genderRate in -1..8) { "The reviewed gender ratio is invalid." }

@@ -22,7 +22,7 @@ private data class LegendsArceusBankPreparation(
     val registerObtained: Boolean
 )
 
-/** Restores one native PA8 or explicitly reviewed Gen 7 conversion into a new save copy. */
+/** Restores one native PA8 or explicitly reviewed cross-generation conversion into a new save copy. */
 class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
     private val createCopyRequest = 2151
@@ -31,7 +31,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
     private var bankEntryName: String? = null
     private var expectedBankSourceHash: String? = null
     private var conversionEffects: List<String> = emptyList()
-    private var registerGen7Obtained = false
+    private var registerConvertedObtained = false
     private var readyDestinations: List<LegendsArceusPseBankDestination> = emptyList()
     private var readyPlan: LegendsArceusPseBankRestoreCopyPlan? = null
     private var pendingPlan: LegendsArceusPseBankRestoreCopyPlan? = null
@@ -59,7 +59,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pastures"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid native PA8 stored core to an empty pasture slot you choose in a new save copy. " +
-                "Native PA8 entries remain byte-exact. Eligible Gen 7 PK7, Sword/Shield PK8, BDSP PB8, Scarlet/Violet PK9, and Legends: Z-A PA9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Native PA8 entries remain byte-exact. Eligible Gen 1 PSE1, Gen 7 PK7, Sword/Shield PK8, BDSP PB8, Scarlet/Violet PK9, and Legends: Z-A PA9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
                 "Unsupported species, forms, items, moves, limits, or text remain blocked; this PSE conversion does not certify encounter, ability, or moveset legality."
             textSize = 16f
         })
@@ -95,7 +95,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 val bankSource = readBankSource()
                 val bankSourceHash = LegendsArceusPseBankRestoreEditing.sha256(bankSource)
                 expectedBankSourceHash = bankSourceHash
-                val prepared = prepareBankRecord(bankSource)
+                val prepared = prepareBankRecord(bankSource, source)
                 val pokemon = LegendsArceusPseBankRestoreEditing.inspectBankRecord(prepared.first)
                 val destinations = LegendsArceusPseBankRestoreEditing.emptyDestinations(source)
                 require(destinations.isNotEmpty()) {
@@ -104,7 +104,8 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 LegendsArceusBankPreparation(
                     pokemon, destinations, bankSourceHash,
                     LegendsArceusPseBankRestoreEditing.sha256(prepared.first), prepared.second,
-                    bankFile().extension.equals("pk7", true)
+                    bankFile().extension.equals("pk7", true) ||
+                        bankFile().extension.equals("pse1", true)
                 )
             }
             runOnUiThread {
@@ -112,7 +113,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 result.onSuccess { prepared ->
                     readyDestinations = prepared.destinations
                     conversionEffects = prepared.effects
-                    registerGen7Obtained = prepared.registerObtained
+                    registerConvertedObtained = prepared.registerObtained
                     status.text = "Native source and Bank integrity verified\n" +
                         "${LegendsArceusSpeciesNames.name(prepared.pokemon.species)} (#${prepared.pokemon.species}) • EXP ${prepared.pokemon.experience}\n" +
                         "${prepared.destinations.size} empty native destination slots available\n" +
@@ -169,7 +170,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 val bank = readBankRecord()
                 LegendsArceusPseBankRestoreEditing.stage(
                     source, hash, bank, destination.pasture, destination.position,
-                    registerObtained = registerGen7Obtained
+                    registerObtained = registerConvertedObtained
                 )
             }
             runOnUiThread {
@@ -204,17 +205,18 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         val directory = File(filesDir, "pse_bank").canonicalFile
         val entry = File(directory, name).canonicalFile
         val native = entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)
+        val gen1 = entry.name.startsWith("pse1_") && entry.extension.equals("pse1", true)
         val gen7 = entry.extension.equals("pk7", true)
         val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
         val bdsp = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
         val scarletViolet = entry.name.startsWith("switch_sv_") && entry.extension.equals("pk9", true)
         val legendsZa = entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true)
         require(entry.parentFile == directory && entry.isFile &&
-            (native || gen7 || swordShield || bdsp || scarletViolet || legendsZa)
+            (native || gen1 || gen7 || swordShield || bdsp || scarletViolet || legendsZa)
         ) {
-            "This is not a current Legends: Arceus, Gen 7, Sword/Shield, BDSP, Scarlet/Violet, or Legends: Z-A PSE Bank entry."
+            "This is not a current Legends: Arceus, Gen 1, Gen 7, Sword/Shield, BDSP, Scarlet/Violet, or Legends: Z-A PSE Bank entry."
         }
-        if (gen7 || swordShield || bdsp || scarletViolet || legendsZa) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+        if (gen1 || gen7 || swordShield || bdsp || scarletViolet || legendsZa) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
             "Review and explicitly choose the disclosed PSE Legalise conversion from PSE Bank."
         }
         return entry
@@ -230,8 +232,23 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         return bytes
     }
 
-    private fun prepareBankRecord(source: ByteArray): Pair<ByteArray, List<String>> {
+    private fun prepareBankRecord(
+        source: ByteArray,
+        destination: ByteArray
+    ): Pair<ByteArray, List<String>> {
         val entry = bankFile()
+        if (entry.extension.equals("pse1", true)) {
+            val metadata = Gen1ToSwordShieldMetadata(
+                intent.getIntExtra("pse.gen1.friendship", -1),
+                intent.getIntExtra("pse.gen1.gender_rate", -2),
+                intent.getIntExtra("pse.gen1.ability_id", 0),
+                intent.getIntExtra("pse.gen1.ability_number", 0)
+            )
+            val converted = Gen1ToLegendsArceusPa8.review(
+                source, LegendsArceusTrainerReadOnly.read(destination), metadata
+            )
+            return converted.nativeRecord to converted.effects
+        }
         if (entry.extension.equals("pk7", true)) {
             val converted = Gen7ToLegendsArceusPa8.review(source)
             return converted.nativeRecord to converted.effects
@@ -272,7 +289,8 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         return source to emptyList()
     }
 
-    private fun readBankRecord(): ByteArray = prepareBankRecord(readBankSource()).first
+    private fun readBankRecord(): ByteArray =
+        prepareBankRecord(readBankSource(), readSource()).first
 
     private fun showReview(plan: LegendsArceusPseBankRestoreCopyPlan) {
         if (busy || plan !== readyPlan) return
@@ -293,7 +311,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 " The same reviewed transaction sets this species' native Hisui NumObtained word to 1 at " +
                     "0x${plan.dexAbsoluteOffset!!.toString(16).uppercase()}; research rate, task counters, " +
                     "report flags, form statistics, global progression, and every unrelated Pokédex record remain exact."
-            registerGen7Obtained ->
+            registerConvertedObtained ->
                 " This species already has a native Hisui obtained count, so the reviewed transaction retains it exactly."
             else -> ""
         }
