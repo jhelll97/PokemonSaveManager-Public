@@ -59,7 +59,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid native PK9 to an empty PC-box slot you choose in a new save copy. " +
-                "Native PK9 entries remain byte-exact. Eligible Gen 1 PSE1, Generation 7 PK7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, and Legends: Z-A PA9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Native PK9 entries remain byte-exact. Eligible Gen 1 PSE1, Gen 2 PSE2, Gen 3 PK3, Generation 7 PK7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, and Legends: Z-A PA9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
                 "Unsupported species, forms, items, moves, limits, or text remain blocked; this PSE conversion does not certify encounter, ability, Tera, or moveset legality."
             textSize = 16f
         })
@@ -100,6 +100,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                 val bankExtension = bankFile().extension
                 if (bankExtension.equals("pse1", true) ||
                     bankExtension.equals("pse2", true) ||
+                    bankExtension.equals("pk3", true) ||
                     bankExtension.equals("pk7", true) ||
                     bankExtension.equals("pa9", true)) {
                     require(pokemon.species in ScarletVioletPokedexReadOnly.supportedSpecies(source)) {
@@ -115,6 +116,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                     ScarletVioletPseBankRestoreEditing.sha256(prepared.first), prepared.second,
                     bankExtension.equals("pse1", true) ||
                         bankExtension.equals("pse2", true) ||
+                        bankExtension.equals("pk3", true) ||
                         bankExtension.equals("pk7", true)
                 )
             }
@@ -217,16 +219,17 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
         val native = entry.name.startsWith("switch_sv_") && entry.extension.equals("pk9", true)
         val gen1 = entry.name.startsWith("pse1_") && entry.extension.equals("pse1", true)
         val gen2 = entry.extension.equals("pse2", true)
+        val gen3 = entry.extension.equals("pk3", true)
         val gen7 = entry.extension.equals("pk7", true)
         val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
         val bdsp = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
         val legendsArceus = entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)
         val legendsZa = entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true)
         require(entry.parentFile == directory && entry.isFile &&
-            (native || gen1 || gen2 || gen7 || swordShield || bdsp || legendsArceus || legendsZa)) {
-            "This is not a current Scarlet/Violet, Gen 1, Gen 2, Generation 7, Sword/Shield, BDSP, Legends: Arceus, or Legends: Z-A PSE Bank entry."
+            (native || gen1 || gen2 || gen3 || gen7 || swordShield || bdsp || legendsArceus || legendsZa)) {
+            "This is not a current Scarlet/Violet, Gen 1, Gen 2, Gen 3, Generation 7, Sword/Shield, BDSP, Legends: Arceus, or Legends: Z-A PSE Bank entry."
         }
-        if (gen1 || gen2 || gen7 || swordShield || bdsp || legendsArceus || legendsZa) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+        if (gen1 || gen2 || gen3 || gen7 || swordShield || bdsp || legendsArceus || legendsZa) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
             "Review and explicitly choose the disclosed cross-generation Legalise conversion from PSE Bank."
         }
         return entry
@@ -267,6 +270,18 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                 intent.getIntExtra("pse.gen2.ability_number", 0)
             )
             val converted = Gen2ToScarletVioletPk9.review(
+                source, ScarletVioletTrainerReadOnly.read(destination), metadata
+            )
+            return converted.nativeRecord to converted.effects
+        }
+        if (entry.extension.equals("pk3", true)) {
+            val metadata = Gen1ToSwordShieldMetadata(
+                intent.getIntExtra("pse.gen3.friendship", -1),
+                intent.getIntExtra("pse.gen3.gender_rate", -2),
+                intent.getIntExtra("pse.gen3.ability_id", 0),
+                intent.getIntExtra("pse.gen3.ability_number", 0)
+            )
+            val converted = Gen3ToScarletVioletPk9.review(
                 source, ScarletVioletTrainerReadOnly.read(destination), metadata
             )
             return converted.nativeRecord to converted.effects
@@ -316,6 +331,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
         val extension = bankFile().extension
         if (extension.equals("pse1", true) ||
             extension.equals("pse2", true) ||
+            extension.equals("pk3", true) ||
             extension.equals("pk7", true) ||
             extension.equals("pa9", true)
         ) {
