@@ -15171,7 +15171,7 @@ class MainActivity : Activity() {
             val pidNotice=if(converted.pid==source.pid)"PID preserved." else "PID adjustment: ${source.pid.toString(16).uppercase().padStart(8,'0')} → ${converted.pid.toString(16).uppercase().padStart(8,'0')} so Generation 4 PID-derived nature and ability slot remain valid; nature, ability, shiny state and TID/SID are preserved. Review before continuing."
             val originTitle=gen4CompatibleOriginTitle(originGame)?:return@loadGen3ToGen4MetaAsync showDialog("Gen 5 → Gen 4 blocked","The reviewed origin mapping is no longer destination-valid. Nothing was changed.")
             val originNotice=if(originLegalised)"Origin Legalise: game ID ${source.originGame} → $originTitle (ID $originGame); this is a user-selected provenance change, not verified history." else "Origin preserved: $originTitle (ID ${source.originGame})."
-            val preview="PSE conversion, not an official backward transfer or provenance claim.\n\nPreserved: species, OT/TID/SID, nickname, EXP, nature, shiny state, verified non-hidden ability, gender, IVs, EVs, moves, PP/PP Ups, friendship, Pokérus, markings, Ball, met level, encounter dates and fateful marker. $originNotice $pidNotice\n\nRequired format difference: native PK4 has no explicit nature or hidden-ability field. Gen 5 location IDs are not remapped; only the explicit unspecified location 0 produced by PSE's forward route is accepted and remains 0. Held items, Eggs, forms, Gen 5 species/moves/abilities/origins and all ambiguous fields are blocked instead of discarded.\n\nThe exact PK5 Bank record remains until the reviewed native PK4, Pokédex mirrors, block CRCs and persisted reopen all verify."
+            val preview="PSE conversion, not an official backward transfer or provenance claim.\n\nPreserved: species, OT/TID/SID, nickname, EXP, nature, shiny state, verified non-hidden ability, gender, IVs, EVs, moves, PP/PP Ups, friendship, Pokérus, markings, Ball, met level, encounter dates and fateful marker. $originNotice $pidNotice\n\nRequired format difference: native PK4 has no explicit nature or hidden-ability field. Gen 5 location IDs are not remapped; only the explicit unspecified location 0 produced by PSE's forward route is accepted and remains 0. Held items, Eggs, forms, Gen 5 species/moves/abilities/origins and all ambiguous fields are blocked instead of discarded.\n\nThe exact PK5 Bank record remains until the reviewed native PK4, Pokédex mirrors, block CRCs and persisted reopen all verify. A Keep-pinned destination backup and independent exact Bank snapshot stay byte-bound before writing and through cleanup. If failure happens before PSE writes or deletes a side, PSE verifies that side stayed exact instead of claiming restoration; after a PSE mutation, it restores and reopens that side independently."
             AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 5 → Gen 4").setMessage(preview)
                 .setNegativeButton("Cancel",null).setPositiveButton("Review destination"){_,_->if(snapshotsMatch())chooseGen5ToGen4Destination(prepared)else showDialog("Gen 5 → Gen 4","The destination or Bank record changed after review.")}.show()
         }
@@ -15266,8 +15266,9 @@ class MainActivity : Activity() {
                     parsed.pid==p.source.pid&&parsed.species==p.source.species&&
                     parsed.tid==p.source.tid&&parsed.sid==p.source.sid
             }.getOrDefault(false)
-            val saveRestored=!writeStarted||runCatching{
-                file.writeBytes(fresh);val restored=file.readBytes()
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(fresh)
+                val restored=file.readBytes()
                 val rp=detectGen4Profile(restored)?:error("The restored Generation 4 layout is invalid.")
                 val rv=gen4Validation(restored,rp)
                 restored.contentEquals(fresh)&&rv.generalChecksum&&rv.storageChecksum&&rv.badPk4==0
