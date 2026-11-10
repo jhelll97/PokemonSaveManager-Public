@@ -57,7 +57,7 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid native PB8 to an empty PC-box slot you choose in a new save copy. " +
-                "Native PB8 entries remain byte-exact. Eligible Gen 7 PK7, Sword/Shield PK8, Legends: Arceus PA8, Scarlet/Violet PK9, and Legends: Z-A PA9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Native PB8 entries remain byte-exact. Eligible Gen 1 PSE1, Gen 7 PK7, Sword/Shield PK8, Legends: Arceus PA8, Scarlet/Violet PK9, and Legends: Z-A PA9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
                 "Unsupported species, forms, items, moves, limits, or text remain blocked; this PSE conversion does not certify encounter or moveset legality."
             textSize = 16f
         })
@@ -93,7 +93,7 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
                 val bankSource = readBankSource()
                 val bankSourceHash = BdspPseBankRestoreEditing.sha256(bankSource)
                 expectedBankSourceHash = bankSourceHash
-                val prepared = prepareBankRecord(bankSource)
+                val prepared = prepareBankRecord(bankSource, source)
                 val pokemon = BdspPseBankRestoreEditing.inspectBankRecord(prepared.first)
                 val destinations = BdspPseBankRestoreEditing.emptyDestinations(source)
                 require(destinations.isNotEmpty()) { "All 1,200 native BDSP PC-box slots are occupied." }
@@ -163,7 +163,8 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
                 val bank = readBankRecord()
                 BdspPseBankRestoreEditing.stage(
                     source, hash, bank, destination.box, destination.position,
-                    registerCaughtEnglish = bankFile().extension.equals("pk7", true)
+                    registerCaughtEnglish = bankFile().extension.equals("pk7", true) ||
+                        bankFile().extension.equals("pse1", true)
                 )
             }
             runOnUiThread {
@@ -198,17 +199,18 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
         val directory = File(filesDir, "pse_bank").canonicalFile
         val entry = File(directory, name).canonicalFile
         val native = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
+        val gen1 = entry.name.startsWith("pse1_") && entry.extension.equals("pse1", true)
         val gen7 = entry.extension.equals("pk7", true)
         val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
         val legendsArceus = entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)
         val scarletViolet = entry.name.startsWith("switch_sv_") && entry.extension.equals("pk9", true)
         val legendsZa = entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true)
         require(entry.parentFile == directory && entry.isFile &&
-            (native || gen7 || swordShield || legendsArceus || scarletViolet || legendsZa)
+            (native || gen1 || gen7 || swordShield || legendsArceus || scarletViolet || legendsZa)
         ) {
-            "This is not a current BDSP, Gen 7, Sword/Shield, Legends: Arceus, Scarlet/Violet, or Legends: Z-A PSE Bank entry."
+            "This is not a current BDSP, Gen 1, Gen 7, Sword/Shield, Legends: Arceus, Scarlet/Violet, or Legends: Z-A PSE Bank entry."
         }
-        if (gen7 || swordShield || legendsArceus || scarletViolet || legendsZa) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+        if (gen1 || gen7 || swordShield || legendsArceus || scarletViolet || legendsZa) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
             "Review and explicitly choose the disclosed PSE Legalise conversion from PSE Bank."
         }
         return entry
@@ -224,8 +226,23 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
         return bytes
     }
 
-    private fun prepareBankRecord(source: ByteArray): Pair<ByteArray, List<String>> {
+    private fun prepareBankRecord(
+        source: ByteArray,
+        destination: ByteArray
+    ): Pair<ByteArray, List<String>> {
         val entry = bankFile()
+        if (entry.extension.equals("pse1", true)) {
+            val metadata = Gen1ToSwordShieldMetadata(
+                intent.getIntExtra("pse.gen1.friendship", -1),
+                intent.getIntExtra("pse.gen1.gender_rate", -2),
+                intent.getIntExtra("pse.gen1.ability_id", 0),
+                intent.getIntExtra("pse.gen1.ability_number", 0)
+            )
+            val converted = Gen1ToBdspPb8.review(
+                source, BdspTrainerReadOnly.read(destination), metadata
+            )
+            return converted.nativeRecord to converted.effects
+        }
         if (entry.extension.equals("pk7", true)) {
             val converted = Gen7ToBdspPb8.review(source)
             return converted.nativeRecord to converted.effects
@@ -266,7 +283,8 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
         return source to emptyList()
     }
 
-    private fun readBankRecord(): ByteArray = prepareBankRecord(readBankSource()).first
+    private fun readBankRecord(): ByteArray =
+        prepareBankRecord(readBankSource(), readSource()).first
 
     private fun showReview(plan: BdspPseBankRestoreCopyPlan) {
         if (busy || plan !== readyPlan) return

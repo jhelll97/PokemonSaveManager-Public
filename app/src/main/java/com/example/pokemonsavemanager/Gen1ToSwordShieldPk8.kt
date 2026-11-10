@@ -36,6 +36,13 @@ data class Gen1ToSwordShieldReview(
     val effects: List<String>
 )
 
+data class Gen1ToPk7Bridge(
+    val source: Gen1ToSwordShieldSource,
+    val pk7: ByteArray,
+    val normalizedPp: IntArray,
+    val minimumExperience: Long
+)
+
 /**
  * Bounded direct adapter for a preserved PSE1 record.
  *
@@ -94,26 +101,10 @@ object Gen1ToSwordShieldPk8 {
         destinationTrainer: SwordShieldTrainerRead,
         metadata: Gen1ToSwordShieldMetadata
     ): Gen1ToSwordShieldReview {
-        val source = inspectSource(record)
-        require(destinationTrainer.languageId == 2) {
-            "This bounded route currently requires an English Sword/Shield destination trainer."
-        }
-        require(metadata.baseFriendship in 0..255) { "The reviewed base friendship is invalid." }
-        require(metadata.genderRate in -1..8) { "The reviewed gender ratio is invalid." }
-        require(metadata.abilityId in 1..255 && metadata.abilityNumber in setOf(1, 2, 4)) {
-            "The reviewed ability mapping cannot be represented in PK7."
-        }
-        val profile = SwordShieldPersonalCatalogue.profiles(source.species)
-            .singleOrNull { it.isDefault }
-            ?: error("This species has no unique default-form Sword/Shield profile.")
-        source.moves.filter { it != 0 }.forEach {
-            require(SwordShieldMoveCatalog.choice(it) != null) {
-                "Move #" + it + " has no native Sword/Shield mapping."
-            }
-        }
-        val bridge = buildPk7Bridge(record, source, destinationTrainer, metadata, profile.growth)
-        val converted = Gen7ToSwordShieldPk8.review(bridge)
-        val generatedExperience = minimumExperience(source.level, profile.growth)
+        val bridge = buildSwordShieldBridge(record, destinationTrainer, metadata)
+        val source = bridge.source
+        val converted = Gen7ToSwordShieldPk8.review(bridge.pk7)
+        val generatedExperience = bridge.minimumExperience
         val nature = (source.experience % 25L).toInt()
         val shiny = wouldBeShiny(source.dvs)
         val bridgeEffects = converted.effects.filterNot {
@@ -138,7 +129,9 @@ object Gen1ToSwordShieldPk8 {
                 source.level + " growth-floor value " + generatedExperience +
                 "; nature " + nature + " is derived from source EXP modulo 25.")
             add("Current PP " + source.currentPp.joinToString("/") +
-                " is normalized to Sword/Shield base PP with retained PP-Up counts " +
+                " is normalized to Sword/Shield base PP " +
+                bridge.normalizedPp.joinToString("/") +
+                " with retained PP-Up counts " +
                 source.ppUps.joinToString("/") + ". Unsupported Sword/Shield moves remain blocked.")
             add("SID is generated as 0. Encryption constant, PID and IVs are deterministic Legalise values bound to the PSE1 bytes, destination trainer and reviewed species metadata; PID does not certify origin.")
             add("Ability " + metadata.abilityId + " in slot " + metadata.abilityNumber +
@@ -153,17 +146,96 @@ object Gen1ToSwordShieldPk8 {
         )
     }
 
+    internal fun buildSwordShieldBridge(
+        record: ByteArray,
+        trainer: SwordShieldTrainerRead,
+        metadata: Gen1ToSwordShieldMetadata
+    ): Gen1ToPk7Bridge {
+        val source = inspectSource(record)
+        require(trainer.languageId == 2) {
+            "This bounded route currently requires an English Sword/Shield destination trainer."
+        }
+        validateMetadata(metadata)
+        val profile = SwordShieldPersonalCatalogue.profiles(source.species)
+            .singleOrNull { it.isDefault }
+            ?: error("This species has no unique default-form Sword/Shield profile.")
+        val normalizedPp = IntArray(4)
+        source.moves.forEachIndexed { index, move ->
+            if (move != 0) {
+                require(SwordShieldMoveCatalog.choice(move) != null) {
+                    "Move #" + move + " has no native Sword/Shield mapping."
+                }
+                normalizedPp[index] = SwordShieldMoveCatalog.maximumPp(move, source.ppUps[index])
+            }
+        }
+        val pk7 = buildPk7Bridge(
+            record, source, trainer.name, trainer.gender, trainer.languageId,
+            metadata, profile.growth, normalizedPp
+        )
+        return Gen1ToPk7Bridge(
+            source, pk7, normalizedPp, minimumExperience(source.level, profile.growth)
+        )
+    }
+
+    internal fun buildBdspBridge(
+        record: ByteArray,
+        trainer: BdspTrainerRead,
+        metadata: Gen1ToSwordShieldMetadata
+    ): Gen1ToPk7Bridge {
+        val source = inspectSource(record)
+        require(trainer.languageId == 2) {
+            "This bounded route currently requires an English BDSP destination trainer."
+        }
+        validateMetadata(metadata)
+        val profile = BdspPersonalCatalogue.profiles(source.species, 0)
+            .distinctBy {
+                listOf(
+                    it.hp, it.attack, it.defense, it.speed,
+                    it.specialAttack, it.specialDefense, it.growth
+                )
+            }
+            .singleOrNull()
+            ?: error("This species has no single verified default BDSP profile.")
+        val normalizedPp = IntArray(4)
+        source.moves.forEachIndexed { index, move ->
+            if (move != 0) {
+                require(BdspMoveCatalog.choice(move) != null) {
+                    "Move #" + move + " is not usable in BDSP."
+                }
+                normalizedPp[index] = BdspMoveCatalog.maximumPp(move, source.ppUps[index])
+            }
+        }
+        val pk7 = buildPk7Bridge(
+            record, source, trainer.name, trainer.gender, trainer.languageId,
+            metadata, profile.growth, normalizedPp
+        )
+        return Gen1ToPk7Bridge(
+            source, pk7, normalizedPp, minimumExperience(source.level, profile.growth)
+        )
+    }
+
+    private fun validateMetadata(metadata: Gen1ToSwordShieldMetadata) {
+        require(metadata.baseFriendship in 0..255) { "The reviewed base friendship is invalid." }
+        require(metadata.genderRate in -1..8) { "The reviewed gender ratio is invalid." }
+        require(metadata.abilityId in 1..255 && metadata.abilityNumber in setOf(1, 2, 4)) {
+            "The reviewed ability mapping cannot be represented in PK7."
+        }
+    }
+
     private fun buildPk7Bridge(
         record: ByteArray,
         source: Gen1ToSwordShieldSource,
-        trainer: SwordShieldTrainerRead,
+        handlerName: String,
+        handlerGender: Int,
+        handlerLanguageId: Int,
         metadata: Gen1ToSwordShieldMetadata,
-        growth: Int
+        growth: Int,
+        normalizedPp: IntArray
     ): ByteArray {
         val seed = MessageDigest.getInstance("SHA-256").apply {
             update(record)
-            update(trainer.name.toByteArray(StandardCharsets.UTF_8))
-            update(byteArrayOf(trainer.gender.toByte(), trainer.languageId.toByte()))
+            update(handlerName.toByteArray(StandardCharsets.UTF_8))
+            update(byteArrayOf(handlerGender.toByte(), handlerLanguageId.toByte()))
             update(intBytes(metadata.baseFriendship))
             update(intBytes(metadata.genderRate))
             update(intBytes(metadata.abilityId))
@@ -200,7 +272,7 @@ object Gen1ToSwordShieldPk8 {
             w16(pk, 0x5A + index * 2, move)
             if (move != 0) {
                 pk[0x62 + index] =
-                    SwordShieldMoveCatalog.maximumPp(move, source.ppUps[index]).toByte()
+                    normalizedPp[index].toByte()
                 pk[0x66 + index] = source.ppUps[index].toByte()
             }
         }
@@ -210,8 +282,8 @@ object Gen1ToSwordShieldPk8 {
         }
         if (customNickname) packedIvs = packedIvs or 0x80000000L
         w32(pk, 0x74, packedIvs)
-        putText(pk, 0x78, trainer.name)
-        pk[0x92] = trainer.gender.toByte()
+        putText(pk, 0x78, handlerName)
+        pk[0x92] = handlerGender.toByte()
         pk[0x93] = 1
         pk[0xA2] = metadata.baseFriendship.toByte()
         putText(pk, 0xB0, source.originalTrainer)
