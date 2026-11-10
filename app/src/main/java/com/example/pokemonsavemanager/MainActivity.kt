@@ -24971,7 +24971,7 @@ class MainActivity : Activity() {
                 append("Ability: source slot ${source.abilityNumber} → verified Gen 4 ability #${plan.meta.abilityId}.\n")
                 append("Level: ${plan.level}, derived from the preserved EXP.\n")
                 append("Required migration difference: Gen 3 met location $oldMet becomes Gen 4 Pal Park location #55 with migration date 20${plan.metYear.toString().padStart(2,'0')}-${plan.metMonth.toString().padStart(2,'0')}-${plan.metDay.toString().padStart(2,'0')}.\n\n")
-                append("This is a PSE Bank conversion using Gen 4-compatible migration semantics. It is not an in-game trade and does not claim official transfer provenance. The source save stays unchanged. A retained recovery backup is required before the destination working copy is written.")
+                append("This is a PSE Bank conversion using Gen 4-compatible migration semantics. It is not an in-game trade and does not claim official transfer provenance. The source save stays unchanged. Exact retained destination and Bank recovery snapshots are required before writing and remain byte-bound through final Bank cleanup; failure restores both sides independently.")
             }
             AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{meta.speciesName}} • Gen 3 → Gen 4")
                 .setMessage(preview).setNegativeButton("Cancel",null)
@@ -25305,8 +25305,9 @@ class MainActivity : Activity() {
             require(p.bankFile.readBytes().contentEquals(p.bankBytes)){"The Gen 3 Bank record changed before cleanup."}
             bankDeleteAttempted=true;require(p.bankFile.delete()){"The Gen 3 Bank record could not be removed after destination verification."}
             require(!p.bankFile.exists()&&bound()&&file.readBytes().contentEquals(work)&&
-                isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){
-                "The completed conversion or retained destination backup could not be rechecked after Bank cleanup."
+                isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&
+                recovery.readBytes().contentEquals(p.bankBytes)){
+                "The completed conversion or retained destination and Bank recovery snapshots could not be rechecked after Bank cleanup."
             }
             runCatching{recovery.delete()}
         }catch(e:Exception){
