@@ -57,7 +57,7 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid native PB8 to an empty PC-box slot you choose in a new save copy. " +
-                "Native PB8 entries remain byte-exact. Eligible Gen 7 PK7 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Native PB8 entries remain byte-exact. Eligible Gen 7 PK7 and Sword/Shield PK8 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
                 "Unsupported species, forms, items, moves, limits, or text remain blocked; this PSE conversion does not certify encounter or moveset legality."
             textSize = 16f
         })
@@ -198,11 +198,12 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
         val entry = File(directory, name).canonicalFile
         val native = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
         val gen7 = entry.extension.equals("pk7", true)
-        require(entry.parentFile == directory && entry.isFile && (native || gen7)) {
-            "This is not a current BDSP or Gen 7 PSE Bank entry."
+        val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
+        require(entry.parentFile == directory && entry.isFile && (native || gen7 || swordShield)) {
+            "This is not a current BDSP, Gen 7, or Sword/Shield PSE Bank entry."
         }
-        if (gen7) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
-            "Review and explicitly choose the disclosed Gen 7 Legalise conversion from PSE Bank."
+        if (gen7 || swordShield) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+            "Review and explicitly choose the disclosed PSE Legalise conversion from PSE Bank."
         }
         return entry
     }
@@ -224,6 +225,13 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
             return converted.nativeRecord to converted.effects
         }
         val hash = BdspPseBankRestoreEditing.sha256(source)
+        if (entry.extension.equals("pk8", true)) {
+            require(entry.name == "switch_swsh_${hash}.pk8") {
+                "The PSE Bank filename no longer matches its native PK8 bytes."
+            }
+            val converted = SwordShieldToBdspPb8.review(source)
+            return converted.nativeRecord to converted.effects
+        }
         require(entry.name == "switch_bdsp_${hash}.pb8") {
             "The PSE Bank filename no longer matches its native record bytes."
         }
@@ -240,10 +248,10 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
         val p = plan.pokemon
         val moves = p.moves.filter { it.id != 0 }.joinToString { "#${it.id} (PP ${it.pp})" }.ifBlank { "None" }
         val effects = if (conversionEffects.isEmpty()) "" else
-            "\n\nExplicit Gen 7 Legalise effects\n• " + conversionEffects.joinToString("\n• ")
+            "\n\nExplicit PSE conversion Legalise effects\n• " + conversionEffects.joinToString("\n• ")
         AlertDialog.Builder(this).setTitle(
             if (conversionEffects.isEmpty()) "Restore this Bank Pokémon to a new copy?"
-            else "Legalise Gen 7 and restore to a new copy?"
+            else "Legalise the converted record and restore to a new copy?"
         )
             .setMessage(
                 "${SwordShieldSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form} • Level ${p.cachedLevel}\n" +
@@ -338,7 +346,7 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
                 status.text = result.fold(
                     onSuccess = {
                         (if (conversionEffects.isEmpty()) "PSE Bank restore saved and reopened successfully.\n"
-                        else "Gen 7 -> BDSP PSE conversion saved and reopened successfully.\n") +
+                        else "PSE conversion saved and reopened successfully.\n") +
                             "Box ${plan.box}, slot ${plan.position} • SHA-256: ${plan.editedSha256}\n" +
                             "Recovery backup: $backupName\nOriginal source and Bank entry unchanged."
                     },
