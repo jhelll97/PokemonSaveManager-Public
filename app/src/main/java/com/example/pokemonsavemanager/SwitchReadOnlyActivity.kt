@@ -4550,6 +4550,7 @@ class SwitchReadOnlyActivity : Activity() {
                     it.extension.equals("pk3", true) ||
                     it.extension.equals("pk4", true) ||
                     it.extension.equals("pk5", true) ||
+                    it.extension.equals("pk6", true) ||
                     (it.name.startsWith("switch_swsh_") && it.extension.equals("pk8", true)) ||
                     (it.name.startsWith("switch_bdsp_") && it.extension.equals("pb8", true)) ||
                     (it.name.startsWith("switch_pla_") && it.extension.equals("pa8", true)) ||
@@ -4564,11 +4565,12 @@ class SwitchReadOnlyActivity : Activity() {
                 it.extension.equals("pk3", true) -> 3
                 it.extension.equals("pk4", true) -> 4
                 it.extension.equals("pk5", true) -> 5
-                it.extension.equals("pk8", true) -> 6
-                it.extension.equals("pb8", true) -> 7
-                it.extension.equals("pa8", true) -> 8
-                it.extension.equals("pk7", true) -> 9
-                else -> 10
+                it.extension.equals("pk6", true) -> 6
+                it.extension.equals("pk8", true) -> 7
+                it.extension.equals("pb8", true) -> 8
+                it.extension.equals("pa8", true) -> 9
+                it.extension.equals("pk7", true) -> 10
+                else -> 11
             }
         }, { it.name })).orEmpty()
         val labels = entries.map { file ->
@@ -4629,6 +4631,18 @@ class SwitchReadOnlyActivity : Activity() {
                     },
                     onFailure = { error ->
                         file.name + " • Gen 5 PK5 blocked • " +
+                            (error.message ?: "unsupported conversion")
+                    }
+                )
+            } else if (file.extension.equals("pk6", true)) {
+                runCatching { Gen6ToScarletVioletPk9.inspectSource(file.readBytes()) }.fold(
+                    onSuccess = { source ->
+                        source.nickname.ifBlank {
+                            ScarletVioletSpeciesNames.name(source.species)
+                        } + " (#" + source.species + ") • Gen 6 PK6 → PK9 • Legalise"
+                    },
+                    onFailure = { error ->
+                        file.name + " • Gen 6 PK6 blocked • " +
                             (error.message ?: "unsupported conversion")
                     }
                 )
@@ -4701,7 +4715,7 @@ class SwitchReadOnlyActivity : Activity() {
             .setPositiveButton("Close", null)
         if (entries.isEmpty()) {
             builder.setMessage(
-                "No native Scarlet/Violet PK9, eligible Gen 1 PSE1, eligible Gen 2 PSE2, eligible Gen 3 PK3, eligible Gen 4 PK4, eligible Gen 5 PK5, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, eligible Generation 7 PK7, or Legends: Z-A PA9 entries are stored. " +
+                "No native Scarlet/Violet PK9, eligible Gen 1 PSE1, eligible Gen 2 PSE2, eligible Gen 3 PK3, eligible Gen 4 PK4, eligible Gen 5 PK5, eligible Gen 6 PK6, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, eligible Generation 7 PK7, or Legends: Z-A PA9 entries are stored. " +
                     "Open Pokémon Boxes in a supported title, choose a Pokémon, then tap Add to PSE Bank."
             )
         } else {
@@ -4719,6 +4733,8 @@ class SwitchReadOnlyActivity : Activity() {
                             showScarletVioletGen4BankEntry(bound, entry)
                         entry.extension.equals("pk5", true) ->
                             showScarletVioletGen5BankEntry(bound, entry)
+                        entry.extension.equals("pk6", true) ->
+                            showScarletVioletGen6BankEntry(bound, entry)
                         entry.extension.equals("pk8", true) ->
                             showScarletVioletSwordShieldBankEntry(bound, entry)
                         entry.extension.equals("pb8", true) ->
@@ -5316,6 +5332,124 @@ class SwitchReadOnlyActivity : Activity() {
                     AlertDialog.Builder(this).setTitle("Gen 5 -> Scarlet/Violet blocked")
                         .setMessage((it.message ?: "No safe conversion is available.") +
                             "\n\nThe PK5 Bank entry and Scarlet/Violet save remain unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }
+        }
+    }
+
+    private fun showScarletVioletGen6BankEntry(
+        bound: SwitchReadSession,
+        file: File
+    ) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = runCatching { file.canonicalFile }.getOrNull()
+        val opened = runCatching {
+            require(entry != null && entry.parentFile == directory && entry.isFile &&
+                entry.extension.equals("pk6", true)) {
+                "This is not a current Gen 6 PSE Bank entry."
+            }
+            val bytes = entry.readBytes()
+            val source = Gen6ToScarletVioletPk9.inspectSource(bytes)
+            val trainer = ScarletVioletTrainerReadOnly.read(bound.snapshot.bytesCopy())
+            require(trainer.languageId == 2) {
+                "This bounded Gen 6 route currently requires an English Scarlet/Violet destination trainer."
+            }
+            Triple(bytes, source, trainer)
+        }.getOrElse {
+            AlertDialog.Builder(this).setTitle("Gen 6 -> Scarlet/Violet blocked")
+                .setMessage((it.message ?: "No safe conversion is available.") +
+                    "\n\nThe PK6 Bank entry and Scarlet/Violet save remain unchanged.")
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val selected = entry ?: return
+        val openedHash = ScarletVioletPseBankRestoreEditing.sha256(opened.first)
+        val loading = AlertDialog.Builder(this)
+            .setTitle("Prepare Gen 6 -> Scarlet/Violet")
+            .setMessage("Loading documented species metadata and building a deterministic reviewed PK9 preview…")
+            .setCancelable(false).create()
+        loading.show()
+        reader.execute {
+            val prepared = runCatching {
+                val metadata = loadGen6SwordShieldMetadata(
+                    opened.second.species, opened.second.abilityNumber, opened.second.ability
+                )
+                require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                val current = selected.readBytes()
+                require(ScarletVioletPseBankRestoreEditing.sha256(current) == openedHash) {
+                    "The Gen 6 Bank entry changed during review."
+                }
+                metadata to Gen6ToScarletVioletPk9.review(
+                    current, opened.third, metadata
+                )
+            }
+            runOnUiThread {
+                if (loading.isShowing) loading.dismiss()
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                prepared.onSuccess { (metadata, converted) ->
+                    val p = ScarletVioletPseBankRestoreEditing
+                        .inspectBankRecord(converted.nativeRecord)
+                    val message = buildString {
+                        append(ScarletVioletSpeciesNames.name(p.species) + " (#" +
+                            p.species + ") • Level " + p.cachedLevel + "\n")
+                        append("Source: " + selected.name +
+                            " • preserved checksum-valid 232-byte PK6 record\n")
+                        append("Prepared destination: checksum-valid 344-byte native Scarlet/Violet PK9\n\n")
+                        append("Exact disclosed conversion effects\n• ")
+                        append(converted.effects.joinToString("\n• "))
+                        append("\n\nContinue only if you accept every disclosed Legalise effect.")
+                    }
+                    AlertDialog.Builder(this)
+                        .setTitle("Gen 6 -> Scarlet/Violet • PSE Legalise review")
+                        .setMessage(message).setNegativeButton("Cancel", null)
+                        .setPositiveButton("Legalise & choose destination") { _, _ ->
+                            try {
+                                require(session === bound) {
+                                    "The active save changed. Reopen PSE Bank."
+                                }
+                                val source = selectedSourceUri ?: error(
+                                    "Reopen the selected Scarlet/Violet save from PSE."
+                                )
+                                require(selected.parentFile == directory && selected.isFile &&
+                                    selected.extension.equals("pk6", true)) {
+                                    "The Gen 6 Bank entry changed."
+                                }
+                                val current = selected.readBytes()
+                                require(
+                                    ScarletVioletPseBankRestoreEditing.sha256(current) ==
+                                        openedHash
+                                ) {
+                                    "The Gen 6 Bank entry changed. Reopen PSE Bank."
+                                }
+                                Gen6ToScarletVioletPk9.review(
+                                    current, opened.third, metadata
+                                )
+                                startActivity(Intent(
+                                    this,
+                                    SwitchScarletVioletPseBankRestoreActivity::class.java
+                                )
+                                    .setData(source)
+                                    .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                                    .putExtra("pse.bank.entry", selected.name)
+                                    .putExtra("pse.bank.legalise", true)
+                                    .putExtra("pse.gen6.friendship", metadata.baseFriendship)
+                                    .putExtra("pse.gen6.gender_rate", metadata.genderRate)
+                                    .putExtra("pse.gen6.ability_id", metadata.abilityId)
+                                    .putExtra("pse.gen6.ability_number", metadata.abilityNumber)
+                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                            } catch (error: Exception) {
+                                AlertDialog.Builder(this)
+                                    .setTitle("Could not prepare Gen 6 conversion")
+                                    .setMessage(error.message ?: "Both sources remain unchanged.")
+                                    .setPositiveButton("Close", null).show()
+                            }
+                        }.show()
+                }.onFailure {
+                    AlertDialog.Builder(this).setTitle("Gen 6 -> Scarlet/Violet blocked")
+                        .setMessage((it.message ?: "No safe conversion is available.") +
+                            "\n\nThe PK6 Bank entry and Scarlet/Violet save remain unchanged.")
                         .setPositiveButton("Close", null).show()
                 }
             }

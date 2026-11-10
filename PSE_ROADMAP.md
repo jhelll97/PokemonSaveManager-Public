@@ -1244,3 +1244,16 @@ Next bounded route: continue the Generation 6 source's retained destination orde
 - This is a PSE conversion. It does not claim an official HOME transfer, in-game trade, encounter legality, moveset legality, or verified provenance.
 
 Next bounded route: Gen 6 PK6 -> Scarlet/Violet PK9.
+
+
+## Gen 6 -> Scarlet/Violet individual PSE Bank conversion
+
+The Scarlet/Violet Bank route now reads the exact selected checksum-valid 232-byte PK6 record and prepares a title-specific 344-byte native PK9 record. Route inventory alone is not treated as implemented conversion support.
+
+The bounded adapter accepts English, non-Egg, default-form Generation 6 records only when Scarlet/Violet has a verified destination profile, the held item is empty, the origin and ball are reviewed, and all current and relearn moves are usable in Scarlet/Violet. Documented metadata must exactly match the PK6 ability ID and slot and destination-valid gender mapping. Unsupported species, forms, text, moves, abilities, ratios, values, and records remain blocked before any save write.
+
+The explicit Legalise review discloses the PSE provenance boundary, Normal original Tera Type with no override, clear Hyper Training, cleared Generation 6 markings and ribbons, normalized text, rebuilt full HP and native cached stats, destination native defaults, and every named PK6 metadata byte range omitted by this conversion.
+
+The selected PK6 Bank entry and Scarlet/Violet source remain unchanged while the user reviews one chosen empty native box slot. The existing transaction retains the recovery copy, updates native integrity and the matched caught registration, persists and reopens the written save, verifies the native PK9, and restores both sides on failure. This PSE conversion does not claim an official HOME transfer, in-game trade, encounter legality, moveset legality, Tera legality, or verified provenance.
+
+Next bounded route: Gen 6 PK6 -> Legends: Z-A PA9.
