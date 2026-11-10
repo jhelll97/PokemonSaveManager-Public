@@ -34746,7 +34746,7 @@ class MainActivity : Activity() {
                 if(legalise!=null)append("Omitted because Gen 1 has no destination fields: ${gen2ToGen1LegaliseChanges(legalise)}.\n")
                 else append("No Gen 2 happiness, Pokérus or caught/met value requires omission.\n")
                 append("Eggs, post-Gen-1 species or moves, and Mail remain blocked. This is a reviewed backward PSE conversion and does not claim official trade or migration provenance.\n\n")
-                append("The source save stays unchanged. The exact Bank record remains until a Keep-pinned destination backup, native Gen 1 record, unchanged existing box records, Seen/Caught flags, checksums and reopened destination all verify. Failure restores the destination and Bank record independently.")
+                append("The source save stays unchanged. The exact Bank record remains until a Keep-pinned destination backup, native Gen 1 record, unchanged existing box records, Seen/Caught flags, checksums and reopened destination all verify. The Keep-pinned destination backup and independent exact Bank snapshot stay byte-bound before writing and through cleanup. If failure happens before PSE writes or deletes a side, PSE verifies that side stayed exact instead of claiming restoration; after a PSE mutation, it restores and reopens that side independently.")
             }
             AlertDialog.Builder(this).setTitle("PSE Convert ${source.nickname.ifBlank{"Pokémon #${source.species}"}} to Gen 1")
                 .setMessage(preview)
@@ -34813,8 +34813,9 @@ class MainActivity : Activity() {
                 val restored=bankFile.readBytes()
                 restored.contentEquals(expectedBank)&&parseGen2BankPayload(restored)?.let{sameGen2BankRecord(it,expected)}==true
             }.getOrDefault(false)
-            val destinationRestored=!writeStarted||runCatching{
-                file.writeBytes(fresh);val restored=file.readBytes()
+            val destinationRestored=runCatching{
+                if(writeStarted)file.writeBytes(fresh)
+                val restored=file.readBytes()
                 restored.contentEquals(fresh)&&verifyGen1SaveIntegrity(restored).first
             }.getOrDefault(false)
             if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
