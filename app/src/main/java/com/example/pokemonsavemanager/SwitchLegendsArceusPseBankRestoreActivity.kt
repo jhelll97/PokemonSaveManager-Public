@@ -57,7 +57,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pastures"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid native PA8 stored core to an empty pasture slot you choose in a new save copy. " +
-                "Native PA8 entries remain byte-exact. Eligible Gen 7 PK7 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Native PA8 entries remain byte-exact. Eligible Gen 7 PK7 and Sword/Shield PK8 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
                 "Unsupported species, forms, items, moves, limits, or text remain blocked; this PSE conversion does not certify encounter, ability, or moveset legality."
             textSize = 16f
         })
@@ -114,7 +114,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                         "${prepared.destinations.size} empty native destination slots available\n" +
                         "Source SHA-256: ${expectedHash}\nBank source SHA-256: ${prepared.sourceBankHash}\n" +
                         "Prepared PA8 SHA-256: ${prepared.nativeRecordHash}" +
-                        if (prepared.effects.isEmpty()) "" else "\n\nGen 7 -> Legends: Arceus Legalise effects\n• " +
+                        if (prepared.effects.isEmpty()) "" else "\n\nPSE conversion Legalise effects\n• " +
                             prepared.effects.joinToString("\n• ")
                 }.onFailure { status.text = it.message ?: "The PSE Bank restore could not be prepared safely." }
                 setBusy(false)
@@ -200,11 +200,12 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         val entry = File(directory, name).canonicalFile
         val native = entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)
         val gen7 = entry.extension.equals("pk7", true)
-        require(entry.parentFile == directory && entry.isFile && (native || gen7)) {
-            "This is not a current Legends: Arceus or Gen 7 PSE Bank entry."
+        val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
+        require(entry.parentFile == directory && entry.isFile && (native || gen7 || swordShield)) {
+            "This is not a current Legends: Arceus, Gen 7, or Sword/Shield PSE Bank entry."
         }
-        if (gen7) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
-            "Review and explicitly choose the disclosed Gen 7 Legalise conversion from PSE Bank."
+        if (gen7 || swordShield) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+            "Review and explicitly choose the disclosed PSE Legalise conversion from PSE Bank."
         }
         return entry
     }
@@ -226,6 +227,13 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
             return converted.nativeRecord to converted.effects
         }
         val hash = LegendsArceusPseBankRestoreEditing.sha256(source)
+        if (entry.extension.equals("pk8", true)) {
+            require(entry.name == "switch_swsh_${hash}.pk8") {
+                "The PSE Bank filename no longer matches its native PK8 bytes."
+            }
+            val converted = SwordShieldToLegendsArceusPa8.review(source)
+            return converted.nativeRecord to converted.effects
+        }
         require(entry.name == "switch_pla_${hash}.pa8") {
             "The PSE Bank filename no longer matches its native record bytes."
         }
@@ -248,10 +256,10 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 "Its exact 360-byte stored core is written; the unchanged complete entry remains in PSE Bank."
         }
         val effects = if (conversionEffects.isEmpty()) "" else
-            "\n\nExplicit Gen 7 Legalise effects\n• " + conversionEffects.joinToString("\n• ")
+            "\n\nExplicit PSE conversion Legalise effects\n• " + conversionEffects.joinToString("\n• ")
         AlertDialog.Builder(this).setTitle(
             if (conversionEffects.isEmpty()) "Restore this Bank Pokémon to a new copy?"
-            else "Legalise Gen 7 and restore to a new copy?"
+            else "Legalise the converted record and restore to a new copy?"
         )
             .setMessage(
                 "${LegendsArceusSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form} • EXP ${p.experience}\n" +
@@ -347,7 +355,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 status.text = result.fold(
                     onSuccess = {
                         (if (conversionEffects.isEmpty()) "PSE Bank restore saved and reopened successfully.\n"
-                        else "Gen 7 -> Legends: Arceus PSE conversion saved and reopened successfully.\n") +
+                        else "PSE conversion saved and reopened successfully.\n") +
                             "Pasture ${plan.pasture}, slot ${plan.position} • SHA-256: ${plan.editedSha256}\n" +
                             "Recovery backup: $backupName\nOriginal source and Bank entry unchanged."
                     },
