@@ -7153,93 +7153,137 @@ class SwitchReadOnlyActivity : Activity() {
     private fun showLegendsZaGen7BankEntry(bound: SwitchReadSession, file: File) {
         if (session !== bound) return
         val directory = File(filesDir, "pse_bank").canonicalFile
-        val entry = file.canonicalFile
-        val reviewed = runCatching {
-            require(entry.parentFile == directory && entry.isFile &&
+        val entry = runCatching { file.canonicalFile }.getOrNull()
+        val opened = runCatching {
+            require(entry != null && entry.parentFile == directory && entry.isFile &&
                 entry.extension.equals("pk7", true)) {
-                "This is not a current Generation 7 PSE Bank entry."
+                "This is not a current Gen 7 PSE Bank entry."
             }
-            val bank = entry.readBytes()
-            val destinationUri = selectedSourceUri
-                ?: error("Reopen the selected Legends: Z-A save from PSE.")
-            val destination = readSelectedSwitchSource(destinationUri)
-            require(LegendsZaPseBankRestoreEditing.sha256(destination) == bound.snapshot.sourceSha256) {
-                "The Legends: Z-A source changed. Reopen it from PSE."
+            val bytes = entry.readBytes()
+            val source = Gen7ToLegendsZaPa9.inspectSource(bytes)
+            val destination = bound.snapshot.bytesCopy()
+            val trainer = LegendsZaTrainerReadOnly.read(destination)
+            require(trainer.languageId == 2) {
+                "This bounded Gen 7 route currently requires an English Legends: Z-A destination trainer."
             }
-            val review = Gen7ToLegendsZaPa9.review(bank)
-            require(review.sourceSpecies in LegendsZaPokedexReadOnly.supportedSpecies(destination)) {
-                "Species #${review.sourceSpecies} is not present in this Legends: Z-A save's native Pokédex table."
+            require(source.species in LegendsZaPokedexReadOnly.supportedSpecies(destination)) {
+                "Species #${source.species} is not present in this Legends: Z-A save's native Pokédex table."
             }
-            review
-        }
-        val review = reviewed.getOrElse { error ->
-            AlertDialog.Builder(this).setTitle("Generation 7 → Legends: Z-A blocked")
-                .setMessage(
-                    (error.message ?: "This PK7 cannot be converted without unsupported loss.") +
-                        "\n\nThe source save and PSE Bank entry remain unchanged."
-                )
+            Triple(bytes, source, trainer)
+        }.getOrElse {
+            AlertDialog.Builder(this).setTitle("Gen 7 -> Legends: Z-A blocked")
+                .setMessage((it.message ?: "No safe conversion is available.") +
+                    "\n\nThe PK7 Bank entry and Legends: Z-A save remain unchanged.")
                 .setPositiveButton("Close", null).show()
             return
         }
-        val detail = buildString {
-            append(
-                review.sourceNickname.ifBlank { ScarletVioletSpeciesNames.name(review.sourceSpecies) } +
-                    " (#${review.sourceSpecies})\n\n"
-            )
-            append("Explicit PSE Legalise effects\n• ")
-            append(review.effects.joinToString("\n• "))
-            append(
-                "\n\nChoose Legalise only to create the disclosed PA9 and then choose one empty " +
-                    "native Legends: Z-A PC-box slot. The source save and PK7 Bank entry remain unchanged. " +
-                    "The destination is written to a new save copy, reopened, and verified; failure restores both sides " +
-                    "and retains the recovery backup. This conversion does not claim an official HOME transfer, trade, " +
-                    "encounter, ability, Mega, moveset, or provenance."
-            )
-        }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("PSE Bank • Generation 7 → Legends: Z-A")
-            .setMessage(detail)
-            .setNegativeButton("Close", null)
-            .setPositiveButton("Legalise & choose destination", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                try {
-                    require(session === bound) { "The active save changed. Reopen PSE Bank." }
-                    val destinationUri = selectedSourceUri
-                        ?: error("Reopen the selected Legends: Z-A save from PSE.")
-                    require(entry.parentFile == directory && entry.isFile &&
-                        entry.extension.equals("pk7", true)) {
-                        "This is not a current Generation 7 PSE Bank entry."
+        val selected = entry ?: return
+        val openedHash = LegendsZaPseBankRestoreEditing.sha256(opened.first)
+        val loading = AlertDialog.Builder(this)
+            .setTitle("Prepare Gen 7 -> Legends: Z-A")
+            .setMessage("Loading documented species metadata and building a reviewed PA9 preview from the exact selected PK7…")
+            .setCancelable(false).create()
+        loading.show()
+        reader.execute {
+            val prepared = runCatching {
+                val metadata = loadGen7SwordShieldMetadata(
+                    opened.second.species, opened.second.abilityNumber,
+                    opened.second.abilityId
+                )
+                require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                val current = selected.readBytes()
+                require(LegendsZaPseBankRestoreEditing.sha256(current) == openedHash) {
+                    "The Gen 7 Bank entry changed during review."
+                }
+                metadata to Gen7ToLegendsZaPa9.review(
+                    current, opened.third, metadata
+                )
+            }
+            runOnUiThread {
+                if (loading.isShowing) loading.dismiss()
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                prepared.onSuccess { (metadata, converted) ->
+                    val pokemon = LegendsZaPseBankRestoreEditing
+                        .inspectBankRecord(converted.nativeRecord)
+                    val message = buildString {
+                        append(ScarletVioletSpeciesNames.name(pokemon.species) + " (#" +
+                            pokemon.species + ") • Level " + pokemon.cachedLevel + "\n")
+                        append("Source: " + selected.name +
+                            " • preserved checksum-valid 232-byte PK7\n")
+                        append("Reviewed Bank SHA-256: " + openedHash + "\n")
+                        append("Prepared destination: checksum-valid 344-byte native Legends: Z-A PA9\n\n")
+                        append("Exact disclosed conversion effects\n• ")
+                        append(converted.effects.joinToString("\n• "))
+                        append("\n\nContinue only if you accept every disclosed Legalise effect.")
                     }
-                    val bank = entry.readBytes()
-                    val current = readSelectedSwitchSource(destinationUri)
-                    require(LegendsZaPseBankRestoreEditing.sha256(current) == bound.snapshot.sourceSha256) {
-                        "The Legends: Z-A source changed. Reopen it from PSE."
-                    }
-                    val currentReview = Gen7ToLegendsZaPa9.review(bank)
-                    require(currentReview.sourceSpecies in LegendsZaPokedexReadOnly.supportedSpecies(current)) {
-                        "Species #${currentReview.sourceSpecies} is not present in this Legends: Z-A save's native Pokédex table."
-                    }
-                    dialog.dismiss()
-                    startActivity(
-                        Intent(this, SwitchLegendsZaPseBankRestoreActivity::class.java)
-                            .setData(destinationUri)
-                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
-                            .putExtra("pse.bank.entry", entry.name)
-                            .putExtra("pse.bank.legalise", true)
-                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    )
-                } catch (error: Exception) {
-                    AlertDialog.Builder(this).setTitle("Could not prepare Legalise conversion")
-                        .setMessage(error.message ?: "The source and Bank entry were left unchanged.")
+                    AlertDialog.Builder(this)
+                        .setTitle("Gen 7 -> Legends: Z-A • PSE Legalise review")
+                        .setMessage(message).setNegativeButton("Cancel", null)
+                        .setPositiveButton("Legalise & choose destination") { _, _ ->
+                            try {
+                                require(session === bound) {
+                                    "The active save changed. Reopen PSE Bank."
+                                }
+                                val source = selectedSourceUri ?: error(
+                                    "Reopen the selected Legends: Z-A save from PSE."
+                                )
+                                require(selected.parentFile == directory && selected.isFile &&
+                                    selected.extension.equals("pk7", true)) {
+                                    "The Gen 7 Bank entry changed."
+                                }
+                                val current = selected.readBytes()
+                                require(
+                                    LegendsZaPseBankRestoreEditing.sha256(current) ==
+                                        openedHash
+                                ) {
+                                    "The Gen 7 Bank entry changed. Reopen PSE Bank."
+                                }
+                                val destination = readSelectedSwitchSource(source)
+                                require(
+                                    LegendsZaPseBankRestoreEditing.sha256(destination) ==
+                                        bound.snapshot.sourceSha256
+                                ) {
+                                    "The Legends: Z-A source changed. Reopen it from PSE."
+                                }
+                                require(
+                                    opened.second.species in
+                                        LegendsZaPokedexReadOnly.supportedSpecies(destination)
+                                ) {
+                                    "The selected species is not present in this Legends: Z-A save's native Pokédex table."
+                                }
+                                Gen7ToLegendsZaPa9.review(
+                                    current, LegendsZaTrainerReadOnly.read(destination), metadata
+                                )
+                                startActivity(Intent(
+                                    this,
+                                    SwitchLegendsZaPseBankRestoreActivity::class.java
+                                )
+                                    .setData(source)
+                                    .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                                    .putExtra("pse.bank.entry", selected.name)
+                                    .putExtra("pse.bank.sha256", openedHash)
+                                    .putExtra("pse.bank.legalise", true)
+                                    .putExtra("pse.gen7.friendship", metadata.baseFriendship)
+                                    .putExtra("pse.gen7.gender_rate", metadata.genderRate)
+                                    .putExtra("pse.gen7.ability_id", metadata.abilityId)
+                                    .putExtra("pse.gen7.ability_number", metadata.abilityNumber)
+                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                            } catch (error: Exception) {
+                                AlertDialog.Builder(this)
+                                    .setTitle("Could not prepare Gen 7 conversion")
+                                    .setMessage(error.message ?: "Both sources remain unchanged.")
+                                    .setPositiveButton("Close", null).show()
+                            }
+                        }.show()
+                }.onFailure {
+                    AlertDialog.Builder(this).setTitle("Gen 7 -> Legends: Z-A blocked")
+                        .setMessage((it.message ?: "No safe conversion is available.") +
+                            "\n\nThe PK7 Bank entry and Legends: Z-A save remain unchanged.")
                         .setPositiveButton("Close", null).show()
                 }
             }
         }
-        dialog.show()
     }
-
     private fun showLegendsZaScarletVioletBankEntry(bound: SwitchReadSession, file: File) {
         if (session !== bound) return
         val directory = File(filesDir, "pse_bank").canonicalFile

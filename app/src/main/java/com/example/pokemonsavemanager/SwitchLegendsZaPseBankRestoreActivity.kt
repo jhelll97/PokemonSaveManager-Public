@@ -46,6 +46,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         sourceUri = intent?.data
         expectedHash = intent?.getStringExtra("pse.switch.sha256")
         bankEntryName = intent?.getStringExtra("pse.bank.entry")
+        expectedBankSourceHash = intent?.getStringExtra("pse.bank.sha256")
         if (sourceUri == null || expectedHash.isNullOrBlank() || bankEntryName.isNullOrBlank()) {
             finish()
             return
@@ -251,7 +252,13 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
     }
 
     private fun readBankSource(): ByteArray {
-        val bytes = bankFile().readBytes()
+        val entry = bankFile()
+        if (entry.extension.equals("pk7", true)) {
+            require(!expectedBankSourceHash.isNullOrBlank()) {
+                "The reviewed Gen 7 Bank hash is missing. Reopen PSE Bank."
+            }
+        }
+        val bytes = entry.readBytes()
         expectedBankSourceHash?.let {
             require(LegendsZaPseBankRestoreEditing.sha256(bytes) == it) {
                 "The preserved PSE Bank source changed. Reopen PSE Bank."
@@ -338,7 +345,15 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
             return converted.nativeRecord to converted.effects
         }
         if (entry.extension.equals("pk7", true)) {
-            val converted = Gen7ToLegendsZaPa9.review(source)
+            val metadata = Gen1ToSwordShieldMetadata(
+                intent.getIntExtra("pse.gen7.friendship", -1),
+                intent.getIntExtra("pse.gen7.gender_rate", -2),
+                intent.getIntExtra("pse.gen7.ability_id", 0),
+                intent.getIntExtra("pse.gen7.ability_number", 0)
+            )
+            val converted = Gen7ToLegendsZaPa9.review(
+                source, LegendsZaTrainerReadOnly.read(destination), metadata
+            )
             return converted.nativeRecord to converted.effects
         }
         val hash = LegendsZaPseBankRestoreEditing.sha256(source)
