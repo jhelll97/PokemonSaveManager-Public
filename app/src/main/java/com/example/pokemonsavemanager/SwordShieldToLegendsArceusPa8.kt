@@ -89,6 +89,12 @@ object SwordShieldToLegendsArceusPa8 {
             return floor(((step.toFloat()+level)/2.5f+0.5f).toDouble()).toInt()
         }
         val hp=ganbaru(0)+((((level/100.0f)+1.0f)*base[0])+level).toInt()
+        fun adjusted(i:Int,v:Int):Int{val up=statNature/5;val down=statNature%5;return if(up==down)v else when(i){up->v*110/100;down->v*90/100;else->v}}
+        fun regular(i:Int,natureIndex:Int):Int{
+            val initial=((((level/50.0f)+1.0f)*base[i])/1.5f).toInt()
+            return ganbaru(i)+adjusted(natureIndex,initial)
+        }
+        val stats=listOf(regular(1,0),regular(2,1),regular(3,4),regular(4,2),regular(5,3))
 
         val o=ByteArray(PA8_SIZE)
         w32(o,0,source.encryptionConstant);w16(o,8,species);copy(s,0x0C,o,0x0C,8);w16(o,0x14,ability)
@@ -107,25 +113,71 @@ object SwordShieldToLegendsArceusPa8 {
         val native=encrypt(o)
         val p=(LegendsArceusPokemonReadOnly.read(native) as? LegendsArceusSlotRead.Pokemon)?.value
             ?:error("The converted PA8 did not reopen with a valid native checksum.")
+        val reopenedPlain=plainPa8(native)
         require(p.species==species&&p.form==form&&p.gender==sourceGender&&
-            p.fatefulEncounter==source.fatefulEncounter&&p.pid==source.pid&&p.experience==exp&&
-            p.nature==nature&&p.statNature==statNature&&!p.isAlpha&&!p.isNoble&&
-            p.currentHp==hp&&p.ball==27&&p.ganbaruValues.all{it==0}&&
-            p.moves.map{it.id}==moves.toList()&&p.relearnMoves==source.relearnMoves) {
-            "The converted PA8 did not reopen with the reviewed identity, moves, HP, Strange Ball, and title-specific defaults."
+            p.fatefulEncounter==source.fatefulEncounter&&p.pid==source.pid&&
+            p.encryptionConstant==source.encryptionConstant&&p.tid==source.tid&&p.sid==source.sid&&
+            p.shiny==source.shiny&&p.experience==exp&&p.nature==nature&&p.statNature==statNature&&
+            !p.isEgg&&!p.isAlpha&&!p.isNoble&&p.currentHp==hp&&p.ball==27&&
+            p.originalTrainerFriendship==byte(s,0x112)&&
+            p.handlingTrainerFriendship==byte(s,0xC8)&&p.currentHandler==currentHandler&&
+            p.hyperTrainingFlags==hyper&&p.nickname==nickname&&p.originalTrainer==ot&&
+            p.moves.map{it.id to it.pp}==source.moves.map{it.id to it.pp}&&
+            p.ivs==source.ivs&&p.ganbaruValues.all{it==0}&&
+            p.relearnMoves==source.relearnMoves&&u16(reopenedPlain,0x14)==ability&&
+            byte(reopenedPlain,0x16)==abilitySlot&&
+            u16(reopenedPlain,0x18)==(markings and 0x0FFF)&&
+            byte(reopenedPlain,0x22)==((sourceFlags and 1) or (sourceGender shl 2))&&
+            reopenedPlain.copyOfRange(0x26,0x33).contentEquals(s.copyOfRange(0x26,0x33))&&
+            text(reopenedPlain,0xB8,"reopened Handling Trainer name")==ht&&
+            byte(reopenedPlain,0xD2)==byte(s,0xC2)&&
+            byte(reopenedPlain,0xD3)==byte(s,0xC3)&&
+            byte(reopenedPlain,0xD4)==currentHandler&&byte(reopenedPlain,0xD8)==byte(s,0xC8)&&
+            byte(reopenedPlain,0xEE)==origin&&byte(reopenedPlain,0xF2)==language&&
+            byte(reopenedPlain,0xF8)==0xFF&&byte(reopenedPlain,0x12A)==byte(s,0x112)&&
+            reopenedPlain.copyOfRange(0x131,0x137).contentEquals(s.copyOfRange(0x119,0x11F))&&
+            reopenedPlain.copyOfRange(0x138,0x13C).contentEquals(s.copyOfRange(0x120,0x124))&&
+            byte(reopenedPlain,0x13D)==byte(s,0x125)&&byte(reopenedPlain,0x13E)==hyper&&
+            byte(reopenedPlain,0x17)==0&&u16(reopenedPlain,0x1A)==0&&
+            byte(reopenedPlain,0x23)==0&&byte(reopenedPlain,0x25)==0&&byte(reopenedPlain,0x33)==0&&
+            reopenedPlain.copyOfRange(0x34,0x54).all{it==0.toByte()}&&
+            reopenedPlain.copyOfRange(0x7A,0x8A).all{it==0.toByte()}&&
+            reopenedPlain.copyOfRange(0x98,0xB8).all{it==0.toByte()}&&
+            reopenedPlain.copyOfRange(0xD5,0xD8).all{it==0.toByte()}&&
+            reopenedPlain.copyOfRange(0xD9,0xEE).all{it==0.toByte()}&&
+            reopenedPlain.copyOfRange(0xEF,0xF2).all{it==0.toByte()}&&
+            reopenedPlain.copyOfRange(0xF3,0xF8).all{it==0.toByte()}&&
+            reopenedPlain.copyOfRange(0xF9,0x110).all{it==0.toByte()}&&
+            reopenedPlain.copyOfRange(0x12B,0x131).all{it==0.toByte()}&&
+            reopenedPlain.copyOfRange(0x13C,0x13D).all{it==0.toByte()}&&
+            reopenedPlain.copyOfRange(0x13F,0x168).all{it==0.toByte()}) {
+            "The converted PA8 did not reopen with every reviewed identity, trainer, move, stat, and Legends: Arceus default field."
         }
         LegendsArceusPseBankRestoreEditing.inspectBankRecord(native)
         val party=LegendsArceusPokemonLevelEditing.partyRecordFromStored(native)
         val reopenedParty=(LegendsArceusPokemonReadOnly.read(party) as? LegendsArceusSlotRead.Pokemon)?.value
             ?:error("The converted PA8 did not reopen with a verified native party cache.")
-        require(reopenedParty.cachedLevel==level&&reopenedParty.maximumHp==hp&&reopenedParty.currentHp==hp) {
-            "The converted PA8 did not reopen with the reviewed level and full native HP."
+        require(reopenedParty.copy(cachedLevel=null,maximumHp=null,cachedStats=null)==p&&
+            reopenedParty.cachedLevel==level&&reopenedParty.maximumHp==hp&&
+            reopenedParty.currentHp==hp&&reopenedParty.cachedStats==stats) {
+            "The converted PA8 did not reopen with the exact reviewed stored core, level, full HP, and five native cached stats."
         }
 
         val ribbonBytes=s.copyOfRange(0x34,0x48)
         val heightScalar=byte(s,0x48);val weightScalar=byte(s,0x49);val sourceScale=byte(s,0x4A)
         val tracker=s.copyOfRange(0xE9,0xF1)
         val technicalRecords=s.copyOfRange(0x127,0x148)
+        val omittedMetadata=listOf(
+            "0x17="+hex(s,0x17,0x18), "0x1A-0x1B="+hex(s,0x1A,0x1C),
+            "0x23="+hex(s,0x23,0x24), "0x25="+hex(s,0x25,0x26),
+            "0x33="+hex(s,0x33,0x34), "0x4B-0x57="+hex(s,0x4B,0x58),
+            "0x7E-0x81="+hex(s,0x7E,0x82), "0x8A-0x8B="+hex(s,0x8A,0x8C),
+            "0x91-0xA7="+hex(s,0x91,0xA8), "0xC5-0xC7="+hex(s,0xC5,0xC8),
+            "0xC9-0xDD="+hex(s,0xC9,0xDE), "0xDF-0xE1="+hex(s,0xDF,0xE2),
+            "0xE3-0xE8="+hex(s,0xE3,0xE9), "0xE9-0xF7="+hex(s,0xE9,0xF8),
+            "0x113-0x118="+hex(s,0x113,0x119), "0x11F="+hex(s,0x11F,0x120),
+            "0x127-0x147="+hex(s,0x127,0x148), "0x148-0x157="+hex(s,0x148,0x158)
+        ).joinToString(", ")
         val effects=listOf(
             "Explicit Legalise: PSE Sword/Shield PK8 -> Legends: Arceus PA8 conversion; this cross-title route is not an official HOME transfer, in-game trade, or verified provenance.",
             "Species #$species and exact default form 0 map to the reviewed Legends: Arceus Pokédex and one verified personal profile. PID, EC, TID/SID, EXP, IVs, raw EV bytes, nature, stat nature, gender, shiny state, friendship, Pokerus, contest values, origin, dates, locations, fateful flag, Hyper Training, moves, current PP and relearn moves are retained.",
@@ -142,6 +194,7 @@ object SwordShieldToLegendsArceusPa8 {
             if(technicalRecords.all{it==0.toByte()})"No Sword/Shield Technical Record flags require omission." else "${technicalRecords.count{it!=0.toByte()}} nonzero Sword/Shield Technical Record bytes are cleared; Legends: Arceus move availability is validated directly.",
             if(tracker.all{it==0.toByte()})"No source HOME tracker bytes require omission." else "Source HOME tracker bytes ${tracker.joinToString(" "){"%02X".format(it)}} are cleared; PSE does not invent or claim an official HOME identity.",
             "Trainer memories, sociability, fullness/enjoyment, battle state/version, form argument, affixed ribbon and other unmapped PK8 or PA8-only metadata reset to disclosed defaults.",
+            "Unmapped PK8 metadata bytes are omitted only by this explicit Legalise choice: $omittedMetadata.",
             "The PK8 Bank entry and Legends: Arceus source remain unchanged. One user-chosen empty native PA8 pasture slot in a new copy is written with retained recovery, SHA-256 footer update, persisted reopen verification, and two-sided rollback."
         )
         return SwordShieldToLegendsArceusReview(native,species,nickname,effects)
@@ -156,6 +209,15 @@ object SwordShieldToLegendsArceusPa8 {
         require(u16(record,4)==0&&(sum and 0xFFFF)==u16(record,6)){"The PK8 checksum failed."}
         return plain
     }
+    private fun plainPa8(record:ByteArray):ByteArray{
+        require(record.size==PA8_SIZE){"A complete 360-byte native stored PA8 record is required."}
+        val ec=u32(record,0);val decoded=record.copyOf();xor(decoded,8,PA8_SIZE,ec)
+        val order=orders[((ec ushr 13).toInt() and 31)%24];val plain=decoded.copyOf()
+        for(block in 0..3){val from=8+(order[block]-'0')*0x58;decoded.copyInto(plain,8+block*0x58,from,from+0x58)}
+        var sum=0;for(offset in 8 until PA8_SIZE step 2)sum+=u16(plain,offset)
+        require(u16(record,4)==0&&(sum and 0xFFFF)==u16(record,6)){"The PA8 checksum failed."}
+        return plain
+    }
     private fun text(b:ByteArray,o:Int,label:String):String{var end=o;while(end<o+26&&u16(b,end)!=0)end+=2
         val v=String(b,o,end-o,StandardCharsets.UTF_16LE)
         require(v.length<=12&&v.all{it.code !in 0xD800..0xDFFF&&it.code>=0x20&&it.code !in 0xE000..0xF8FF}){"The $label contains an unmapped glyph."};return v}
@@ -168,6 +230,7 @@ object SwordShieldToLegendsArceusPa8 {
         xor(s,8,PA8_SIZE,ec);return s}
     private fun xor(b:ByteArray,from:Int,end:Int,seed:Long){var state=seed;for(i in from until end step 2){state=(state*0x41C64E6DL+0x6073L) and 0xFFFFFFFFL;w16(b,i,u16(b,i) xor (state ushr 16).toInt())}}
     private fun copy(a:ByteArray,ao:Int,b:ByteArray,bo:Int,n:Int)=a.copyInto(b,bo,ao,ao+n)
+    private fun hex(b:ByteArray,from:Int,end:Int)=b.copyOfRange(from,end).joinToString(""){"%02X".format(it)}
     private fun byte(b:ByteArray,o:Int)=b[o].toInt() and 255
     private fun u16(b:ByteArray,o:Int)=byte(b,o) or (byte(b,o+1) shl 8)
     private fun u32(b:ByteArray,o:Int)=u16(b,o).toLong() or (u16(b,o+2).toLong() shl 16)

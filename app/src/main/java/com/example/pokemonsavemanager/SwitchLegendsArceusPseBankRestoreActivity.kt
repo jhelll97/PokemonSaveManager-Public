@@ -235,9 +235,11 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
 
     private fun readBankSource(): ByteArray {
         val entry = bankFile()
-        if (entry.extension.equals("pk7", true)) {
+        val swordShield = entry.name.startsWith("switch_swsh_") &&
+            entry.extension.equals("pk8", true)
+        if (entry.extension.equals("pk7", true) || swordShield) {
             require(!expectedBankSourceHash.isNullOrBlank()) {
-                "The reviewed Gen 7 Bank hash is missing. Reopen PSE Bank."
+                "The reviewed PSE Bank hash is missing. Reopen PSE Bank."
             }
         }
         val bytes = entry.readBytes()
