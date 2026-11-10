@@ -1290,3 +1290,14 @@ The route now validates the selected BDSP trainer language and requires document
 The chosen empty native PB8 slot, title-native caught registration, whole-file MD5, verified recovery backup, persisted reopen verification, preserved source save and Bank entry, and failed-copy cleanup remain in one transaction. The conversion does not claim an official HOME transfer, in-game trade, encounter legality, moveset legality, or verified provenance.
 
 Next bounded route: Gen 7 PK7 -> Legends: Arceus PA8 recovery and integrity hardening.
+
+
+## Gen 7 -> Legends: Arceus recovery and mapping hardening
+
+The Gen 7 PK7 -> Legends: Arceus PA8 Bank review now binds the exact selected checksum-valid 232-byte PK7 by SHA-256 before metadata lookup, after the asynchronous lookup, when the user accepts Legalise, and again on first entry to the restore activity. A replacement or modified Bank record cannot inherit an earlier conversion review. The restore regenerates the title-native PA8 from the preserved PK7 and rechecks the destination save and Bank bytes before and after the reviewed new-copy write.
+
+The route now validates the selected Legends: Arceus trainer language and requires documented species metadata to match the PK7 ability ID, ability slot, and destination-valid gender ratio before conversion. Invalid gender values, current-handler state, PP-Up values, and mismatched destination mappings remain blocked. The generated PA8 must reopen with the reviewed form, gender, fateful flag, identity, level, full HP, Strange Ball mapping, and zero Ganbaru defaults. The Legalise review names the reviewed Bank hash and discloses the exact remaining PK7 metadata byte ranges and values omitted from PA8, in addition to the existing field, ribbon, memory, text, default, provenance, and rebuilt-stat effects.
+
+The chosen empty native PA8 pasture slot, title-native Hisui obtained registration, container integrity updates, verified recovery backup, persisted reopen verification, preserved source save and Bank entry, and failed-copy cleanup remain in one transaction. The conversion does not claim an official HOME transfer, in-game trade, encounter legality, ability legality, moveset legality, or verified provenance.
+
+Next bounded route: Gen 7 PK7 -> Scarlet/Violet PK9 recovery and integrity hardening.

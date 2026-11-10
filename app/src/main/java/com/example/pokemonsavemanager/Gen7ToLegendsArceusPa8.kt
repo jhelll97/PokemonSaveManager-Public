@@ -11,6 +11,14 @@ data class Gen7ToLegendsArceusReview(
     val effects: List<String>
 )
 
+data class Gen7LegendsArceusPk7Source(
+    val decryptedBytes: ByteArray,
+    val species: Int,
+    val gender: Int,
+    val abilityId: Int,
+    val abilityNumber: Int
+)
+
 object Gen7ToLegendsArceusPa8 {
     private const val PK7_SIZE = 0xE8
     private const val PA8_SIZE = 0x168
@@ -21,10 +29,32 @@ object Gen7ToLegendsArceusPa8 {
         30,31,32,33,35,36,37,38,39,40,41)
     private val unavailableDefaultForms = setOf(58,59,100,101,157,211,503,549,550,570,571,628,705,706,713,724)
 
-    fun review(record: ByteArray): Gen7ToLegendsArceusReview {
+    fun inspectSource(record: ByteArray): Gen7LegendsArceusPk7Source {
         val s = plainPk7(record)
-        val species=u16(s,8); val held=u16(s,0x0A); val ability=byte(s,0x14)
-        val abilitySlot=byte(s,0x15) and 7; val markings=u16(s,0x16); val pid=u32(s,0x18)
+        val flags = byte(s,0x1D)
+        return Gen7LegendsArceusPk7Source(
+            s, u16(s,8), (flags ushr 1) and 3, byte(s,0x14), byte(s,0x15) and 7
+        )
+    }
+
+    fun review(record: ByteArray): Gen7ToLegendsArceusReview =
+        reviewInternal(record, null, null)
+
+    fun review(
+        record: ByteArray,
+        destinationTrainer: LegendsArceusTrainerRead,
+        metadata: Gen1ToSwordShieldMetadata
+    ): Gen7ToLegendsArceusReview = reviewInternal(record, destinationTrainer, metadata)
+
+    private fun reviewInternal(
+        record: ByteArray,
+        destinationTrainer: LegendsArceusTrainerRead?,
+        metadata: Gen1ToSwordShieldMetadata?
+    ): Gen7ToLegendsArceusReview {
+        val source = inspectSource(record)
+        val s = source.decryptedBytes
+        val species=source.species; val held=u16(s,0x0A); val ability=source.abilityId
+        val abilitySlot=source.abilityNumber; val markings=u16(s,0x16); val pid=u32(s,0x18)
         val nature=byte(s,0x1C); val sourceFlags=byte(s,0x1D); val form=sourceFlags ushr 3
         val exp=u32(s,0x10); val iv32=u32(s,0x74); val egg=iv32 and 0x40000000L != 0L
         val nicknamed=iv32 and 0x80000000L != 0L; val hyper=byte(s,0xDE)
@@ -50,14 +80,24 @@ object Gen7ToLegendsArceusPa8 {
         require(date(byte(s,0xD4),byte(s,0xD5),byte(s,0xD6))){"The source met date is invalid."}
         require(hyper and 0xC0 == 0){"The source Hyper Training field contains unsupported bits."}
         require(currentHandler in 0..1){"The source current-handler field is outside the reviewed PA8 range."}
-        val sourceGender=(sourceFlags ushr 1) and 3
+        val sourceGender=source.gender
         require(sourceGender in 0..2){"The source gender field is outside the reviewed PA8 range."}
+        if (destinationTrainer != null || metadata != null) {
+            require(destinationTrainer != null && metadata != null) {
+                "Destination trainer and documented species metadata must be reviewed together."
+            }
+            require(destinationTrainer.languageId==2){"This bounded route currently requires an English Legends: Arceus destination trainer."}
+            require(metadata.baseFriendship in 0..255 && metadata.genderRate in -1..8){"The documented species friendship or gender mapping is invalid."}
+            require(metadata.abilityId==ability && metadata.abilityNumber==abilitySlot){"The documented Legends: Arceus ability does not exactly match PK7 ability #$ability in slot $abilitySlot."}
+            require(destinationGender(sourceGender,metadata.genderRate)){"The PK7 gender does not match the documented Legends: Arceus species ratio."}
+        }
         val ev=IntArray(6){byte(s,0x1E+it)}
         require(ev.all{it in 0..252} && ev.sum()<=510){"The source EVs exceed the stored PA8 limits."}
         val iv=IntArray(6){((iv32 ushr (it*5)) and 31).toInt()}
         val moves=IntArray(4){u16(s,0x5A+it*2)}
         val pp=IntArray(4){byte(s,0x62+it)}
         val ups=IntArray(4){byte(s,0x66+it)}
+        require(ups.all{it in 0..3}){"A PK7 move slot contains unsupported PP-Up bits."}
         for(i in 0..3){
             val move=moves[i]
             if(move==0) require(pp[i]==0 && ups[i]==0){"Empty move slot ${i+1} contains PP or PP-Up data."}
@@ -126,12 +166,21 @@ object Gen7ToLegendsArceusPa8 {
         val ribbons=s.copyOfRange(0x30,0x3A)
         val memories=intArrayOf(byte(s,0xA3),byte(s,0xA4),byte(s,0xA5),u16(s,0xA8),
             byte(s,0xCB),byte(s,0xCC),byte(s,0xCD),u16(s,0xCE),byte(s,0xD0))
+        val omittedMetadata=listOf(
+            "0x2A="+hex(s,0x2A,0x2B), "0x2C-0x2F="+hex(s,0x2C,0x30),
+            "0x3A-0x3F="+hex(s,0x3A,0x40), "0x58-0x59="+hex(s,0x58,0x5A),
+            "0x72-0x73="+hex(s,0x72,0x74), "0x90-0x91="+hex(s,0x90,0x92),
+            "0x94-0xA1="+hex(s,0x94,0xA2), "0xA3-0xAD="+hex(s,0xA3,0xAE),
+            "0xC8-0xC9="+hex(s,0xC8,0xCA), "0xCB-0xD0="+hex(s,0xCB,0xD1),
+            "0xD7="+hex(s,0xD7,0xD8), "0xE0-0xE2="+hex(s,0xE0,0xE3),
+            "0xE4-0xE7="+hex(s,0xE4,0xE8)
+        ).joinToString(", ")
         val effects=listOf(
             "Explicit Legalise: PSE PK7 -> PA8 conversion; not an official HOME transfer, in-game trade, or verified provenance.",
             "Species, reviewed default form, PID, EC, TID/SID, EXP, IVs, raw EV bytes, nature, gender, shiny state, friendship, Pokerus, contest values, origin, dates, locations, fateful flag, Hyper Training, moves, current PP and relearn moves are retained.",
             if(nicknamed)"Nickname retained as English UTF-16 text: $nickname." else "Non-nicknamed text resets to the English Legends: Arceus species name: $nickname.",
             "OT text, HT text and current-handler state are retained; Gen 7 text trash bytes are normalized.",
-            "Held item remains empty. Ability ID $ability and slot $abilitySlot are retained as PA8 storage data; encounter, ability and moveset legality are not certified.",
+            if(metadata==null)"Held item remains empty. Ability ID $ability and slot $abilitySlot are retained as PA8 storage data; encounter, ability and moveset legality are not certified." else "Held item remains empty. Documented Legends: Arceus ability ID $ability and slot $abilitySlot are retained as PA8 storage data; the source gender matches the documented destination ratio; encounter, ability and moveset legality are not certified.",
             "Source Ball #$sourceBall becomes Strange Ball #27, the native Legends: Arceus representation for a Pokémon originating outside Hisui.",
             if(ups.all{it==0})"No PP Ups require removal; PA8 PP-Up bytes remain zero." else "PP Ups ${ups.joinToString("/")} are cleared because Legends: Arceus uses fixed move PP; current PP was verified against each native base limit.",
             "Ganbaru Values reset to 0. Native stats use retained IVs, Hyper Training, level, nature and PLA's IV bias; raw EV bytes remain stored but do not drive PLA battle stats. Current HP is rebuilt full at $hp.",
@@ -139,6 +188,7 @@ object Gen7ToLegendsArceusPa8 {
             if(markings and 0xF000==0)"All 12 supported marking bits are retained." else "High marking bits 0x${(markings and 0xF000).toString(16).uppercase()} are cleared; low 12 bits are retained.",
             if(ribbons.all{it==0.toByte()})"No Gen 7 ribbon bits require omission." else "Ribbon/memory-ribbon bytes ${ribbons.joinToString(" "){"%02X".format(it)}} are cleared; this bounded adapter has no reviewed PA8 ribbon mapping.",
             "Resort, Super Training, distributed training, affection, geography, country/region/console metadata, sociability and trainer memories are cleared. Source memory/affection values: ${memories.joinToString("/")}.",
+            "Unmapped PK7 metadata bytes are omitted only by this explicit Legalise choice: $omittedMetadata.",
             "The PK7 Bank entry and Legends: Arceus source remain unchanged. One user-chosen empty native PA8 pasture slot in a new copy is written with retained recovery, persisted reopen verification, and two-sided rollback."
         )
         return Gen7ToLegendsArceusReview(native,species,sourceNick,effects)
@@ -158,6 +208,8 @@ object Gen7ToLegendsArceusPa8 {
         val v=String(b,o,end-o,StandardCharsets.UTF_16LE)
         require(v.length<=12&&v.all{it.code !in 0xD800..0xDFFF&&it.code>=0x20&&it.code !in 0xE000..0xF8FF}){"The $label contains an unmapped glyph."};return v}
     private fun putText(b:ByteArray,o:Int,v:String){val x=v.toByteArray(StandardCharsets.UTF_16LE);require(x.size<=24){"Converted text exceeds 12 characters."};x.copyInto(b,o)}
+    private fun hex(b:ByteArray,from:Int,end:Int)=b.copyOfRange(from,end).joinToString(""){"%02X".format(it)}
+    private fun destinationGender(gender:Int,rate:Int)=when{rate<0->gender==2;rate==0->gender==0;rate>=8->gender==1;else->gender in 0..1}
     private fun date(y:Int,m:Int,d:Int)=if(y==0&&m==0&&d==0)true else y in 0..99&&m in 1..12&&d in 1..31&&runCatching{java.time.LocalDate.of(2000+y,m,d)}.isSuccess
     private fun minExp(l:Int,g:Int):Long{if(l<=1)return 0;val n=l.toLong();val c=n*n*n;return when(g){0->c;1->when{l<=50->c*(100-n)/50;l<=68->c*(150-n)/100;l<=98->{val r=n%3;c*(1274+r*r-9*r-20*(n/3))/1000};else->c*(160-n)/100};2->when{l<=15->c*(24+(n+1)/3)/50;l<=35->c*(14+n)/50;else->c*(32+n/2)/50};3->maxOf(0L,6*c/5-15*n*n+100*n-140);4->4*c/5;5->5*c/4;else->error("Unsupported growth group.")}}
     private fun level(e:Long,g:Int):Int{var l=1;for(i in 2..100){if(e<minExp(i,g))break;l=i};return l}
