@@ -1425,4 +1425,12 @@ The review preserves identity, trainer, EXP, IV, nature, gender, shiny, friendsh
 
 The existing Legends: Z-A native restore transaction writes the generated checksum-valid 344-byte PA9 only to one chosen empty native PC-box slot in a reviewed new save copy. It updates title-native caught registration and native container integrity, retains and verifies a recovery backup, reopens and verifies the persisted destination, preserves the original Legends: Z-A save and PB7 Bank entry, and removes a failed copy when possible while retaining recovery. A failed copy that cannot be verified empty is reported as unsafe, preserving two-sided rollback.
 
-Next bounded route: Let's Go PB7 -> Generation 7 PK7 individual-Pokémon Bank conversion.
+## Let's Go -> core Generation 7 individual-Pokémon Bank conversion
+
+The Generation 7 Bank screen now lists content-addressed `switch_lgpe_*.pb7` records after native PK7 entries and opens each PB7 as a separate one-Pokémon Legalise route into a loaded Sun, Moon, Ultra Sun or Ultra Moon save. The review binds the exact PB7 SHA-256, blocks Eggs, partner forms, Meltan and Melmetal, non-default forms, held items, Let's Go-exclusive moves, invalid ability, marking, text, origin, Ball, date, handler, Hyper Training, PP or PP-Up fields, nonzero hidden EV bytes, and any nonzero PB7 byte that would be reinterpreted as Resort state.
+
+The adapter preserves every reviewed 232-byte core field except the checksum and PB7 Awakening Values. It discloses and clears all six exact Awakening Values because PK7 uses those bytes as contest values, verifies PB7 hidden EV bytes are zero so native PK7 EVs stay zero, and discloses omission of the exact 28-byte PB7 party cache, cached level, HP, battle stats and combat power. The conversion makes no official trade, Pokémon Bank, encounter-legality or provenance claim.
+
+After explicit Legalise acceptance, the user chooses one empty native Generation 7 PC slot. PSE regenerates and reopens the exact encrypted PK7, writes only that selected slot plus required Pokédex flags, block CRCs and save signature, retains a Keep-pinned exact destination backup and an independent PB7 recovery snapshot, reopens and verifies the persisted destination, and preserves the content-addressed PB7 Bank entry and original Let's Go save. On failure, PSE restores and verifies both the Gen 7 destination and PB7 side independently.
+
+Next bounded route: inspect Let's Go PB7 -> Generation 6 PK6 as a backward PSE conversion, with an explicit origin and provenance Legalise choice wherever core Generation 6 cannot represent a retained Let's Go field.

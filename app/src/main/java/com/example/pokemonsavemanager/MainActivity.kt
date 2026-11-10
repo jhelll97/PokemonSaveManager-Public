@@ -13076,6 +13076,300 @@ class MainActivity : Activity() {
         showBank()
     }
 
+
+    private fun letsGoGen7BankGridCell(slot:Int,pair:Pair<File,LetsGoPokemonRead>?):LinearLayout{
+        val cellWidth=((resources.displayMetrics.widthPixels-dp(44))/6).coerceAtLeast(dp(50))
+        return LinearLayout(this).apply{
+            orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER;setPadding(dp(2),dp(4),dp(2),dp(4))
+            setBackgroundColor(if(pair==null)Color.rgb(27,27,27) else CARD)
+            layoutParams=GridLayout.LayoutParams().apply{width=cellWidth;height=dp(82);setMargins(dp(1),dp(1),dp(1),dp(1))}
+            if(pair!=null){
+                val(file,p)=pair;isClickable=true;isFocusable=true
+                setOnClickListener{
+                    if(bankMultiSelectMode)showDialog("Let's Go PB7","This Legalise route is reviewed one Pokémon at a time. Cancel multi-select, then open this PB7 record.")
+                    else showLetsGoGen7BankEntry(file,p)
+                }
+                val sprite=ImageView(this@MainActivity).apply{scaleType=ImageView.ScaleType.FIT_CENTER;contentDescription=p.nickname}
+                addView(sprite,LinearLayout.LayoutParams(dp(52),dp(52)));loadPokemonSprite(sprite,p.species,p.shiny)
+            }else addView(TextView(this@MainActivity).apply{text="○";textSize=24f;gravity=Gravity.CENTER;setTextColor(Color.rgb(80,80,80))},LinearLayout.LayoutParams(dp(52),dp(52)))
+            addView(TextView(this@MainActivity).apply{text=(slot+1).toString();textSize=10f;gravity=Gravity.CENTER;setTextColor(if(pair==null)Color.rgb(100,100,100)else MUTED)})
+        }
+    }
+
+    private data class LetsGoGen7Prepared(
+        val bankFile:File,val bankBytes:ByteArray,val source:LetsGoPokemonRead,
+        val destination:ByteArray,val pk7:ByteArray,val converted:PokemonEntry,
+        val destinationFile:File,val sourceUri:Uri?,val sourceLabel:String?,
+        val effects:List<String>,var submitted:Boolean=false
+    )
+
+    private fun showLetsGoGen7BankEntry(bankFile:File,p:LetsGoPokemonRead){
+        val currentGen=importedFile?.let{generationForSize(it.length().toInt())}?:0
+        val message=if(currentGen==7)
+            "Native 260-byte Let's Go PB7 preserved. Review an explicit Legalise conversion into one empty native PK7 slot in the loaded Sun, Moon, Ultra Sun or Ultra Moon save. The PB7 Bank entry and original Let's Go save remain unchanged."
+        else
+            "Native 260-byte Let's Go PB7 preserved. Load a valid Sun, Moon, Ultra Sun or Ultra Moon destination to review this individual-Pokémon conversion."
+        val b=AlertDialog.Builder(this)
+            .setTitle("${p.nickname.ifBlank{"Pokémon #${p.species}"}} • Let's Go PB7")
+            .setMessage(message).setNegativeButton("Close",null)
+        if(currentGen==7)b.setPositiveButton("Review PB7 → PK7 Legalise"){_,_->
+            prepareLetsGoToGen7Transfer(bankFile,p)
+        }
+        b.show()
+    }
+
+    private fun letsGoGen7SourceMatches(a:LetsGoPokemonRead,b:LetsGoPokemonRead):Boolean=
+        a.species==b.species&&a.form==b.form&&a.tid==b.tid&&a.sid==b.sid&&
+            a.pid==b.pid&&a.encryptionConstant==b.encryptionConstant&&a.nickname==b.nickname
+
+    private fun letsGoGen7SnapshotsMatch(p:LetsGoGen7Prepared,requireOpen:Boolean=true):Boolean=
+        (!requireOpen||!p.submitted)&&importedFile?.absolutePath==p.destinationFile.absolutePath&&
+            currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&runCatching{
+                p.destinationFile.readBytes().contentEquals(p.destination)&&
+                    p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                    p.bankFile.name=="switch_lgpe_${sha256(p.bankBytes)}.pb7"
+            }.getOrDefault(false)
+
+    private fun prepareLetsGoToGen7Transfer(bankFile:File,shown:LetsGoPokemonRead){
+        val title="Let's Go PB7 → Gen 7 PK7"
+        val file=importedFile?:return showDialog(title,"Load a valid Sun, Moon, Ultra Sun or Ultra Moon destination first.")
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val destination=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The destination save could not be read.")
+        val checks=validateGen7CoreChecksums(destination)
+        if(!bound()||generationForSize(destination.size)!=7||!checks.first)
+            return showDialog(title,checks.second)
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The PSE Bank path could not be verified.")
+        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The selected PB7 path could not be verified.")
+        if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pb7",true))
+            return showDialog(title,"The selected record is outside the Let's Go PSE Bank.")
+        val bank=runCatching{selected.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The preserved PB7 record could not be read.")
+        val expectedName="switch_lgpe_${sha256(bank)}.pb7"
+        if(selected.name!=expectedName)
+            return showDialog(title,"The PB7 filename does not match its exact SHA-256 content binding. The record was left unchanged.")
+        val source=(LetsGoPokemonReadOnly.read(bank) as? LetsGoSlotRead.Pokemon)?.value
+            ?:return showDialog(title,"The selected Bank record is not a checksum-valid native PB7.")
+        if(!letsGoGen7SourceMatches(source,shown))
+            return showDialog(title,"The selected PB7 changed since the Bank screen opened. Reopen PSE Bank.")
+        val review=try{LetsGoToGen7Pk7.review(bank)}catch(e:Exception){
+            return showDialog("PB7 → PK7 blocked",(e.message?:"No safe native PK7 mapping is available.")+
+                "\n\nThe PB7 Bank record and Gen 7 destination were left unchanged.")
+        }
+        val converted=parsePk6(review.nativeRecord,0,PK6_STORED_SIZE,false,807)
+            ?:return showDialog(title,"The generated native PK7 could not be reopened.")
+        if(!converted.checksumValid||converted.species!=source.species||converted.pid!=source.pid||
+            converted.tid!=source.tid||converted.sid!=source.sid)
+            return showDialog(title,"The generated PK7 did not preserve the reviewed identity.")
+        if(!bound()||!runCatching{
+                file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)
+            }.getOrDefault(false))
+            return showDialog(title,"The destination or PB7 changed during review. Nothing was changed.")
+        val prepared=LetsGoGen7Prepared(selected,bank,source,destination,review.nativeRecord,
+            converted,file,openedUri,openedLabel,review.effects)
+        val preview=buildString{
+            append("Exact PB7 SHA-256: ${sha256(bank)}\n\n")
+            review.effects.forEach{append("• ").append(it).append("\n\n")}
+            append("Choose Legalise only if every disclosed transformation is acceptable. Cancel leaves both sides byte-for-byte unchanged.")
+        }
+        AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • PB7 → PK7")
+            .setMessage(preview).setNegativeButton("Cancel",null)
+            .setPositiveButton("Legalise and choose destination"){_,_->chooseLetsGoToGen7Destination(prepared)}
+            .show()
+    }
+
+    private fun chooseLetsGoToGen7Destination(p:LetsGoGen7Prepared){
+        val title="Let's Go PB7 → Gen 7 PK7"
+        if(!letsGoGen7SnapshotsMatch(p))return showDialog(title,"The destination or PB7 changed. Reopen PSE Bank.")
+        val info=boxStorageInfo(p.destination)?:return showDialog(title,"Native Generation 7 PC storage could not be resolved.")
+        val empty=(0 until info.second).filter{
+            parsePk6(p.destination,info.first+it*PK6_STORED_SIZE,PK6_STORED_SIZE,false,807)==null
+        }
+        if(empty.isEmpty())return showDialog(title,"All native Generation 7 PC slots are occupied.")
+        val first=empty.first()
+        AlertDialog.Builder(this).setTitle("Choose native Gen 7 destination")
+            .setMessage("PSE will write the reviewed PK7 to one empty slot, update only required Pokédex and native integrity data, retain a recovery backup, and keep the PB7 Bank entry.")
+            .setItems(arrayOf("First Empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
+                if(!letsGoGen7SnapshotsMatch(p))showDialog(title,"The destination or PB7 changed. Reopen PSE Bank.")
+                else if(which==0)transferLetsGoBankToGen7(p,first)else showLetsGoToGen7BoxPicker(p)
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun showLetsGoToGen7BoxPicker(p:LetsGoGen7Prepared){
+        val title="Let's Go PB7 → Gen 7 PK7"
+        if(!letsGoGen7SnapshotsMatch(p))return showDialog(title,"The destination or PB7 changed. Reopen PSE Bank.")
+        val info=boxStorageInfo(p.destination)?:return
+        val boxes=(0 until info.second/30).filter{box->(0 until 30).any{slot->
+            parsePk6(p.destination,info.first+(box*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,807)==null
+        }}
+        if(boxes.isEmpty())return showDialog(title,"All native Generation 7 PC boxes are full.")
+        AlertDialog.Builder(this).setTitle("Choose Gen 7 destination box")
+            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+                val box=boxes[which]
+                val slots=(0 until 30).filter{slot->
+                    parsePk6(p.destination,info.first+(box*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,807)==null
+                }
+                AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
+                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
+                        transferLetsGoBankToGen7(p,box*30+slots[slotIndex])
+                    }.setNegativeButton("Cancel",null).show()
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun transferLetsGoBankToGen7(p:LetsGoGen7Prepared,target:Int){
+        val title="Let's Go PB7 → Gen 7 PK7"
+        if(!letsGoGen7SnapshotsMatch(p)||p.submitted)
+            return showDialog(title,"The destination or PB7 changed, or this transfer was already submitted. Reopen PSE Bank.")
+        val file=p.destinationFile
+        val fresh=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The destination save could not be read. Nothing was changed.")
+        p.submitted=true
+        var writeStarted=false
+        var backup:File?=null
+        var bankRecovery:File?=null
+        try{
+            require(fresh.contentEquals(p.destination)&&generationForSize(fresh.size)==7){
+                "The prepared Gen 7 destination changed."
+            }
+            val checks=validateGen7CoreChecksums(fresh);require(checks.first){checks.second}
+            val info=boxStorageInfo(fresh)?:error("PSE could not resolve native Gen 7 PC storage.")
+            require(target in 0 until info.second){"The selected Gen 7 slot is invalid."}
+            val off=info.first+target*PK6_STORED_SIZE
+            require(parsePk6(fresh,off,PK6_STORED_SIZE,false,807)==null){
+                "The selected Gen 7 slot is no longer empty."
+            }
+            val bank=p.bankFile.readBytes()
+            require(bank.contentEquals(p.bankBytes)&&p.bankFile.name=="switch_lgpe_${sha256(bank)}.pb7"){
+                "The exact content-addressed PB7 Bank record changed."
+            }
+            val source=(LetsGoPokemonReadOnly.read(bank) as? LetsGoSlotRead.Pokemon)?.value
+                ?:error("The selected PB7 no longer reopens with a valid native checksum.")
+            require(letsGoGen7SourceMatches(source,p.source)){
+                "The selected PB7 no longer matches the reviewed Pokémon."
+            }
+            val regenerated=LetsGoToGen7Pk7.review(bank)
+            require(regenerated.nativeRecord.contentEquals(p.pk7)&&regenerated.effects==p.effects){
+                "The reviewed PB7 to PK7 conversion changed before writing."
+            }
+            val converted=parsePk6(regenerated.nativeRecord,0,PK6_STORED_SIZE,false,807)
+                ?:error("The regenerated PK7 could not be reopened.")
+            require(converted.checksumValid&&converted.species==p.converted.species&&
+                converted.pid==p.converted.pid&&converted.tid==p.converted.tid&&converted.sid==p.converted.sid){
+                "The regenerated PK7 differs from the reviewed identity."
+            }
+
+            val work=fresh.copyOf();p.pk7.copyInto(work,off)
+            val staged=parsePk6(work,off,PK6_STORED_SIZE,false,807)
+                ?:error("The staged PK7 could not be parsed.")
+            require(staged.checksumValid&&staged.species==p.converted.species&&
+                staged.pid==p.converted.pid&&staged.tid==p.converted.tid&&staged.sid==p.converted.sid){
+                "The staged PK7 differs from the reviewed conversion."
+            }
+            val allowed=HashSet<Int>()
+            for(i in off until off+PK6_STORED_SIZE)allowed.add(i)
+            val bit=staged.species-1;val byte=bit ushr 3
+            val dexBase=if(work.size==SIZE_G7_SM)0x02A00 else 0x02C00
+            allowed.add(dexBase+0x88+byte)
+            val shift=staged.gender.coerceIn(0,1) or ((if(staged.shiny)1 else 0) shl 1)
+            for(plane in listOf(shift,4,5,6,7))allowed.add(dexBase+0xF0+plane*0x8C+byte)
+            var lang=staged.language
+            if(lang in 1..10&&lang!=6){
+                if(lang>=7)lang--;lang--
+                allowed.add(dexBase+0x550+((bit*9+lang) ushr 3))
+            }
+            for(id in intArrayOf(6,14)){
+                val checksum=gen7ChecksumOffset(work,id);allowed.add(checksum);allowed.add(checksum+1)
+            }
+            val signature=if(work.size==SIZE_G7_USUM)0x6C100 else 0x6BB00
+            for(i in signature until signature+0x80)allowed.add(i)
+            registerGen7Dex(work,staged.species,staged.form,staged.gender,staged.shiny,staged.language)
+            updateGen7SaveBlockChecksum(work,14,info.first,info.second*PK6_STORED_SIZE)
+            val dexInfo=gen7BlockInfo(work,6)?:error("Gen 7 Pokédex block layout is unavailable.")
+            updateGen7SaveBlockChecksum(work,6,dexInfo.first,dexInfo.second)
+            finalizeGen7Save(work)
+            require(work.indices.all{it in allowed||work[it]==fresh[it]}){
+                "The conversion changed data outside the reviewed PK7, Pokédex flags, block CRCs and save signature."
+            }
+            require(gen7DexRegistered(work,staged)){"The staged Gen 7 Pokédex registration failed."}
+            val stagedChecks=validateGen7CoreChecksums(work);require(stagedChecks.first){stagedChecks.second}
+
+            val recovery=File.createTempFile(backupGameName(file)+"_PreLetsGoToGen7_",".backup",backupsDir())
+            backup=recovery;recovery.writeBytes(fresh)
+            require(recovery.readBytes().contentEquals(fresh)){"The exact Gen 7 recovery backup did not verify."}
+            retainGen3ToGen7SafetyBackup(recovery,fresh)
+            val bankCopy=File.createTempFile("PSE_LetsGoToG7_BankRecovery_",".tmp",bankDir())
+            bankRecovery=bankCopy;bankCopy.writeBytes(p.bankBytes)
+            require(bankCopy.readBytes().contentEquals(p.bankBytes)){"The PB7 recovery snapshot did not verify."}
+            require(letsGoGen7SnapshotsMatch(p,false)&&isBackupKept(recovery)&&
+                recovery.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The source identity, destination, PB7 or retained recovery snapshots changed before writing."
+            }
+
+            writeStarted=true;file.writeBytes(work)
+            val written=file.readBytes()
+            require(written.contentEquals(work)&&written.indices.all{it in allowed||written[it]==fresh[it]}){
+                "The persisted Gen 7 save differs from the reviewed write scope."
+            }
+            val actual=written.copyOfRange(off,off+PK6_STORED_SIZE)
+            val reopened=parsePk6(actual,0,PK6_STORED_SIZE,false,807)
+                ?:error("The persisted PK7 could not be parsed.")
+            require(actual.contentEquals(p.pk7)&&reopened.checksumValid&&
+                reopened.species==p.converted.species&&reopened.pid==p.converted.pid&&
+                reopened.tid==p.converted.tid&&reopened.sid==p.converted.sid&&
+                gen7DexRegistered(written,reopened)){
+                "The exact converted PK7 or Pokédex registration did not persist."
+            }
+            val writtenChecks=validateGen7CoreChecksums(written);require(writtenChecks.first){writtenChecks.second}
+            require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&
+                currentSourceLabel==p.sourceLabel&&p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_lgpe_${sha256(p.bankBytes)}.pb7"&&
+                file.readBytes().contentEquals(work)&&isBackupKept(recovery)&&
+                recovery.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The preserved PB7, verified destination or retained recovery snapshots changed after persistence."
+            }
+            runCatching{bankCopy.delete()}
+        }catch(e:Exception){
+            val bankRestored=runCatching{
+                val current=runCatching{p.bankFile.readBytes()}.getOrNull()
+                if(current==null||!current.contentEquals(p.bankBytes)){
+                    p.bankFile.writeBytes(p.bankBytes)
+                }
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                    p.bankFile.name=="switch_lgpe_${sha256(p.bankBytes)}.pb7"&&
+                    (LetsGoPokemonReadOnly.read(p.bankBytes) as? LetsGoSlotRead.Pokemon)?.value
+                        ?.let{letsGoGen7SourceMatches(it,p.source)}==true
+            }.getOrDefault(false)
+            val destinationRestored=runCatching{
+                if(writeStarted)file.writeBytes(fresh)
+                val restored=file.readBytes()
+                restored.contentEquals(fresh)&&validateGen7CoreChecksums(restored).first
+            }.getOrDefault(false)
+            if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&destinationRestored->
+                    "The exact Gen 7 destination and PB7 Bank record were restored or kept and verified."
+                bankRestored->
+                    "The PB7 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                destinationRestored->
+                    "The exact Gen 7 destination was restored, but PB7 restoration was not verified. Keep the Bank recovery snapshot for review."
+                else->
+                    "Automatic recovery could not be verified. Keep the retained destination backup and PB7 recovery snapshot for review."
+            }
+            showDialog("Let's Go PB7 → Gen 7 PK7 failed",(e.message?:"Unknown error")+"\n\n"+recovery+
+                (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                (bankRecovery?.takeIf{it.exists()}?.let{"\nPB7 recovery snapshot: ${it.name}"}?:""))
+            return
+        }
+        Toast.makeText(this,
+            "PSE converted Let's Go PB7 → Gen 7 PK7 to Box ${target/30+1} • Slot ${target%30+1}; PB7 preserved",
+            Toast.LENGTH_LONG).show()
+        showBank()
+    }
+
     private fun showGen7BankEntry(bankFile:File,p:PokemonEntry){
         val currentGen=importedFile?.let{generationForSize(it.length().toInt())}?:0
         val message=when(currentGen){
@@ -42784,7 +43078,21 @@ private data class Gen2ToGen5LegalisePlan(
             }
             if (pkm == null || !pkm.checksumValid) null else Triple(bg,f,pkm)
         }
-        val total = when(bankViewGeneration){ 1->gen1Entries.size; 2->gen2Entries.size; 3,4,5,6,7->standardEntries.count{it.first==bankViewGeneration}; else->0 }
+        val letsGoGen7Entries=bankDir().listFiles()?.filter{
+            it.isFile&&it.extension.equals("pb7",true)&&it.name.startsWith("switch_lgpe_")
+        }?.sortedBy{it.name}?.mapNotNull{file->
+            val raw=runCatching{file.readBytes()}.getOrNull()?:return@mapNotNull null
+            val read=LetsGoPokemonReadOnly.read(raw) as? LetsGoSlotRead.Pokemon
+            read?.value?.let{Triple(file,raw,it)}
+        }?:emptyList()
+        val standardGen7Entries=standardEntries.filter{it.first==7}
+        val total = when(bankViewGeneration){
+            1->gen1Entries.size
+            2->gen2Entries.size
+            3,4,5,6->standardEntries.count{it.first==bankViewGeneration}
+            7->standardGen7Entries.size+letsGoGen7Entries.size
+            else->0
+        }
         // Gen 1 has exactly ten configured Bank Boxes. If an older build left overflow
         // records behind, keep them visible as recovery pages without treating them as boxes.
         val boxCount = bankDisplayBoxCount(total,bankViewGeneration)
@@ -42814,6 +43122,8 @@ private data class Gen2ToGen5LegalisePlan(
             }
         }
         if(bankViewGeneration==2){val quarantinedCount=gen2BankQuarantinedFiles().size;if(quarantinedCount>0)addButton(root,"Review quarantined Gen 2 records ($quarantinedCount)"){showGen2BankQuarantineRecovery()}}
+        if(bankViewGeneration==7&&letsGoGen7Entries.isNotEmpty())addMutedLine(root,
+            "${letsGoGen7Entries.size} preserved Let's Go PB7 source record${if(letsGoGen7Entries.size==1)"" else "s"} follow the native PK7 entries. PB7 conversions are reviewed one at a time and remain in Bank after a verified destination write.")
         if(bankViewGeneration==5&&bankMultiSelectMode){bankMultiSelectMode=false;selectedBankFiles.clear()}
         val selectBar=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
         val selectToggle=Button(this).apply{text=if(bankMultiSelectMode)"Cancel" else "Multi-select";setAllCaps(false);setOnClickListener{bankMultiSelectMode=!bankMultiSelectMode;selectedBankFiles.clear();showBank()}}
@@ -42904,9 +43214,17 @@ private data class Gen2ToGen5LegalisePlan(
             when(bankViewGeneration){
                 1 -> grid.addView(gen1BankGridCell(local,gen1Entries.getOrNull(idx)))
                 2 -> grid.addView(gen2BankGridCell(local,gen2Entries.getOrNull(idx)))
-                3,4,5,6,7 -> {
+                3,4,5,6 -> {
                     val e=standardEntries.filter{it.first==bankViewGeneration}.getOrNull(idx)
                     grid.addView(bankGridCell(local,e?.let{Pair(it.second,it.third)}))
+                }
+                7 -> {
+                    val native=standardGen7Entries.getOrNull(idx)
+                    if(native!=null)grid.addView(bankGridCell(local,Pair(native.second,native.third)))
+                    else {
+                        val pb7=letsGoGen7Entries.getOrNull(idx-standardGen7Entries.size)
+                        grid.addView(letsGoGen7BankGridCell(local,pb7?.let{Pair(it.first,it.third)}))
+                    }
                 }
                 else -> grid.addView(bankGridCell(local,null))
             }
