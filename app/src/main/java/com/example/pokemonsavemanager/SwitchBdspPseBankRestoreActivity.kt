@@ -44,6 +44,7 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
         sourceUri = intent?.data
         expectedHash = intent?.getStringExtra("pse.switch.sha256")
         bankEntryName = intent?.getStringExtra("pse.bank.entry")
+        expectedBankSourceHash = intent?.getStringExtra("pse.bank.sha256")
         if (sourceUri == null || expectedHash.isNullOrBlank() || bankEntryName.isNullOrBlank()) {
             finish()
             return
@@ -314,7 +315,15 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
             return converted.nativeRecord to converted.effects
         }
         if (entry.extension.equals("pk7", true)) {
-            val converted = Gen7ToBdspPb8.review(source)
+            val metadata = Gen1ToSwordShieldMetadata(
+                intent.getIntExtra("pse.gen7.friendship", -1),
+                intent.getIntExtra("pse.gen7.gender_rate", -2),
+                intent.getIntExtra("pse.gen7.ability_id", 0),
+                intent.getIntExtra("pse.gen7.ability_number", 0)
+            )
+            val converted = Gen7ToBdspPb8.review(
+                source, BdspTrainerReadOnly.read(destination), metadata
+            )
             return converted.nativeRecord to converted.effects
         }
         val hash = BdspPseBankRestoreEditing.sha256(source)
