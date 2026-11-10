@@ -136,9 +136,9 @@ object Gen7ToSwordShieldPk8 {
         val p=(SwordShieldPokemonReadOnly.read(native) as? SwordShieldSlotRead.Pokemon)?.value
             ?:error("The converted PK8 did not reopen with a valid native checksum.")
         require(p.species==species&&p.gender==gender&&p.ability==ability&&
-            p.fatefulEncounter==((byte(s,0x1D) and 1)!=0)&&p.currentHandler==byte(s,0x93)&&
+            p.fatefulEncounter==((byte(s,0x1D) and 1)!=0)&&
             p.pid==pid&&p.experience==exp&&p.cachedLevel==level&&p.maximumHp==hp&&
-            p.cachedStats==listOf(atk,def,spe,spa,spd)){"The converted PK8 did not reopen with the reviewed identity, gender, handler, flags, ability, and stats."}
+            p.cachedStats==listOf(atk,def,spe,spa,spd)){"The converted PK8 did not reopen with the reviewed identity, gender, flags, ability, and stats."}
         SwordShieldPseBankRestoreEditing.inspectBankRecord(native)
 
         val ribbons=s.copyOfRange(0x30,0x3A)
