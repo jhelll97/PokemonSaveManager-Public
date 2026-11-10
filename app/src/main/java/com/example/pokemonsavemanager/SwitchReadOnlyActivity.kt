@@ -5589,12 +5589,19 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound) return
         val directory = File(filesDir, "pse_bank").canonicalFile
         val entry = runCatching { file.canonicalFile }.getOrNull()
-        val result = runCatching {
+        val opened = runCatching {
             require(entry != null && entry.parentFile == directory && entry.isFile &&
-                entry.extension.equals("pk7", true)) { "This is not a current Gen 7 PSE Bank entry." }
-            Gen7ToScarletVioletPk9.review(entry.readBytes())
-        }
-        val converted = result.getOrElse {
+                entry.extension.equals("pk7", true)) {
+                "This is not a current Gen 7 PSE Bank entry."
+            }
+            val bytes = entry.readBytes()
+            val source = Gen7ToScarletVioletPk9.inspectSource(bytes)
+            val trainer = ScarletVioletTrainerReadOnly.read(bound.snapshot.bytesCopy())
+            require(trainer.languageId == 2) {
+                "This bounded Gen 7 route currently requires an English Scarlet/Violet destination trainer."
+            }
+            Triple(bytes, source, trainer)
+        }.getOrElse {
             AlertDialog.Builder(this).setTitle("Gen 7 -> Scarlet/Violet blocked")
                 .setMessage((it.message ?: "No safe conversion is available.") +
                     "\n\nThe PK7 Bank entry and Scarlet/Violet save remain unchanged.")
@@ -5602,37 +5609,98 @@ class SwitchReadOnlyActivity : Activity() {
             return
         }
         val selected = entry ?: return
-        val p = ScarletVioletPseBankRestoreEditing.inspectBankRecord(converted.nativeRecord)
-        val message = buildString {
-            append("${ScarletVioletSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n")
-            append("Source: ${selected.name} • preserved 232-byte PK7\n")
-            append("Prepared destination: checksum-valid 344-byte native Scarlet/Violet PK9\n\n")
-            append("Exact disclosed conversion effects\n• ")
-            append(converted.effects.joinToString("\n• "))
-            append("\n\nContinue only if you accept every disclosed Legalise effect.")
-        }
-        AlertDialog.Builder(this).setTitle("Gen 7 -> Scarlet/Violet • PSE Legalise review")
-            .setMessage(message).setNegativeButton("Cancel", null)
-            .setPositiveButton("Legalise & choose destination") { _, _ ->
-                try {
-                    require(session === bound) { "The active save changed. Reopen PSE Bank." }
-                    val source = selectedSourceUri ?: error("Reopen the selected Scarlet/Violet save from PSE.")
-                    require(selected.parentFile == directory && selected.isFile && selected.extension.equals("pk7", true)) {
-                        "The Gen 7 Bank entry changed."
+        val openedHash = ScarletVioletPseBankRestoreEditing.sha256(opened.first)
+        val loading = AlertDialog.Builder(this)
+            .setTitle("Prepare Gen 7 -> Scarlet/Violet")
+            .setMessage("Loading documented species metadata and building a reviewed PK9 preview from the exact selected PK7…")
+            .setCancelable(false).create()
+        loading.show()
+        reader.execute {
+            val prepared = runCatching {
+                val metadata = loadGen7SwordShieldMetadata(
+                    opened.second.species, opened.second.abilityNumber,
+                    opened.second.abilityId
+                )
+                require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                val current = selected.readBytes()
+                require(ScarletVioletPseBankRestoreEditing.sha256(current) == openedHash) {
+                    "The Gen 7 Bank entry changed during review."
+                }
+                metadata to Gen7ToScarletVioletPk9.review(
+                    current, opened.third, metadata
+                )
+            }
+            runOnUiThread {
+                if (loading.isShowing) loading.dismiss()
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                prepared.onSuccess { (metadata, converted) ->
+                    val pokemon = ScarletVioletPseBankRestoreEditing
+                        .inspectBankRecord(converted.nativeRecord)
+                    val message = buildString {
+                        append(ScarletVioletSpeciesNames.name(pokemon.species) + " (#" +
+                            pokemon.species + ") • Level " + pokemon.cachedLevel + "\n")
+                        append("Source: " + selected.name +
+                            " • preserved checksum-valid 232-byte PK7\n")
+                        append("Reviewed Bank SHA-256: " + openedHash + "\n")
+                        append("Prepared destination: checksum-valid 344-byte native Scarlet/Violet PK9\n\n")
+                        append("Exact disclosed conversion effects\n• ")
+                        append(converted.effects.joinToString("\n• "))
+                        append("\n\nContinue only if you accept every disclosed Legalise effect.")
                     }
-                    Gen7ToScarletVioletPk9.review(selected.readBytes())
-                    startActivity(Intent(this, SwitchScarletVioletPseBankRestoreActivity::class.java)
-                        .setData(source)
-                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
-                        .putExtra("pse.bank.entry", selected.name)
-                        .putExtra("pse.bank.legalise", true)
-                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
-                } catch (error: Exception) {
-                    AlertDialog.Builder(this).setTitle("Could not prepare Gen 7 conversion")
-                        .setMessage(error.message ?: "Both sources remain unchanged.")
+                    AlertDialog.Builder(this)
+                        .setTitle("Gen 7 -> Scarlet/Violet • PSE Legalise review")
+                        .setMessage(message).setNegativeButton("Cancel", null)
+                        .setPositiveButton("Legalise & choose destination") { _, _ ->
+                            try {
+                                require(session === bound) {
+                                    "The active save changed. Reopen PSE Bank."
+                                }
+                                val source = selectedSourceUri ?: error(
+                                    "Reopen the selected Scarlet/Violet save from PSE."
+                                )
+                                require(selected.parentFile == directory && selected.isFile &&
+                                    selected.extension.equals("pk7", true)) {
+                                    "The Gen 7 Bank entry changed."
+                                }
+                                val current = selected.readBytes()
+                                require(
+                                    ScarletVioletPseBankRestoreEditing.sha256(current) ==
+                                        openedHash
+                                ) {
+                                    "The Gen 7 Bank entry changed. Reopen PSE Bank."
+                                }
+                                Gen7ToScarletVioletPk9.review(
+                                    current, opened.third, metadata
+                                )
+                                startActivity(Intent(
+                                    this,
+                                    SwitchScarletVioletPseBankRestoreActivity::class.java
+                                )
+                                    .setData(source)
+                                    .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                                    .putExtra("pse.bank.entry", selected.name)
+                                    .putExtra("pse.bank.sha256", openedHash)
+                                    .putExtra("pse.bank.legalise", true)
+                                    .putExtra("pse.gen7.friendship", metadata.baseFriendship)
+                                    .putExtra("pse.gen7.gender_rate", metadata.genderRate)
+                                    .putExtra("pse.gen7.ability_id", metadata.abilityId)
+                                    .putExtra("pse.gen7.ability_number", metadata.abilityNumber)
+                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                            } catch (error: Exception) {
+                                AlertDialog.Builder(this)
+                                    .setTitle("Could not prepare Gen 7 conversion")
+                                    .setMessage(error.message ?: "Both sources remain unchanged.")
+                                    .setPositiveButton("Close", null).show()
+                            }
+                        }.show()
+                }.onFailure {
+                    AlertDialog.Builder(this).setTitle("Gen 7 -> Scarlet/Violet blocked")
+                        .setMessage((it.message ?: "No safe conversion is available.") +
+                            "\n\nThe PK7 Bank entry and Scarlet/Violet save remain unchanged.")
                         .setPositiveButton("Close", null).show()
                 }
-            }.show()
+            }
+        }
     }
 
     private fun showScarletVioletSwordShieldBankEntry(bound: SwitchReadSession, file: File) {
