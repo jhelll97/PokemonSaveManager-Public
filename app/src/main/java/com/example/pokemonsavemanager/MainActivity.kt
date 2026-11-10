@@ -2197,7 +2197,7 @@ class MainActivity : Activity() {
             setAllCaps(false)
             setTextColor(TEXT)
             setBackgroundColor(if (selected) Color.rgb(25, 115, 205) else Color.rgb(45, 45, 45))
-            setOnClickListener(action)
+            setOnClickListener { action() }
         }
         tabs.addView(tabButton("Party", activeTab == "party", onParty),
             LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(4) })
