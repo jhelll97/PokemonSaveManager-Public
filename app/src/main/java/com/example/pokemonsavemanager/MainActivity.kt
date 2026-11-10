@@ -24576,6 +24576,7 @@ class MainActivity : Activity() {
             append("PSE conversion, not an official reverse migration. The original PK3 remains in Bank until the native save is written and verified.\n\n")
             append("Preserved: species, nickname, OT name/TID, EXP, current moves and PP, PP Ups, friendship and Pokérus. Source IVs are ordered HP/Atk/Def/Speed/SpA/SpD: ").append(source.ivs.joinToString("/")).append(". Destination DVs (HP/Atk/Def/Speed/Special) are ").append(convertedDvs.joinToString("/")).append("; Atk, Def, Speed and Special use floor(Gen 3 IV ÷ 2) from the corresponding Atk/Def/Speed/SpA IV, and HP DV is derived from the low bits of those four DVs. The independent Gen 3 HP and SpD IVs have no Gen 2 fields and are not retained. EVs → Stat Exp (HP/Atk/Def/Speed/Special): ").append(source.evs.take(4).joinToString("/")).append(" + SpA/SpD ").append(source.evs[4]).append("/").append(source.evs[5]).append(" → ").append(convertedStatExp.joinToString("/")).append("; Special uses the integer average of SpA/SpD EVs, rounded down.")
             append("\n\nNot represented by Gen 2: PID, nature, ability, gender, met/egg locations and dates, Ball, ribbons, and Generation 3 origin metadata. The Gen 2 shiny result is ").append(if(shinyResult)"shiny" else "not shiny").append("; the source is ").append(if(source.shiny)"shiny" else "not shiny").append(". No held item, Egg, alternate form, fateful marker, unsupported move or unrepresentable text is allowed through this route.")
+            append("\n\nA Keep-pinned destination backup and independent exact Bank snapshot stay byte-bound before writing and through cleanup. If failure happens before PSE writes or deletes a side, PSE verifies that side stayed exact instead of claiming restoration; after a PSE mutation, it restores and reopens that side independently.")
             append("\n\nThe experience-based level will be ").append(mon[31].toInt() and 0xFF).append(" using the destination species growth group. Review the changes before choosing a Gen 2 PC Box.")
         }
         val targets=availableGen2BoxTargets(destination)
@@ -24627,8 +24628,9 @@ class MainActivity : Activity() {
                 restored.contentEquals(bankBytes)&&parsed!=null&&parsed.checksumValid&&
                     parsed.pid==source.pid&&parsed.species==source.species&&parsed.tid==source.tid&&parsed.sid==source.sid
             }.getOrDefault(false)
-            val destinationRestored=!writeStarted||runCatching{
-                file.writeBytes(openedDestination);val restored=file.readBytes()
+            val destinationRestored=runCatching{
+                if(writeStarted)file.writeBytes(openedDestination)
+                val restored=file.readBytes()
                 restored.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(restored).first
             }.getOrDefault(false)
             if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
