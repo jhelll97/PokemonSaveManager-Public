@@ -25,7 +25,7 @@ object Gen7ToSwordShieldPk8 {
         "2013","3012","2031","3021","1203","1302","2103","3102","2301","3201",
         "1230","1320","2130","3120","2310","3210")
     private val origins = setOf(1,2,3,4,5,7,8,10,11,12,15,20,21,22,23,24,25,26,27,
-        30,31,32,33,35,36,37,38,39,40,41)
+        30,31,32,33,34,35,36,37,38,39,40,41,42,43)
 
     fun inspectSource(record: ByteArray): Gen7Pk7Source {
         val s = plainPk7(record)
@@ -59,7 +59,7 @@ object Gen7ToSwordShieldPk8 {
         val nicknamed=iv32 and 0x80000000L != 0L; val hyper=byte(s,0xDE)
         val language=byte(s,0xE3); val origin=byte(s,0xDF); val ball=byte(s,0xDC)
         val metLevel=byte(s,0xDD) and 0x7F
-        require(species in 1..807){"The source is not a supported Generation 7 species."}
+        require(species in 1..809){"The source is not a supported Generation 7 or Let's Go species."}
         require(form==0){"Only verified default-form PK7 records can enter Sword/Shield in this bounded route."}
         require(!egg){"Egg PK7 records remain blocked from this PSE conversion."}
         require(held==0){"Held item #$held has no reviewed Gen 7 -> Sword/Shield mapping. Remove it in the source game first."}
@@ -173,7 +173,7 @@ object Gen7ToSwordShieldPk8 {
     private fun plainPk7(source:ByteArray):ByteArray{
         require(source.size==PK7_SIZE){"A complete 232-byte PK7 record is required."}
         require(u16(source,4)==0){"The PK7 sanity field is not zero."}
-        fun valid(b:ByteArray):Boolean{var sum=0;for(i in 8 until PK7_SIZE step 2)sum+=u16(b,i);return (sum and 0xFFFF)==u16(source,6)&&u16(b,8) in 1..807}
+        fun valid(b:ByteArray):Boolean{var sum=0;for(i in 8 until PK7_SIZE step 2)sum+=u16(b,i);return (sum and 0xFFFF)==u16(source,6)&&u16(b,8) in 1..809}
         if(valid(source))return source.copyOf()
         val ec=u32(source,0);val decoded=source.copyOf();xor(decoded,8,PK7_SIZE,ec)
         val order=orders[((ec ushr 13).toInt() and 31)%24];val plain=decoded.copyOf()
