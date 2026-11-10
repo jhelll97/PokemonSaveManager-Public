@@ -10915,7 +10915,7 @@ class MainActivity : Activity() {
         out[0x5F]=p.originGame.toByte()
         writeGen5String(out,0x68,16,p.otName,7)
         out[0x82]=(((p.pokerusStrain and 0xF) shl 4) or (p.pokerusDays and 0xF)).toByte()
-        out[0x83]=p.ball.toByte()
+        out[0x83]=4 // PK3 has no Ball field; Gen 3 migration writes a Poké Ball.
         out[0x84]=((p.metLevel and 0x7F) or ((p.otGender and 1) shl 7)).toByte()
         // Gen 4 map-location IDs do not identify the same places in Gen 5.
         writeU16LE(out,0x80,0)
@@ -24774,7 +24774,6 @@ class MainActivity : Activity() {
         p.moves.any{it !in 0..354}->"The PK3 contains a move outside the Generation 3 move catalogue."
         p.evs.any{it !in 0..255}||p.evs.sum()>510->"The PK3 EV data is not destination-valid for Generation 4."
         p.ivs.any{it !in 0..31}->"The PK3 IV data is invalid."
-        p.ball !in 1..12->"Ball ID ${p.ball} has no verified direct Generation 3 to Generation 4 mapping."
         gen3CompatibleOriginTitle(p.originGame)==null->"Origin game ID ${p.originGame} is not a documented native Generation 3 title."
         p.abilityNumber !in 1..2->"The PK3 ability slot is invalid."
         allowPidLegalise&&gen3ToGen4PidLegaliseRejection(p)!=null->gen3ToGen4PidLegaliseRejection(p)
@@ -24891,7 +24890,7 @@ class MainActivity : Activity() {
             q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(expectedPp)&&gen4Pk4PpUps(encrypted).contentEquals(expectedUps)&&
             q.evs.contentEquals(p.evs)&&q.ivs.contentEquals(p.ivs)&&!q.isEgg&&
             q.pokerusDays==(p.pokerusDays and 0xF)&&q.pokerusStrain==(p.pokerusStrain and 0xF)&&
-            q.eggLocation==0&&q.metLocation==55&&q.ball==p.ball&&q.metLevel==plan.level&&
+            q.eggLocation==0&&q.metLocation==55&&q.ball==4&&q.metLevel==plan.level&&
             q.otGender==(p.otGender and 1)&&q.originGame==p.originGame&&
             q.metYear==plan.metYear&&q.metMonth==plan.metMonth&&q.metDay==plan.metDay){
             "The converted PK4 did not preserve every destination-representable field."
@@ -24968,7 +24967,8 @@ class MainActivity : Activity() {
             val originTitle=gen3CompatibleOriginTitle(source.originGame)?:return@loadGen3ToGen4MetaAsync showDialog("Gen 3 → Gen 4 blocked","The source origin is no longer a documented native Generation 3 title. Nothing was changed.")
             val preview=buildString{
                 append("PSE Bank conversion preview\n\n")
-                append("Preserved: species, $pidSummary, shiny state, gender, nature, OT/TID/SID, nickname, EXP, friendship, IVs, EVs, moves, current PP, PP Ups, Pokérus and Ball.\n")
+                append("Preserved: species, $pidSummary, shiny state, gender, nature, OT/TID/SID, nickname, EXP, friendship, IVs, EVs, moves, current PP, PP Ups and Pokérus.\n")
+                append("Ball: Generation 3 PK3 has no Ball field; the migration writes Poké Ball (ID 4).\n")
                 append("Origin preserved: $originTitle (ID ${source.originGame}).\n")
                 if(plan.pidLegalised)append("PID: ${"%08X".format(source.pid)} → ${"%08X".format(plan.pid)}. The saved ability slot, nature, gender and shiny state are preserved.\n")
                 append("\n")
