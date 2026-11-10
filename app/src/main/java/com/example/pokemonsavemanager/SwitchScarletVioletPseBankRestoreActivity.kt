@@ -57,7 +57,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid native PK9 to an empty PC-box slot you choose in a new save copy. " +
-                "Native PK9 entries remain byte-exact. Eligible Generation 7 PK7, Sword/Shield PK8, BDSP PB8, and Legends: Arceus PA8 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Native PK9 entries remain byte-exact. Eligible Generation 7 PK7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, and Legends: Z-A PA9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
                 "Unsupported species, forms, items, moves, limits, or text remain blocked; this PSE conversion does not certify encounter, ability, Tera, or moveset legality."
             textSize = 16f
         })
@@ -95,6 +95,11 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                 expectedBankSourceHash = bankSourceHash
                 val prepared = prepareBankRecord(bankSource)
                 val pokemon = ScarletVioletPseBankRestoreEditing.inspectBankRecord(prepared.first)
+                if (bankFile().extension.equals("pa9", true)) {
+                    require(pokemon.species in ScarletVioletPokedexReadOnly.supportedSpecies(source)) {
+                        "Species #${pokemon.species} is not present in this Scarlet/Violet save's native Pokédex table."
+                    }
+                }
                 val destinations = ScarletVioletPseBankRestoreEditing.emptyDestinations(source)
                 require(destinations.isNotEmpty()) {
                     "All 960 native Scarlet/Violet PC-box slots are occupied."
@@ -162,7 +167,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
             val result = runCatching {
                 val source = readSource()
                 val hash = expectedHash ?: error("Reopen the source from PSE.")
-                val bank = readBankRecord()
+                val bank = readBankRecord(source)
                 ScarletVioletPseBankRestoreEditing.stage(
                     source, hash, bank, destination.box, destination.position
                 )
@@ -203,11 +208,12 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
         val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
         val bdsp = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
         val legendsArceus = entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)
+        val legendsZa = entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true)
         require(entry.parentFile == directory && entry.isFile &&
-            (native || gen7 || swordShield || bdsp || legendsArceus)) {
-            "This is not a current Scarlet/Violet, Generation 7, Sword/Shield, BDSP, or Legends: Arceus PSE Bank entry."
+            (native || gen7 || swordShield || bdsp || legendsArceus || legendsZa)) {
+            "This is not a current Scarlet/Violet, Generation 7, Sword/Shield, BDSP, Legends: Arceus, or Legends: Z-A PSE Bank entry."
         }
-        if (gen7 || swordShield || bdsp || legendsArceus) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+        if (gen7 || swordShield || bdsp || legendsArceus || legendsZa) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
             "Review and explicitly choose the disclosed cross-generation Legalise conversion from PSE Bank."
         }
         return entry
@@ -251,6 +257,13 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
             val converted = LegendsArceusToScarletVioletPk9.review(source)
             return converted.nativeRecord to converted.effects
         }
+        if (entry.extension.equals("pa9", true)) {
+            require(entry.name == "switch_za_${hash}.pa9") {
+                "The PSE Bank filename no longer matches its native PA9 bytes."
+            }
+            val converted = LegendsZaToScarletVioletPk9.review(source)
+            return converted.nativeRecord to converted.effects
+        }
         require(entry.name == "switch_sv_${hash}.pk9") {
             "The PSE Bank filename no longer matches its native record bytes."
         }
@@ -258,7 +271,16 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
         return source to emptyList()
     }
 
-    private fun readBankRecord(): ByteArray = prepareBankRecord(readBankSource()).first
+    private fun readBankRecord(destinationSource: ByteArray): ByteArray {
+        val record = prepareBankRecord(readBankSource()).first
+        if (bankFile().extension.equals("pa9", true)) {
+            val pokemon = ScarletVioletPseBankRestoreEditing.inspectBankRecord(record)
+            require(pokemon.species in ScarletVioletPokedexReadOnly.supportedSpecies(destinationSource)) {
+                "Species #${pokemon.species} is not present in this Scarlet/Violet save's native Pokédex table."
+            }
+        }
+        return record
+    }
 
     private fun showReview(plan: ScarletVioletPseBankRestoreCopyPlan) {
         if (busy || plan !== readyPlan) return
@@ -339,7 +361,10 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
             val result = runCatching {
                 plan.saveNewCopy(
                     readSource = { readSource() },
-                    readBankRecord = { readBankRecord() },
+                    readBankRecord = {
+                        val source = readSource()
+                        readBankRecord(source)
+                    },
                     retainBackup = { original ->
                         val backup = SwitchSafeBackupStore.createVerified(
                             this, SwitchGameFamily.SCARLET_VIOLET, original
