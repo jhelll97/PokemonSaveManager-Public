@@ -31,6 +31,13 @@ data class Gen2ToSwordShieldReview(
     val effects: List<String>
 )
 
+data class Gen2ToPk7Bridge(
+    val source: Gen2ToSwordShieldSource,
+    val pk7: ByteArray,
+    val ivs: IntArray,
+    val evs: IntArray
+)
+
 /**
  * Bounded adapter for one preserved 62-byte PSE2 record.
  *
@@ -183,6 +190,118 @@ object Gen2ToSwordShieldPk8 {
         )
     }
 
+
+    internal fun buildBdspBridge(
+        record: ByteArray,
+        trainer: BdspTrainerRead,
+        metadata: Gen1ToSwordShieldMetadata
+    ): Gen2ToPk7Bridge {
+        val source = inspectSource(record)
+        require(trainer.languageId == 2) {
+            "This bounded route currently requires an English BDSP destination trainer."
+        }
+        require(metadata.baseFriendship in 0..255) { "The reviewed base friendship is invalid." }
+        require(metadata.genderRate in -1..8) { "The reviewed gender ratio is invalid." }
+        require(metadata.abilityId in 1..255 && metadata.abilityNumber in setOf(1, 2, 4)) {
+            "The reviewed ability mapping cannot be represented in PK7."
+        }
+        val profile = BdspPersonalCatalogue.profiles(source.species, 0)
+            .distinctBy {
+                listOf(
+                    it.hp, it.attack, it.defense, it.speed,
+                    it.specialAttack, it.specialDefense, it.growth
+                )
+            }
+            .singleOrNull()
+            ?: error("This species has no single verified default BDSP profile.")
+        require(level(source.experience, profile.growth) == source.level) {
+            "The Gen 2 level byte does not agree with exact EXP under the BDSP species growth group."
+        }
+        require(source.experience <= minimumExperience(100, profile.growth)) {
+            "The source EXP exceeds the reviewed BDSP level-100 value."
+        }
+        source.moves.forEachIndexed { index, move ->
+            if (move != 0) {
+                require(BdspMoveCatalog.choice(move) != null) {
+                    "Move #$move has no native BDSP mapping."
+                }
+                val maximum = BdspMoveCatalog.maximumPp(move, source.ppUps[index])
+                require(source.currentPp[index] in 0..maximum) {
+                    "Move #$move current PP cannot be retained within its BDSP limit."
+                }
+            }
+        }
+        val seed = MessageDigest.getInstance("SHA-256").apply {
+            update(record)
+            update(trainer.name.toByteArray(StandardCharsets.UTF_8))
+            update(byteArrayOf(trainer.gender.toByte(), trainer.languageId.toByte()))
+            update(intBytes(metadata.baseFriendship))
+            update(intBytes(metadata.genderRate))
+            update(intBytes(metadata.abilityId))
+            update(intBytes(metadata.abilityNumber))
+        }.digest()
+        val ec = u32(seed, 0)
+        val pid = forceShiny(u32(seed, 4), source.trainerId, source.shiny)
+        val ivs = deterministicIvs(seed, source)
+        val evs = mappedEvs(source.statExperience)
+        val nature = (source.experience % 25L).toInt()
+        val gender = transferGender(source.dvs[1], metadata.genderRate)
+        val speciesName = SwordShieldSpeciesNames.name(source.species)
+        require(speciesName.isNotBlank()) { "The BDSP species name is unavailable." }
+        val nickname = source.nickname.ifBlank { speciesName }
+        val customNickname = source.nickname.isNotBlank() &&
+            !source.nickname.equals(speciesName, ignoreCase = true)
+        val pk = ByteArray(PK7_SIZE)
+        w32(pk, 0x00, ec)
+        w16(pk, 0x04, 0)
+        w16(pk, 0x08, source.species)
+        w16(pk, 0x0A, 0)
+        w16(pk, 0x0C, source.trainerId)
+        w16(pk, 0x0E, 0)
+        w32(pk, 0x10, source.experience)
+        pk[0x14] = metadata.abilityId.toByte()
+        pk[0x15] = metadata.abilityNumber.toByte()
+        w16(pk, 0x16, 0)
+        w32(pk, 0x18, pid)
+        pk[0x1C] = nature.toByte()
+        pk[0x1D] = (((gender and 3) shl 1) or
+            if (source.species == 251) 1 else 0).toByte()
+        for (index in evs.indices) pk[0x1E + index] = evs[index].toByte()
+        pk[0x2B] = source.pokerus.toByte()
+        putText(pk, 0x40, nickname)
+        for (index in 0..3) {
+            val move = source.moves[index]
+            w16(pk, 0x5A + index * 2, move)
+            if (move != 0) {
+                pk[0x62 + index] = source.currentPp[index].toByte()
+                pk[0x66 + index] = source.ppUps[index].toByte()
+            }
+        }
+        var packedIvs = 0L
+        for (index in 0..5) {
+            packedIvs = packedIvs or ((ivs[index].toLong() and 31L) shl (index * 5))
+        }
+        if (customNickname) packedIvs = packedIvs or 0x80000000L
+        w32(pk, 0x74, packedIvs)
+        putText(pk, 0x78, trainer.name)
+        pk[0x92] = trainer.gender.toByte()
+        pk[0x93] = 1
+        pk[0xA2] = source.happiness.toByte()
+        putText(pk, 0xB0, source.originalTrainer)
+        pk[0xCA] = source.happiness.toByte()
+        w16(pk, 0xD8, 0)
+        w16(pk, 0xDA, 30017)
+        pk[0xDC] = 4
+        pk[0xDD] = source.level.toByte()
+        pk[0xDE] = 0
+        pk[0xDF] = source.sourceGame.toByte()
+        pk[0xE3] = 2
+        var checksum = 0
+        for (offset in 8 until PK7_SIZE step 2) checksum += u16(pk, offset)
+        w16(pk, 6, checksum and 0xFFFF)
+        return Gen2ToPk7Bridge(source, pk, ivs, evs)
+    }
+
     private fun buildPk7Bridge(
         record: ByteArray,
         source: Gen2ToSwordShieldSource,
@@ -306,8 +425,12 @@ object Gen2ToSwordShieldPk8 {
         source: Gen2ToSwordShieldSource,
         trainer: SwordShieldTrainerRead,
         metadata: Gen1ToSwordShieldMetadata
+    ): IntArray = deterministicIvs(seed(record, trainer, metadata), source)
+
+    private fun deterministicIvs(
+        seed: ByteArray,
+        source: Gen2ToSwordShieldSource
     ): IntArray {
-        val seed = seed(record, trainer, metadata)
         fun expanded(dv: Int) = ((dv.coerceIn(0, 15) shl 1) or 1).coerceIn(0, 31)
         val values = intArrayOf(
             expanded(source.dvs[0]), expanded(source.dvs[1]), expanded(source.dvs[2]),
