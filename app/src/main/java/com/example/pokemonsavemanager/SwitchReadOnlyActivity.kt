@@ -1997,12 +1997,14 @@ class SwitchReadOnlyActivity : Activity() {
         val entries = directory.listFiles()?.filter {
             it.isFile && ((it.name.startsWith("switch_bdsp_") && it.extension.equals("pb8", true)) ||
                 it.extension.equals("pk7", true) ||
-                (it.name.startsWith("switch_swsh_") && it.extension.equals("pk8", true)))
+                (it.name.startsWith("switch_swsh_") && it.extension.equals("pk8", true)) ||
+                (it.name.startsWith("switch_pla_") && it.extension.equals("pa8", true)))
         }?.sortedWith(compareBy<File>({
             when {
                 it.extension.equals("pb8", true) -> 0
                 it.extension.equals("pk7", true) -> 1
-                else -> 2
+                it.extension.equals("pk8", true) -> 2
+                else -> 3
             }
         }, { it.name }))
             .orEmpty()
@@ -2028,6 +2030,17 @@ class SwitchReadOnlyActivity : Activity() {
                             (error.message ?: "unsupported conversion")
                     }
                 )
+            } else if (file.extension.equals("pa8", true)) {
+                runCatching { LegendsArceusToBdspPb8.review(file.readBytes()) }.fold(
+                    onSuccess = { review ->
+                        review.sourceNickname.ifBlank { SwordShieldSpeciesNames.name(review.sourceSpecies) } +
+                            " (#" + review.sourceSpecies + ") • Legends: Arceus PA8 -> PB8 Legalise"
+                    },
+                    onFailure = { error ->
+                        file.name + " • Legends: Arceus route blocked • " +
+                            (error.message ?: "unsupported conversion")
+                    }
+                )
             } else {
                 val parsed = runCatching { BdspPokemonReadOnly.read(file.readBytes()) }.getOrNull()
                 val pokemon = (parsed as? BdspSlotRead.Pokemon)?.value
@@ -2040,7 +2053,7 @@ class SwitchReadOnlyActivity : Activity() {
             .setTitle("PSE Bank • " + entries.size + " BDSP routes")
             .setPositiveButton("Close", null)
         if (entries.isEmpty()) {
-            builder.setMessage("No native BDSP PB8, eligible Gen 7 PK7, or Sword/Shield PK8 Bank entries are available.")
+            builder.setMessage("No native BDSP PB8, eligible Gen 7 PK7, Sword/Shield PK8, or Legends: Arceus PA8 Bank entries are available.")
         } else {
             builder.setItems(labels.toTypedArray()) { _, index ->
                 if (session !== bound) return@setItems
@@ -2048,6 +2061,7 @@ class SwitchReadOnlyActivity : Activity() {
                 when {
                     selected.extension.equals("pk7", true) -> showBdspGen7BankEntry(bound, selected)
                     selected.extension.equals("pk8", true) -> showBdspSwordShieldBankEntry(bound, selected)
+                    selected.extension.equals("pa8", true) -> showBdspLegendsArceusBankEntry(bound, selected)
                     else -> showBdspBankEntry(bound, selected)
                 }
             }
@@ -2118,6 +2132,75 @@ class SwitchReadOnlyActivity : Activity() {
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
                 } catch (error: Exception) {
                     AlertDialog.Builder(this).setTitle("Could not prepare Sword/Shield conversion")
+                        .setMessage(error.message ?: "Both sources remain unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }.show()
+    }
+
+    private fun showBdspLegendsArceusBankEntry(bound: SwitchReadSession, file: File) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = runCatching { file.canonicalFile }.getOrNull()
+        val result = runCatching {
+            require(
+                entry != null && entry.parentFile == directory && entry.isFile &&
+                    entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)
+            ) { "This is not a current Legends: Arceus PSE Bank entry." }
+            val bank = entry.readBytes()
+            val hash = BdspPseBankRestoreEditing.sha256(bank)
+            require(entry.name == "switch_pla_${hash}.pa8") {
+                "The PSE Bank filename no longer matches its native PA8 bytes."
+            }
+            LegendsArceusToBdspPb8.review(bank)
+        }
+        val converted = result.getOrElse {
+            AlertDialog.Builder(this).setTitle("Legends: Arceus -> BDSP blocked")
+                .setMessage(
+                    (it.message ?: "No safe conversion is available.") +
+                        "\n\nThe PA8 Bank entry and BDSP save remain unchanged."
+                )
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val selected = entry ?: return
+        val p = BdspPseBankRestoreEditing.inspectBankRecord(converted.nativeRecord)
+        val message = buildString {
+            append("${SwordShieldSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n")
+            append("Source: ${selected.name} • preserved ${selected.length()}-byte PA8\n")
+            append("Prepared destination: checksum-valid 344-byte native BDSP PB8\n\n")
+            append("Exact disclosed conversion effects\n• ")
+            append(converted.effects.joinToString("\n• "))
+            append(
+                "\n\nContinue only if you accept every disclosed Legalise effect. " +
+                    "This backward cross-title PSE conversion does not claim an official HOME transfer, trade, or provenance."
+            )
+        }
+        AlertDialog.Builder(this).setTitle("Legends: Arceus -> BDSP • PSE Legalise review")
+            .setMessage(message).setNegativeButton("Cancel", null)
+            .setPositiveButton("Legalise & choose destination") { _, _ ->
+                try {
+                    require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                    val source = selectedSourceUri ?: error("Reopen the selected BDSP save from PSE.")
+                    require(
+                        selected.parentFile == directory && selected.isFile &&
+                            selected.name.startsWith("switch_pla_") &&
+                            selected.extension.equals("pa8", true)
+                    ) { "The Legends: Arceus Bank entry changed." }
+                    val bank = selected.readBytes()
+                    val hash = BdspPseBankRestoreEditing.sha256(bank)
+                    require(selected.name == "switch_pla_${hash}.pa8") {
+                        "The PSE Bank entry changed. Reopen PSE Bank."
+                    }
+                    LegendsArceusToBdspPb8.review(bank)
+                    startActivity(Intent(this, SwitchBdspPseBankRestoreActivity::class.java)
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.bank.entry", selected.name)
+                        .putExtra("pse.bank.legalise", true)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not prepare Legends: Arceus conversion")
                         .setMessage(error.message ?: "Both sources remain unchanged.")
                         .setPositiveButton("Close", null).show()
                 }
