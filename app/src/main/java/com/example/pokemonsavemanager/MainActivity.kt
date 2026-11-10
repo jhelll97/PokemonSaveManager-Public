@@ -2607,7 +2607,7 @@ class MainActivity : Activity() {
                 gravity = Gravity.CENTER_VERTICAL
             }
             top.addView(TextView(this).apply {
-                text = if (item.switchFamily.isNotBlank()) "GEN ${item.generation} • SWITCH • READ-ONLY" else if (item.generation > 0) "GEN ${item.generation}" else "SAVE"
+                text = if (item.generation > 0) "GEN ${item.generation}" else "SAVE"
                 textSize = 10f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(if (isCurrent) Color.rgb(95, 215, 255) else ACCENT)
@@ -2895,13 +2895,24 @@ class MainActivity : Activity() {
 
     private fun openActiveSwitchSection(section: String): Boolean {
         val source = activeSwitchSave ?: return false
-        startActivity(Intent(this, SwitchReadOnlyActivity::class.java).apply {
-            data = source.uri
-            putExtra("pse.switch.family", source.switchFamily)
-            putExtra("pse.switch.sha256", source.analysis.sha256)
-            putExtra("pse.switch.section", section)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-        })
+        try {
+            startActivity(Intent(this, SwitchReadOnlyActivity::class.java).apply {
+                data = source.uri
+                putExtra("pse.switch.family", source.switchFamily)
+                putExtra("pse.switch.sha256", source.analysis.sha256)
+                putExtra("pse.switch.section", section)
+                // Switch save browsing is read-only; never request a write grant
+                // for a source document when opening the separate viewer.
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            })
+        } catch (e: SecurityException) {
+            showDialog(
+                "Switch save could not open",
+                "PSE could not pass read access to this save into the viewer. Re-select the save from its original folder and try again."
+            )
+        } catch (e: android.content.ActivityNotFoundException) {
+            showDialog("Switch viewer unavailable", "PSE could not start the Switch read-only viewer.")
+        }
         return true
     }
 
