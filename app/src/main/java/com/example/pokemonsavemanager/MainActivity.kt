@@ -10787,7 +10787,7 @@ class MainActivity : Activity() {
                 append(originDisclosure).append("\n")
                 append("Destination format changes: met location becomes 0 (unspecified); Gen 4 migration date ${source.metYear.toString().padStart(4,'0')}-${source.metMonth.toString().padStart(2,'0')}-${source.metDay.toString().padStart(2,'0')} is omitted because PK3 has no date fields.\n")
                 append("Held items, forms, Eggs, fateful encounters and other unsupported records remain blocked, so none are silently discarded. This is a reviewed backward PSE conversion and does not claim official reverse-migration provenance.\n\n")
-                append("The source save stays unchanged. The exact PK4 Bank record remains until a Keep-pinned destination backup, one native PK3, unchanged unrelated PC data, Pokédex mirrors, affected section checksums and reopened destination all verify. Failure restores the destination and Bank record independently.")
+                append("The source save stays unchanged. The exact PK4 Bank record remains until a Keep-pinned destination backup, one native PK3, unchanged unrelated PC data, Pokédex mirrors, affected section checksums and reopened destination all verify. The Keep-pinned destination backup and independent exact Bank snapshot stay byte-bound before writing and through cleanup. If failure happens before PSE writes or deletes a side, PSE verifies that side stayed exact instead of claiming restoration; after a PSE mutation, it restores and reopens that side independently.")
             }
             AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{meta.speciesName}} • Gen 4 → Gen 3").setMessage(preview).setNegativeButton("Cancel",null).setPositiveButton("Review destination"){_,_->if(snapshotsMatch())chooseGen4ToGen3Destination(prepared)else showDialog("Gen 4 → Gen 3","The destination or Bank record changed after review.")}.show()
         }
@@ -10832,8 +10832,9 @@ class MainActivity : Activity() {
                 restored.contentEquals(p.bankBytes)&&parsed!=null&&parsed.checksumValid&&
                     parsed.pid==p.source.pid&&parsed.species==p.source.species&&parsed.tid==p.source.tid&&parsed.sid==p.source.sid
             }.getOrDefault(false)
-            val saveRestored=!writeStarted||runCatching{
-                file.writeBytes(fresh);val restored=file.readBytes()
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(fresh)
+                val restored=file.readBytes()
                 restored.contentEquals(fresh)&&gen3SaveValid(restored)
             }.getOrDefault(false)
             if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
