@@ -18,7 +18,8 @@ private data class ScarletVioletBankPreparation(
     val destinations: List<ScarletVioletPseBankDestination>,
     val sourceBankHash: String,
     val nativeRecordHash: String,
-    val effects: List<String>
+    val effects: List<String>,
+    val registerCaught: Boolean
 )
 
 /** Restores one native PK9 or explicitly reviewed cross-generation conversion into a new save copy. */
@@ -30,6 +31,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
     private var bankEntryName: String? = null
     private var expectedBankSourceHash: String? = null
     private var conversionEffects: List<String> = emptyList()
+    private var registerGen7Caught = false
     private var readyDestinations: List<ScarletVioletPseBankDestination> = emptyList()
     private var readyPlan: ScarletVioletPseBankRestoreCopyPlan? = null
     private var pendingPlan: ScarletVioletPseBankRestoreCopyPlan? = null
@@ -95,7 +97,8 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                 expectedBankSourceHash = bankSourceHash
                 val prepared = prepareBankRecord(bankSource)
                 val pokemon = ScarletVioletPseBankRestoreEditing.inspectBankRecord(prepared.first)
-                if (bankFile().extension.equals("pa9", true)) {
+                val bankExtension = bankFile().extension
+                if (bankExtension.equals("pk7", true) || bankExtension.equals("pa9", true)) {
                     require(pokemon.species in ScarletVioletPokedexReadOnly.supportedSpecies(source)) {
                         "Species #${pokemon.species} is not present in this Scarlet/Violet save's native Pokédex table."
                     }
@@ -106,7 +109,8 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                 }
                 ScarletVioletBankPreparation(
                     pokemon, destinations, bankSourceHash,
-                    ScarletVioletPseBankRestoreEditing.sha256(prepared.first), prepared.second
+                    ScarletVioletPseBankRestoreEditing.sha256(prepared.first), prepared.second,
+                    bankExtension.equals("pk7", true)
                 )
             }
             runOnUiThread {
@@ -114,6 +118,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                 result.onSuccess { prepared ->
                     readyDestinations = prepared.destinations
                     conversionEffects = prepared.effects
+                    registerGen7Caught = prepared.registerCaught
                     status.text = "Native source and Bank integrity verified\n" +
                         "${ScarletVioletSpeciesNames.name(prepared.pokemon.species)} (#${prepared.pokemon.species}) • Level ${prepared.pokemon.cachedLevel}\n" +
                         "${prepared.destinations.size} empty native destination slots available\n" +
@@ -169,7 +174,8 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                 val hash = expectedHash ?: error("Reopen the source from PSE.")
                 val bank = readBankRecord(source)
                 ScarletVioletPseBankRestoreEditing.stage(
-                    source, hash, bank, destination.box, destination.position
+                    source, hash, bank, destination.box, destination.position,
+                    registerCaught = registerGen7Caught
                 )
             }
             runOnUiThread {
@@ -273,7 +279,8 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
 
     private fun readBankRecord(destinationSource: ByteArray): ByteArray {
         val record = prepareBankRecord(readBankSource()).first
-        if (bankFile().extension.equals("pa9", true)) {
+        val extension = bankFile().extension
+        if (extension.equals("pk7", true) || extension.equals("pa9", true)) {
             val pokemon = ScarletVioletPseBankRestoreEditing.inspectBankRecord(record)
             require(pokemon.species in ScarletVioletPokedexReadOnly.supportedSpecies(destinationSource)) {
                 "Species #${pokemon.species} is not present in this Scarlet/Violet save's native Pokédex table."
@@ -290,6 +297,20 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
         val moves = p.moves.filter { it.id != 0 }.joinToString { "#${it.id} (PP ${it.pp})" }.ifBlank { "None" }
         val effects = if (conversionEffects.isEmpty()) "" else
             "\n\nExplicit PSE conversion Legalise effects\n• " + conversionEffects.joinToString("\n• ")
+        val dexScope = when {
+            plan.addedCaughtRegistration -> {
+                val ranges = plan.dexAbsoluteRanges.joinToString { range ->
+                    if (range.first == range.last) "0x${range.first.toString(16).uppercase()}"
+                    else "0x${range.first.toString(16).uppercase()}-0x${range.last.toString(16).uppercase()}"
+                }
+                " The same reviewed transaction registers form 0 as caught with the converted gender, " +
+                    "shiny state, and English language in the native Pokédex fields at ${ranges}. " +
+                    "Display selections, unrelated forms, regional entries, and unknown bits remain exact."
+            }
+            registerGen7Caught ->
+                " This species already has the complete native caught, form, gender, shiny, and English-language registration, so those fields remain exact."
+            else -> ""
+        }
         AlertDialog.Builder(this).setTitle(
             if (conversionEffects.isEmpty()) "Restore this Bank Pokémon to a new copy?"
             else "Legalise the converted record and restore to a new copy?"
@@ -299,9 +320,9 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                     "Nickname: ${p.nickname.ifBlank { "None" }} • Shiny: ${if (p.shiny) "Yes" else "No"}\n" +
                     "OT ${p.originalTrainer} • TID ${p.tid} / SID ${p.sid}\nMoves: $moves\n\n" +
                     "Destination: native Box ${plan.box}, slot ${plan.position}\n" +
-                    "Allowed native byte scope: one previously empty 344-byte PK9 PC-box slot at 0x${plan.absoluteOffset.toString(16).uppercase()} " +
-                    "plus the native SHA-256 footer. Every existing PC-box slot, all party data, ride Pokémon data, and all unrelated bytes remain exact. " +
-                    "PSE verifies the unchanged source and Bank entry, retains a verified recovery backup, reopens the persisted copy, and removes a failed copy when possible. " +
+                    "Allowed native byte scope: one previously empty 344-byte PK9 PC-box slot at 0x${plan.absoluteOffset.toString(16).uppercase()}, " +
+                    "the reviewed native Pokédex fields when required, and the native SHA-256 footer. Every existing PC-box slot, all party data, ride Pokémon data, and all unrelated bytes remain exact." +
+                    dexScope + " PSE verifies the unchanged source and Bank entry, retains a verified recovery backup, reopens the persisted copy, and removes a failed copy when possible. " +
                     "The Bank entry remains available. Choose a NEW empty document." + effects
             )
             .setNegativeButton("Cancel", null)

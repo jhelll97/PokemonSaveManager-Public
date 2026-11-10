@@ -6,6 +6,23 @@ import java.security.MessageDigest
 
 data class ScarletVioletPseBankDestination(val box: Int, val position: Int)
 
+internal data class ScarletVioletPseDexRegistration(
+    val bytes: ByteArray,
+    val region: ScarletVioletDexRegion,
+    val number: Int,
+    val form: Int,
+    val gender: Int,
+    val shiny: Boolean,
+    val languageIndex: Int,
+    val absoluteOffset: Int,
+    val relativeOffset: Int,
+    val touchedRanges: List<IntRange>
+) {
+    val absoluteRanges: List<IntRange> get() = touchedRanges.map {
+        (absoluteOffset + it.first)..(absoluteOffset + it.last)
+    }
+}
+
 /** Restores one checksum-valid native PK9 Bank record into a reviewed new Scarlet/Violet save copy. */
 object ScarletVioletPseBankRestoreEditing {
     private const val MAX_FILE_SIZE = 0x31CF81
@@ -80,11 +97,14 @@ object ScarletVioletPseBankRestoreEditing {
     fun stage(
         source: ByteArray,
         expectedSha256: String,
-        bankRecord: ByteArray
+        bankRecord: ByteArray,
+        registerCaught: Boolean = false
     ): ScarletVioletPseBankRestoreCopyPlan {
         val destination = emptyDestinations(source).firstOrNull()
             ?: throw IllegalArgumentException("All 960 native Scarlet/Violet PC-box slots are occupied.")
-        return stage(source, expectedSha256, bankRecord, destination.box, destination.position)
+        return stage(
+            source, expectedSha256, bankRecord, destination.box, destination.position, registerCaught
+        )
     }
 
     fun stage(
@@ -92,7 +112,8 @@ object ScarletVioletPseBankRestoreEditing {
         expectedSha256: String,
         bankRecord: ByteArray,
         box: Int,
-        position: Int
+        position: Int,
+        registerCaught: Boolean = false
     ): ScarletVioletPseBankRestoreCopyPlan {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
@@ -108,10 +129,17 @@ object ScarletVioletPseBankRestoreEditing {
         val written = ScarletVioletSaveValidation.writeBoxRecord(
             original, box, position, supplied
         )
-        verify(original, written.bytes, supplied, box, position, written.absoluteOffset)
+        val dexRegistration = if (registerCaught) {
+            stageCaughtRegistration(written.bytes, pokemon)
+        } else null
+        val edited = dexRegistration?.bytes ?: written.bytes
+        verify(
+            original, edited, supplied, pokemon, box, position,
+            written.absoluteOffset, dexRegistration
+        )
         return ScarletVioletPseBankRestoreCopyPlan(
-            original, written.bytes, supplied, pokemon,
-            box, position, written.absoluteOffset
+            original, edited, supplied, pokemon,
+            box, position, written.absoluteOffset, dexRegistration
         )
     }
 
@@ -119,9 +147,11 @@ object ScarletVioletPseBankRestoreEditing {
         original: ByteArray,
         edited: ByteArray,
         bankRecord: ByteArray,
+        pokemon: ScarletVioletPokemonRead,
         box: Int,
         position: Int,
-        absoluteOffset: Int
+        absoluteOffset: Int,
+        dexRegistration: ScarletVioletPseDexRegistration?
     ) {
         val before = ScarletVioletStorageReadOnly.read(original)
         val after = ScarletVioletStorageReadOnly.read(edited)
@@ -153,11 +183,181 @@ object ScarletVioletPseBankRestoreEditing {
                 beforeBlocks.boxes[index] == afterBlocks.boxes[index]
         }) { "An unrelated native PC-box byte changed." }
 
+        verifyDexRegistration(original, edited, pokemon, dexRegistration)
+
         val footerOffset = original.size - FOOTER_SIZE
+        val dexRanges = dexRegistration?.absoluteRanges.orEmpty()
         require(original.indices.all { index ->
             index in absoluteOffset until absoluteOffset + bankRecord.size ||
+                dexRanges.any { index in it } ||
                 index in footerOffset until original.size || original[index] == edited[index]
         }) { "An unrelated encrypted container byte changed, including ride Pokémon data." }
+    }
+
+    private fun stageCaughtRegistration(
+        source: ByteArray,
+        pokemon: ScarletVioletPokemonRead
+    ): ScarletVioletPseDexRegistration? {
+        require(pokemon.form in 0..31 && pokemon.gender in 0..2) {
+            "The converted PK9 form or gender is outside the reviewed Pokédex range."
+        }
+        val beforeDex = ScarletVioletPokedexReadOnly.read(source)
+        val target = beforeDex.regions.asSequence().flatMap { region ->
+            region.entries.asSequence().map { Triple(region.region, it.number, it) }
+        }.firstOrNull { it.third.speciesId == pokemon.species }
+            ?: throw IllegalArgumentException(
+                "Species #${pokemon.species} is not present in this Scarlet/Violet save's native Pokédex table."
+            )
+        val modern = beforeDex.layout == ScarletVioletDexLayout.DLC
+        val before = target.third
+        if (!modern) require(before.rawState != null && before.rawState in 0L..3L) {
+            "This original-layout entry contains an unknown raw state and remains locked."
+        }
+        val recordSize = if (modern) 0x20 else 0x18
+        val relativeOffset = ScarletVioletPokedexReadOnly.nativeSpeciesId(pokemon.species) * recordSize
+        val blocks = ScarletVioletSaveValidation.readDexBlocks(source)
+        val block = if (modern) blocks.dlc!! else blocks.original
+        val originalRecord = block.copyOfRange(relativeOffset, relativeOffset + recordSize)
+        val record = originalRecord.copyOf()
+        val formBit = 1L shl pokemon.form
+        val genderBit = 1 shl pokemon.gender
+        val languageIndex = 1
+        val touched = mutableListOf<IntRange>()
+        if (modern) {
+            writeU32(record, 0, before.obtainedForms!! or formBit)
+            writeU32(record, 4, before.seenForms or formBit)
+            writeU32(record, 8, before.heardForms!! or formBit)
+            writeU16(record, 0x10, before.languageFlags or (1 shl languageIndex))
+            record[0x12] = (before.genderFlags or genderBit).toByte()
+            touched += 0..3
+            touched += 4..7
+            touched += 8..11
+            touched += 0x10..0x11
+            touched += 0x12..0x12
+            if (pokemon.shiny) {
+                record[0x13] = (before.rawShinyFlags or 2).toByte()
+                touched += 0x13..0x13
+            }
+        } else {
+            writeU32(record, 0, 3)
+            writeU32(record, 4, before.seenForms or formBit)
+            writeU16(record, 8, before.genderFlags or genderBit)
+            writeU16(record, 0xA, before.languageFlags or (1 shl languageIndex))
+            touched += 0..3
+            touched += 4..7
+            touched += 8..9
+            touched += 0xA..0xB
+            if (pokemon.shiny) {
+                record[0xC] = (before.rawShinyFlags or 1).toByte()
+                touched += 0xC..0xC
+            }
+        }
+        if (record.contentEquals(originalRecord)) return null
+        val write = ScarletVioletSaveValidation.writeDexRecord(
+            source, modern, relativeOffset, record
+        )
+        ScarletVioletPokedexEditing.verify(
+            source, write.bytes, target.first, target.second, pokemon.form, pokemon.gender,
+            pokemon.shiny, ScarletVioletDexEditMode.CAUGHT, languageIndex,
+            write.absoluteOffset, touched
+        )
+        return ScarletVioletPseDexRegistration(
+            write.bytes, target.first, target.second, pokemon.form, pokemon.gender,
+            pokemon.shiny, languageIndex, write.absoluteOffset, relativeOffset, touched
+        )
+    }
+
+    private fun verifyDexRegistration(
+        original: ByteArray,
+        edited: ByteArray,
+        pokemon: ScarletVioletPokemonRead,
+        registration: ScarletVioletPseDexRegistration?
+    ) {
+        val beforeBlocks = ScarletVioletSaveValidation.readDexBlocks(original)
+        val afterBlocks = ScarletVioletSaveValidation.readDexBlocks(edited)
+        if (registration == null) {
+            val sameDlc = when {
+                beforeBlocks.dlc == null && afterBlocks.dlc == null -> true
+                beforeBlocks.dlc == null || afterBlocks.dlc == null -> false
+                else -> beforeBlocks.dlc.contentEquals(afterBlocks.dlc)
+            }
+            require(beforeBlocks.original.contentEquals(afterBlocks.original) && sameDlc) {
+                "Native Scarlet/Violet Pokédex data changed without a reviewed caught registration."
+            }
+            return
+        }
+        val beforeDex = ScarletVioletPokedexReadOnly.read(original)
+        val afterDex = ScarletVioletPokedexReadOnly.read(edited)
+        require(beforeDex.version == afterDex.version && beforeDex.layout == afterDex.layout &&
+            beforeDex.regions.map { it.region } == afterDex.regions.map { it.region }) {
+            "The restored copy changed native Pokédex layout or regional identity."
+        }
+        val target = beforeDex.region(registration.region)?.entry(registration.number)
+            ?: throw IllegalArgumentException("The reviewed regional Pokédex entry is unavailable.")
+        require(target.speciesId == pokemon.species) {
+            "The reviewed Scarlet/Violet Pokédex species changed."
+        }
+        val formBit = 1L shl registration.form
+        val genderBit = 1 shl registration.gender
+        fun expected(entry: ScarletVioletDexEntryRead): ScarletVioletDexEntryRead {
+            val languageFlags = entry.languageFlags or (1 shl registration.languageIndex)
+            val shinyFlags = if (!registration.shiny) entry.rawShinyFlags else
+                entry.rawShinyFlags or if (beforeDex.layout == ScarletVioletDexLayout.DLC) 2 else 1
+            return if (beforeDex.layout == ScarletVioletDexLayout.DLC) entry.copy(
+                obtainedForms = entry.obtainedForms!! or formBit,
+                seenForms = entry.seenForms or formBit,
+                heardForms = entry.heardForms!! or formBit,
+                genderFlags = entry.genderFlags or genderBit,
+                languageFlags = languageFlags,
+                languages = ScarletVioletPokedexEditing.languageNames.filterIndexed { bit, _ ->
+                    languageFlags and (1 shl bit) != 0
+                },
+                rawShinyFlags = shinyFlags
+            ) else entry.copy(
+                rawState = 3,
+                seenForms = entry.seenForms or formBit,
+                genderFlags = entry.genderFlags or genderBit,
+                languageFlags = languageFlags,
+                languages = ScarletVioletPokedexEditing.languageNames.filterIndexed { bit, _ ->
+                    languageFlags and (1 shl bit) != 0
+                },
+                rawShinyFlags = shinyFlags
+            )
+        }
+        require(beforeDex.regions.indices.all { regionIndex ->
+            val beforeEntries = beforeDex.regions[regionIndex].entries
+            val afterEntries = afterDex.regions[regionIndex].entries
+            beforeEntries.indices.all { index ->
+                val beforeEntry = beforeEntries[index]
+                afterEntries[index] == if (beforeEntry.speciesId == pokemon.species)
+                    expected(beforeEntry) else beforeEntry
+            }
+        }) { "An unrelated native Scarlet/Violet Pokédex record changed." }
+        val afterTarget = afterDex.region(registration.region)!!.entry(registration.number)
+        require(afterTarget.caught && afterTarget.seen &&
+            afterTarget.seenForms and formBit != 0L &&
+            afterTarget.genderFlags and genderBit != 0 &&
+            (!registration.shiny || afterTarget.shinySeen)) {
+            "The native Scarlet/Violet caught registration did not reopen exactly."
+        }
+        val beforeBlock = if (beforeDex.layout == ScarletVioletDexLayout.DLC)
+            beforeBlocks.dlc!! else beforeBlocks.original
+        val afterBlock = if (afterDex.layout == ScarletVioletDexLayout.DLC)
+            afterBlocks.dlc!! else afterBlocks.original
+        require(beforeBlock.indices.all { index ->
+            registration.touchedRanges.any { range ->
+                index in (registration.relativeOffset + range.first)..(registration.relativeOffset + range.last)
+            } || beforeBlock[index] == afterBlock[index]
+        }) { "An unrelated native Scarlet/Violet Pokédex byte changed." }
+    }
+
+    private fun writeU16(bytes: ByteArray, offset: Int, value: Int) {
+        bytes[offset] = value.toByte()
+        bytes[offset + 1] = (value ushr 8).toByte()
+    }
+
+    private fun writeU32(bytes: ByteArray, offset: Int, value: Long) {
+        repeat(4) { bytes[offset + it] = (value ushr (it * 8)).toByte() }
     }
 
     fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes)
@@ -171,14 +371,18 @@ class ScarletVioletPseBankRestoreCopyPlan internal constructor(
     val pokemon: ScarletVioletPokemonRead,
     val box: Int,
     val position: Int,
-    val absoluteOffset: Int
+    val absoluteOffset: Int,
+    dexRegistration: ScarletVioletPseDexRegistration?
 ) {
     private val original = original.copyOf()
     private val edited = edited.copyOf()
     private val bankRecord = bankRecord.copyOf()
+    private val dexRegistration = dexRegistration?.copy(bytes = dexRegistration.bytes.copyOf())
     val sourceSha256 = ScarletVioletPseBankRestoreEditing.sha256(this.original)
     val bankSha256 = ScarletVioletPseBankRestoreEditing.sha256(this.bankRecord)
     val editedSha256 = ScarletVioletPseBankRestoreEditing.sha256(this.edited)
+    val dexAbsoluteRanges: List<IntRange> = this.dexRegistration?.absoluteRanges.orEmpty()
+    val addedCaughtRegistration: Boolean get() = this.dexRegistration != null
     private var consumed = false
 
     @Synchronized
@@ -213,7 +417,8 @@ class ScarletVioletPseBankRestoreCopyPlan internal constructor(
         var started = false
         try {
             ScarletVioletPseBankRestoreEditing.verify(
-                original, edited, bankRecord, box, position, absoluteOffset
+                original, edited, bankRecord, pokemon, box, position,
+                absoluteOffset, dexRegistration
             )
             started = true
             writeDestination(edited.copyOf())
@@ -222,7 +427,8 @@ class ScarletVioletPseBankRestoreCopyPlan internal constructor(
                 "The saved copy differs from the reviewed PSE Bank restore."
             }
             ScarletVioletPseBankRestoreEditing.verify(
-                original, persisted, bankRecord, box, position, absoluteOffset
+                original, persisted, bankRecord, pokemon, box, position,
+                absoluteOffset, dexRegistration
             )
             requireSource()
             requireBank()
