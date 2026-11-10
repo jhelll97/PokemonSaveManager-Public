@@ -164,7 +164,8 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
                 SwordShieldPseBankRestoreEditing.stage(
                     source, hash, bank, destination.box, destination.position,
                     registerCaughtEnglish = bankFile().extension.equals("pk7", true) ||
-                        bankFile().extension.equals("pse1", true)
+                        bankFile().extension.equals("pse1", true) ||
+                        bankFile().extension.equals("pse2", true)
                 )
             }
             runOnUiThread {
@@ -200,17 +201,18 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
         val entry = File(directory, name).canonicalFile
         val native = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
         val gen1 = entry.name.startsWith("pse1_") && entry.extension.equals("pse1", true)
+        val gen2 = entry.extension.equals("pse2", true)
         val gen7 = entry.extension.equals("pk7", true)
         val bdsp = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
         val legendsArceus = entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)
         val scarletViolet = entry.name.startsWith("switch_sv_") && entry.extension.equals("pk9", true)
         val legendsZa = entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true)
         require(entry.parentFile == directory && entry.isFile &&
-            (native || gen1 || gen7 || bdsp || legendsArceus || scarletViolet || legendsZa)
+            (native || gen1 || gen2 || gen7 || bdsp || legendsArceus || scarletViolet || legendsZa)
         ) {
-            "This is not a current Sword/Shield, Gen 1, Gen 7, BDSP, Legends: Arceus, Scarlet/Violet, or Legends: Z-A PSE Bank entry."
+            "This is not a current Sword/Shield, Gen 1, Gen 2, Gen 7, BDSP, Legends: Arceus, Scarlet/Violet, or Legends: Z-A PSE Bank entry."
         }
-        if (gen1 || gen7 || bdsp || legendsArceus || scarletViolet || legendsZa) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+        if (gen1 || gen2 || gen7 || bdsp || legendsArceus || scarletViolet || legendsZa) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
             "Review and explicitly choose the disclosed PSE Legalise conversion from PSE Bank."
         }
         return entry
@@ -236,6 +238,18 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
                 intent.getIntExtra("pse.gen1.ability_number", 0)
             )
             val converted = Gen1ToSwordShieldPk8.review(
+                source, SwordShieldTrainerReadOnly.read(destination), metadata
+            )
+            return converted.nativeRecord to converted.effects
+        }
+        if (entry.extension.equals("pse2", true)) {
+            val metadata = Gen1ToSwordShieldMetadata(
+                intent.getIntExtra("pse.gen2.friendship", -1),
+                intent.getIntExtra("pse.gen2.gender_rate", -2),
+                intent.getIntExtra("pse.gen2.ability_id", 0),
+                intent.getIntExtra("pse.gen2.ability_number", 0)
+            )
+            val converted = Gen2ToSwordShieldPk8.review(
                 source, SwordShieldTrainerReadOnly.read(destination), metadata
             )
             return converted.nativeRecord to converted.effects
