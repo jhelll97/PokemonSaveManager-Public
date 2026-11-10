@@ -1232,3 +1232,15 @@ The Legalise disclosure identifies retained species, default form, encryption co
 The restore remains title-native and transactional: it re-reads the exact PK6 and BDSP source, writes one reviewed native PB8 to one user-chosen empty PC-box slot in a new copy, updates only the matched native caught registration and SHA-256 integrity footer, retains a verified destination recovery backup, reopens the persisted copy, and verifies both original sources remain unchanged. Existing box records, party data, unrelated Pokédex records and unrelated save bytes remain exact. Failure keeps or restores the destination and preserved Bank source independently. This is a PSE conversion and does not claim an official transfer, HOME move, trade or verified provenance.
 
 Next bounded route: continue the Generation 6 source's retained destination order by inspecting Gen 6 PK6 -> Legends: Arceus PA8. Reuse one exact selected checksum-valid PK6 binding only where Hisui species, form, move, ability, Strange Ball, native Pokédex and integrity mappings are independently destination-valid; keep unsupported or lossy fields blocked until the user explicitly accepts every disclosed Legalise effect.
+
+
+## Gen 6 -> Legends: Arceus individual PSE Bank conversion
+
+- The Legends: Arceus Bank route now reads the exact selected checksum-valid 232-byte PK6 record and prepares a title-specific 360-byte native PA8 record. Route inventory alone is not treated as conversion support.
+- The bounded adapter accepts English, non-Egg, default-form Generation 6 records only when the species exists in the reviewed Legends: Arceus catalogue, the held item is empty, the source ball and origin are reviewed, and all current and relearn moves are usable in Legends: Arceus.
+- Species metadata must exactly match the PK6 ability ID and slot and the destination-valid gender mapping. Unsupported forms, glyphs, species, moves, abilities, ratios, values, or records remain blocked before any save write.
+- The Legalise review explicitly discloses the PSE provenance boundary, Strange Ball replacement, PP-Up removal, zero Ganbaru Values, clear Hyper Training, cleared markings/ribbons/PLA-only state, normalized text, rebuilt native HP and party cache, and every named PK6 metadata byte range omitted by this conversion.
+- The selected PK6 Bank entry and source Legends: Arceus save remain unchanged while the user reviews one chosen empty native pasture slot. The existing restore transaction retains the recovery copy, updates native checksums and obtained registration, persists and reopens the written save, verifies the PA8 and party cache, and restores both sides on failure.
+- This is a PSE conversion. It does not claim an official HOME transfer, in-game trade, encounter legality, moveset legality, or verified provenance.
+
+Next bounded route: Gen 6 PK6 -> Scarlet/Violet PK9.
