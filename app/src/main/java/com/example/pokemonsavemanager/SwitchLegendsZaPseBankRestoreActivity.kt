@@ -59,7 +59,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid native PA9 to an empty PC-box slot you choose in a new save copy. " +
-                "Native PA9 entries remain byte-exact. Eligible Gen 1 PSE1, Gen 2 PSE2, Gen 3 PK3, Gen 4 PK4, Generation 7 PK7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, and Scarlet/Violet PK9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Native PA9 entries remain byte-exact. Eligible Gen 1 PSE1, Gen 2 PSE2, Gen 3 PK3, Gen 4 PK4, Gen 5 PK5, Generation 7 PK7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, and Scarlet/Violet PK9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
                 "Unsupported species, forms, items, moves, limits, or text remain blocked; these PSE conversions do not certify encounter, ability, Mega, or moveset legality."
             textSize = 16f
         })
@@ -113,6 +113,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                         bankFile().extension.equals("pse2", true) ||
                         bankFile().extension.equals("pk3", true) ||
                         bankFile().extension.equals("pk4", true) ||
+                        bankFile().extension.equals("pk5", true) ||
                         bankFile().extension.equals("pk7", true)
                 )
             }
@@ -213,6 +214,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         bankEntryName?.endsWith(".pse2", true) == true -> "Generation 2"
         bankEntryName?.endsWith(".pk3", true) == true -> "Generation 3"
         bankEntryName?.endsWith(".pk4", true) == true -> "Generation 4"
+        bankEntryName?.endsWith(".pk5", true) == true -> "Generation 5"
         bankEntryName?.endsWith(".pk7", true) == true -> "Generation 7"
         bankEntryName?.endsWith(".pk9", true) == true -> "Scarlet/Violet"
         bankEntryName?.endsWith(".pk8", true) == true -> "Sword/Shield"
@@ -230,16 +232,17 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         val gen2 = entry.extension.equals("pse2", true)
         val gen3 = entry.extension.equals("pk3", true)
         val gen4 = entry.extension.equals("pk4", true)
+        val gen5 = entry.extension.equals("pk5", true)
         val gen7 = entry.extension.equals("pk7", true)
         val scarletViolet = entry.name.startsWith("switch_sv_") && entry.extension.equals("pk9", true)
         val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
         val bdsp = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
         val legendsArceus = entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)
         require(entry.parentFile == directory && entry.isFile &&
-            (native || gen1 || gen2 || gen3 || gen4 || gen7 || swordShield || bdsp || legendsArceus || scarletViolet)) {
-            "This is not a current Legends: Z-A, Gen 1, Gen 2, Gen 3, Gen 4, Generation 7, Sword/Shield, BDSP, Legends: Arceus, or Scarlet/Violet PSE Bank entry."
+            (native || gen1 || gen2 || gen3 || gen4 || gen5 || gen7 || swordShield || bdsp || legendsArceus || scarletViolet)) {
+            "This is not a current Legends: Z-A, Gen 1, Gen 2, Gen 3, Gen 4, Gen 5, Generation 7, Sword/Shield, BDSP, Legends: Arceus, or Scarlet/Violet PSE Bank entry."
         }
-        if (gen1 || gen2 || gen3 || gen4 || gen7 || swordShield || bdsp || legendsArceus || scarletViolet) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+        if (gen1 || gen2 || gen3 || gen4 || gen5 || gen7 || swordShield || bdsp || legendsArceus || scarletViolet) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
             "Review and explicitly choose the disclosed ${conversionSourceName()} Legalise conversion from PSE Bank."
         }
         return entry
@@ -304,6 +307,18 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                 intent.getIntExtra("pse.gen4.ability_number", 0)
             )
             val converted = Gen4ToLegendsZaPa9.review(
+                source, LegendsZaTrainerReadOnly.read(destination), metadata
+            )
+            return converted.nativeRecord to converted.effects
+        }
+        if (entry.extension.equals("pk5", true)) {
+            val metadata = Gen1ToSwordShieldMetadata(
+                intent.getIntExtra("pse.gen5.friendship", -1),
+                intent.getIntExtra("pse.gen5.gender_rate", -2),
+                intent.getIntExtra("pse.gen5.ability_id", 0),
+                intent.getIntExtra("pse.gen5.ability_number", 0)
+            )
+            val converted = Gen5ToLegendsZaPa9.review(
                 source, LegendsZaTrainerReadOnly.read(destination), metadata
             )
             return converted.nativeRecord to converted.effects
