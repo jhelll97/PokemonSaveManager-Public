@@ -59,7 +59,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pastures"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid native PA8 stored core to an empty pasture slot you choose in a new save copy. " +
-                "Native PA8 entries remain byte-exact. Eligible Gen 1 PSE1, Gen 2 PSE2, Gen 3 PK3, Gen 7 PK7, Sword/Shield PK8, BDSP PB8, Scarlet/Violet PK9, and Legends: Z-A PA9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Native PA8 entries remain byte-exact. Eligible Gen 1 PSE1, Gen 2 PSE2, Gen 3 PK3, Gen 4 PK4, Gen 7 PK7, Sword/Shield PK8, BDSP PB8, Scarlet/Violet PK9, and Legends: Z-A PA9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
                 "Unsupported species, forms, items, moves, limits, or text remain blocked; this PSE conversion does not certify encounter, ability, or moveset legality."
             textSize = 16f
         })
@@ -107,7 +107,8 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                     bankFile().extension.equals("pk7", true) ||
                         bankFile().extension.equals("pse1", true) ||
                         bankFile().extension.equals("pse2", true) ||
-                        bankFile().extension.equals("pk3", true)
+                        bankFile().extension.equals("pk3", true) ||
+                        bankFile().extension.equals("pk4", true)
                 )
             }
             runOnUiThread {
@@ -210,17 +211,18 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         val gen1 = entry.name.startsWith("pse1_") && entry.extension.equals("pse1", true)
         val gen2 = entry.extension.equals("pse2", true)
         val gen3 = entry.extension.equals("pk3", true)
+        val gen4 = entry.extension.equals("pk4", true)
         val gen7 = entry.extension.equals("pk7", true)
         val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
         val bdsp = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
         val scarletViolet = entry.name.startsWith("switch_sv_") && entry.extension.equals("pk9", true)
         val legendsZa = entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true)
         require(entry.parentFile == directory && entry.isFile &&
-            (native || gen1 || gen2 || gen3 || gen7 || swordShield || bdsp || scarletViolet || legendsZa)
+            (native || gen1 || gen2 || gen3 || gen4 || gen7 || swordShield || bdsp || scarletViolet || legendsZa)
         ) {
-            "This is not a current Legends: Arceus, Gen 1, Gen 2, Gen 3, Gen 7, Sword/Shield, BDSP, Scarlet/Violet, or Legends: Z-A PSE Bank entry."
+            "This is not a current Legends: Arceus, Gen 1, Gen 2, Gen 3, Gen 4, Gen 7, Sword/Shield, BDSP, Scarlet/Violet, or Legends: Z-A PSE Bank entry."
         }
-        if (gen1 || gen2 || gen3 || gen7 || swordShield || bdsp || scarletViolet || legendsZa) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
+        if (gen1 || gen2 || gen3 || gen4 || gen7 || swordShield || bdsp || scarletViolet || legendsZa) require(intent.getBooleanExtra("pse.bank.legalise", false)) {
             "Review and explicitly choose the disclosed PSE Legalise conversion from PSE Bank."
         }
         return entry
@@ -273,6 +275,18 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 intent.getIntExtra("pse.gen3.ability_number", 0)
             )
             val converted = Gen3ToLegendsArceusPa8.review(
+                source, LegendsArceusTrainerReadOnly.read(destination), metadata
+            )
+            return converted.nativeRecord to converted.effects
+        }
+        if (entry.extension.equals("pk4", true)) {
+            val metadata = Gen1ToSwordShieldMetadata(
+                intent.getIntExtra("pse.gen4.friendship", -1),
+                intent.getIntExtra("pse.gen4.gender_rate", -2),
+                intent.getIntExtra("pse.gen4.ability_id", 0),
+                intent.getIntExtra("pse.gen4.ability_number", 0)
+            )
+            val converted = Gen4ToLegendsArceusPa8.review(
                 source, LegendsArceusTrainerReadOnly.read(destination), metadata
             )
             return converted.nativeRecord to converted.effects
