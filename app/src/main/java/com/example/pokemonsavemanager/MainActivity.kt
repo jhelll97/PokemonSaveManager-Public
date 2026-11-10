@@ -10987,7 +10987,7 @@ class MainActivity : Activity() {
             )
             val pidNotice=if(converted.pid==source.pid)"PID preserved." else "PID adjustment: ${source.pid.toString(16).uppercase().padStart(8,'0')} → ${converted.pid.toString(16).uppercase().padStart(8,'0')} so the Generation 5 ability slot agrees with its PID; TID/SID, ability, nature and shiny state are preserved. Review before continuing."
             val originTitle=gen4CompatibleOriginTitle(source.originGame)?:return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 5 blocked","The source origin is no longer a documented native Generation 3–4 title. Nothing was changed.")
-            val preview="PSE converts this preserved Gen 4 Bank record into a native Gen 5 PK5. Species, TID/SID, nickname, OT, experience, ability, nature, gender/form, shiny state, moves/PP/PP Ups, IVs, EVs, friendship, Pokérus, ball, met level and met date are preserved. Origin preserved: $originTitle (ID ${source.originGame}). $pidNotice The Gen 4 met-location number is set to 0 because Gen 4 and Gen 5 location catalogs differ; this is shown as unspecified location, not official migration provenance. Records with held items, undocumented origins or unsupported fields remain blocked. The source save remains unchanged, and the Gen 4 Bank copy stays available until the reviewed Gen 5 save is written."
+            val preview="PSE converts this preserved Gen 4 Bank record into a native Gen 5 PK5. Species, TID/SID, nickname, OT, experience, ability, nature, gender/form, shiny state, moves/PP/PP Ups, IVs, EVs, friendship, Pokérus, ball, met level and met date are preserved. Origin preserved: $originTitle (ID ${source.originGame}). $pidNotice The Gen 4 met-location number is set to 0 because Gen 4 and Gen 5 location catalogs differ; this is shown as unspecified location, not official migration provenance. Records with held items, undocumented origins or unsupported fields remain blocked. The source save remains unchanged. The exact Gen 4 Bank record stays available until one chosen empty native PK5 slot, Pokédex registration, box checksum, checksum table and persisted PK5 reopen all verify. Exact retained destination and Bank recovery snapshots remain byte-bound through cleanup, and failure restores both sides independently."
             AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 4 → Gen 5")
                 .setMessage(preview).setNegativeButton("Cancel",null)
                 .setPositiveButton("Choose Gen 5 destination"){_,_->chooseGen4ToGen5Destination(prepared)}
@@ -11106,7 +11106,8 @@ class MainActivity : Activity() {
             }
             require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
                 p.bankFile.readBytes().contentEquals(p.bankBytes)&&file.readBytes().contentEquals(save)&&
-                isBackupKept(recovery)&&bankCopy.readBytes().contentEquals(bank)){
+                isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(bank)){
                 "The source identity, Gen ${p.sourceGeneration} Bank record, recovery snapshots or verified Gen 5 destination changed before Bank cleanup."
             }
             bankDeleteAttempted=true
