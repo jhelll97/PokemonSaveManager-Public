@@ -1270,3 +1270,13 @@ The explicit Legalise review discloses the PSE provenance boundary, clear Hyper 
 The selected PK6 Bank entry and Legends: Z-A source remain unchanged while the user reviews one chosen empty native box slot. The existing transaction retains the recovery copy, updates native integrity and revision-aware caught/default-form, gender, shiny, and English Pokédex registration, persists and reopens the written save, verifies the native PA9, and restores both sides on failure. This PSE conversion does not claim an official HOME transfer, in-game trade, encounter legality, moveset legality, Mega legality, or verified provenance.
 
 Next bounded route: Gen 7 PK7 -> Sword/Shield PK8 recovery and integrity hardening.
+
+## Gen 7 -> Sword/Shield recovery and mapping hardening
+
+The Gen 7 PK7 -> Sword/Shield PK8 Bank review now binds the exact selected checksum-valid 232-byte PK7 by SHA-256 before metadata lookup, after the asynchronous lookup, when the user accepts Legalise, and again on first entry to the restore activity. A replacement or modified Bank record cannot inherit an earlier conversion review. The restore continues to regenerate the native PK8 from the preserved PK7 and rechecks both source documents before and after the reviewed new-copy write.
+
+The route now validates the selected Sword/Shield trainer language and requires documented species metadata to match the PK7 ability ID, ability slot, and destination-valid gender ratio before conversion. Invalid gender values, current-handler state, PP-Up values, and mismatched destination mappings remain blocked. The generated PK8 must reopen with the reviewed gender, fateful flag, handler, ability, identity, level, HP, and cached stats. The Legalise review names the reviewed Bank hash and discloses the exact remaining PK7 metadata byte ranges and values omitted from PK8, in addition to the existing field, ribbon, memory, text, default, provenance, and rebuilt-stat effects.
+
+The chosen empty PK8 slot, allocated regional Pokédex records, native SHA-256 footer, verified recovery backup, persisted reopen verification, preserved source save and Bank entry, and failed-copy cleanup remain in one transaction. The conversion does not claim an official HOME transfer, in-game trade, encounter legality, moveset legality, or verified provenance.
+
+Next bounded route: Gen 7 PK7 -> BDSP PB8 recovery and integrity hardening.
