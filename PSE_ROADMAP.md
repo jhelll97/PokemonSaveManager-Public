@@ -1342,3 +1342,13 @@ The converter continues to require a destination-supported default-form species,
 The selected empty native PK9 PC-box slot, title-native caught/form/gender/shiny/language registration and container integrity updates, verified recovery backup, persisted exact reopen verification, preserved Scarlet/Violet source and PA9 Bank entry, and failed-copy cleanup remain one transaction with two-sided rollback. This backward PSE conversion does not claim an official HOME transfer, in-game trade, encounter legality, ability legality, Alpha or Mega history, moveset legality, natural Tera type, or verified provenance.
 
 Next bounded route: Sword/Shield PK8 -> BDSP PB8 recovery and integrity hardening.
+
+## Sword/Shield -> BDSP recovery and integrity hardening
+
+The Sword/Shield PK8 -> BDSP PB8 review now binds the exact selected checksum-valid 344-byte native PK8 by SHA-256 when the Bank entry opens, when the user accepts Legalise, and again on first entry to the restore activity. The hash-derived Bank filename remains independently checked, the reviewed hash is visible before destination selection, and a replacement PK8 cannot inherit an earlier conversion review.
+
+The converter continues to require a BDSP-supported default-form species, one verified destination profile, empty held item, BDSP-available current and relearn moves, reviewed ability storage, English text, origin, Ball, handler, date, EV, PP, PP-Up, Hyper Training and EXP ranges. Its generated native PB8 must now reopen with the reviewed EC, trainer IDs, shiny state, nature and stat nature, trainer friendships and handler fields, exact moves/PP/PP Ups, IVs, EVs, contest values, Hyper Training, relearn moves, ability slot, cached level/stats and full HP. The reopen also verifies retained marking, Pokerus, origin, language, date and location bytes plus the disclosed zero defaults for ribbons, size, Dynamax/Gigantamax, memories, battle/form data, tracker, Technical Records and other PB8-only storage. The Legalise review lists the exact remaining PK8 metadata byte ranges and values omitted from PB8.
+
+The selected empty native PB8 PC-box slot, title-native caught registration, whole-file MD5 update, verified recovery backup, persisted exact reopen verification, preserved BDSP source and PK8 Bank entry, and failed-copy cleanup remain one transaction with two-sided rollback. This backward cross-title PSE conversion does not claim an official HOME transfer, in-game trade, encounter legality, ability legality, moveset legality, Dynamax/Gigantamax history, or verified provenance.
+
+Next bounded route: Sword/Shield PK8 -> Legends: Arceus PA8 recovery and integrity hardening.

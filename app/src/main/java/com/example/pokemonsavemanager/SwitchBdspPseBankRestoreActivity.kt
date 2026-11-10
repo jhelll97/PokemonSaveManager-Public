@@ -228,7 +228,13 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
     }
 
     private fun readBankSource(): ByteArray {
-        val bytes = bankFile().readBytes()
+        val entry = bankFile()
+        if (entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)) {
+            require(!expectedBankSourceHash.isNullOrBlank()) {
+                "The reviewed Sword/Shield Bank identity is missing. Reopen PSE Bank."
+            }
+        }
+        val bytes = entry.readBytes()
         expectedBankSourceHash?.let {
             require(BdspPseBankRestoreEditing.sha256(bytes) == it) {
                 "The preserved PSE Bank source changed. Reopen PSE Bank."
