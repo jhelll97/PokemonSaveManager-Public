@@ -6,6 +6,15 @@ import java.security.MessageDigest
 
 data class SwordShieldPseBankDestination(val box: Int, val position: Int)
 
+data class SwordShieldPseBankDexRegistration(
+    val region: SwordShieldDexRegion,
+    val number: Int,
+    val variant: Int,
+    val formIndex: Int,
+    val languageIndex: Int,
+    val absoluteOffset: Int
+)
+
 /** Restores one checksum-valid native PK8 Bank record into a reviewed new Sword/Shield save copy. */
 object SwordShieldPseBankRestoreEditing {
     private const val MAX_FILE_SIZE = 0x1876B1
@@ -78,7 +87,8 @@ object SwordShieldPseBankRestoreEditing {
         expectedSha256: String,
         bankRecord: ByteArray,
         box: Int,
-        position: Int
+        position: Int,
+        registerCaughtEnglish: Boolean = false
     ): SwordShieldPseBankRestoreCopyPlan {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
@@ -94,10 +104,16 @@ object SwordShieldPseBankRestoreEditing {
         val written = SwordShieldSaveValidation.writeBoxRecord(
             original, box, position, supplied
         )
-        verify(original, written.bytes, supplied, box, position, written.absoluteOffset)
+        val (edited, dexRegistrations) = if (registerCaughtEnglish) {
+            registerCaughtEnglishDex(written.bytes, pokemon)
+        } else written.bytes to emptyList()
+        verify(
+            original, edited, supplied, box, position, written.absoluteOffset,
+            dexRegistrations
+        )
         return SwordShieldPseBankRestoreCopyPlan(
-            original, written.bytes, supplied, pokemon,
-            box, position, written.absoluteOffset
+            original, edited, supplied, pokemon,
+            box, position, written.absoluteOffset, dexRegistrations
         )
     }
 
@@ -107,7 +123,8 @@ object SwordShieldPseBankRestoreEditing {
         bankRecord: ByteArray,
         box: Int,
         position: Int,
-        absoluteOffset: Int
+        absoluteOffset: Int,
+        dexRegistrations: List<SwordShieldPseBankDexRegistration>
     ) {
         val before = SwordShieldStorageReadOnly.read(original)
         val after = SwordShieldStorageReadOnly.read(edited)
@@ -136,11 +153,113 @@ object SwordShieldPseBankRestoreEditing {
                 beforeBlocks.boxes[index] == afterBlocks.boxes[index]
         }) { "An unrelated native PC-box byte changed." }
 
+        if (dexRegistrations.isNotEmpty()) {
+            val beforeDex = SwordShieldPokedexReadOnly.read(original)
+            val afterDex = SwordShieldPokedexReadOnly.read(edited)
+            require(beforeDex.version == afterDex.version) {
+                "The destination Pokédex changed native title identity."
+            }
+            dexRegistrations.forEach { registration ->
+                val beforeEntry = beforeDex.region(registration.region)?.entry(registration.number)
+                    ?: error("The original regional Pokédex record is missing.")
+                val afterEntry = afterDex.region(registration.region)?.entry(registration.number)
+                    ?: error("The restored regional Pokédex record is missing.")
+                require(beforeEntry.speciesId == reopened.value.species &&
+                    afterEntry.speciesId == reopened.value.species) {
+                    "A destination Pokédex record no longer matches the restored species."
+                }
+                require(registration.formIndex in afterEntry.seenBits[registration.variant] &&
+                    afterEntry.caught &&
+                    SwordShieldPokedexEditing.languages[registration.languageIndex] in afterEntry.languages) {
+                    "The restored Pokémon did not reopen with its native caught registration."
+                }
+                require(beforeEntry.seenBits.indices.all { group ->
+                    if (group == registration.variant) {
+                        afterEntry.seenBits[group].toSet() ==
+                            beforeEntry.seenBits[group].toSet() + registration.formIndex
+                    } else afterEntry.seenBits[group] == beforeEntry.seenBits[group]
+                }) { "An unrelated destination seen form changed." }
+                require(afterEntry.languages.toSet() == beforeEntry.languages.toSet() +
+                    SwordShieldPokedexEditing.languages[registration.languageIndex]) {
+                    "An unrelated destination caught-language registration changed."
+                }
+                require(beforeEntry.displayedFormId == afterEntry.displayedFormId &&
+                    beforeEntry.displayedGenderId == afterEntry.displayedGenderId &&
+                    beforeEntry.displayGigantamax == afterEntry.displayGigantamax &&
+                    beforeEntry.displayShiny == afterEntry.displayShiny &&
+                    beforeEntry.caughtGigantamax == afterEntry.caughtGigantamax &&
+                    beforeEntry.secondaryGigantamaxFlag == afterEntry.secondaryGigantamaxFlag &&
+                    beforeEntry.battledCount == afterEntry.battledCount &&
+                    beforeEntry.rawExtra1 == afterEntry.rawExtra1 &&
+                    beforeEntry.rawExtra2 == afterEntry.rawExtra2
+                ) { "Native destination display, Gigantamax, counter, or extra data changed." }
+                val allowedFlagMask = 1L or (1L shl (registration.languageIndex + 2))
+                require((beforeEntry.rawFlags xor afterEntry.rawFlags) and allowedFlagMask.inv() == 0L) {
+                    "An unrelated native destination Pokédex flag changed."
+                }
+            }
+        }
+
         val hashOffset = original.size - 32
         require(original.indices.all { index ->
             index in absoluteOffset until absoluteOffset + bankRecord.size ||
+                dexRegistrations.any {
+                    index in it.absoluteOffset until it.absoluteOffset + 0x30
+                } ||
                 index in hashOffset until original.size || original[index] == edited[index]
         }) { "An unrelated encrypted container byte changed." }
+    }
+
+    private fun registerCaughtEnglishDex(
+        source: ByteArray,
+        pokemon: SwordShieldPokemonRead
+    ): Pair<ByteArray, List<SwordShieldPseBankDexRegistration>> {
+        require(pokemon.form == 0) {
+            "Only the reviewed base form can receive the verified native Pokédex mapping."
+        }
+        val variant = pokemon.gender.coerceIn(0, 1) + if (pokemon.shiny) 2 else 0
+        val formIndex = 0
+        val languageIndex = 1
+        val allocated = SwordShieldPokedexReadOnly.read(source).regions
+        val matches = allocated.flatMap { region ->
+            region.entries.filter { it.speciesId == pokemon.species }.map { region to it.number }
+        }
+        require(matches.isNotEmpty()) {
+            "This save has no allocated native Sword/Shield regional Pokédex record for the converted species."
+        }
+        var edited = source.copyOf()
+        val registrations = matches.map { (regionRead, number) ->
+            val blocks = SwordShieldSaveValidation.readDexBlocks(edited)
+            val table = when (regionRead.region) {
+                SwordShieldDexRegion.GALAR -> blocks.galar
+                SwordShieldDexRegion.ARMOR -> blocks.armor
+                SwordShieldDexRegion.CROWN -> blocks.crown
+            } ?: error("The matched regional Pokédex is no longer allocated.")
+            val record = table.copyOfRange((number - 1) * 0x30, number * 0x30)
+            val seenOffset = variant * 8 + formIndex / 8
+            record[seenOffset] =
+                (record[seenOffset].toInt() or (1 shl (formIndex and 7))).toByte()
+            var flags = u32(record, 0x20)
+            flags = flags or 1L or (1L shl (languageIndex + 2))
+            writeU32(record, 0x20, flags)
+            val written = SwordShieldSaveValidation.writeDexRecord(
+                edited, regionRead.region, number, record
+            )
+            edited = written.bytes
+            SwordShieldPseBankDexRegistration(
+                regionRead.region, number, variant, formIndex, languageIndex,
+                written.absoluteOffset
+            )
+        }
+        return edited to registrations
+    }
+
+    private fun u32(bytes: ByteArray, offset: Int): Long = (0..3).fold(0L) { value, index ->
+        value or ((bytes[offset + index].toLong() and 255) shl (index * 8))
+    }
+
+    private fun writeU32(bytes: ByteArray, offset: Int, value: Long) {
+        repeat(4) { bytes[offset + it] = (value ushr (it * 8)).toByte() }
     }
 
     fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes)
@@ -154,11 +273,13 @@ class SwordShieldPseBankRestoreCopyPlan internal constructor(
     val pokemon: SwordShieldPokemonRead,
     val box: Int,
     val position: Int,
-    val absoluteOffset: Int
+    val absoluteOffset: Int,
+    dexRegistrations: List<SwordShieldPseBankDexRegistration>
 ) {
     private val original = original.copyOf()
     private val edited = edited.copyOf()
     private val bankRecord = bankRecord.copyOf()
+    val dexRegistrations: List<SwordShieldPseBankDexRegistration> = dexRegistrations.toList()
     val sourceSha256 = SwordShieldPseBankRestoreEditing.sha256(this.original)
     val bankSha256 = SwordShieldPseBankRestoreEditing.sha256(this.bankRecord)
     val editedSha256 = SwordShieldPseBankRestoreEditing.sha256(this.edited)
@@ -196,7 +317,8 @@ class SwordShieldPseBankRestoreCopyPlan internal constructor(
         var started = false
         try {
             SwordShieldPseBankRestoreEditing.verify(
-                original, edited, bankRecord, box, position, absoluteOffset
+                original, edited, bankRecord, box, position, absoluteOffset,
+                dexRegistrations
             )
             started = true
             writeDestination(edited.copyOf())
@@ -205,7 +327,8 @@ class SwordShieldPseBankRestoreCopyPlan internal constructor(
                 "The saved copy differs from the reviewed PSE Bank restore."
             }
             SwordShieldPseBankRestoreEditing.verify(
-                original, persisted, bankRecord, box, position, absoluteOffset
+                original, persisted, bankRecord, box, position, absoluteOffset,
+                dexRegistrations
             )
             requireSource()
             requireBank()

@@ -162,7 +162,8 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
                 val hash = expectedHash ?: error("Reopen the source from PSE.")
                 val bank = readBankRecord()
                 SwordShieldPseBankRestoreEditing.stage(
-                    source, hash, bank, destination.box, destination.position
+                    source, hash, bank, destination.box, destination.position,
+                    registerCaughtEnglish = bankFile().extension.equals("pk7", true)
                 )
             }
             runOnUiThread {
@@ -275,6 +276,13 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
         val moves = p.moves.filter { it.id != 0 }.joinToString { "#${it.id} (PP ${it.pp})" }.ifBlank { "None" }
         val effects = if (conversionEffects.isEmpty()) "" else
             "\n\nExplicit PSE conversion Legalise effects\n• " + conversionEffects.joinToString("\n• ")
+        val dexReview = if (plan.dexRegistrations.isEmpty()) "" else
+            "\nDestination caught registration: " + plan.dexRegistrations.joinToString { registration ->
+                "${registration.region.displayName} #${registration.number} (English, 0x${registration.absoluteOffset.toString(16).uppercase()})"
+            }
+        val dexScope = if (plan.dexRegistrations.isEmpty()) "" else
+            " plus ${plan.dexRegistrations.size} matched native 0x30 regional Pokédex record" +
+                if (plan.dexRegistrations.size == 1) "" else "s"
         AlertDialog.Builder(this).setTitle(
             if (conversionEffects.isEmpty()) "Restore this Bank Pokémon to a new copy?"
             else "Legalise the converted record and restore to a new copy?"
@@ -283,9 +291,9 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
                 "${SwordShieldSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form} • Level ${p.cachedLevel}\n" +
                     "Nickname: ${p.nickname.ifBlank { "None" }} • Shiny: ${if (p.shiny) "Yes" else "No"}\n" +
                     "OT ${p.originalTrainer} • TID ${p.tid} / SID ${p.sid}\nMoves: $moves\n\n" +
-                    "Destination: native Box ${plan.box}, slot ${plan.position}\n" +
-                    "Allowed encrypted byte scope: one previously empty 344-byte PK8 slot at 0x${plan.absoluteOffset.toString(16).uppercase()} " +
-                    "plus the native SHA-256 footer. Every existing PC-box slot, all party data, and all unrelated bytes remain exact. " +
+                    "Destination: native Box ${plan.box}, slot ${plan.position}" + dexReview + "\n" +
+                    "Allowed encrypted byte scope: one previously empty 344-byte PK8 slot at 0x${plan.absoluteOffset.toString(16).uppercase()}" +
+                    dexScope + " plus the native SHA-256 footer. Every existing PC-box slot, all party data, and all unrelated bytes remain exact. " +
                     "PSE verifies the unchanged source and Bank entry, retains a verified recovery backup, reopens the persisted copy, and removes a failed copy when possible. " +
                     "The Bank entry remains available. Choose a NEW empty document." + effects
             )
@@ -374,6 +382,9 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
                         (if (conversionEffects.isEmpty()) "PSE Bank restore saved and reopened successfully.\n"
                         else "PSE conversion saved and reopened successfully.\n") +
                             "Box ${plan.box}, slot ${plan.position} • SHA-256: ${plan.editedSha256}\n" +
+                            (if (plan.dexRegistrations.isEmpty()) "" else
+                                "Caught registration reopened in " +
+                                    plan.dexRegistrations.joinToString { it.region.displayName } + ".\n") +
                             "Recovery backup: $backupName\nOriginal source and Bank entry unchanged."
                     },
                     onFailure = {
