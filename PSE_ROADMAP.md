@@ -1384,3 +1384,13 @@ The Legalise review preserves identity, trainer, EXP, IV, nature, gender, shiny,
 The existing Sword/Shield native restore transaction writes the generated checksum-valid PK8 only to one selected empty PC-box slot in a reviewed new save copy, updates regional caught registration and native container integrity, retains and verifies a recovery backup, reopens and verifies the persisted destination, preserves the original Sword/Shield save and PB7 Bank entry, and removes a failed copy when possible while retaining recovery. A failed copy that cannot be verified empty is reported as unsafe.
 
 Next bounded route: Let's Go PB7 -> BDSP PB8 individual-Pokémon Bank conversion.
+
+## Let's Go -> BDSP individual-Pokémon Bank conversion
+
+The BDSP Bank screen now accepts one selected checksum-valid native Let's Go PB7 Bank record for an explicit PB8 Legalise conversion. It lists content-addressed `switch_lgpe_*.pb7` entries separately, binds the exact SHA-256 through review and restore, requires an English BDSP destination trainer plus documented destination ability slot, ability ID, base friendship and gender mapping, and blocks Eggs, save-bound partner forms, unsupported forms or species, nonzero hidden EV bytes, invalid moves, PP, PP Ups, text, origin, Ball, handler, date, Hyper Training or experience fields. Meltan and Melmetal remain blocked because BDSP has no destination-valid species mapping.
+
+The review preserves identity, trainer, EXP, IV, nature, gender, shiny, friendship, Pokérus, origin, date and location, Ball, fateful, Hyper Training, move and relearn fields that have destination-valid PB8 mappings. It discloses and omits all six Let's Go Awakening Values, the exact PB7 party-cache bytes, cached HP, stats and combat power, and every remaining unmapped PB7 core field; PB8 EV and contest values default to zero, cached level and stats are rebuilt from the verified BDSP profile, and current HP is full. This PSE conversion does not claim an official HOME transfer, trade, encounter legality, ability legality, moveset legality, or verified provenance.
+
+The existing BDSP native restore transaction writes the generated checksum-valid PB8 only to one selected empty PC-box slot in a reviewed new save copy, updates title-native caught registration and whole-file MD5 integrity, retains and verifies a recovery backup, reopens and verifies the persisted destination, preserves the original BDSP save and PB7 Bank entry, and removes a failed copy when possible while retaining recovery. A failed copy that cannot be verified empty is reported as unsafe.
+
+Next bounded route: Let's Go PB7 -> Legends: Arceus PA8 individual-Pokémon Bank conversion.
