@@ -84,11 +84,14 @@ object LegendsArceusPseBankRestoreEditing {
     fun stage(
         source: ByteArray,
         expectedSha256: String,
-        bankRecord: ByteArray
+        bankRecord: ByteArray,
+        registerObtained: Boolean = false
     ): LegendsArceusPseBankRestoreCopyPlan {
         val destination = emptyDestinations(source).firstOrNull()
             ?: throw IllegalArgumentException("All 960 native Legends: Arceus pasture slots are occupied.")
-        return stage(source, expectedSha256, bankRecord, destination.pasture, destination.position)
+        return stage(
+            source, expectedSha256, bankRecord, destination.pasture, destination.position, registerObtained
+        )
     }
 
     fun stage(
@@ -96,7 +99,8 @@ object LegendsArceusPseBankRestoreEditing {
         expectedSha256: String,
         bankRecord: ByteArray,
         pasture: Int,
-        position: Int
+        position: Int,
+        registerObtained: Boolean = false
     ): LegendsArceusPseBankRestoreCopyPlan {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
@@ -114,13 +118,26 @@ object LegendsArceusPseBankRestoreEditing {
         val written = LegendsArceusSaveValidation.writePastureRecord(
             original, pasture, position, storedRecord
         )
+        val beforeDexEntry = if (registerObtained) {
+            LegendsArceusPokedexReadOnly.read(original).entries
+                .singleOrNull { it.speciesId == pokemon.species }
+                ?: throw IllegalArgumentException(
+                    "Species #${pokemon.species} has no reviewed native Hisui Pokédex record."
+                )
+        } else null
+        val dexWritten = if (beforeDexEntry?.numObtained == 0) {
+            LegendsArceusSaveValidation.writeDexObtainedCount(
+                written.bytes, pokemon.species, 1
+            )
+        } else null
+        val edited = dexWritten?.bytes ?: written.bytes
         verify(
-            original, written.bytes, supplied, storedRecord,
-            pasture, position, written.absoluteOffset
+            original, edited, supplied, storedRecord, pokemon.species,
+            pasture, position, written.absoluteOffset, dexWritten?.absoluteOffset
         )
         return LegendsArceusPseBankRestoreCopyPlan(
-            original, written.bytes, supplied, storedRecord, pokemon,
-            pasture, position, written.absoluteOffset
+            original, edited, supplied, storedRecord, pokemon,
+            pasture, position, written.absoluteOffset, dexWritten?.absoluteOffset
         )
     }
 
@@ -129,9 +146,11 @@ object LegendsArceusPseBankRestoreEditing {
         edited: ByteArray,
         bankRecord: ByteArray,
         storedRecord: ByteArray,
+        pokemonSpecies: Int,
         pasture: Int,
         position: Int,
-        absoluteOffset: Int
+        absoluteOffset: Int,
+        dexAbsoluteOffset: Int?
     ) {
         val before = LegendsArceusStorageReadOnly.read(original)
         val after = LegendsArceusStorageReadOnly.read(edited)
@@ -163,9 +182,43 @@ object LegendsArceusPseBankRestoreEditing {
                 beforeBlocks.pastures[index] == afterBlocks.pastures[index]
         }) { "An unrelated native pasture byte changed." }
 
+        val beforeDexBlock = LegendsArceusSaveValidation.readDexBlock(original)
+        val afterDexBlock = LegendsArceusSaveValidation.readDexBlock(edited)
+        if (dexAbsoluteOffset == null) {
+            require(beforeDexBlock.data.contentEquals(afterDexBlock.data)) {
+                "Native Hisui Pokédex data changed without a reviewed obtained registration."
+            }
+        } else {
+            val beforeDex = LegendsArceusPokedexReadOnly.read(original)
+            val afterDex = LegendsArceusPokedexReadOnly.read(edited)
+            val beforeEntry = beforeDex.entries.single { it.speciesId == pokemonSpecies }
+            val afterEntry = afterDex.entries.single { it.speciesId == pokemonSpecies }
+            require(beforeEntry.numObtained == 0 &&
+                afterEntry == beforeEntry.copy(numObtained = 1)) {
+                "The native Hisui obtained registration did not reopen exactly."
+            }
+            require(beforeDex.rawGlobalFlags == afterDex.rawGlobalFlags &&
+                beforeDex.totalResearchPoints == afterDex.totalResearchPoints &&
+                beforeDex.updateCounter == afterDex.updateCounter &&
+                beforeDex.reportCounter == afterDex.reportCounter) {
+                "Global Hisui research state changed."
+            }
+            require(beforeDex.entries.indices.all { index ->
+                beforeDex.entries[index].speciesId == pokemonSpecies ||
+                    beforeDex.entries[index] == afterDex.entries[index]
+            }) { "An unrelated Hisui research record changed." }
+            val dexRelativeOffset = 0x70 + pokemonSpecies * 0x58 + 0xA
+            require(beforeDexBlock.data.indices.all { index ->
+                index in dexRelativeOffset until dexRelativeOffset + 2 ||
+                    beforeDexBlock.data[index] == afterDexBlock.data[index]
+            }) { "An unrelated native Hisui Pokédex byte changed." }
+        }
+
         val footerOffset = original.size - FOOTER_SIZE
+        val dexRange = dexAbsoluteOffset?.let { it until it + 2 }
         require(original.indices.all { index ->
             index in absoluteOffset until absoluteOffset + storedRecord.size ||
+                dexRange?.contains(index) == true ||
                 index in footerOffset until original.size || original[index] == edited[index]
         }) { "An unrelated encrypted container byte changed." }
     }
@@ -182,7 +235,8 @@ class LegendsArceusPseBankRestoreCopyPlan internal constructor(
     val pokemon: LegendsArceusPokemonRead,
     val pasture: Int,
     val position: Int,
-    val absoluteOffset: Int
+    val absoluteOffset: Int,
+    val dexAbsoluteOffset: Int?
 ) {
     private val original = original.copyOf()
     private val edited = edited.copyOf()
@@ -192,6 +246,7 @@ class LegendsArceusPseBankRestoreCopyPlan internal constructor(
     val bankSha256 = LegendsArceusPseBankRestoreEditing.sha256(this.bankRecord)
     val editedSha256 = LegendsArceusPseBankRestoreEditing.sha256(this.edited)
     val partyTailBytes = this.bankRecord.size - this.storedRecord.size
+    val addedObtainedRegistration: Boolean get() = dexAbsoluteOffset != null
     private var consumed = false
 
     @Synchronized
@@ -226,7 +281,8 @@ class LegendsArceusPseBankRestoreCopyPlan internal constructor(
         var started = false
         try {
             LegendsArceusPseBankRestoreEditing.verify(
-                original, edited, bankRecord, storedRecord, pasture, position, absoluteOffset
+                original, edited, bankRecord, storedRecord, pokemon.species,
+                pasture, position, absoluteOffset, dexAbsoluteOffset
             )
             started = true
             writeDestination(edited.copyOf())
@@ -235,7 +291,8 @@ class LegendsArceusPseBankRestoreCopyPlan internal constructor(
                 "The saved copy differs from the reviewed PSE Bank restore."
             }
             LegendsArceusPseBankRestoreEditing.verify(
-                original, persisted, bankRecord, storedRecord, pasture, position, absoluteOffset
+                original, persisted, bankRecord, storedRecord, pokemon.species,
+                pasture, position, absoluteOffset, dexAbsoluteOffset
             )
             requireSource()
             requireBank()

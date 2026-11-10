@@ -18,7 +18,8 @@ private data class LegendsArceusBankPreparation(
     val destinations: List<LegendsArceusPseBankDestination>,
     val sourceBankHash: String,
     val nativeRecordHash: String,
-    val effects: List<String>
+    val effects: List<String>,
+    val registerObtained: Boolean
 )
 
 /** Restores one native PA8 or explicitly reviewed Gen 7 conversion into a new save copy. */
@@ -30,6 +31,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
     private var bankEntryName: String? = null
     private var expectedBankSourceHash: String? = null
     private var conversionEffects: List<String> = emptyList()
+    private var registerGen7Obtained = false
     private var readyDestinations: List<LegendsArceusPseBankDestination> = emptyList()
     private var readyPlan: LegendsArceusPseBankRestoreCopyPlan? = null
     private var pendingPlan: LegendsArceusPseBankRestoreCopyPlan? = null
@@ -101,7 +103,8 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 }
                 LegendsArceusBankPreparation(
                     pokemon, destinations, bankSourceHash,
-                    LegendsArceusPseBankRestoreEditing.sha256(prepared.first), prepared.second
+                    LegendsArceusPseBankRestoreEditing.sha256(prepared.first), prepared.second,
+                    bankFile().extension.equals("pk7", true)
                 )
             }
             runOnUiThread {
@@ -109,6 +112,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 result.onSuccess { prepared ->
                     readyDestinations = prepared.destinations
                     conversionEffects = prepared.effects
+                    registerGen7Obtained = prepared.registerObtained
                     status.text = "Native source and Bank integrity verified\n" +
                         "${LegendsArceusSpeciesNames.name(prepared.pokemon.species)} (#${prepared.pokemon.species}) • EXP ${prepared.pokemon.experience}\n" +
                         "${prepared.destinations.size} empty native destination slots available\n" +
@@ -164,7 +168,8 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 val hash = expectedHash ?: error("Reopen the source from PSE.")
                 val bank = readBankRecord()
                 LegendsArceusPseBankRestoreEditing.stage(
-                    source, hash, bank, destination.pasture, destination.position
+                    source, hash, bank, destination.pasture, destination.position,
+                    registerObtained = registerGen7Obtained
                 )
             }
             runOnUiThread {
@@ -283,6 +288,15 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         }
         val effects = if (conversionEffects.isEmpty()) "" else
             "\n\nExplicit PSE conversion Legalise effects\n• " + conversionEffects.joinToString("\n• ")
+        val dexScope = when {
+            plan.addedObtainedRegistration ->
+                " The same reviewed transaction sets this species' native Hisui NumObtained word to 1 at " +
+                    "0x${plan.dexAbsoluteOffset!!.toString(16).uppercase()}; research rate, task counters, " +
+                    "report flags, form statistics, global progression, and every unrelated Pokédex record remain exact."
+            registerGen7Obtained ->
+                " This species already has a native Hisui obtained count, so the reviewed transaction retains it exactly."
+            else -> ""
+        }
         AlertDialog.Builder(this).setTitle(
             if (conversionEffects.isEmpty()) "Restore this Bank Pokémon to a new copy?"
             else "Legalise the converted record and restore to a new copy?"
@@ -293,9 +307,9 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                     "OT ${p.originalTrainer} • TID ${p.tid} / SID ${p.sid}\nMoves: $moves\n\n" +
                     "Destination: native Pasture ${plan.pasture}, slot ${plan.position}\n" +
                     "$formatNote\n\n" +
-                    "Allowed native byte scope: one previously empty 360-byte PA8 pasture slot at 0x${plan.absoluteOffset.toString(16).uppercase()} " +
-                    "plus the native SHA-256 footer. Every existing pasture slot, all party data, and all unrelated bytes remain exact. " +
-                    "PSE verifies the unchanged source and Bank entry, retains a verified recovery backup, reopens the persisted copy, and removes a failed copy when possible. " +
+                    "Allowed native byte scope: one previously empty 360-byte PA8 pasture slot at 0x${plan.absoluteOffset.toString(16).uppercase()}, " +
+                    "the reviewed native Hisui obtained word when required, and the native SHA-256 footer. Every existing pasture slot, all party data, and all unrelated bytes remain exact." +
+                    dexScope + " PSE verifies the unchanged source and Bank entry, retains a verified recovery backup, reopens the persisted copy, and removes a failed copy when possible. " +
                     "The Bank entry remains available. Choose a NEW empty document." + effects
             )
             .setNegativeButton("Cancel", null)
