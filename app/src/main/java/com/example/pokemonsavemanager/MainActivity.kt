@@ -16642,6 +16642,622 @@ class MainActivity : Activity() {
     }
 
 
+
+    private data class SwordShieldGen7Prepared(
+        val bankFile:File,
+        val bankBytes:ByteArray,
+        val review:SwordShieldToGen7Review,
+        val destination:ByteArray,
+        val trainer:TrainerData,
+        val originGame:Int,
+        val pk3:ByteArray,
+        val bridge3:PokemonEntry,
+        val meta5:Gen3ToGen4Meta,
+        val plan4:Gen3ToGen4Plan,
+        val pk4:ByteArray,
+        val bridge4:PokemonEntry,
+        val pk5:ByteArray,
+        val bridge5:PokemonEntry,
+        val pk6:ByteArray,
+        val bridge6:PokemonEntry,
+        val pk7:ByteArray,
+        val converted7:PokemonEntry,
+        val destinationFile:File,
+        val sourceUri:Uri?,
+        val sourceLabel:String?,
+        val effects:List<String>,
+        var submitted:Boolean=false
+    )
+
+    private fun swordShieldGen7SnapshotsMatch(
+        p:SwordShieldGen7Prepared,requireOpen:Boolean=true
+    ):Boolean=(!requireOpen||!p.submitted)&&
+        importedFile?.absolutePath==p.destinationFile.absolutePath&&
+        currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&runCatching{
+            p.destinationFile.readBytes().contentEquals(p.destination)&&
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_swsh_${sha256(p.bankBytes)}.pk8"
+        }.getOrDefault(false)
+
+    private fun prepareSwordShieldToGen7Transfer(
+        bankFile:File,shown:SwordShieldPokemonRead,requestedOriginGame:Int?=null
+    ){
+        val title="Sword/Shield PK8 → Gen 7 PK7"
+        val file=importedFile?:return showDialog(title,
+            "Load a valid Pokémon Sun, Moon, Ultra Sun or Ultra Moon destination first.")
+        val openedUri=currentSourceUri
+        val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&
+            currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val destination=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The destination save could not be read.")
+        val checks=validateGen7CoreChecksums(destination)
+        if(generationForSize(destination.size)!=7||!bound()||!checks.first)
+            return showDialog(title,
+                "Load a checksum-clean Pokémon Sun, Moon, Ultra Sun or Ultra Moon save first. ${checks.second}")
+        val trainer=analyzeSave(file).trainer
+            ?:return showDialog(title,
+                "PSE could not read the Generation 7 destination trainer identity.")
+        if(!trainer.gameMatchesFamily)
+            return showDialog(title,
+                "The loaded Generation 7 title could not be verified.")
+        if(trainer.gender!="Male"&&trainer.gender!="Female")
+            return showDialog("PK8 → PK7 blocked",
+                "The destination trainer gender is ${trainer.gender}. PSE will not guess native PK7 handler metadata.")
+
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The PSE Bank path could not be verified.")
+        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The selected PK8 path could not be verified.")
+        if(selected.parentFile!=root||!selected.isFile||
+            !selected.extension.equals("pk8",true))
+            return showDialog(title,
+                "The selected record is outside the Sword/Shield PSE Bank.")
+        val bank=runCatching{selected.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The preserved PK8 record could not be read.")
+        if(selected.name!="switch_swsh_${sha256(bank)}.pk8")
+            return showDialog(title,
+                "The PK8 filename does not match its exact SHA-256 content binding. Nothing was changed.")
+        val review=try{SwordShieldToGen7Pk7.review(bank)}catch(e:Exception){
+            return showDialog("PK8 → PK7 blocked",
+                (e.message?:"No safe native Generation 7 mapping is available.")+
+                    "\n\nThe PK8 Bank entry and Generation 7 destination were left unchanged.")
+        }
+        if(!sameSwordShieldGen3Source(review.source,shown))
+            return showDialog(title,
+                "The selected PK8 changed since the Bank screen opened. Reopen PSE Bank.")
+
+        val originGame=requestedOriginGame
+        if(originGame==null){
+            val choices=listOf(
+                1 to "Pokémon Sapphire",2 to "Pokémon Ruby",3 to "Pokémon Emerald",
+                4 to "Pokémon FireRed",5 to "Pokémon LeafGreen",
+                15 to "Pokémon Colosseum / XD"
+            )
+            AlertDialog.Builder(this)
+                .setTitle("Choose documented Gen 3 origin mapping")
+                .setMessage("This bounded PK7 route uses reviewed native PK3, PK4, PK5 and PK6 bridges only in memory. Choose the exact Generation 3 origin retained by PK7. This Legalise choice does not verify history. Destination: ${trainer.exactGame}. Cancel leaves both files unchanged.")
+                .setItems(choices.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
+                    prepareSwordShieldToGen7Transfer(
+                        bankFile,shown,choices[which].first
+                    )
+                }.setNegativeButton("Cancel",null).show()
+            return
+        }
+        val originTitle=gen3CompatibleOriginTitle(originGame)
+            ?:return showDialog("PK8 → PK7 blocked",
+                "The selected bridge origin is not a documented native Generation 3 title.")
+
+        val pk3=try{
+            buildSwordShieldGen3Pk3(review.source,originGame)
+        }catch(e:Exception){
+            return showDialog("PK8 → PK7 blocked",
+                (e.message?:"No safe native PK3 bridge is available.")+
+                    "\n\nNothing was changed.")
+        }
+        val parsedBridge=parsePk3(pk3,0,false)
+            ?:return showDialog(title,
+                "The prepared native PK3 bridge could not be reopened.")
+        val abilityRows=canonicalGen3SpeciesAbilities(parsedBridge.species)
+            ?:return showDialog("PK8 → PK7 blocked",
+                "Canonical Generation 3 ability data is unavailable for species #${parsedBridge.species}.")
+        val bridgeAbility=abilityRows
+            .getOrElse(parsedBridge.abilityNumber-1){0}.takeIf{it!=0}
+            ?:abilityRows.firstOrNull()?.takeIf{it!=0}
+            ?:return showDialog("PK8 → PK7 blocked",
+                "No destination-valid normal Generation 3 ability exists for the bridge.")
+        val bridge3=parsedBridge.copy(ability=bridgeAbility)
+        val sourcePpUps=gen3MovePpUps(pk3)
+        if(sourcePpUps.any{it !in 0..3})
+            return showDialog("PK8 → PK7 blocked",
+                "The reviewed PK3 bridge contains invalid PP-Up data.")
+        fun snapshotsMatch()=bound()&&runCatching{
+            file.readBytes().contentEquals(destination)&&
+                selected.readBytes().contentEquals(bank)&&
+                selected.name=="switch_swsh_${sha256(bank)}.pk8"
+        }.getOrDefault(false)
+        if(!snapshotsMatch())return showDialog(title,
+            "The destination or PK8 changed during preparation. Nothing was changed.")
+
+        val loading=AlertDialog.Builder(this).setTitle("Prepare PK8 → PK7")
+            .setMessage("Verifying one unchanged normal ability through Generations 5 and 7 and preparing the native PK7…")
+            .setCancelable(false).create()
+        loading.show()
+        loadGen3ToGen4MetaAsync(bridge3,5,3){meta5,reason5->
+            if(!snapshotsMatch()){
+                if(loading.isShowing)loading.dismiss()
+                return@loadGen3ToGen4MetaAsync showDialog(
+                    title,"The destination or PK8 changed during preparation."
+                )
+            }
+            if(meta5==null){
+                if(loading.isShowing)loading.dismiss()
+                return@loadGen3ToGen4MetaAsync showDialog(
+                    "PK8 → PK7 blocked",
+                    (reason5?:"Generation 5 species or ability data could not be verified.")+
+                        "\n\nNothing was changed."
+                )
+            }
+            loadGen3ToGen7TransferMetaAsync(bridge3,7){meta7->
+                if(loading.isShowing)loading.dismiss()
+                if(!snapshotsMatch())
+                    return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        title,"The destination or PK8 changed during preparation."
+                    )
+                if(meta7==null||meta7.abilityId!=meta5.abilityId)
+                    return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        "PK8 → PK7 blocked",
+                        "The reviewed normal ability slot does not have one exact unchanged mapping through Generations 5 and 7. Nothing was changed."
+                    )
+                val plan4=try{
+                    makeGen3ToGen4Plan(bridge3,meta5,false)
+                }catch(e:Exception){
+                    return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        "PK8 → PK7 blocked",
+                        (e.message?:"No safe Generation 7 conversion plan is available.")+
+                            "\n\nNothing was changed."
+                    )
+                }
+                val pk4=try{
+                    buildGen3ToGen4Pk4(pk3,bridge3,destination,plan4,false)
+                }catch(e:Exception){
+                    return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        "PK8 → PK7 blocked",
+                        (e.message?:"No safe native PK4 bridge is available.")+
+                            "\n\nNothing was changed."
+                    )
+                }
+                val bridge4=parsePk4(pk4,false)
+                    ?:return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        title,"The prepared native PK4 bridge could not be reopened."
+                    )
+                val pk5=try{
+                    buildGen4ToGen5Pk5(
+                        pk4,bridge4,destination,meta5,false
+                    )
+                }catch(e:Exception){
+                    return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        "PK8 → PK7 blocked",
+                        (e.message?:"No safe native PK5 bridge is available.")+
+                            "\n\nNothing was changed."
+                    )
+                }
+                val bridge5=parsePk5(pk5,false)
+                    ?:return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        title,"The prepared native PK5 bridge could not be reopened."
+                    )
+                val pk6=try{
+                    buildGen5ToGen6Pk6(
+                        pk5,bridge5,destination,trainer,7
+                    )
+                }catch(e:Exception){
+                    return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        "PK8 → PK7 blocked",
+                        (e.message?:"No safe native PK6 bridge is available.")+
+                            "\n\nNothing was changed."
+                    )
+                }
+                val bridge6=parsePk6(
+                    pk6,0,PK6_STORED_SIZE,false,721
+                )?:return@loadGen3ToGen7TransferMetaAsync showDialog(
+                    title,"The prepared native PK6 bridge could not be reopened."
+                )
+                val pk7=try{
+                    buildGen6ToGen7Pk7(pk6,bridge6,originGame)
+                }catch(e:Exception){
+                    return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        "PK8 → PK7 blocked",
+                        (e.message?:"No safe native PK7 mapping is available.")+
+                            "\n\nNothing was changed."
+                    )
+                }
+                val converted7=parsePk6(
+                    pk7,0,PK6_STORED_SIZE,false,807
+                )?:return@loadGen3ToGen7TransferMetaAsync showDialog(
+                    title,"The prepared native PK7 could not be reopened."
+                )
+                if(!converted7.checksumValid||
+                    converted7.species!=review.source.species||
+                    converted7.tid!=review.source.tid||
+                    converted7.sid!=review.source.sid||
+                    !gen6Pk6PpUps(pk7).contentEquals(sourcePpUps))
+                    return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        title,"The prepared PK7 did not preserve the reviewed identity or PP Ups."
+                    )
+
+                fun genderLabel(value:Int)=when(value){
+                    0->"male";1->"female";2->"genderless";else->"unknown"
+                }
+                fun pid(value:Long)="0x${value.toString(16).uppercase().padStart(8,'0')}"
+                val effects=review.source.effects+review.effects+listOf(
+                    "Destination: one native PK7 in ${trainer.exactGame}; loaded trainer ${trainer.trainerName} (${trainer.gender}) becomes current handler. Original Trainer ${review.source.originalTrainer}, TID/SID and source identity remain stored.",
+                    "Temporary bridge origin: $originTitle (ID $originGame). PK4 applies conversion date 20${plan4.metYear.toString().padStart(2,'0')}-${plan4.metMonth.toString().padStart(2,'0')}-${plan4.metDay.toString().padStart(2,'0')}; PK5 uses unspecified location 0; PK6 uses transfer marker 30001 and Egg location 0; PK7 converts one-bit markings to blue states while Resort and Hyper Training start empty. These are PSE conversion fields, not verified Poké Transfer or Pokémon Bank history.",
+                    "PID: source PK8 ${pid(review.source.pid)} → PK3/PK4 ${pid(bridge4.pid)} → PK5 ${pid(bridge5.pid)} → PK6/PK7 ${pid(converted7.pid)}. Adjustments are limited to the reviewed normal ability slot and shiny rules; PK7 explicitly stores nature ${converted7.nature}.",
+                    "Source PK8 gender ${genderLabel(review.source.gender)}, shiny ${review.source.shiny}, ability #${review.source.ability} slot ${review.source.abilityNumber} → bridge ability #${bridge3.ability} slot ${bridge3.abilityNumber} → PK7 gender ${genderLabel(converted7.gender)}, shiny ${converted7.shiny}, ability #${converted7.ability} slot ${converted7.abilityNumber}.",
+                    "Native PK7 preserves species, default form, TID/SID, nickname, Original Trainer, EXP, EVs, IVs, friendship, Pokérus, moves, current PP, PP Ups, Ball ID 4, met level ${review.source.metLevel}, OT gender and language from the reviewed bridges. Markings remain the reviewed zero value.",
+                    "Encryption constant is generated deterministically in the PK6 bridge and retained by PK7. Current handler changes to the loaded destination trainer. Relearn moves, handler geography, memories, affection, Resort state, Hyper Training and other later-generation fields start empty because no bridge format supplies them.",
+                    "Post-Generation-3 species or moves, alternate forms, Eggs, held items, fateful records, hidden abilities, incompatible historical abilities, non-English or unrepresentable text, invalid PP/EV/IV/EXP states and ambiguous PID-sensitive species remain blocked rather than silently discarded.",
+                    "PSE writes only one chosen empty native PK7 slot, updates required Pokédex flags, Box/Pokédex block CRCs and the native save signature, retains a Keep-pinned destination backup and independent PK8 recovery snapshot, then reopens and verifies the exact persisted PK7. The PK8 Bank entry and original Sword/Shield save remain unchanged."
+                )
+                val prepared=SwordShieldGen7Prepared(
+                    selected,bank,review,destination,trainer,originGame,
+                    pk3,bridge3,meta5,plan4,pk4,bridge4,pk5,bridge5,
+                    pk6,bridge6,pk7,converted7,file,openedUri,openedLabel,effects
+                )
+                val preview=buildString{
+                    append("Exact PK8 SHA-256: ${sha256(bank)}\n")
+                    append("Destination: ${trainer.exactGame}\n\n")
+                    effects.forEach{append("• ").append(it).append("\n\n")}
+                    append("Choose Legalise only if every disclosed transformation and omission is acceptable. Cancel leaves both sides byte-for-byte unchanged.")
+                }
+                AlertDialog.Builder(this)
+                    .setTitle("${review.source.nickname.ifBlank{"Pokémon #${review.source.species}"}} • PK8 → PK7")
+                    .setMessage(preview).setNegativeButton("Cancel",null)
+                    .setPositiveButton("Legalise and choose destination"){_,_->
+                        if(swordShieldGen7SnapshotsMatch(prepared))
+                            chooseSwordShieldToGen7Destination(prepared)
+                        else showDialog(title,
+                            "The destination or PK8 changed after review. Nothing was changed.")
+                    }.show()
+            }
+        }
+    }
+
+    private fun chooseSwordShieldToGen7Destination(p:SwordShieldGen7Prepared){
+        val title="Sword/Shield PK8 → Gen 7 PK7"
+        if(!swordShieldGen7SnapshotsMatch(p))
+            return showDialog(title,
+                "The destination or PK8 changed. Reopen PSE Bank.")
+        val info=boxStorageInfo(p.destination)
+            ?:return showDialog(title,
+                "Native Generation 7 PC storage could not be resolved.")
+        val empty=(0 until info.second).filter{
+            parsePk6(
+                p.destination,info.first+it*PK6_STORED_SIZE,
+                PK6_STORED_SIZE,false,info.third
+            )==null
+        }
+        if(empty.isEmpty())return showDialog(title,
+            "No empty native Generation 7 PC slot is available.")
+        val first=empty.first()
+        AlertDialog.Builder(this).setTitle("Choose native Gen 7 destination")
+            .setMessage("PSE will write the reviewed PK7 to one empty slot, update only required Pokédex and native integrity data, retain recovery data, and keep the PK8 Bank entry.")
+            .setItems(arrayOf(
+                "First Empty • Box ${first/30+1} • Slot ${first%30+1}",
+                "Choose Box / Slot"
+            )){_,which->
+                if(!swordShieldGen7SnapshotsMatch(p))
+                    showDialog(title,
+                        "The destination or PK8 changed. Reopen PSE Bank.")
+                else if(which==0)transferSwordShieldBankToGen7(p,first)
+                else showSwordShieldToGen7BoxPicker(p)
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun showSwordShieldToGen7BoxPicker(p:SwordShieldGen7Prepared){
+        val title="Sword/Shield PK8 → Gen 7 PK7"
+        if(!swordShieldGen7SnapshotsMatch(p))
+            return showDialog(title,
+                "The destination or PK8 changed. Reopen PSE Bank.")
+        val info=boxStorageInfo(p.destination)?:return
+        val boxes=(0 until info.second/30).filter{box->
+            (0 until 30).any{slot->
+                parsePk6(
+                    p.destination,
+                    info.first+(box*30+slot)*PK6_STORED_SIZE,
+                    PK6_STORED_SIZE,false,info.third
+                )==null
+            }
+        }
+        if(boxes.isEmpty())return showDialog(title,
+            "All native Generation 7 PC boxes are full.")
+        AlertDialog.Builder(this).setTitle("Choose Gen 7 destination box")
+            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+                val box=boxes[which]
+                val slots=(0 until 30).filter{slot->
+                    parsePk6(
+                        p.destination,
+                        info.first+(box*30+slot)*PK6_STORED_SIZE,
+                        PK6_STORED_SIZE,false,info.third
+                    )==null
+                }
+                AlertDialog.Builder(this)
+                    .setTitle("Box ${box+1} • choose slot")
+                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
+                        transferSwordShieldBankToGen7(
+                            p,box*30+slots[slotIndex]
+                        )
+                    }.setNegativeButton("Cancel",null).show()
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun transferSwordShieldBankToGen7(
+        p:SwordShieldGen7Prepared,target:Int
+    ){
+        val title="Sword/Shield PK8 → Gen 7 PK7"
+        if(!swordShieldGen7SnapshotsMatch(p)||p.submitted)
+            return showDialog(title,
+                "The destination or PK8 changed, or this conversion was already submitted. Reopen PSE Bank.")
+        val file=p.destinationFile
+        val fresh=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog(title,
+                "The destination save could not be read. Nothing was changed.")
+        p.submitted=true
+        var writeStarted=false
+        var backup:File?=null
+        var bankRecovery:File?=null
+        try{
+            require(fresh.contentEquals(p.destination)&&
+                generationForSize(fresh.size)==7){
+                "The prepared Generation 7 destination changed."
+            }
+            val checks=validateGen7CoreChecksums(fresh)
+            require(checks.first){checks.second}
+            val info=boxStorageInfo(fresh)
+                ?:error("PSE could not resolve native Generation 7 PC storage.")
+            require(target in 0 until info.second){
+                "The selected Generation 7 slot is invalid."
+            }
+            val off=info.first+target*PK6_STORED_SIZE
+            require(parsePk6(
+                fresh,off,PK6_STORED_SIZE,false,info.third
+            )==null){
+                "The selected Generation 7 slot is no longer empty."
+            }
+
+            val bank=p.bankFile.readBytes()
+            require(bank.contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_swsh_${sha256(bank)}.pk8"){
+                "The exact content-addressed PK8 Bank record changed."
+            }
+            val review=SwordShieldToGen7Pk7.review(bank)
+            require(review==p.review){
+                "The reviewed PK8 mapping changed before writing."
+            }
+            val pk3=buildSwordShieldGen3Pk3(review.source,p.originGame)
+            val parsedBridge=parsePk3(pk3,0,false)
+                ?:error("The refreshed native PK3 bridge could not be reopened.")
+            val abilityRows=canonicalGen3SpeciesAbilities(parsedBridge.species)
+                ?:error("Canonical Generation 3 ability data became unavailable.")
+            val bridgeAbility=abilityRows
+                .getOrElse(parsedBridge.abilityNumber-1){0}.takeIf{it!=0}
+                ?:abilityRows.firstOrNull()?.takeIf{it!=0}
+                ?:error("No destination-valid bridge ability remains.")
+            val bridge3=parsedBridge.copy(ability=bridgeAbility)
+            val sourcePpUps=gen3MovePpUps(pk3)
+            require(pk3.contentEquals(p.pk3)&&
+                sameGen4ToGen3Pk3(bridge3,p.bridge3)&&
+                sourcePpUps.contentEquals(review.source.ppUps.toIntArray())){
+                "The reviewed native PK3 bridge changed before writing."
+            }
+            val plan4=makeGen3ToGen4PlanWithDate(
+                bridge3,p.meta5,p.plan4.metYear,p.plan4.metMonth,
+                p.plan4.metDay,false
+            )
+            require(plan4==p.plan4){
+                "The reviewed Generation 7 conversion plan changed."
+            }
+            val pk4=buildGen3ToGen4Pk4(
+                pk3,bridge3,fresh,plan4,false
+            )
+            val bridge4=parsePk4(pk4,false)
+                ?:error("The refreshed native PK4 bridge could not be reopened.")
+            require(pk4.contentEquals(p.pk4)&&
+                sameGen3ToGen4Pk4(bridge4,p.bridge4)&&
+                gen4Pk4PpUps(pk4).contentEquals(sourcePpUps)){
+                "The reviewed native PK4 bridge changed before writing."
+            }
+            val pk5=buildGen4ToGen5Pk5(
+                pk4,bridge4,fresh,p.meta5,false
+            )
+            val bridge5=parsePk5(pk5,false)
+                ?:error("The refreshed native PK5 bridge could not be reopened.")
+            require(pk5.contentEquals(p.pk5)&&
+                sameGen4ToGen5Pk5(bridge5,p.bridge5)&&
+                gen5Pk5PpUps(pk5).contentEquals(sourcePpUps)){
+                "The reviewed native PK5 bridge changed before writing."
+            }
+            val pk6=buildGen5ToGen6Pk6(
+                pk5,bridge5,fresh,p.trainer,7
+            )
+            val bridge6=parsePk6(
+                pk6,0,PK6_STORED_SIZE,false,721
+            )?:error("The refreshed native PK6 bridge could not be reopened.")
+            require(pk6.contentEquals(p.pk6)&&
+                sameGen5ToGen6Pk6(bridge6,p.bridge6)&&
+                gen6Pk6PpUps(pk6).contentEquals(sourcePpUps)){
+                "The reviewed native PK6 bridge changed before writing."
+            }
+            val pk7=buildGen6ToGen7Pk7(pk6,bridge6,p.originGame)
+            val converted7=parsePk6(
+                pk7,0,PK6_STORED_SIZE,false,807
+            )?:error("The refreshed native PK7 could not be reopened.")
+            require(pk7.contentEquals(p.pk7)&&
+                sameGen6ToGen7Pk7(converted7,p.converted7)&&
+                gen6Pk6PpUps(pk7).contentEquals(sourcePpUps)){
+                "The reviewed native PK7 changed before writing."
+            }
+
+            val work=fresh.copyOf()
+            pk7.copyInto(work,off)
+            val staged=parsePk6(
+                work,off,PK6_STORED_SIZE,false,info.third
+            )?:error("The staged PK7 could not be parsed.")
+            require(sameGen6ToGen7Pk7(staged,converted7)&&
+                gen6Pk6PpUps(pk7).contentEquals(sourcePpUps)){
+                "The staged PK7 differs from the reviewed conversion."
+            }
+
+            val allowed=HashSet<Int>()
+            for(i in off until off+PK6_STORED_SIZE)allowed.add(i)
+            val bit=staged.species-1
+            val byte=bit ushr 3
+            val dexBase=if(work.size==SIZE_G7_SM)0x02A00 else 0x02C00
+            allowed.add(dexBase+0x88+byte)
+            val shift=staged.gender.coerceIn(0,1) or
+                ((if(staged.shiny)1 else 0) shl 1)
+            for(plane in listOf(shift,4,5,6,7))
+                allowed.add(dexBase+0xF0+plane*0x8C+byte)
+            var language=staged.language
+            if(language in 1..10&&language!=6){
+                if(language>=7)language--
+                language--
+                allowed.add(dexBase+0x550+((bit*9+language) ushr 3))
+            }
+            for(id in intArrayOf(6,14)){
+                val checksum=gen7ChecksumOffset(work,id)
+                allowed.add(checksum)
+                allowed.add(checksum+1)
+            }
+            val signature=if(work.size==SIZE_G7_USUM)0x6C100 else 0x6BB00
+            for(i in signature until signature+0x80)allowed.add(i)
+            registerGen7Dex(
+                work,staged.species,staged.form,staged.gender,
+                staged.shiny,staged.language
+            )
+            updateGen7SaveBlockChecksum(
+                work,14,info.first,info.second*PK6_STORED_SIZE
+            )
+            val dexInfo=gen7BlockInfo(work,6)
+                ?:error("Generation 7 Pokédex block layout is unavailable.")
+            updateGen7SaveBlockChecksum(work,6,dexInfo.first,dexInfo.second)
+            finalizeGen7Save(work)
+            require(work.indices.all{
+                it in allowed||work[it]==fresh[it]
+            }){
+                "The conversion changed data outside the reviewed PK7, Pokédex flags, block CRCs and save signature."
+            }
+            require(gen7DexRegistered(work,staged)){
+                "The staged Generation 7 Pokédex registration failed."
+            }
+            val stagedChecks=validateGen7CoreChecksums(work)
+            require(stagedChecks.first){stagedChecks.second}
+
+            val recovery=File.createTempFile(
+                backupGameName(file)+"_PreSwShToGen7_",".backup",backupsDir()
+            )
+            backup=recovery
+            recovery.writeBytes(fresh)
+            require(recovery.readBytes().contentEquals(fresh)){
+                "The exact Generation 7 recovery backup did not verify."
+            }
+            retainGen2ToGen7SafetyBackup(recovery,fresh)
+            val bankCopy=File.createTempFile(
+                "PSE_SwShToG7_PK8Recovery_",".tmp",bankDir()
+            )
+            bankRecovery=bankCopy
+            bankCopy.writeBytes(p.bankBytes)
+            require(bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The independent PK8 recovery snapshot did not verify."
+            }
+            require(swordShieldGen7SnapshotsMatch(p,false)&&
+                isBackupKept(recovery)&&
+                file.readBytes().contentEquals(fresh)&&
+                recovery.readBytes().contentEquals(fresh)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The source identity or retained recovery snapshots changed before writing."
+            }
+
+            writeStarted=true
+            file.writeBytes(work)
+            val written=file.readBytes()
+            require(written.contentEquals(work)&&written.indices.all{
+                it in allowed||written[it]==fresh[it]
+            }){
+                "The persisted Generation 7 save differs from the reviewed write scope."
+            }
+            val writtenChecks=validateGen7CoreChecksums(written)
+            require(writtenChecks.first){writtenChecks.second}
+            val actual=written.copyOfRange(off,off+PK6_STORED_SIZE)
+            val reopened=parsePk6(
+                actual,0,PK6_STORED_SIZE,false,info.third
+            )?:error("The persisted PK7 could not be reopened.")
+            require(actual.contentEquals(pk7)&&
+                sameGen6ToGen7Pk7(reopened,converted7)&&
+                gen6Pk6PpUps(actual).contentEquals(sourcePpUps)&&
+                gen7DexRegistered(written,reopened)){
+                "The exact converted PK7 or Pokédex registration did not persist after reopening."
+            }
+            require(importedFile?.absolutePath==file.absolutePath&&
+                currentSourceUri==p.sourceUri&&
+                currentSourceLabel==p.sourceLabel&&
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_swsh_${sha256(p.bankBytes)}.pk8"&&
+                SwordShieldToGen7Pk7.review(
+                    p.bankFile.readBytes()
+                )==p.review&&file.readBytes().contentEquals(work)&&
+                isBackupKept(recovery)&&
+                recovery.readBytes().contentEquals(fresh)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The preserved PK8, destination or retained recovery snapshots changed after persistence."
+            }
+            runCatching{bankCopy.delete()}
+        }catch(e:Exception){
+            val bankRestored=runCatching{
+                val current=runCatching{
+                    p.bankFile.readBytes()
+                }.getOrNull()
+                if(current==null||!current.contentEquals(p.bankBytes))
+                    p.bankFile.writeBytes(p.bankBytes)
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                    p.bankFile.name=="switch_swsh_${sha256(p.bankBytes)}.pk8"&&
+                    SwordShieldToGen7Pk7.review(
+                        p.bankFile.readBytes()
+                    )==p.review
+            }.getOrDefault(false)
+            val destinationRestored=runCatching{
+                if(writeStarted)file.writeBytes(fresh)
+                val restored=file.readBytes()
+                restored.contentEquals(fresh)&&
+                    validateGen7CoreChecksums(restored).first
+            }.getOrDefault(false)
+            if(bankRestored&&destinationRestored)
+                runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&destinationRestored->
+                    "The exact Generation 7 destination and PK8 Bank record were restored or kept and verified."
+                bankRestored->
+                    "The PK8 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                destinationRestored->
+                    "The exact Generation 7 destination was restored, but PK8 restoration was not verified. Keep the PK8 recovery snapshot for review."
+                else->
+                    "Automatic recovery could not be verified. Keep the retained destination backup and PK8 recovery snapshot for review."
+            }
+            showDialog("$title failed",
+                (e.message?:"Unknown error")+"\n\n"+recovery+
+                    (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                    (bankRecovery?.takeIf{it.exists()}?.let{
+                        "\nPK8 recovery snapshot: ${it.name}"
+                    }?:""))
+            return
+        }
+        Toast.makeText(this,
+            "PSE converted Sword/Shield PK8 → Gen 7 PK7 to Box ${target/30+1} • Slot ${target%30+1}; PK8 preserved",
+            Toast.LENGTH_LONG).show()
+        showBank()
+    }
+
+
     private data class SwordShieldGen5Prepared(
         val bankFile:File,
         val bankBytes:ByteArray,
@@ -48898,7 +49514,8 @@ private data class Gen2ToGen5LegalisePlan(
             4->"Native 344-byte Sword/Shield PK8 preserved. Review a backward PSE Legalise conversion through a verified in-memory PK3 bridge into one chosen empty native PK4 slot in the loaded Diamond, Pearl, Platinum, HeartGold or SoulSilver save. The PK8 Bank entry and original Sword/Shield save remain unchanged."
             5->"Native 344-byte Sword/Shield PK8 preserved. Review a backward PSE Legalise conversion through verified in-memory PK3 and PK4 bridges into one chosen empty native PK5 slot in the loaded Black, White, Black 2 or White 2 save. The PK8 Bank entry and original Sword/Shield save remain unchanged."
             6->"Native 344-byte Sword/Shield PK8 preserved. Review a backward PSE Legalise conversion through verified in-memory PK3, PK4 and PK5 bridges into one chosen empty native PK6 slot in the loaded Pokémon X, Y, Omega Ruby or Alpha Sapphire save. The PK8 Bank entry and original Sword/Shield save remain unchanged."
-            else->"Native 344-byte Sword/Shield PK8 preserved. Load a checksum-clean Generation 1, Generation 2, Generation 3, Generation 4, Generation 5 or Generation 6 destination to review a bounded backward conversion. Other destinations remain unavailable until their title-specific mappings are complete."
+            7->"Native 344-byte Sword/Shield PK8 preserved. Review a backward PSE Legalise conversion through verified in-memory PK3, PK4, PK5 and PK6 bridges into one chosen empty native PK7 slot in the loaded Pokémon Sun, Moon, Ultra Sun or Ultra Moon save. The PK8 Bank entry and original Sword/Shield save remain unchanged."
+            else->"Native 344-byte Sword/Shield PK8 preserved. Load a checksum-clean Generation 1, Generation 2, Generation 3, Generation 4, Generation 5, Generation 6 or Generation 7 destination to review a bounded backward conversion. Other destinations remain unavailable until their title-specific mappings are complete."
         }
         val b=AlertDialog.Builder(this)
             .setTitle("${p.nickname.ifBlank{"Pokémon #${p.species}"}} • Sword/Shield PK8")
@@ -48920,6 +49537,9 @@ private data class Gen2ToGen5LegalisePlan(
         }
         if(currentGen==6)b.setPositiveButton("Review PK8 → PK6 Legalise"){_,_->
             prepareSwordShieldToGen6Transfer(bankFile,p)
+        }
+        if(currentGen==7)b.setPositiveButton("Review PK8 → PK7 Legalise"){_,_->
+            prepareSwordShieldToGen7Transfer(bankFile,p)
         }
         b.show()
     }
