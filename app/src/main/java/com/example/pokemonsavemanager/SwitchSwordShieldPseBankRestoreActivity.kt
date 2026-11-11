@@ -168,6 +168,7 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
                         bankFile().extension.equals("pb8", true) ||
                         bankFile().extension.equals("pa8", true) ||
                         bankFile().extension.equals("pk9", true) ||
+                        bankFile().extension.equals("pa9", true) ||
                         bankFile().extension.equals("pk7", true) ||
                         bankFile().extension.equals("pse1", true) ||
                         bankFile().extension.equals("pse2", true) ||
@@ -179,7 +180,8 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
                         !bankFile().extension.equals("pb7", true) &&
                             !bankFile().extension.equals("pb8", true) &&
                             !bankFile().extension.equals("pa8", true) &&
-                            !bankFile().extension.equals("pk9", true)
+                            !bankFile().extension.equals("pk9", true) &&
+                            !bankFile().extension.equals("pa9", true)
                 )
             }
             runOnUiThread {
