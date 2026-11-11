@@ -2513,9 +2513,9 @@ class SwitchReadOnlyActivity : Activity() {
             require(entry.name == "switch_sv_${hash}.pk9") {
                 "The PSE Bank filename no longer matches its native PK9 bytes."
             }
-            ScarletVioletToBdspPb8.review(bank)
+            hash to ScarletVioletToBdspPb8.review(bank)
         }
-        val converted = result.getOrElse {
+        val (openedHash, converted) = result.getOrElse {
             AlertDialog.Builder(this).setTitle("Scarlet/Violet -> BDSP blocked")
                 .setMessage(
                     (it.message ?: "No safe conversion is available.") +
@@ -2529,6 +2529,7 @@ class SwitchReadOnlyActivity : Activity() {
         val message = buildString {
             append("${SwordShieldSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n")
             append("Source: ${selected.name} • preserved 344-byte PK9\n")
+            append("Reviewed Bank SHA-256: $openedHash\n")
             append("Prepared destination: checksum-valid 344-byte native BDSP PB8\n\n")
             append("Exact disclosed conversion effects\n• ")
             append(converted.effects.joinToString("\n• "))
@@ -2550,7 +2551,7 @@ class SwitchReadOnlyActivity : Activity() {
                     ) { "The Scarlet/Violet Bank entry changed." }
                     val bank = selected.readBytes()
                     val hash = BdspPseBankRestoreEditing.sha256(bank)
-                    require(selected.name == "switch_sv_${hash}.pk9") {
+                    require(hash == openedHash && selected.name == "switch_sv_${hash}.pk9") {
                         "The PSE Bank entry changed. Reopen PSE Bank."
                     }
                     ScarletVioletToBdspPb8.review(bank)
@@ -2558,6 +2559,7 @@ class SwitchReadOnlyActivity : Activity() {
                         .setData(source)
                         .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
                         .putExtra("pse.bank.entry", selected.name)
+                        .putExtra("pse.bank.sha256", openedHash)
                         .putExtra("pse.bank.legalise", true)
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
                 } catch (error: Exception) {
