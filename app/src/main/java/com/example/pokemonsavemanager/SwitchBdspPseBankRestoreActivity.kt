@@ -235,6 +235,7 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
             entry.extension.equals("pk3", true) ||
             entry.extension.equals("pk4", true) ||
             entry.extension.equals("pk5", true) ||
+            entry.extension.equals("pk6", true) ||
             (entry.name.startsWith("switch_lgpe_") && entry.extension.equals("pb7", true)) ||
             (entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)) ||
             (entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)) ||
