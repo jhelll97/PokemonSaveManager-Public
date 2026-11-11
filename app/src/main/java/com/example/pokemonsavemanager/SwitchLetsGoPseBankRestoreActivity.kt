@@ -164,11 +164,13 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
         val entry = bankFile()
         val bytes = entry.readBytes()
         val hash = LetsGoPseBankRestoreEditing.sha256(bytes)
-        expectedBankSourceHash?.let { reviewed ->
-            require(hash == reviewed) {
-                "The PSE Bank entry changed after Legalise review. Reopen PSE Bank."
-            }
-        } ?: run { expectedBankSourceHash = hash }
+        val reviewed = expectedBankSourceHash
+        require(!reviewed.isNullOrBlank()) {
+            "The reviewed PSE Bank identity is missing. Reopen PSE Bank."
+        }
+        require(hash == reviewed) {
+            "The PSE Bank entry changed after review. Reopen PSE Bank."
+        }
         return if (entry.extension.equals("pb7", true)) {
             require(entry.name == "switch_lgpe_${hash}.pb7") {
                 "The PSE Bank filename no longer matches its native PB7 bytes."
