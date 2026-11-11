@@ -66,7 +66,7 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid PB7 to the next unused native storage record in a new save copy. " +
-                "Same-format Let's Go PB7 records remain exact. Eligible Sword/Shield PK8, BDSP PB8, and Legends: Z-A PA9 records require an explicit Legalise review before conversion to title-specific PB7. " +
+                "Same-format Let's Go PB7 records remain exact. Eligible Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, and Legends: Z-A PA9 records require an explicit Legalise review before conversion to title-specific PB7. " +
                 "Eggs, save-bound partner forms, unsupported species/forms and destination-invalid moves remain protected."
             textSize = 16f
         })
@@ -155,8 +155,10 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
         val native = entry.name.startsWith("switch_lgpe_") && entry.extension.equals("pb7", true)
         val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
         val bdsp = entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)
+        val legendsArceus = entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)
         val legendsZa = entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true)
-        require(entry.parentFile == directory && entry.isFile && (native || swordShield || bdsp || legendsZa)) {
+        require(entry.parentFile == directory && entry.isFile &&
+            (native || swordShield || bdsp || legendsArceus || legendsZa)) {
             "This is not a current Let's Go-compatible PSE Bank entry."
         }
         return entry
@@ -197,6 +199,16 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
                 "The PSE Bank filename no longer matches its native PB8 bytes."
             }
             val converted = BdspToLetsGoPb7.review(bytes, version)
+            LetsGoPseBankRestoreEditing.inspectBankRecord(converted.nativeRecord)
+            PreparedLetsGoBank(converted.nativeRecord, hash, converted.effects, true)
+        } else if (entry.extension.equals("pa8", true)) {
+            require(legalise) {
+                "Legends: Arceus PA8 requires the reviewed Legalise choice from the Let's Go Bank screen."
+            }
+            require(entry.name == "switch_pla_${hash}.pa8") {
+                "The PSE Bank filename no longer matches its native PA8 bytes."
+            }
+            val converted = LegendsArceusToLetsGoPb7.review(bytes, version)
             LetsGoPseBankRestoreEditing.inspectBankRecord(converted.nativeRecord)
             PreparedLetsGoBank(converted.nativeRecord, hash, converted.effects, true)
         } else {
