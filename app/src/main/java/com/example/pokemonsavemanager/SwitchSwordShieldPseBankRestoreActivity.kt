@@ -232,6 +232,7 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
         val entry = bankFile()
         if ((entry.name.startsWith("switch_lgpe_") && entry.extension.equals("pb7", true)) ||
             (entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)) ||
+            (entry.name.startsWith("switch_sv_") && entry.extension.equals("pk9", true)) ||
             (entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true))) {
             require(!expectedBankSourceHash.isNullOrBlank()) {
                 "The reviewed cross-title Bank identity is missing. Reopen PSE Bank."
