@@ -234,6 +234,7 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
             (entry.name.startsWith("pse1_") && entry.extension.equals("pse1", true)) ||
             entry.extension.equals("pse2", true) ||
             entry.extension.equals("pk3", true) ||
+            entry.extension.equals("pk4", true) ||
             (entry.name.startsWith("switch_lgpe_") && entry.extension.equals("pb7", true)) ||
             (entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)) ||
             (entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)) ||
