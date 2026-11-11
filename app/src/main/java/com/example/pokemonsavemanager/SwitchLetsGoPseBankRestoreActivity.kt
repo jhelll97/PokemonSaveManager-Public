@@ -153,8 +153,9 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
         val directory = File(filesDir, "pse_bank").canonicalFile
         val entry = File(directory, name).canonicalFile
         val native = entry.name.startsWith("switch_lgpe_") && entry.extension.equals("pb7", true)
-        val converted = entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true)
-        require(entry.parentFile == directory && entry.isFile && (native || converted)) {
+        val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
+        val legendsZa = entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true)
+        require(entry.parentFile == directory && entry.isFile && (native || swordShield || legendsZa)) {
             "This is not a current Let's Go-compatible PSE Bank entry."
         }
         return entry
@@ -177,6 +178,16 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
             }
             LetsGoPseBankRestoreEditing.inspectBankRecord(bytes)
             PreparedLetsGoBank(bytes, hash, emptyList(), false)
+        } else if (entry.extension.equals("pk8", true)) {
+            require(legalise) {
+                "Sword/Shield PK8 requires the reviewed Legalise choice from the Let's Go Bank screen."
+            }
+            require(entry.name == "switch_swsh_${hash}.pk8") {
+                "The PSE Bank filename no longer matches its native PK8 bytes."
+            }
+            val converted = SwordShieldToLetsGoPb7.review(bytes, version)
+            LetsGoPseBankRestoreEditing.inspectBankRecord(converted.nativeRecord)
+            PreparedLetsGoBank(converted.nativeRecord, hash, converted.effects, true)
         } else {
             require(legalise) {
                 "Legends: Z-A PA9 requires the reviewed Legalise choice from the Let's Go Bank screen."

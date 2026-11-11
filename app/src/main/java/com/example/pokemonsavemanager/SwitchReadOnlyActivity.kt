@@ -1949,6 +1949,7 @@ class SwitchReadOnlyActivity : Activity() {
         val directory = File(filesDir, "pse_bank")
         val entries = directory.listFiles()?.filter {
             it.isFile && ((it.name.startsWith("switch_lgpe_") && it.extension.equals("pb7", true)) ||
+                (it.name.startsWith("switch_swsh_") && it.extension.equals("pk8", true)) ||
                 (it.name.startsWith("switch_za_") && it.extension.equals("pa9", true)))
         }?.sortedBy { it.name }.orEmpty()
         val labels = entries.map { file ->
@@ -1958,6 +1959,15 @@ class SwitchReadOnlyActivity : Activity() {
                 if (pokemon == null) file.name + " • unreadable"
                 else pokemon.nickname.ifBlank { LetsGoSpeciesNames.name(pokemon.species) } +
                     " (#" + pokemon.species + ")" + (if (pokemon.shiny) " • Shiny" else "") + " • PB7"
+            } else if (file.extension.equals("pk8", true)) {
+                runCatching { SwordShieldToLetsGoPb7.review(file.readBytes(), verified.version) }
+                    .fold(
+                        onSuccess = { converted ->
+                            converted.sourceNickname.ifBlank { LetsGoSpeciesNames.name(converted.sourceSpecies) } +
+                                " (#${converted.sourceSpecies}) • Sword/Shield PK8 -> ${verified.version.displayName} PB7 • Legalise"
+                        },
+                        onFailure = { file.name + " • blocked for ${verified.version.displayName}" }
+                    )
             } else {
                 runCatching { LegendsZaToLetsGoPb7.review(file.readBytes(), verified.version) }
                     .fold(
@@ -1973,18 +1983,107 @@ class SwitchReadOnlyActivity : Activity() {
             .setTitle("PSE Bank • " + entries.size + " entries for ${verified.version.displayName}")
             .setPositiveButton("Close", null)
         if (entries.isEmpty()) {
-            builder.setMessage("No native Let's Go PB7 or Legends: Z-A PA9 entries are stored. Open Pokémon Boxes, choose a Pokémon, then tap Add to PSE Bank.")
+            builder.setMessage("No native Let's Go PB7, Sword/Shield PK8, or Legends: Z-A PA9 entries are stored. Open Pokémon Boxes, choose a Pokémon, then tap Add to PSE Bank.")
         } else {
             builder.setItems(labels.toTypedArray()) { _, index ->
                 if (session === bound) {
                     val selected = entries[index]
-                    if (selected.extension.equals("pa9", true))
-                        showLetsGoLegendsZaBankEntry(bound, selected, verified.version)
-                    else showLetsGoBankEntry(bound, selected)
+                    when {
+                        selected.extension.equals("pk8", true) ->
+                            showLetsGoSwordShieldBankEntry(bound, selected, verified.version)
+                        selected.extension.equals("pa9", true) ->
+                            showLetsGoLegendsZaBankEntry(bound, selected, verified.version)
+                        else -> showLetsGoBankEntry(bound, selected)
+                    }
                 }
             }
         }
         builder.show()
+    }
+
+    private fun showLetsGoSwordShieldBankEntry(
+        bound: SwitchReadSession,
+        file: File,
+        destinationVersion: LetsGoVersion
+    ) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = runCatching { file.canonicalFile }.getOrNull()
+        val result = runCatching {
+            require(entry != null && entry.parentFile == directory && entry.isFile &&
+                entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)) {
+                "This is not a current Sword/Shield PSE Bank entry."
+            }
+            val bank = entry.readBytes()
+            val hash = LetsGoPseBankRestoreEditing.sha256(bank)
+            require(entry.name == "switch_swsh_${hash}.pk8") {
+                "The PSE Bank filename no longer matches its native PK8 bytes."
+            }
+            hash to SwordShieldToLetsGoPb7.review(bank, destinationVersion)
+        }
+        val (openedHash, converted) = result.getOrElse {
+            AlertDialog.Builder(this).setTitle("Sword/Shield -> ${destinationVersion.displayName} blocked")
+                .setMessage(
+                    (it.message ?: "No safe conversion is available.") +
+                        "\n\nThe PK8 Bank entry and Let's Go save remain unchanged."
+                )
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val selected = entry ?: return
+        val p = LetsGoPseBankRestoreEditing.inspectBankRecord(converted.nativeRecord)
+        val message = buildString {
+            append("${LetsGoSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n")
+            append("Source: ${selected.name} • preserved checksum-valid 344-byte native PK8\n")
+            append("Reviewed Bank SHA-256: $openedHash\n")
+            append("Explicit destination: ${destinationVersion.displayName}\n")
+            append("Prepared destination: checksum-valid 260-byte native PB7\n\n")
+            append("Exact disclosed conversion effects\n• ")
+            append(converted.effects.joinToString("\n• "))
+            append(
+                "\n\nContinue only if you accept every disclosed Legalise effect. " +
+                    "This backward cross-generation PSE conversion does not claim an official HOME transfer, " +
+                    "trade, encounter record, legality certification, or provenance."
+            )
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Sword/Shield -> ${destinationVersion.displayName} • PSE Legalise review")
+            .setMessage(message)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Legalise & choose destination") { _, _ ->
+                try {
+                    require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                    val current = bound.snapshot.inspectLetsGo() as? LetsGoValidation.Verified
+                        ?: error("Reopen a validated native Let's Go destination.")
+                    require(current.version == destinationVersion) {
+                        "The explicit destination title changed. Reopen PSE Bank."
+                    }
+                    val source = selectedSourceUri
+                        ?: error("Reopen the selected ${destinationVersion.displayName} save from PSE.")
+                    require(selected.parentFile == directory && selected.isFile &&
+                        selected.name.startsWith("switch_swsh_") &&
+                        selected.extension.equals("pk8", true)) {
+                        "The Sword/Shield Bank entry changed."
+                    }
+                    val bank = selected.readBytes()
+                    val hash = LetsGoPseBankRestoreEditing.sha256(bank)
+                    require(hash == openedHash && selected.name == "switch_swsh_${hash}.pk8") {
+                        "The PSE Bank entry changed. Reopen PSE Bank."
+                    }
+                    SwordShieldToLetsGoPb7.review(bank, destinationVersion)
+                    startActivity(Intent(this, SwitchLetsGoPseBankRestoreActivity::class.java)
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.bank.entry", selected.name)
+                        .putExtra("pse.bank.sha256", openedHash)
+                        .putExtra("pse.bank.legalise", true)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not prepare Sword/Shield conversion")
+                        .setMessage(error.message ?: "Both sources remain unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }.show()
     }
 
     private fun showLetsGoBankEntry(bound: SwitchReadSession, file: File) {
