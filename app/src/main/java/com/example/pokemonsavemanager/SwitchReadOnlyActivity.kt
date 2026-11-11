@@ -2797,6 +2797,7 @@ class SwitchReadOnlyActivity : Activity() {
                             p.species + ") • Level " + p.cachedLevel + "\n")
                         append("Source: " + selected.name +
                             " • preserved 62-byte PSE2 record\n")
+                        append("Reviewed Bank SHA-256: $openedHash\n")
                         append("Prepared destination: checksum-valid 344-byte native BDSP PB8\n\n")
                         append("Exact disclosed conversion effects\n• ")
                         append(converted.effects.joinToString("\n• "))
@@ -2828,6 +2829,7 @@ class SwitchReadOnlyActivity : Activity() {
                                     .setData(source)
                                     .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
                                     .putExtra("pse.bank.entry", selected.name)
+                                    .putExtra("pse.bank.sha256", openedHash)
                                     .putExtra("pse.bank.legalise", true)
                                     .putExtra("pse.gen2.friendship", metadata.baseFriendship)
                                     .putExtra("pse.gen2.gender_rate", metadata.genderRate)

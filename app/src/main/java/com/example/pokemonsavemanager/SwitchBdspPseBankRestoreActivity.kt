@@ -231,6 +231,7 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
     private fun readBankSource(): ByteArray {
         val entry = bankFile()
         if ((entry.name.startsWith("pse1_") && entry.extension.equals("pse1", true)) ||
+            entry.extension.equals("pse2", true) ||
             (entry.name.startsWith("switch_lgpe_") && entry.extension.equals("pb7", true)) ||
             (entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)) ||
             (entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true)) ||
