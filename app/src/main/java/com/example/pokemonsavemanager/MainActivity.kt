@@ -14324,7 +14324,7 @@ class MainActivity : Activity() {
                 pk4,converted4,file,openedUri,openedLabel,effects)
             val preview=buildString{
                 append("Exact PB7 SHA-256: ${sha256(bank)}\n")
-                append("Destination: $destinationTitle (${profile.family} structure)\n\n")
+                append("Destination: ${profile.family}\n\n")
                 effects.forEach{append("• ").append(it).append("\n\n")}
                 append("Choose Legalise only if every disclosed transformation is acceptable. Cancel leaves both sides byte-for-byte unchanged.")
             }
@@ -16262,7 +16262,7 @@ class MainActivity : Activity() {
             )
             val preview=buildString{
                 append("Exact PK8 SHA-256: ${sha256(bank)}\n")
-                append("Destination: ${profile.family}\n\n")
+                append("Destination: $destinationTitle (${profile.family} structure)\n\n")
                 effects.forEach{append("• ").append(it).append("\n\n")}
                 append("Choose Legalise only if every disclosed transformation and omission is acceptable. Cancel leaves both sides byte-for-byte unchanged.")
             }
