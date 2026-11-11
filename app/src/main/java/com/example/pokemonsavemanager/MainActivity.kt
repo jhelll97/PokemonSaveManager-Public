@@ -21607,6 +21607,496 @@ class MainActivity : Activity() {
 
 
 
+    private data class LegendsArceusGen4Prepared(
+        val bankFile:File,
+        val bankBytes:ByteArray,
+        val review:LegendsArceusToGen4Review,
+        val destination:ByteArray,
+        val originGame:Int,
+        val pk3:ByteArray,
+        val bridge3:PokemonEntry,
+        val meta4:Gen3ToGen4Meta,
+        val plan4:Gen3ToGen4Plan,
+        val pk4:ByteArray,
+        val converted4:PokemonEntry,
+        val destinationFile:File,
+        val sourceUri:Uri?,
+        val sourceLabel:String?,
+        val effects:List<String>,
+        var submitted:Boolean=false
+    )
+
+    private fun legendsArceusGen4SnapshotsMatch(
+        p:LegendsArceusGen4Prepared,requireOpen:Boolean=true
+    ):Boolean=(!requireOpen||!p.submitted)&&
+        importedFile?.absolutePath==p.destinationFile.absolutePath&&
+        currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&runCatching{
+            p.destinationFile.readBytes().contentEquals(p.destination)&&
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_pla_${sha256(p.bankBytes)}.pa8"
+        }.getOrDefault(false)
+
+    private fun prepareLegendsArceusToGen4Transfer(
+        bankFile:File,shown:LegendsArceusPokemonRead,requestedOriginGame:Int?=null
+    ){
+        val title="Legends: Arceus PA8 → Gen 4 PK4"
+        val file=importedFile?:return showDialog(title,
+            "Load a valid Diamond, Pearl, Platinum, HeartGold or SoulSilver destination first.")
+        val openedUri=currentSourceUri
+        val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&
+            currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val destination=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The destination save could not be read.")
+        val profile=detectGen4Profile(destination)
+            ?:return showDialog(title,
+                "Load a valid Diamond, Pearl, Platinum, HeartGold or SoulSilver save first.")
+        val validation=gen4Validation(destination,profile)
+        if(!bound()||!validation.generalChecksum||!validation.storageChecksum||
+            validation.badPk4!=0)
+            return showDialog(title,
+                "The Generation 4 destination did not pass native block, storage and PK4 validation.")
+
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The PSE Bank path could not be verified.")
+        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The selected PA8 path could not be verified.")
+        if(selected.parentFile!=root||!selected.isFile||
+            !selected.extension.equals("pa8",true))
+            return showDialog(title,
+                "The selected record is outside the Legends: Arceus PSE Bank.")
+        val bank=runCatching{selected.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The preserved PA8 record could not be read.")
+        if(selected.name!="switch_pla_${sha256(bank)}.pa8")
+            return showDialog(title,
+                "The PA8 filename does not match its exact SHA-256 content binding. Nothing was changed.")
+        val review=try{LegendsArceusToGen4Pk4.review(bank)}catch(e:Exception){
+            return showDialog("PA8 → PK4 blocked",
+                (e.message?:"No safe native Generation 4 mapping is available.")+
+                    "\n\nThe PA8 Bank entry and Generation 4 destination were left unchanged.")
+        }
+        if(!sameLegendsArceusGen3Source(review.source,shown))
+            return showDialog(title,
+                "The selected PA8 changed since the Bank screen opened. Reopen PSE Bank.")
+
+        val originGame=requestedOriginGame
+        if(originGame==null){
+            val choices=listOf(
+                1 to "Pokémon Sapphire",2 to "Pokémon Ruby",3 to "Pokémon Emerald",
+                4 to "Pokémon FireRed",5 to "Pokémon LeafGreen",
+                15 to "Pokémon Colosseum / XD"
+            )
+            AlertDialog.Builder(this)
+                .setTitle("Choose documented Gen 3 origin mapping")
+                .setMessage("This bounded PK4 route uses a reviewed native PK3 bridge. Choose the exact Generation 3 origin written into that bridge and retained by PK4 as a Pal Park record. This Legalise choice does not verify history. Destination family: ${profile.family}. Cancel leaves both files unchanged.")
+                .setItems(choices.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
+                    prepareLegendsArceusToGen4Transfer(
+                        bankFile,shown,choices[which].first
+                    )
+                }.setNegativeButton("Cancel",null).show()
+            return
+        }
+        val originTitle=gen3CompatibleOriginTitle(originGame)
+            ?:return showDialog("PA8 → PK4 blocked",
+                "The selected bridge origin is not a documented native Generation 3 title.")
+
+        val pk3=try{
+            buildLegendsArceusGen3Pk3(review.source,originGame)
+        }catch(e:Exception){
+            return showDialog("PA8 → PK4 blocked",
+                (e.message?:"No safe native PK3 bridge is available.")+
+                    "\n\nNothing was changed.")
+        }
+        val parsedBridge=parsePk3(pk3,0,false)
+            ?:return showDialog(title,
+                "The prepared native PK3 bridge could not be reopened.")
+        val abilityRows=canonicalGen3SpeciesAbilities(parsedBridge.species)
+            ?:return showDialog("PA8 → PK4 blocked",
+                "Canonical Generation 3 ability data is unavailable for species #${parsedBridge.species}.")
+        val bridgeAbility=abilityRows
+            .getOrElse(parsedBridge.abilityNumber-1){0}.takeIf{it!=0}
+            ?:abilityRows.firstOrNull()?.takeIf{it!=0}
+            ?:return showDialog("PA8 → PK4 blocked",
+                "No destination-valid normal Generation 3 ability exists for the bridge.")
+        val bridge3=parsedBridge.copy(ability=bridgeAbility)
+        fun snapshotsMatch()=bound()&&runCatching{
+            file.readBytes().contentEquals(destination)&&
+                selected.readBytes().contentEquals(bank)&&
+                selected.name=="switch_pla_${sha256(bank)}.pa8"
+        }.getOrDefault(false)
+        if(!snapshotsMatch())return showDialog(title,
+            "The destination or PA8 changed during preparation. Nothing was changed.")
+
+        val loading=AlertDialog.Builder(this).setTitle("Prepare PA8 → PK4")
+            .setMessage("Verifying the PK3 bridge, historical Generation 4 ability and native PK4 mapping…")
+            .setCancelable(false).create()
+        loading.show()
+        loadGen3ToGen4MetaAsync(bridge3,4,3){meta4,reason->
+            if(loading.isShowing)loading.dismiss()
+            if(!snapshotsMatch())return@loadGen3ToGen4MetaAsync showDialog(
+                title,"The destination or PA8 changed during preparation."
+            )
+            if(meta4==null)return@loadGen3ToGen4MetaAsync showDialog(
+                "PA8 → PK4 blocked",
+                (reason?:"Generation 4 species or ability data could not be verified.")+
+                    "\n\nNothing was changed."
+            )
+            val plan4=try{
+                makeGen3ToGen4Plan(bridge3,meta4,false)
+            }catch(e:Exception){
+                return@loadGen3ToGen4MetaAsync showDialog(
+                    "PA8 → PK4 blocked",
+                    (e.message?:"No safe Generation 4 conversion plan is available.")+
+                        "\n\nNothing was changed."
+                )
+            }
+            val pk4=try{
+                buildGen3ToGen4Pk4(pk3,bridge3,destination,plan4)
+            }catch(e:Exception){
+                return@loadGen3ToGen4MetaAsync showDialog(
+                    "PA8 → PK4 blocked",
+                    (e.message?:"No safe native PK4 mapping is available.")+
+                        "\n\nNothing was changed."
+                )
+            }
+            val converted4=parsePk4(pk4,false)
+                ?:return@loadGen3ToGen4MetaAsync showDialog(
+                    title,"The prepared native PK4 could not be reopened."
+                )
+            if(!converted4.checksumValid||
+                converted4.species!=review.source.species||
+                converted4.tid!=review.source.tid||
+                converted4.sid!=review.source.sid)
+                return@loadGen3ToGen4MetaAsync showDialog(title,
+                    "The prepared PK4 did not preserve the reviewed identity.")
+
+            fun genderLabel(value:Int)=when(value){
+                0->"male";1->"female";2->"genderless";else->"unknown"
+            }
+            val pidNote=if(converted4.pid==review.source.pid)
+                "PID remains 0x${review.source.pid.toString(16).uppercase().padStart(8,'0')}."
+            else "PID changes 0x${review.source.pid.toString(16).uppercase().padStart(8,'0')} → 0x${converted4.pid.toString(16).uppercase().padStart(8,'0')} only through the reviewed Generation 3-to-4 PID plan."
+            val effects=review.source.effects+review.effects+listOf(
+                "Destination: one native PK4 in ${profile.family}. Temporary bridge origin: $originTitle (ID $originGame); PK4 records met location 55 and conversion date 20${plan4.metYear.toString().padStart(2,'0')}-${plan4.metMonth.toString().padStart(2,'0')}-${plan4.metDay.toString().padStart(2,'0')}. This is PSE provenance, not verified Pal Park history.",
+                "$pidNote Source PA8 nature ${review.source.nature}, explicit gender ${genderLabel(review.source.gender)}, shiny ${review.source.shiny}, ability #${review.source.ability} slot ${review.source.abilityNumber} → PK4 nature ${converted4.nature}, gender ${genderLabel(converted4.gender)}, shiny ${converted4.shiny}, verified ability #${converted4.ability} in PID-derived slot ${converted4.abilityNumber}.",
+                "Native PK4 preserves species, TID/SID, nickname, OT, EXP, EVs, IVs, friendship, Pokérus, moves, current PP and PP Ups from the reviewed bridge. The bridge's Poké Ball ID 4, met level ${review.source.metLevel}, OT gender ${review.source.originalTrainerGender}, zero markings and empty held-item field are retained.",
+                "Post-Generation-3 species or moves, alternate forms, Eggs, held items, fateful records, unreviewed or incompatible historical abilities, non-English or unrepresentable text, invalid PP/EV/IV/EXP states and ambiguous PID-sensitive species remain blocked.",
+                "PSE writes only one chosen empty native PK4 slot, updates required Pokédex flags and active block CRCs, retains a Keep-pinned destination backup and independent PA8 recovery snapshot, then reopens and verifies the exact persisted PK4. The PA8 Bank entry and original Legends: Arceus save remain unchanged."
+            )
+            val prepared=LegendsArceusGen4Prepared(
+                selected,bank,review,destination,originGame,pk3,bridge3,
+                meta4,plan4,pk4,converted4,file,openedUri,openedLabel,effects
+            )
+            val preview=buildString{
+                append("Exact PA8 SHA-256: ${sha256(bank)}\n")
+                append("Destination: ${profile.family}\n\n")
+                effects.forEach{append("• ").append(it).append("\n\n")}
+                append("Choose Legalise only if every disclosed transformation and omission is acceptable. Cancel leaves both sides byte-for-byte unchanged.")
+            }
+            AlertDialog.Builder(this)
+                .setTitle("${review.source.nickname.ifBlank{"Pokémon #${review.source.species}"}} • PA8 → PK4")
+                .setMessage(preview).setNegativeButton("Cancel",null)
+                .setPositiveButton("Legalise and choose destination"){_,_->
+                    if(legendsArceusGen4SnapshotsMatch(prepared))
+                        chooseLegendsArceusToGen4Destination(prepared)
+                    else showDialog(title,
+                        "The destination or PA8 changed after review. Nothing was changed.")
+                }.show()
+        }
+    }
+
+    private fun chooseLegendsArceusToGen4Destination(p:LegendsArceusGen4Prepared){
+        val title="Legends: Arceus PA8 → Gen 4 PK4"
+        if(!legendsArceusGen4SnapshotsMatch(p))
+            return showDialog(title,
+                "The destination or PA8 changed. Reopen PSE Bank.")
+        val profile=detectGen4Profile(p.destination)
+            ?:return showDialog(title,
+                "The Generation 4 destination layout is no longer valid.")
+        val empty=gen4EmptyBoxSlots(p.destination,profile)
+        if(empty.isEmpty())return showDialog(title,
+            "No empty native Generation 4 PC slot is available.")
+        val first=empty.first()
+        AlertDialog.Builder(this).setTitle("Choose native Gen 4 destination")
+            .setMessage("PSE will write the reviewed PK4 to one empty slot, update only required Pokédex and active block integrity data, retain recovery data, and keep the PA8 Bank entry.")
+            .setItems(arrayOf(
+                "First Empty • Box ${first/30+1} • Slot ${first%30+1}",
+                "Choose Box / Slot"
+            )){_,which->
+                if(!legendsArceusGen4SnapshotsMatch(p))
+                    showDialog(title,
+                        "The destination or PA8 changed. Reopen PSE Bank.")
+                else if(which==0)transferLegendsArceusBankToGen4(p,first)
+                else showLegendsArceusToGen4BoxPicker(p)
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun showLegendsArceusToGen4BoxPicker(p:LegendsArceusGen4Prepared){
+        val title="Legends: Arceus PA8 → Gen 4 PK4"
+        if(!legendsArceusGen4SnapshotsMatch(p))
+            return showDialog(title,
+                "The destination or PA8 changed. Reopen PSE Bank.")
+        val profile=detectGen4Profile(p.destination)
+            ?:return showDialog(title,
+                "The Generation 4 destination layout is no longer valid.")
+        val boxes=(0 until 18).filter{box->(0 until 30).any{slot->
+            val off=gen4BoxSlotOffset(
+                p.destination,profile,box*30+slot
+            )
+            parsePk4(p.destination.copyOfRange(off,off+136),false)==null
+        }}
+        if(boxes.isEmpty())return showDialog(title,
+            "All native Generation 4 PC boxes are full.")
+        AlertDialog.Builder(this).setTitle("Choose Gen 4 destination box")
+            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+                val box=boxes[which]
+                val slots=(0 until 30).filter{slot->
+                    val off=gen4BoxSlotOffset(
+                        p.destination,profile,box*30+slot
+                    )
+                    parsePk4(
+                        p.destination.copyOfRange(off,off+136),false
+                    )==null
+                }
+                AlertDialog.Builder(this)
+                    .setTitle("Box ${box+1} • choose slot")
+                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
+                        transferLegendsArceusBankToGen4(
+                            p,box*30+slots[slotIndex]
+                        )
+                    }.setNegativeButton("Cancel",null).show()
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun transferLegendsArceusBankToGen4(
+        p:LegendsArceusGen4Prepared,target:Int
+    ){
+        val title="Legends: Arceus PA8 → Gen 4 PK4"
+        if(!legendsArceusGen4SnapshotsMatch(p)||p.submitted)
+            return showDialog(title,
+                "The destination or PA8 changed, or this conversion was already submitted. Reopen PSE Bank.")
+        val file=p.destinationFile
+        val original=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog(title,
+                "The destination save could not be read. Nothing was changed.")
+        p.submitted=true
+        var writeStarted=false
+        var backup:File?=null
+        var bankRecovery:File?=null
+        try{
+            require(original.contentEquals(p.destination)&&target in 0 until 540){
+                "The prepared Generation 4 destination changed or selected slot is invalid."
+            }
+            val profile=detectGen4Profile(original)
+                ?:error("The destination is no longer a valid Generation 4 save.")
+            val before=gen4Validation(original,profile)
+            require(before.generalChecksum&&before.storageChecksum&&
+                before.badPk4==0){
+                "The fresh Generation 4 destination failed native validation."
+            }
+
+            val bank=p.bankFile.readBytes()
+            require(bank.contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_pla_${sha256(bank)}.pa8"){
+                "The exact content-addressed PA8 Bank record changed."
+            }
+            val review=LegendsArceusToGen4Pk4.review(bank)
+            require(review==p.review){
+                "The reviewed PA8 mapping changed before writing."
+            }
+            val pk3=buildLegendsArceusGen3Pk3(review.source,p.originGame)
+            val parsedBridge=parsePk3(pk3,0,false)
+                ?:error("The refreshed native PK3 bridge could not be reopened.")
+            val abilityRows=canonicalGen3SpeciesAbilities(parsedBridge.species)
+                ?:error("Canonical Generation 3 ability data became unavailable.")
+            val bridgeAbility=abilityRows
+                .getOrElse(parsedBridge.abilityNumber-1){0}.takeIf{it!=0}
+                ?:abilityRows.firstOrNull()?.takeIf{it!=0}
+                ?:error("No destination-valid bridge ability remains.")
+            val bridge3=parsedBridge.copy(ability=bridgeAbility)
+            require(pk3.contentEquals(p.pk3)&&
+                sameGen4ToGen3Pk3(bridge3,p.bridge3)&&
+                gen3MovePpUps(pk3)
+                    .contentEquals(review.source.ppUps.toIntArray())){
+                "The reviewed native PK3 bridge changed before writing."
+            }
+            val plan4=makeGen3ToGen4PlanWithDate(
+                bridge3,p.meta4,p.plan4.metYear,p.plan4.metMonth,
+                p.plan4.metDay,false
+            )
+            require(plan4==p.plan4){
+                "The reviewed Generation 4 conversion plan changed."
+            }
+            val pk4=buildGen3ToGen4Pk4(pk3,bridge3,original,plan4)
+            val converted4=parsePk4(pk4,false)
+                ?:error("The refreshed native PK4 could not be reopened.")
+            require(pk4.contentEquals(p.pk4)&&
+                sameGen3ToGen4Pk4(converted4,p.converted4)&&
+                gen4Pk4PpUps(pk4).contentEquals(gen3MovePpUps(pk3))){
+                "The reviewed native PK4 changed before writing."
+            }
+
+            val off=gen4BoxSlotOffset(original,profile,target)
+            require(parsePk4(original.copyOfRange(off,off+136),false)==null){
+                "The selected Generation 4 slot is no longer empty."
+            }
+            val work=original.copyOf()
+            pk4.copyInto(work,off)
+            val allowed=HashSet<Int>()
+            for(i in off until off+136)allowed.add(i)
+            val staged=parsePk4(work.copyOfRange(off,off+136),false)
+                ?:error("The staged PK4 could not be parsed.")
+            require(sameGen3ToGen4Pk4(staged,converted4)&&
+                gen4Pk4PpUps(work.copyOfRange(off,off+136))
+                    .contentEquals(gen3MovePpUps(pk3))){
+                "The staged PK4 differs from the reviewed conversion."
+            }
+
+            val general=gen4ActiveBlock(work,0,profile.generalSize)*0x40000
+            val dexBase=general+gen4PokedexBase(profile)
+            val bit=staged.species-1
+            allowed.add(dexBase+0x04+bit/8)
+            allowed.add(dexBase+0x44+bit/8)
+            allowed.add(general+profile.generalSize-2)
+            allowed.add(general+profile.generalSize-1)
+            registerGen1ToGen4Pokedex(work,profile,staged.species)
+            val storage=gen4ActiveBlock(
+                work,profile.storageStart,profile.storageSize
+            )*0x40000+profile.storageStart
+            allowed.add(storage+profile.storageSize-2)
+            allowed.add(storage+profile.storageSize-1)
+            updateGen4BlockChecksum(work,storage,profile.storageSize,profile)
+            require(work.indices.all{it in allowed||work[it]==original[it]}){
+                "The conversion changed data outside the selected PK4, required Pokédex flags and active block CRCs."
+            }
+            val stagedValidation=gen4Validation(work,profile)
+            require(stagedValidation.generalChecksum&&
+                stagedValidation.storageChecksum&&stagedValidation.badPk4==0&&
+                gen1ToGen4DexRegistered(work,profile,staged.species)){
+                "The staged Generation 4 save failed storage, Pokédex or checksum verification."
+            }
+
+            val recovery=File.createTempFile(
+                backupGameName(file)+"_PrePlaToGen4_",".backup",backupsDir()
+            )
+            backup=recovery
+            recovery.writeBytes(original)
+            require(recovery.readBytes().contentEquals(original)){
+                "The Generation 4 recovery backup did not verify."
+            }
+            retainGen2ToGen4SafetyBackup(recovery,original)
+            val bankCopy=File.createTempFile(
+                "PSE_PlaToG4_PA8Recovery_",".tmp",bankDir()
+            )
+            bankRecovery=bankCopy
+            bankCopy.writeBytes(p.bankBytes)
+            require(bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The independent PA8 recovery snapshot did not verify."
+            }
+            require(legendsArceusGen4SnapshotsMatch(p,false)&&
+                file.readBytes().contentEquals(original)&&
+                isBackupKept(recovery)&&
+                recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The source identity or retained recovery snapshots changed before writing."
+            }
+
+            writeStarted=true
+            file.writeBytes(work)
+            val written=file.readBytes()
+            require(written.contentEquals(work)&&
+                written.indices.all{it in allowed||written[it]==original[it]}){
+                "The persisted Generation 4 save differs from the reviewed write scope."
+            }
+            val writtenProfile=detectGen4Profile(written)
+                ?:error("The persisted Generation 4 save could not be reopened.")
+            val after=gen4Validation(written,writtenProfile)
+            require(after.generalChecksum&&after.storageChecksum&&
+                after.badPk4==0&&
+                gen1ToGen4DexRegistered(
+                    written,writtenProfile,converted4.species
+                )){
+                "The persisted Generation 4 save failed checksum or Pokédex validation."
+            }
+            val actualOff=gen4BoxSlotOffset(
+                written,writtenProfile,target
+            )
+            val actual=written.copyOfRange(actualOff,actualOff+136)
+            val reopened=parsePk4(actual,false)
+                ?:error("The persisted PK4 could not be reopened.")
+            require(actual.contentEquals(pk4)&&
+                sameGen3ToGen4Pk4(reopened,converted4)&&
+                gen4Pk4PpUps(actual).contentEquals(gen3MovePpUps(pk3))){
+                "The exact converted PK4 did not persist after reopening."
+            }
+            require(importedFile?.absolutePath==file.absolutePath&&
+                currentSourceUri==p.sourceUri&&
+                currentSourceLabel==p.sourceLabel&&
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_pla_${sha256(p.bankBytes)}.pa8"&&
+                LegendsArceusToGen4Pk4.review(
+                    p.bankFile.readBytes()
+                )==p.review&&file.readBytes().contentEquals(work)&&
+                isBackupKept(recovery)&&
+                recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The preserved PA8, destination or retained recovery snapshots changed after persistence."
+            }
+            runCatching{bankCopy.delete()}
+        }catch(e:Exception){
+            val bankRestored=runCatching{
+                val current=runCatching{
+                    p.bankFile.readBytes()
+                }.getOrNull()
+                if(current==null||!current.contentEquals(p.bankBytes))
+                    p.bankFile.writeBytes(p.bankBytes)
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                    p.bankFile.name=="switch_pla_${sha256(p.bankBytes)}.pa8"&&
+                    LegendsArceusToGen4Pk4.review(
+                        p.bankFile.readBytes()
+                    )==p.review
+            }.getOrDefault(false)
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(original)
+                val restored=file.readBytes()
+                val restoredProfile=detectGen4Profile(restored)
+                    ?:error("The restored Generation 4 layout is invalid.")
+                val restoredValidation=gen4Validation(
+                    restored,restoredProfile
+                )
+                restored.contentEquals(original)&&
+                    restoredValidation.generalChecksum&&
+                    restoredValidation.storageChecksum&&
+                    restoredValidation.badPk4==0
+            }.getOrDefault(false)
+            if(bankRestored&&saveRestored)
+                runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&saveRestored->
+                    "The exact Generation 4 destination and PA8 Bank record were restored or kept and verified."
+                bankRestored->
+                    "The PA8 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                saveRestored->
+                    "The exact Generation 4 destination was restored, but PA8 restoration was not verified. Keep the PA8 recovery snapshot for review."
+                else->
+                    "Automatic recovery could not be verified. Keep the retained destination backup and PA8 recovery snapshot for review."
+            }
+            showDialog("$title failed",
+                (e.message?:"Unknown error")+"\n\n"+recovery+
+                    (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                    (bankRecovery?.takeIf{it.exists()}?.let{
+                        "\nPA8 recovery snapshot: ${it.name}"
+                    }?:""))
+            return
+        }
+        Toast.makeText(this,
+            "PSE converted Legends: Arceus PA8 → Gen 4 PK4 to Box ${target/30+1} • Slot ${target%30+1}; PA8 preserved",
+            Toast.LENGTH_LONG).show()
+        showBank()
+    }
+
+
+
     private data class BdspGen3Prepared(
         val bankFile:File,
         val bankBytes:ByteArray,
@@ -54473,7 +54963,8 @@ private data class Gen2ToGen5LegalisePlan(
             1->"Native ${if(p.cachedLevel==null)"360-byte stored" else "376-byte party"} Legends: Arceus PA8 preserved. Review a backward PSE Legalise conversion into the exact next empty PK1 slot in one chosen Red, Blue or Yellow PC Box. The PA8 Bank entry and original Legends: Arceus save remain unchanged."
             2->"Native ${if(p.cachedLevel==null)"360-byte stored" else "376-byte party"} Legends: Arceus PA8 preserved. Review a backward PSE Legalise conversion into the exact next empty PK2 slot in one chosen Gold, Silver or Crystal PC Box. The PA8 Bank entry and original Legends: Arceus save remain unchanged."
             3->"Native ${if(p.cachedLevel==null)"360-byte stored" else "376-byte party"} Legends: Arceus PA8 preserved. Review a backward PSE Legalise conversion into one chosen empty native PK3 slot in the loaded Ruby, Sapphire, Emerald, FireRed or LeafGreen save. The PA8 Bank entry and original Legends: Arceus save remain unchanged."
-            else->"Native Legends: Arceus PA8 preserved. Load a checksum-clean Generation 1 through Generation 3 destination to review a bounded backward conversion. Other destinations remain unavailable until their title-specific mappings are complete."
+            4->"Native ${if(p.cachedLevel==null)"360-byte stored" else "376-byte party"} Legends: Arceus PA8 preserved. Review a backward PSE Legalise conversion through a verified in-memory PK3 bridge into one chosen empty native PK4 slot in the loaded Diamond, Pearl, Platinum, HeartGold or SoulSilver save. The PA8 Bank entry and original Legends: Arceus save remain unchanged."
+            else->"Native Legends: Arceus PA8 preserved. Load a checksum-clean Generation 1 through Generation 4 destination to review a bounded backward conversion. Other destinations remain unavailable until their title-specific mappings are complete."
         }
         val b=AlertDialog.Builder(this)
             .setTitle("${p.nickname.ifBlank{"Pokémon #${p.species}"}} • Legends: Arceus PA8")
@@ -54486,6 +54977,9 @@ private data class Gen2ToGen5LegalisePlan(
         }
         if(currentGen==3)b.setPositiveButton("Review PA8 → PK3 Legalise"){_,_->
             prepareLegendsArceusToGen3Transfer(bankFile,p)
+        }
+        if(currentGen==4)b.setPositiveButton("Review PA8 → PK4 Legalise"){_,_->
+            prepareLegendsArceusToGen4Transfer(bankFile,p)
         }
         b.show()
     }
