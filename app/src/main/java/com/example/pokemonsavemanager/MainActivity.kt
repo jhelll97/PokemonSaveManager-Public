@@ -16104,7 +16104,9 @@ class MainActivity : Activity() {
             converted.level==level&&converted.heldItem==0&&
             converted.moves.contentEquals(review.moves.toIntArray())&&
             converted.movePP.contentEquals(review.pp.toIntArray())&&
-            converted.movePpUps.contentEquals(review.ppUps.toIntArray())&&
+            (0..3).all{i->
+                ((payload[GEN2_BANK_HEADER_SIZE+23+i].toInt() ushr 6) and 3)==review.ppUps[i]
+            }&&
             converted.statExp.contentEquals(IntArray(5))&&
             converted.happiness==review.friendship&&
             converted.pokerus==review.pokerus&&converted.caughtData==0&&
