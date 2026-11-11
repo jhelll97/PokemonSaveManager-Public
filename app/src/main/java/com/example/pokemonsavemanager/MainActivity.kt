@@ -18828,6 +18828,569 @@ class MainActivity : Activity() {
     }
 
 
+    private data class ScarletVioletGen3Prepared(
+        val bankFile:File,
+        val bankBytes:ByteArray,
+        val review:ScarletVioletToGen3Review,
+        val destination:ByteArray,
+        val originGame:Int,
+        val meta:Gen3ToGen4Meta,
+        val destinationAbility:Int,
+        val destinationGender:Int,
+        val pk3:ByteArray,
+        val converted:PokemonEntry,
+        val destinationFile:File,
+        val sourceUri:Uri?,
+        val sourceLabel:String?,
+        val effects:List<String>,
+        var submitted:Boolean=false
+    )
+
+    private fun sameScarletVioletGen3Source(
+        review:ScarletVioletToGen3Review,shown:ScarletVioletPokemonRead
+    ):Boolean=review.species==shown.species&&review.nickname==shown.nickname&&
+        review.originalTrainer==shown.originalTrainer&&review.tid==shown.tid&&
+        review.sid==shown.sid&&review.pid==shown.pid&&
+        review.encryptionConstant==shown.encryptionConstant&&
+        review.experience==shown.experience&&review.nature==shown.nature&&
+        review.statNature==shown.statNature&&review.ability==shown.ability&&
+        review.abilityNumber==shown.abilityNumber&&review.gender==shown.gender&&
+        review.shiny==shown.shiny&&review.originGame==shown.originGame&&
+        review.ball==shown.ball&&review.metLevel==shown.metLevel&&
+        review.originalTrainerGender==shown.originalTrainerGender&&
+        review.teraTypeOriginal==shown.teraTypeOriginal&&
+        review.teraTypeOverride==shown.teraTypeOverride&&
+        review.scale==shown.scale&&review.obedienceLevel==shown.obedienceLevel&&
+        review.relearnMoves==shown.relearnMoves&&
+        review.moves==shown.moves.map{it.id}&&
+        review.pp==shown.moves.map{it.pp}&&review.ppUps==shown.moves.map{it.ppUps}&&
+        review.ivs==shown.ivs&&review.evs==shown.evs
+
+    private fun scarletVioletGen3SnapshotsMatch(
+        p:ScarletVioletGen3Prepared,requireOpen:Boolean=true
+    ):Boolean=(!requireOpen||!p.submitted)&&
+        importedFile?.absolutePath==p.destinationFile.absolutePath&&
+        currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&runCatching{
+            p.destinationFile.readBytes().contentEquals(p.destination)&&
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_sv_${sha256(p.bankBytes)}.pk9"
+        }.getOrDefault(false)
+
+    private fun buildScarletVioletGen3Pk3(
+        review:ScarletVioletToGen3Review,originGame:Int
+    ):ByteArray{
+        require(gen3CompatibleOriginTitle(originGame)!=null){
+            "Choose a documented native Generation 3 origin title."
+        }
+        val growth=canonicalGen3GrowthRate(review.species)
+            ?:error("The Generation 3 growth curve is unavailable for this species.")
+        val level100=canonicalExperienceForGrowthRate(growth,100)
+            ?:error("The Generation 3 Level 100 experience limit is unavailable.")
+        require(review.experience<=level100){
+            "The PK9 experience exceeds this species' Generation 3 Level 100 limit."
+        }
+        require(gen3TextSupported(review.nickname)&&review.nickname.length in 1..10){
+            "The nickname cannot be represented exactly in native Generation 3 text."
+        }
+        require(gen3TextSupported(review.originalTrainer)&&
+            review.originalTrainer.length in 1..7){
+            "The Original Trainer name cannot be represented exactly in native Generation 3 text."
+        }
+        for(i in 0..3){
+            val move=review.moves[i]
+            val pp=review.pp[i]
+            val ups=review.ppUps[i]
+            if(move==0)require(pp==0&&ups==0){
+                "Empty move slot ${i+1} contains PP or PP-Up data."
+            }else{
+                val base=gen3MovePp.getOrElse(move){0}
+                require(base>0&&ups in 0..3&&pp in 0..base*(5+ups)/5){
+                    "Move #$move has PP or PP Ups outside its native Generation 3 limit."
+                }
+            }
+        }
+        val out=ByteArray(80)
+        writeU32LE(out,0,review.pid)
+        writeU16LE(out,4,review.tid)
+        writeU16LE(out,6,review.sid)
+        writeGen3Text(out,8,10,review.nickname)
+        out[0x12]=2
+        writeGen3Text(out,0x14,7,review.originalTrainer)
+        out[0x1B]=0
+        val blocks=hashMapOf<Char,ByteArray>(
+            'G' to ByteArray(12),'A' to ByteArray(12),
+            'E' to ByteArray(12),'M' to ByteArray(12)
+        )
+        val g=blocks['G']!!
+        val a=blocks['A']!!
+        val e=blocks['E']!!
+        val m=blocks['M']!!
+        val internalSpecies=if(review.species<=251)review.species else review.species+25
+        writeU16LE(g,0,internalSpecies)
+        writeU16LE(g,2,0)
+        writeU32LE(g,4,review.experience)
+        var ppBonuses=0
+        for(i in 0..3){
+            writeU16LE(a,i*2,review.moves[i])
+            a[8+i]=(if(review.moves[i]==0)0 else review.pp[i]).toByte()
+            ppBonuses=ppBonuses or
+                ((if(review.moves[i]==0)0 else review.ppUps[i]) shl (i*2))
+        }
+        g[8]=ppBonuses.toByte()
+        g[9]=review.friendship.toByte()
+        for(i in 0..5)e[i]=review.evs[i].toByte()
+        m[0]=review.pokerus.toByte()
+        m[1]=0
+        writeU16LE(m,2,
+            (review.metLevel and 0x7F) or ((originGame and 0xF) shl 7) or
+                (4 shl 11) or ((review.originalTrainerGender and 1) shl 15)
+        )
+        var ivWord=0L
+        for(i in 0..5)
+            ivWord=ivWord or ((review.ivs[i].toLong() and 31L) shl (i*5))
+        if((review.pid and 1L)!=0L)ivWord=ivWord or 0x80000000L
+        writeU32LE(m,4,ivWord)
+        val order=gen3Orders[(review.pid%24L).toInt()]
+        val plain=ByteArray(48)
+        for(i in 0..3)(blocks[order[i]]!!).copyInto(plain,i*12)
+        var checksum=0
+        for(i in 0 until 48 step 2)
+            checksum=(checksum+readU16LE(plain,i)) and 0xFFFF
+        writeU16LE(out,0x1C,checksum)
+        val key=(review.pid xor
+            (((review.sid.toLong() and 0xFFFFL) shl 16) or
+                (review.tid.toLong() and 0xFFFFL))).toInt()
+        var offset=0
+        while(offset<48){
+            writeU32LE(plain,offset,
+                (readU32LE(plain,offset).toInt() xor key).toLong() and 0xFFFFFFFFL)
+            offset+=4
+        }
+        plain.copyInto(out,0x20)
+        val converted=parsePk3(out,0,false)
+            ?:error("The converted native PK3 could not be reopened.")
+        require(converted.checksumValid&&converted.species==review.species&&
+            converted.pid==review.pid&&converted.tid==review.tid&&
+            converted.sid==review.sid&&converted.nickname==review.nickname&&
+            converted.otName==review.originalTrainer&&
+            converted.experience==review.experience&&converted.heldItem==0&&
+            converted.friendship==review.friendship&&converted.language==2&&
+            converted.markingValue==0&&converted.originGame==originGame&&
+            converted.ball==4&&converted.metLevel==review.metLevel&&
+            converted.metLocation==0&&
+            converted.otGender==review.originalTrainerGender&&
+            converted.moves.contentEquals(review.moves.toIntArray())&&
+            converted.movePP.contentEquals(review.pp.toIntArray())&&
+            gen3MovePpUps(out).contentEquals(review.ppUps.toIntArray())&&
+            converted.evs.contentEquals(review.evs.toIntArray())&&
+            converted.ivs.contentEquals(review.ivs.toIntArray())&&
+            converted.pokerusDays==(review.pokerus and 0xF)&&
+            converted.pokerusStrain==((review.pokerus ushr 4) and 0xF)&&
+            !converted.isEgg&&
+            converted.abilityNumber==((review.pid.toInt() and 1)+1)){
+            "The native PK3 did not preserve every reviewed destination field."
+        }
+        return out
+    }
+
+    private fun prepareScarletVioletToGen3Transfer(
+        bankFile:File,shown:ScarletVioletPokemonRead,requestedOriginGame:Int?=null
+    ){
+        val title="Scarlet/Violet PK9 → Gen 3 PK3"
+        val file=importedFile?:return showDialog(title,
+            "Load a valid Ruby, Sapphire, Emerald, FireRed or LeafGreen destination first.")
+        val openedUri=currentSourceUri
+        val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&
+            currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val destination=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The destination save could not be read.")
+        if(!bound()||generationForSize(destination.size)!=3||!gen3SaveValid(destination))
+            return showDialog(title,
+                "The loaded destination is not a valid bound Generation 3 save.")
+        val destinationGame=detectGen3GameFromData(destination,file.name)
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The PSE Bank path could not be verified.")
+        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The selected PK9 path could not be verified.")
+        if(selected.parentFile!=root||!selected.isFile||
+            !selected.extension.equals("pk9",true))
+            return showDialog(title,
+                "The selected record is outside the Scarlet/Violet PSE Bank.")
+        val bank=runCatching{selected.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The preserved PK9 record could not be read.")
+        if(selected.name!="switch_sv_${sha256(bank)}.pk9")
+            return showDialog(title,
+                "The PK9 filename does not match its exact SHA-256 content binding. Nothing was changed.")
+        val review=try{ScarletVioletToGen3Pk3.review(bank)}catch(e:Exception){
+            return showDialog("PK9 → PK3 blocked",
+                (e.message?:"No safe native Generation 3 mapping is available.")+
+                    "\n\nThe PK9 Bank entry and Generation 3 destination were left unchanged.")
+        }
+        if(!sameScarletVioletGen3Source(review,shown))
+            return showDialog(title,
+                "The selected PK9 changed since the Bank screen opened. Reopen PSE Bank.")
+
+        val originGame=requestedOriginGame
+        if(originGame==null){
+            val choices=listOf(
+                1 to "Pokémon Sapphire",2 to "Pokémon Ruby",3 to "Pokémon Emerald",
+                4 to "Pokémon FireRed",5 to "Pokémon LeafGreen",
+                15 to "Pokémon Colosseum / XD"
+            )
+            AlertDialog.Builder(this)
+                .setTitle("Choose documented Gen 3 origin mapping")
+                .setMessage("Scarlet/Violet origin ${review.originGame} cannot be stored as native Generation 3 provenance. Choose the exact title and ID to write in PK3. This Legalise choice changes provenance and does not verify history. Destination: $destinationGame. Cancel leaves both files unchanged.")
+                .setItems(choices.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
+                    prepareScarletVioletToGen3Transfer(
+                        bankFile,shown,choices[which].first
+                    )
+                }.setNegativeButton("Cancel",null).show()
+            return
+        }
+        val originTitle=gen3CompatibleOriginTitle(originGame)
+            ?:return showDialog("PK9 → PK3 blocked",
+                "The selected origin title is not a documented native Generation 3 mapping.")
+        fun snapshotsMatch()=bound()&&runCatching{
+            file.readBytes().contentEquals(destination)&&
+                selected.readBytes().contentEquals(bank)&&
+                selected.name=="switch_sv_${sha256(bank)}.pk9"
+        }.getOrDefault(false)
+        if(!snapshotsMatch())return showDialog(title,
+            "The destination or PK9 changed during preparation. Nothing was changed.")
+
+        val pk3=try{buildScarletVioletGen3Pk3(review,originGame)}catch(e:Exception){
+            return showDialog("PK9 → PK3 blocked",
+                (e.message?:"No safe native PK3 mapping is available.")+
+                    "\n\nNothing was changed.")
+        }
+        val converted=parsePk3(pk3,0,false)
+            ?:return showDialog(title,"The prepared native PK3 could not be reopened.")
+        val abilityRows=canonicalGen3SpeciesAbilities(review.species)
+            ?:return showDialog("PK9 → PK3 blocked",
+                "Canonical Generation 3 ability-slot data is unavailable for species #${review.species}.")
+        val destinationAbility=abilityRows
+            .getOrElse(converted.abilityNumber-1){0}.takeIf{it!=0}
+            ?:abilityRows.firstOrNull()?.takeIf{it!=0}
+            ?:return showDialog("PK9 → PK3 blocked",
+                "No destination-valid normal Generation 3 ability exists for this species.")
+        val probe=converted.copy(ability=destinationAbility)
+        val loading=AlertDialog.Builder(this).setTitle("Prepare PK9 → PK3")
+            .setMessage("Verifying Generation 3 species, gender and ability rules…")
+            .setCancelable(false).create()
+        loading.show()
+        loadGen3ToGen4MetaAsync(probe,3,3){meta,reason->
+            if(loading.isShowing)loading.dismiss()
+            if(!snapshotsMatch())return@loadGen3ToGen4MetaAsync showDialog(
+                title,"The destination or PK9 changed during preparation."
+            )
+            if(meta==null)return@loadGen3ToGen4MetaAsync showDialog(
+                "PK9 → PK3 blocked",
+                (reason?:"Generation 3 species metadata could not be verified.")+
+                    "\n\nNothing was changed."
+            )
+            if(meta.abilityId!=destinationAbility)
+                return@loadGen3ToGen4MetaAsync showDialog(
+                    "PK9 → PK3 blocked",
+                    "The verified Generation 3 ability changed during review."
+                )
+            val destinationGender=gen3TransferGender(probe,meta.genderRate)
+            fun genderLabel(value:Int)=when(value){
+                0->"male";1->"female";2->"genderless";else->"unknown"
+            }
+            val effects=review.effects+listOf(
+                "Destination: one native PK3 in the loaded $destinationGame save. Origin Legalise: source game ID ${review.originGame} → $originTitle (ID $originGame); native met location is 0 (unspecified).",
+                "PID 0x${review.pid.toString(16).uppercase().padStart(8,'0')} is retained. Nature ${review.nature} → ${converted.nature}; explicit gender ${genderLabel(review.gender)} → PID-derived ${genderLabel(destinationGender)}; shiny ${review.shiny} → ${converted.shiny}.",
+                "Scarlet/Violet ability #${review.ability} in slot ${review.abilityNumber} → canonical Generation 3 ability #$destinationAbility in PID-derived normal slot ${converted.abilityNumber}. This is an explicit Legalise transformation, not encounter or ability provenance.",
+                "Native PK3 preserves TID/SID, nickname, OT, EXP, EVs, IVs, friendship, Pokérus, moves, current PP and PP Ups. Source Ball ${review.ball} becomes Poké Ball ID 4; met level ${review.metLevel} and OT gender ${review.originalTrainerGender} are retained; markings and contest values become explicit zero.",
+                "PSE writes only one chosen empty native PK3 slot, updates required Pokédex mirrors and affected section checksums, retains a Keep-pinned destination backup and independent PK9 recovery snapshot, then reopens and verifies the exact persisted PK3. The PK9 Bank entry and original Scarlet/Violet save remain unchanged."
+            )
+            val prepared=ScarletVioletGen3Prepared(
+                selected,bank,review,destination,originGame,meta,
+                destinationAbility,destinationGender,pk3,converted,file,
+                openedUri,openedLabel,effects
+            )
+            val preview=buildString{
+                append("Exact PK9 SHA-256: ${sha256(bank)}\n")
+                append("Destination: $destinationGame\n\n")
+                effects.forEach{append("• ").append(it).append("\n\n")}
+                append("Choose Legalise only if every disclosed transformation and omission is acceptable. Cancel leaves both sides byte-for-byte unchanged.")
+            }
+            AlertDialog.Builder(this)
+                .setTitle("${review.nickname.ifBlank{"Pokémon #${review.species}"}} • PK9 → PK3")
+                .setMessage(preview).setNegativeButton("Cancel",null)
+                .setPositiveButton("Legalise and choose destination"){_,_->
+                    if(scarletVioletGen3SnapshotsMatch(prepared))
+                        chooseScarletVioletToGen3Destination(prepared)
+                    else showDialog(title,
+                        "The destination or PK9 changed after review. Nothing was changed.")
+                }.show()
+        }
+    }
+
+    private fun chooseScarletVioletToGen3Destination(p:ScarletVioletGen3Prepared){
+        val title="Scarlet/Violet PK9 → Gen 3 PK3"
+        if(!scarletVioletGen3SnapshotsMatch(p))
+            return showDialog(title,
+                "The destination or PK9 changed. Reopen PSE Bank.")
+        val pc=gen3PcBuffer(p.destination)
+            ?:return showDialog(title,
+                "PSE could not reconstruct Generation 3 PC storage.")
+        val empty=(0 until 420).filter{
+            parsePk3(pc,4+it*80,false)==null
+        }
+        if(empty.isEmpty())return showDialog(title,
+            "No empty native Generation 3 PC slot is available.")
+        val first=empty.first()
+        AlertDialog.Builder(this).setTitle("Choose native Gen 3 destination")
+            .setMessage("PSE will write the reviewed PK3 to one empty slot, update only required Pokédex mirrors and section checksums, retain recovery data, and keep the PK9 Bank entry.")
+            .setNegativeButton("Cancel",null)
+            .setPositiveButton(
+                "First Empty • Box ${first/30+1} • Slot ${first%30+1}"
+            ){_,_->transferScarletVioletBankToGen3(p,first)}
+            .setNeutralButton("Choose Box / Slot"){_,_->
+                showScarletVioletToGen3BoxPicker(p,pc)
+            }.show()
+    }
+
+    private fun showScarletVioletToGen3BoxPicker(
+        p:ScarletVioletGen3Prepared,pc:ByteArray
+    ){
+        val title="Scarlet/Violet PK9 → Gen 3 PK3"
+        if(!scarletVioletGen3SnapshotsMatch(p))
+            return showDialog(title,
+                "The destination or PK9 changed. Reopen PSE Bank.")
+        val boxes=(0 until 14).filter{box->(0 until 30).any{slot->
+            parsePk3(pc,4+(box*30+slot)*80,false)==null
+        }}
+        if(boxes.isEmpty())return showDialog(title,
+            "All native Generation 3 PC boxes are full.")
+        AlertDialog.Builder(this).setTitle("Choose Gen 3 destination box")
+            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+                val box=boxes[which]
+                val slots=(0 until 30).filter{slot->
+                    parsePk3(pc,4+(box*30+slot)*80,false)==null
+                }
+                AlertDialog.Builder(this)
+                    .setTitle("Box ${box+1} • choose slot")
+                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
+                        transferScarletVioletBankToGen3(
+                            p,box*30+slots[slotIndex]
+                        )
+                    }.setNegativeButton("Cancel",null).show()
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun transferScarletVioletBankToGen3(
+        p:ScarletVioletGen3Prepared,target:Int
+    ){
+        val title="Scarlet/Violet PK9 → Gen 3 PK3"
+        if(!scarletVioletGen3SnapshotsMatch(p)||p.submitted)
+            return showDialog(title,
+                "The destination or PK9 changed, or this conversion was already submitted. Reopen PSE Bank.")
+        val file=p.destinationFile
+        val original=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog(title,
+                "The destination save could not be read. Nothing was changed.")
+        p.submitted=true
+        var writeStarted=false
+        var backup:File?=null
+        var bankRecovery:File?=null
+        try{
+            require(original.contentEquals(p.destination)&&
+                generationForSize(original.size)==3&&gen3SaveValid(original)&&
+                target in 0 until 420){
+                "The prepared Generation 3 destination changed or selected slot is invalid."
+            }
+            val bank=p.bankFile.readBytes()
+            require(bank.contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_sv_${sha256(bank)}.pk9"){
+                "The exact content-addressed PK9 Bank record changed."
+            }
+            val review=ScarletVioletToGen3Pk3.review(bank)
+            require(review==p.review){
+                "The reviewed PK9 mapping changed before writing."
+            }
+            val pk3=buildScarletVioletGen3Pk3(review,p.originGame)
+            val converted=parsePk3(pk3,0,false)
+                ?:error("The refreshed native PK3 could not be reopened.")
+            require(pk3.contentEquals(p.pk3)&&
+                sameGen4ToGen3Pk3(converted,p.converted)&&
+                gen3MovePpUps(pk3).contentEquals(review.ppUps.toIntArray())){
+                "The reviewed native PK3 changed before writing."
+            }
+            val abilities=canonicalGen3SpeciesAbilities(review.species)
+                ?:error("Canonical Generation 3 ability data became unavailable.")
+            val ability=abilities.getOrElse(converted.abilityNumber-1){0}
+                .takeIf{it!=0}?:abilities.firstOrNull()?.takeIf{it!=0}
+                ?:error("No destination-valid Generation 3 ability remains.")
+            require(ability==p.destinationAbility&&p.meta.abilityId==ability&&
+                gen3TransferGender(
+                    converted.copy(ability=ability),p.meta.genderRate
+                )==p.destinationGender){
+                "The reviewed Generation 3 ability or gender mapping changed."
+            }
+
+            val save=original.copyOf()
+            val pc=gen3PcBuffer(save)
+                ?:error("Could not reconstruct Generation 3 PC storage.")
+            val beforePc=pc.copyOf()
+            val off=4+target*80
+            require(parsePk3(pc,off,false)==null){
+                "The selected Generation 3 slot is no longer empty."
+            }
+            pk3.copyInto(pc,off)
+            val staged=parsePk3(pc,off,false)
+                ?:error("The staged PK3 could not be parsed.")
+            require(sameGen4ToGen3Pk3(staged,converted)&&
+                gen3MovePpUps(pc.copyOfRange(off,off+80))
+                    .contentEquals(review.ppUps.toIntArray())){
+                "The staged PK3 differs from the reviewed conversion."
+            }
+            require(pc.indices.all{
+                it in off until off+80||pc[it]==beforePc[it]
+            }){
+                "The conversion changed unrelated Generation 3 PC data."
+            }
+            writeGen1ToGen3PcAndDexFrozen(save,pc,converted.species)
+            require(gen3SaveValid(save)&&
+                gen2ToGen3DexRegistered(save,converted.species)){
+                "The staged Generation 3 save failed Pokédex or section-checksum verification."
+            }
+
+            val map=gen3ActiveSectionMap(original)
+                ?:error("Could not map the original Generation 3 sections.")
+            val allowed=HashSet<Int>()
+            var cursor=0
+            for(id in 5..13){
+                val base=map[id]
+                val len=gen3SectionLengths[id]
+                val a=maxOf(off,cursor)
+                val z=minOf(off+80,cursor+len)
+                for(i in a until z)allowed.add(base+i-cursor)
+                allowed.add(base+0xFF6)
+                allowed.add(base+0xFF7)
+                cursor+=len
+            }
+            val layout=gen3PokedexLayout(original)
+                ?:error("Could not map Generation 3 Pokédex mirrors.")
+            val dexByte=(converted.species-1)/8
+            for(base in layout.mirrors)allowed.add(base+dexByte)
+            for(base in intArrayOf(
+                layout.section0,layout.section1,layout.seenSection
+            )){
+                allowed.add(base+0xFF6)
+                allowed.add(base+0xFF7)
+            }
+            require(save.indices.all{
+                it in allowed||save[it]==original[it]
+            }){
+                "The conversion changed data outside the selected PK3, Pokédex mirrors and required section checksums."
+            }
+
+            val recovery=File.createTempFile(
+                backupGameName(file)+"_PreSVToGen3_",".backup",backupsDir()
+            )
+            backup=recovery
+            recovery.writeBytes(original)
+            require(recovery.readBytes().contentEquals(original)){
+                "The Generation 3 recovery backup did not verify."
+            }
+            retainGen2ToGen3SafetyBackup(recovery,original)
+            val bankCopy=File.createTempFile(
+                "PSE_SVToG3_PK9Recovery_",".tmp",bankDir()
+            )
+            bankRecovery=bankCopy
+            bankCopy.writeBytes(p.bankBytes)
+            require(bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The independent PK9 recovery snapshot did not verify."
+            }
+            require(scarletVioletGen3SnapshotsMatch(p,false)&&
+                file.readBytes().contentEquals(original)&&
+                isBackupKept(recovery)&&
+                recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The source identity or retained recovery snapshots changed before writing."
+            }
+
+            writeStarted=true
+            file.writeBytes(save)
+            val written=file.readBytes()
+            require(written.contentEquals(save)&&gen3SaveValid(written)&&
+                gen2ToGen3DexRegistered(written,converted.species)&&
+                written.indices.all{it in allowed||written[it]==original[it]}){
+                "The persisted Generation 3 save differs from the reviewed write scope."
+            }
+            val writtenPc=gen3PcBuffer(written)
+                ?:error("The persisted Generation 3 PC storage could not be reopened.")
+            val actual=writtenPc.copyOfRange(off,off+80)
+            val reopened=parsePk3(actual,0,false)
+                ?:error("The persisted PK3 could not be reopened.")
+            require(actual.contentEquals(pk3)&&
+                sameGen4ToGen3Pk3(reopened,converted)&&
+                gen3MovePpUps(actual).contentEquals(review.ppUps.toIntArray())){
+                "The exact converted PK3 did not persist after reopening."
+            }
+            require(importedFile?.absolutePath==file.absolutePath&&
+                currentSourceUri==p.sourceUri&&
+                currentSourceLabel==p.sourceLabel&&
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_sv_${sha256(p.bankBytes)}.pk9"&&
+                ScarletVioletToGen3Pk3.review(
+                    p.bankFile.readBytes()
+                )==p.review&&file.readBytes().contentEquals(save)&&
+                isBackupKept(recovery)&&
+                recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The preserved PK9, destination or retained recovery snapshots changed after persistence."
+            }
+            runCatching{bankCopy.delete()}
+        }catch(e:Exception){
+            val bankRestored=runCatching{
+                val current=runCatching{
+                    p.bankFile.readBytes()
+                }.getOrNull()
+                if(current==null||!current.contentEquals(p.bankBytes))
+                    p.bankFile.writeBytes(p.bankBytes)
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                    p.bankFile.name=="switch_sv_${sha256(p.bankBytes)}.pk9"&&
+                    ScarletVioletToGen3Pk3.review(
+                        p.bankFile.readBytes()
+                    )==p.review
+            }.getOrDefault(false)
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(original)
+                val restored=file.readBytes()
+                restored.contentEquals(original)&&
+                    generationForSize(restored.size)==3&&gen3SaveValid(restored)
+            }.getOrDefault(false)
+            if(bankRestored&&saveRestored)
+                runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&saveRestored->
+                    "The exact Generation 3 destination and PK9 Bank record were restored or kept and verified."
+                bankRestored->
+                    "The PK9 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                saveRestored->
+                    "The exact Generation 3 destination was restored, but PK9 restoration was not verified. Keep the PK9 recovery snapshot for review."
+                else->
+                    "Automatic recovery could not be verified. Keep the retained destination backup and PK9 recovery snapshot for review."
+            }
+            showDialog("$title failed",
+                (e.message?:"Unknown error")+"\n\n"+recovery+
+                    (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                    (bankRecovery?.takeIf{it.exists()}?.let{
+                        "\nPK9 recovery snapshot: ${it.name}"
+                    }?:""))
+            return
+        }
+        Toast.makeText(this,
+            "PSE converted Scarlet/Violet PK9 → Gen 3 PK3 to Box ${target/30+1} • Slot ${target%30+1}; PK9 preserved",
+            Toast.LENGTH_LONG).show()
+        showBank()
+    }
+
+
     private data class BdspGen7Prepared(
         val bankFile:File,
         val bankBytes:ByteArray,
@@ -57616,7 +58179,8 @@ private data class Gen2ToGen5LegalisePlan(
         val message=when(currentGen){
             1->"Native 344-byte Scarlet/Violet PK9 preserved. Review a backward PSE Legalise conversion into the exact next empty PK1 slot in one chosen Red, Blue or Yellow PC Box. The PK9 Bank entry and original Scarlet/Violet save remain unchanged."
             2->"Native 344-byte Scarlet/Violet PK9 preserved. Review a backward PSE Legalise conversion into the exact next empty PK2 slot in one chosen Gold, Silver or Crystal PC Box. The PK9 Bank entry and original Scarlet/Violet save remain unchanged."
-            else->"Native 344-byte Scarlet/Violet PK9 preserved. Load a checksum-clean Generation 1 or Generation 2 destination to review a completed bounded backward conversion. Other destinations remain unavailable until their title-specific mappings are complete."
+            3->"Native 344-byte Scarlet/Violet PK9 preserved. Review a backward PSE Legalise conversion into one chosen empty native PK3 slot in the loaded Ruby, Sapphire, Emerald, FireRed or LeafGreen save. The PK9 Bank entry and original Scarlet/Violet save remain unchanged."
+            else->"Native 344-byte Scarlet/Violet PK9 preserved. Load a checksum-clean Generation 1, Generation 2 or Generation 3 destination to review a completed bounded backward conversion. Other destinations remain unavailable until their title-specific mappings are complete."
         }
         val b=AlertDialog.Builder(this)
             .setTitle("${p.nickname.ifBlank{"Pokémon #${p.species}"}} • Scarlet/Violet PK9")
@@ -57626,6 +58190,9 @@ private data class Gen2ToGen5LegalisePlan(
         }
         if(currentGen==2)b.setPositiveButton("Review PK9 → PK2 Legalise"){_,_->
             prepareScarletVioletToGen2Transfer(bankFile,p)
+        }
+        if(currentGen==3)b.setPositiveButton("Review PK9 → PK3 Legalise"){_,_->
+            prepareScarletVioletToGen3Transfer(bankFile,p)
         }
         b.show()
     }
