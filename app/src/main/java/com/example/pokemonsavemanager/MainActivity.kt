@@ -28371,6 +28371,408 @@ class MainActivity : Activity() {
     }
 
 
+    private data class LegendsZaGen2Prepared(
+        val bankFile:File,
+        val bankBytes:ByteArray,
+        val review:LegendsZaToGen2Review,
+        val destination:ByteArray,
+        val bridge:ByteArray,
+        val converted:Gen2Pokemon,
+        val destinationFile:File,
+        val profileKey:String,
+        val sourceUri:Uri?,
+        val sourceLabel:String?,
+        val effects:List<String>,
+        var submitted:Boolean=false
+    )
+
+    private fun sameLegendsZaGen2Source(
+        review:LegendsZaToGen2Review,shown:LegendsZaPokemonRead
+    ):Boolean=review.species==shown.species&&review.nickname==shown.nickname&&
+        review.originalTrainer==shown.originalTrainer&&review.tid==shown.tid&&
+        review.sid==shown.sid&&review.pid==shown.pid&&
+        review.encryptionConstant==shown.encryptionConstant&&
+        review.experience==shown.experience&&review.nature==shown.nature&&
+        review.statNature==shown.statNature&&review.gender==shown.gender&&
+        review.moves==shown.moves.map{it.id}&&review.pp==shown.moves.map{it.pp}&&
+        review.ppUps==shown.moves.map{it.ppUps}&&review.ivs==shown.ivs&&
+        review.evs==shown.evs&&review.form==shown.form&&
+        review.isAlpha==shown.isAlpha&&review.cachedLevel==shown.cachedLevel&&
+        review.cachedStats==shown.cachedStats
+
+    private fun buildLegendsZaGen2Record(
+        review:LegendsZaToGen2Review
+    ):ByteArray{
+        val growth=canonicalGen2Growth(review.species)
+            ?:error("The Generation 2 growth group is unavailable for this species.")
+        val level=gen2LevelForExperience(growth,review.experience).coerceIn(1,100)
+        val sourceDvs=IntArray(5){i->(review.ivs[i]/2).coerceIn(0,15)}
+        val expectedDvs=intArrayOf(
+            ((sourceDvs[1]and 1)shl 3)or((sourceDvs[2]and 1)shl 2)or
+                ((sourceDvs[3]and 1)shl 1)or(sourceDvs[4]and 1),
+            sourceDvs[1],sourceDvs[2],sourceDvs[3],sourceDvs[4]
+        )
+        val mon=ByteArray(32)
+        mon[0]=review.species.toByte()
+        for(i in 0..3){
+            mon[2+i]=review.moves[i].toByte()
+            mon[23+i]=if(review.moves[i]==0)0
+                else ((review.ppUps[i] shl 6) or (review.pp[i] and 0x3F)).toByte()
+        }
+        writeU16BE(mon,6,review.tid);writeU24BE(mon,8,review.experience)
+        mon[21]=(((sourceDvs[1] shl 4) or sourceDvs[2]) and 0xFF).toByte()
+        mon[22]=(((sourceDvs[3] shl 4) or sourceDvs[4]) and 0xFF).toByte()
+        mon[27]=review.friendship.toByte();mon[28]=review.pokerus.toByte()
+        mon[31]=level.toByte()
+        val ot=ByteArray(11);val nick=ByteArray(11)
+        writeGen1Text(ot,0,11,review.originalTrainer)
+        writeGen1Text(nick,0,11,review.nickname)
+        val payload=buildLetsGoGen2Payload(mon,ot,nick)
+        val converted=parseGen2BankPayload(payload)
+            ?:error("The prepared native Generation 2 record could not be reopened.")
+        require(converted.species==review.species&&
+            converted.nickname==review.nickname&&
+            converted.otName==review.originalTrainer&&converted.tid==review.tid&&
+            converted.experience==review.experience&&converted.level==level&&
+            converted.heldItem==0&&
+            converted.moves.contentEquals(review.moves.toIntArray())&&
+            converted.movePP.contentEquals(review.pp.toIntArray())&&
+            (0..3).all{i->
+                ((payload[GEN2_BANK_HEADER_SIZE+23+i].toInt() ushr 6) and 3)==review.ppUps[i]
+            }&&converted.statExp.contentEquals(IntArray(5))&&
+            converted.happiness==review.friendship&&
+            converted.pokerus==review.pokerus&&converted.caughtData==0&&
+            converted.dvs.contentEquals(expectedDvs)&&
+            converted.shiny==gen2Shiny(expectedDvs)&&!converted.isEgg){
+            "The native Generation 2 record did not preserve every reviewed field."
+        }
+        return payload
+    }
+
+    private fun legendsZaGen2SnapshotsMatch(
+        p:LegendsZaGen2Prepared,requireOpen:Boolean=true
+    ):Boolean=(!requireOpen||!p.submitted)&&
+        importedFile?.absolutePath==p.destinationFile.absolutePath&&
+        currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&runCatching{
+            p.destinationFile.readBytes().contentEquals(p.destination)&&
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_za_${sha256(p.bankBytes)}.pa9"
+        }.getOrDefault(false)
+
+    private fun prepareLegendsZaToGen2Transfer(
+        bankFile:File,shown:LegendsZaPokemonRead
+    ){
+        val title="Legends: Z-A PA9 → Gen 2 PK2"
+        val file=importedFile?:return showDialog(
+            title,"Load a valid Pokémon Gold, Silver or Crystal destination first."
+        )
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&
+            currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val destination=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The destination save could not be read.")
+        val profile=detectGen2Profile(destination)
+            ?:return showDialog(title,
+                "Load a checksum-clean Pokémon Gold, Silver or Crystal destination first.")
+        if(!bound()||!verifyGen2SaveIntegrity(destination).first)
+            return showDialog(title,
+                "The loaded Generation 2 destination is not fully valid.")
+
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The PSE Bank path could not be verified.")
+        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The selected PA9 path could not be verified.")
+        if(selected.parentFile!=root||!selected.isFile||
+            !selected.extension.equals("pa9",true))
+            return showDialog(title,
+                "The selected record is outside the Legends: Z-A PSE Bank.")
+        val bank=runCatching{selected.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The preserved PA9 record could not be read.")
+        if(selected.name!="switch_za_${sha256(bank)}.pa9")
+            return showDialog(title,
+                "The PA9 filename does not match its exact SHA-256 content binding. Nothing was changed.")
+        val review=try{LegendsZaToGen2Pk2.review(bank)}catch(e:Exception){
+            return showDialog("PA9 → PK2 blocked",
+                (e.message?:"No safe native Generation 2 mapping is available.")+
+                    "\n\nThe PA9 Bank entry and Generation 2 destination were left unchanged.")
+        }
+        if(!sameLegendsZaGen2Source(review,shown))
+            return showDialog(title,
+                "The selected PA9 changed since the Bank screen opened. Reopen PSE Bank.")
+        val bridge=try{buildLegendsZaGen2Record(review)}catch(e:Exception){
+            return showDialog("PA9 → PK2 blocked",
+                (e.message?:"The native Generation 2 record could not be built.")+
+                    "\n\nNothing was changed.")
+        }
+        val converted=parseGen2BankPayload(bridge)
+            ?:return showDialog(title,"The prepared PK2 could not be reopened.")
+        val targets=availableGen2BoxTargets(destination)
+        if(targets.isEmpty())return showDialog(title,
+            "All 14 Generation 2 PC Boxes are full.")
+        if(!bound()||!runCatching{
+                file.readBytes().contentEquals(destination)&&
+                    selected.readBytes().contentEquals(bank)
+            }.getOrDefault(false))
+            return showDialog(title,
+                "The destination or PA9 changed during preparation. Nothing was changed.")
+
+        val dvs=converted.dvs
+        val effects=review.effects+listOf(
+            "Destination: one native PK2 in the loaded ${profile.displayName} profile. Stored level ${converted.level} is derived from retained EXP using the Generation 2 species growth group.",
+            "Native PK2 preserves species, nickname, OT name and TID, EXP, current moves and PP, PP Ups ${review.ppUps.joinToString("/")}, active friendship ${converted.happiness}, Pokérus 0x${converted.pokerus.toString(16).uppercase().padStart(2,'0')}, zero Stat Exp, and DVs ${dvs.joinToString("/")}.",
+            "The source is ${if(review.shiny)"shiny" else "not shiny"}; the destination DV pattern is ${if(converted.shiny)"shiny" else "not shiny"}. Generation 2 derives gender from DVs and stores no PID, encryption constant, SID, nature, ability or explicit gender.",
+            "Choosing a compact PC Box selects its exact next empty PK2 slot. PSE writes only that record, Owned and Seen flags and the primary checksum, retains a Keep-pinned destination backup and independent PA9 recovery snapshot, then reopens and verifies the exact persisted record. The PA9 Bank entry and original Legends: Z-A save remain unchanged."
+        )
+        val prepared=LegendsZaGen2Prepared(
+            selected,bank,review,destination,bridge,converted,file,profile.key,
+            openedUri,openedLabel,effects
+        )
+        val preview=buildString{
+            append("Exact PA9 SHA-256: ${sha256(bank)}\n")
+            append("Source: Pokémon Legends: Z-A\n")
+            append("Destination: ${profile.displayName}\n\n")
+            effects.forEach{append("• ").append(it).append("\n\n")}
+            append("Choose Legalise only if every disclosed transformation and omission is acceptable. Cancel leaves both sides byte-for-byte unchanged.")
+        }
+        AlertDialog.Builder(this)
+            .setTitle("${review.nickname.ifBlank{"Pokémon #${review.species}"}} • PA9 → PK2")
+            .setMessage(preview).setNegativeButton("Cancel",null)
+            .setPositiveButton("Legalise and choose destination"){_,_->
+                if(legendsZaGen2SnapshotsMatch(prepared))
+                    chooseLegendsZaToGen2Destination(prepared)
+                else showDialog(title,
+                    "The destination or PA9 changed after review. Nothing was changed.")
+            }.show()
+    }
+
+    private fun chooseLegendsZaToGen2Destination(
+        p:LegendsZaGen2Prepared
+    ){
+        val title="Legends: Z-A PA9 → Gen 2 PK2"
+        if(!legendsZaGen2SnapshotsMatch(p))
+            return showDialog(title,
+                "The destination or PA9 changed. Reopen PSE Bank.")
+        val profile=detectGen2Profile(p.destination)
+            ?:return showDialog(title,
+                "The Generation 2 destination is no longer valid.")
+        if(profile.key!=p.profileKey)
+            return showDialog(title,
+                "The Generation 2 destination family changed.")
+        val targets=availableGen2BoxTargets(p.destination)
+        if(targets.isEmpty())
+            return showDialog(title,"All 14 Generation 2 PC Boxes are full.")
+        val labels=targets.map{
+            gen2BoxDestinationLabel(
+                it.first,it.second,p.destinationFile,profile,p.sourceUri,p.destination
+            )+" • writes Slot ${21-it.second}"
+        }.toTypedArray()
+        var consumed=false
+        AlertDialog.Builder(this)
+            .setTitle("Choose exact native PK2 destination")
+            .setMessage("Generation 2 boxes are compact. Choose the PC Box; PSE will write only its displayed next empty native slot.")
+            .setItems(labels){_,which->
+                if(consumed||which !in targets.indices){
+                    showDialog(title,
+                        "This destination choice was already handled. Reopen PSE Bank.")
+                    return@setItems
+                }
+                consumed=true
+                transferLegendsZaBankToGen2(p,targets[which].first)
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun transferLegendsZaBankToGen2(
+        p:LegendsZaGen2Prepared,targetBox:Int
+    ){
+        val title="Legends: Z-A PA9 → Gen 2 PK2"
+        if(!legendsZaGen2SnapshotsMatch(p)||p.submitted)
+            return showDialog(title,
+                "The destination or PA9 changed, or this conversion was already submitted. Reopen PSE Bank.")
+        val file=p.destinationFile
+        val original=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog(title,
+                "The destination save could not be read. Nothing was changed.")
+        p.submitted=true
+        var writeStarted=false
+        var backup:File?=null
+        var bankRecovery:File?=null
+        var destinationSlot=-1
+        try{
+            require(original.contentEquals(p.destination)&&
+                verifyGen2SaveIntegrity(original).first){
+                "The prepared Generation 2 destination changed."
+            }
+            val profile=detectGen2Profile(original)
+                ?:error("The destination is no longer a valid Generation 2 save.")
+            require(profile.key==p.profileKey&&targetBox in 1..14){
+                "The selected Generation 2 profile or PC Box changed."
+            }
+            val base=gen2BoxOffset(targetBox)
+            val count=original[base].toInt() and 0xFF
+            require(count in 0..19){
+                "The selected Generation 2 PC Box is full or structurally invalid."
+            }
+            val before=gen2LocationPayloads(original,"Box $targetBox",profile)
+
+            val bank=p.bankFile.readBytes()
+            require(bank.contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_za_${sha256(bank)}.pa9"){
+                "The exact content-addressed PA9 Bank record changed."
+            }
+            val review=LegendsZaToGen2Pk2.review(bank)
+            require(review==p.review){
+                "The reviewed PA9 mapping changed before writing."
+            }
+            val bridge=buildLegendsZaGen2Record(review)
+            require(bridge.contentEquals(p.bridge)){
+                "The reviewed native Generation 2 conversion changed before writing."
+            }
+            val converted=parseGen2BankPayload(bridge)
+                ?:error("The refreshed native Generation 2 record could not be reopened.")
+            require(sameGen2BankRecord(converted,p.converted)){
+                "The refreshed PK2 differs from the reviewed conversion."
+            }
+            val o=GEN2_BANK_HEADER_SIZE
+            val mon=bridge.copyOfRange(o,o+32)
+            val ot=bridge.copyOfRange(o+32,o+43)
+            val nick=bridge.copyOfRange(o+43,o+54)
+
+            val work=original.copyOf()
+            val slot=appendGen2BoxPokemon(work,targetBox,mon,ot,nick)
+            require(slot==count){
+                "The selected next empty Generation 2 slot changed."
+            }
+            destinationSlot=slot
+            markGen2PokedexOwnedSeen(work,profile,converted.species)
+            updateGen2PrimaryChecksum(work,profile)
+            val stagedProfile=detectGen2Profile(work)
+                ?:error("The staged Generation 2 save failed structural validation.")
+            val after=gen2LocationPayloads(work,"Box $targetBox",stagedProfile)
+            val expectedPayload=ByteArray(55)
+            expectedPayload[0]=mon[0]
+            mon.copyInto(expectedPayload,1)
+            ot.copyInto(expectedPayload,33)
+            nick.copyInto(expectedPayload,44)
+            require(stagedProfile.key==profile.key&&
+                verifyGen2SaveIntegrity(work).first&&after.size==before.size+1&&
+                sameGen2PayloadList(after.take(before.size),before)&&
+                after.last().contentEquals(expectedPayload)&&
+                gen2PokedexOwnedSeen(work,stagedProfile,converted.species)){
+                "The staged PK2, existing Box contents, Pokédex or checksum did not verify."
+            }
+
+            val allowed=HashSet<Int>()
+            allowed.add(base)
+            allowed.add(base+1+count);allowed.add(base+1+count+1)
+            val mons=base+22;val ots=mons+20*32;val nicks=ots+20*11
+            for(i in mons+count*32 until mons+(count+1)*32)allowed.add(i)
+            for(i in ots+count*11 until ots+(count+1)*11)allowed.add(i)
+            for(i in nicks+count*11 until nicks+(count+1)*11)allowed.add(i)
+            val dexBit=converted.species-1
+            val dex=gen2PokedexBases(profile)
+            allowed.add(dex.first+dexBit/8);allowed.add(dex.second+dexBit/8)
+            allowed.add(profile.checksumOffset);allowed.add(profile.checksumOffset+1)
+            require(work.indices.all{it in allowed||work[it]==original[it]}){
+                "The conversion changed data outside the selected PK2, Pokédex flags and primary checksum."
+            }
+
+            val recovery=File.createTempFile(
+                backupGameName(file)+"_PreZaToGen2_",".backup",backupsDir()
+            )
+            backup=recovery
+            recovery.writeBytes(original)
+            require(recovery.readBytes().contentEquals(original)){
+                "The Generation 2 recovery backup did not verify."
+            }
+            retainGen2SafetyBackup(recovery,original)
+            val bankCopy=File.createTempFile(
+                "PSE_ZaToG2_PA9Recovery_",".tmp",bankDir()
+            )
+            bankRecovery=bankCopy
+            bankCopy.writeBytes(p.bankBytes)
+            require(bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The independent PA9 recovery snapshot did not verify."
+            }
+            require(legendsZaGen2SnapshotsMatch(p,false)&&
+                file.readBytes().contentEquals(original)&&isBackupKept(recovery)&&
+                recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The source identity or retained recovery snapshots changed before writing."
+            }
+
+            writeStarted=true
+            file.writeBytes(work)
+            val written=file.readBytes()
+            val writtenProfile=detectGen2Profile(written)
+                ?:error("The persisted Generation 2 save failed validation.")
+            require(written.contentEquals(work)&&writtenProfile.key==p.profileKey&&
+                verifyGen2SaveIntegrity(written).first&&
+                written.indices.all{it in allowed||written[it]==original[it]}){
+                "The persisted Generation 2 destination differs from the reviewed write scope."
+            }
+            val persisted=gen2LocationPayloads(
+                written,"Box $targetBox",writtenProfile
+            )
+            require(persisted.size==before.size+1&&
+                sameGen2PayloadList(persisted.take(before.size),before)&&
+                persisted.last().contentEquals(expectedPayload)&&
+                gen2PokedexOwnedSeen(written,writtenProfile,converted.species)){
+                "The exact converted PK2 did not persist after reopening."
+            }
+            require(importedFile?.absolutePath==file.absolutePath&&
+                currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_za_${sha256(p.bankBytes)}.pa9"&&
+                LegendsZaToGen2Pk2.review(p.bankFile.readBytes())==p.review&&
+                file.readBytes().contentEquals(work)&&isBackupKept(recovery)&&
+                recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The preserved PA9, destination or retained recovery snapshots changed after persistence."
+            }
+            runCatching{bankCopy.delete()}
+        }catch(e:Exception){
+            val bankRestored=runCatching{
+                val current=runCatching{p.bankFile.readBytes()}.getOrNull()
+                if(current==null||!current.contentEquals(p.bankBytes))
+                    p.bankFile.writeBytes(p.bankBytes)
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                    p.bankFile.name=="switch_za_${sha256(p.bankBytes)}.pa9"&&
+                    LegendsZaToGen2Pk2.review(p.bankFile.readBytes())==p.review
+            }.getOrDefault(false)
+            val destinationRestored=runCatching{
+                if(writeStarted)file.writeBytes(original)
+                val restored=file.readBytes()
+                restored.contentEquals(original)&&
+                    verifyGen2SaveIntegrity(restored).first&&
+                    detectGen2Profile(restored)?.key==p.profileKey
+            }.getOrDefault(false)
+            if(bankRestored&&destinationRestored)
+                runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&destinationRestored->
+                    "The exact Generation 2 destination and PA9 Bank record were restored or kept and verified."
+                bankRestored->
+                    "The PA9 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                destinationRestored->
+                    "The exact Generation 2 destination was restored, but PA9 restoration was not verified. Keep the PA9 recovery snapshot for review."
+                else->
+                    "Automatic recovery could not be verified. Keep the retained destination backup and PA9 recovery snapshot for review."
+            }
+            showDialog("$title failed",
+                (e.message?:"Unknown error")+"\n\n"+recovery+
+                    (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                    (bankRecovery?.takeIf{it.exists()}?.let{
+                        "\nPA9 recovery snapshot: ${it.name}"
+                    }?:""))
+            return
+        }
+        Toast.makeText(this,
+            "PSE converted Legends: Z-A PA9 → Gen 2 PK2 to Box $targetBox • Slot ${destinationSlot+1}; PA9 preserved",
+            Toast.LENGTH_LONG).show()
+        showBank()
+    }
+
+
     private data class BdspGen2Prepared(
         val bankFile:File,
         val bankBytes:ByteArray,
@@ -60777,15 +61179,19 @@ private data class Gen2ToGen5LegalisePlan(
         bankFile:File,p:LegendsZaPokemonRead
     ){
         val currentGen=importedFile?.let{generationForSize(it.length().toInt())}?:0
-        val message=if(currentGen==1)
-            "Native 344-byte Legends: Z-A PA9 preserved. Review a backward PSE Legalise conversion into the exact next empty PK1 slot in one chosen Red, Blue or Yellow PC Box. The PA9 Bank entry and original Legends: Z-A save remain unchanged."
-        else
-            "Native 344-byte Legends: Z-A PA9 preserved. Load a checksum-clean Generation 1 destination to review the completed bounded backward conversion. Other destinations remain unavailable until their title-specific mappings are complete."
+        val message=when(currentGen){
+            1->"Native 344-byte Legends: Z-A PA9 preserved. Review a backward PSE Legalise conversion into the exact next empty PK1 slot in one chosen Red, Blue or Yellow PC Box. The PA9 Bank entry and original Legends: Z-A save remain unchanged."
+            2->"Native 344-byte Legends: Z-A PA9 preserved. Review a backward PSE Legalise conversion into the exact next empty PK2 slot in one chosen Gold, Silver or Crystal PC Box. The PA9 Bank entry and original Legends: Z-A save remain unchanged."
+            else->"Native 344-byte Legends: Z-A PA9 preserved. Load a checksum-clean Generation 1 or Generation 2 destination to review a completed bounded backward conversion. Other destinations remain unavailable until their title-specific mappings are complete."
+        }
         val b=AlertDialog.Builder(this)
             .setTitle("${p.nickname.ifBlank{"Pokémon #${p.species}"}} • Legends: Z-A PA9")
             .setMessage(message).setNegativeButton("Close",null)
         if(currentGen==1)b.setPositiveButton("Review PA9 → PK1 Legalise"){_,_->
             prepareLegendsZaToGen1Transfer(bankFile,p)
+        }
+        if(currentGen==2)b.setPositiveButton("Review PA9 → PK2 Legalise"){_,_->
+            prepareLegendsZaToGen2Transfer(bankFile,p)
         }
         b.show()
     }
