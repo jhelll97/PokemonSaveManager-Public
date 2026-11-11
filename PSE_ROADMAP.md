@@ -1525,4 +1525,16 @@ The user chooses one documented Generation 3 origin title and sees that PK3 met 
 
 After Legalise acceptance, the user chooses exactly one empty native PK3 slot. PSE writes only that record, the required Pokédex mirrors and affected section checksums, retains a Keep-pinned exact destination backup and an independent PK8 recovery snapshot, reopens and verifies the exact persisted PK3 and write scope, and preserves the PK8 Bank entry and original Sword/Shield save. Failure handling restores and verifies the Generation 3 destination and PK8 independently and retains recovery artifacts whenever either side cannot be verified.
 
-Next bounded route: Sword/Shield PK8 -> Generation 4 PK4 individual-Pokémon Bank conversion.
+## Sword/Shield -> Generation 4 individual-Pokémon Bank conversion
+
+The legacy Bank screen now exposes each content-addressed Sword/Shield PK8 as a separate PK8 -> PK4 route when a checksum-clean Diamond, Pearl, Platinum, HeartGold or SoulSilver destination is loaded. This first bounded PK4 route performs its own exact source review and builds a deterministic native PK3 bridge in memory before invoking the verified Generation 3 -> Generation 4 writer. The temporary bridge is never deposited or written to a save; route inventory, native PK8 deposit support and the Sword/Shield restore adapter remain insufficient evidence by themselves.
+
+The route accepts only the Generation 3 species, moves, default forms, English text, value ranges and PID-sensitive cases already proven by the native PK3 source adapter. Post-Generation-3 species and moves remain blocked until a direct Generation 4 catalogue mapping exists. Eggs, held items, fateful records, alternate forms, unsupported text, invalid PP/PP Ups, invalid EV/IV/EXP data, Hyper Training and ambiguous PID-dependent species are blocked rather than silently discarded.
+
+The user chooses a documented Generation 3 origin for the temporary bridge. Native PK4 records that origin as a Generation 3-origin Pal Park record with met location 55 and a disclosed conversion date. This backward PSE Legalise choice does not claim an official Pal Park migration, trade, Pokémon Bank or HOME transfer, encounter legality, certification, or verified provenance.
+
+The review discloses the exact PK8 -> PK3 omissions and then the final PK4 effects. Species, TID/SID, nickname, OT, EXP, EVs, IVs, friendship, Pokérus, moves, current PP and PP Ups remain in destination-native fields. Nature, gender, shiny state and the normal ability slot are verified through PID plus historical Generation 4 species metadata; hidden or incompatible historical abilities are blocked. The UI names the exact source and destination PID, nature, gender, shiny and ability values, the retained Poké Ball and met level, the zero markings and held-item fields, and every omitted Sword/Shield-only field before confirmation.
+
+After Legalise acceptance, the user chooses exactly one empty native PK4 slot. PSE writes only that record, required Pokédex flags and active general/storage block CRCs, retains a Keep-pinned exact destination backup and an independent PK8 recovery snapshot, reopens and verifies the exact persisted PK4 and write scope, and preserves the PK8 Bank entry and original Sword/Shield save. Failure handling restores and verifies the Generation 4 destination and PK8 independently and retains recovery artifacts whenever either side cannot be verified.
+
+Next bounded route: Sword/Shield PK8 -> Generation 5 PK5 individual-Pokémon Bank conversion.
