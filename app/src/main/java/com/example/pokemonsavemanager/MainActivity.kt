@@ -22624,6 +22624,592 @@ class MainActivity : Activity() {
 
 
 
+    private data class LegendsArceusGen6Prepared(
+        val bankFile:File,
+        val bankBytes:ByteArray,
+        val review:LegendsArceusToGen6Review,
+        val destination:ByteArray,
+        val trainer:TrainerData,
+        val originGame:Int,
+        val pk3:ByteArray,
+        val bridge3:PokemonEntry,
+        val meta5:Gen3ToGen4Meta,
+        val plan4:Gen3ToGen4Plan,
+        val pk4:ByteArray,
+        val bridge4:PokemonEntry,
+        val pk5:ByteArray,
+        val bridge5:PokemonEntry,
+        val pk6:ByteArray,
+        val converted6:PokemonEntry,
+        val destinationFile:File,
+        val sourceUri:Uri?,
+        val sourceLabel:String?,
+        val effects:List<String>,
+        var submitted:Boolean=false
+    )
+
+    private fun legendsArceusGen6SnapshotsMatch(
+        p:LegendsArceusGen6Prepared,requireOpen:Boolean=true
+    ):Boolean=(!requireOpen||!p.submitted)&&
+        importedFile?.absolutePath==p.destinationFile.absolutePath&&
+        currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&runCatching{
+            p.destinationFile.readBytes().contentEquals(p.destination)&&
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_pla_${sha256(p.bankBytes)}.pa8"
+        }.getOrDefault(false)
+
+    private fun prepareLegendsArceusToGen6Transfer(
+        bankFile:File,shown:LegendsArceusPokemonRead,requestedOriginGame:Int?=null
+    ){
+        val title="Legends: Arceus PA8 → Gen 6 PK6"
+        val file=importedFile?:return showDialog(title,
+            "Load a valid Pokémon X, Y, Omega Ruby or Alpha Sapphire destination first.")
+        val openedUri=currentSourceUri
+        val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&
+            currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val destination=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The destination save could not be read.")
+        if((destination.size!=SIZE_G6_XY&&destination.size!=SIZE_G6_ORAS)||
+            !bound()||!gen6BoxChecksumValid(destination)||
+            !gen6BlockChecksumValid(destination,20))
+            return showDialog(title,
+                "Load a checksum-clean Pokémon X, Y, Omega Ruby or Alpha Sapphire save first.")
+        val trainer=analyzeSave(file).trainer
+            ?:return showDialog(title,
+                "PSE could not read the Generation 6 destination trainer identity.")
+        if(!trainer.gameMatchesFamily||trainer.gameId !in 24..27)
+            return showDialog(title,
+                "The loaded Generation 6 title could not be verified.")
+        if(trainer.gender!="Male"&&trainer.gender!="Female")
+            return showDialog("PA8 → PK6 blocked",
+                "The destination trainer gender is ${trainer.gender}. PSE will not guess native PK6 handler metadata.")
+
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The PSE Bank path could not be verified.")
+        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The selected PA8 path could not be verified.")
+        if(selected.parentFile!=root||!selected.isFile||
+            !selected.extension.equals("pa8",true))
+            return showDialog(title,
+                "The selected record is outside the Legends: Arceus PSE Bank.")
+        val bank=runCatching{selected.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The preserved PA8 record could not be read.")
+        if(selected.name!="switch_pla_${sha256(bank)}.pa8")
+            return showDialog(title,
+                "The PA8 filename does not match its exact SHA-256 content binding. Nothing was changed.")
+        val review=try{LegendsArceusToGen6Pk6.review(bank)}catch(e:Exception){
+            return showDialog("PA8 → PK6 blocked",
+                (e.message?:"No safe native Generation 6 mapping is available.")+
+                    "\n\nThe PA8 Bank entry and Generation 6 destination were left unchanged.")
+        }
+        if(!sameLegendsArceusGen3Source(review.source,shown))
+            return showDialog(title,
+                "The selected PA8 changed since the Bank screen opened. Reopen PSE Bank.")
+
+        val originGame=requestedOriginGame
+        if(originGame==null){
+            val choices=listOf(
+                1 to "Pokémon Sapphire",2 to "Pokémon Ruby",3 to "Pokémon Emerald",
+                4 to "Pokémon FireRed",5 to "Pokémon LeafGreen",
+                15 to "Pokémon Colosseum / XD"
+            )
+            AlertDialog.Builder(this)
+                .setTitle("Choose documented Gen 3 origin mapping")
+                .setMessage("This bounded PK6 route uses reviewed native PK3, PK4 and PK5 bridges only in memory. Choose the exact Generation 3 origin retained by PK6. This Legalise choice does not verify history. Destination: ${trainer.exactGame}. Cancel leaves both files unchanged.")
+                .setItems(choices.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
+                    prepareLegendsArceusToGen6Transfer(
+                        bankFile,shown,choices[which].first
+                    )
+                }.setNegativeButton("Cancel",null).show()
+            return
+        }
+        val originTitle=gen3CompatibleOriginTitle(originGame)
+            ?:return showDialog("PA8 → PK6 blocked",
+                "The selected bridge origin is not a documented native Generation 3 title.")
+
+        val pk3=try{
+            buildLegendsArceusGen3Pk3(review.source,originGame)
+        }catch(e:Exception){
+            return showDialog("PA8 → PK6 blocked",
+                (e.message?:"No safe native PK3 bridge is available.")+
+                    "\n\nNothing was changed.")
+        }
+        val parsedBridge=parsePk3(pk3,0,false)
+            ?:return showDialog(title,
+                "The prepared native PK3 bridge could not be reopened.")
+        val abilityRows=canonicalGen3SpeciesAbilities(parsedBridge.species)
+            ?:return showDialog("PA8 → PK6 blocked",
+                "Canonical Generation 3 ability data is unavailable for species #${parsedBridge.species}.")
+        val bridgeAbility=abilityRows
+            .getOrElse(parsedBridge.abilityNumber-1){0}.takeIf{it!=0}
+            ?:abilityRows.firstOrNull()?.takeIf{it!=0}
+            ?:return showDialog("PA8 → PK6 blocked",
+                "No destination-valid normal Generation 3 ability exists for the bridge.")
+        val bridge3=parsedBridge.copy(ability=bridgeAbility)
+        val sourcePpUps=gen3MovePpUps(pk3)
+        if(sourcePpUps.any{it !in 0..3})
+            return showDialog("PA8 → PK6 blocked",
+                "The reviewed PK3 bridge contains invalid PP-Up data.")
+        fun snapshotsMatch()=bound()&&runCatching{
+            file.readBytes().contentEquals(destination)&&
+                selected.readBytes().contentEquals(bank)&&
+                selected.name=="switch_pla_${sha256(bank)}.pa8"
+        }.getOrDefault(false)
+        if(!snapshotsMatch())return showDialog(title,
+            "The destination or PA8 changed during preparation. Nothing was changed.")
+
+        val loading=AlertDialog.Builder(this).setTitle("Prepare PA8 → PK6")
+            .setMessage("Verifying unchanged historical abilities through Generations 5 and 6 and preparing the native PK6…")
+            .setCancelable(false).create()
+        loading.show()
+        loadGen3ToGen4MetaAsync(bridge3,5,3){meta5,reason5->
+            if(!snapshotsMatch()){
+                if(loading.isShowing)loading.dismiss()
+                return@loadGen3ToGen4MetaAsync showDialog(
+                    title,"The destination or PA8 changed during preparation."
+                )
+            }
+            if(meta5==null){
+                if(loading.isShowing)loading.dismiss()
+                return@loadGen3ToGen4MetaAsync showDialog(
+                    "PA8 → PK6 blocked",
+                    (reason5?:"Generation 5 species or ability data could not be verified.")+
+                        "\n\nNothing was changed."
+                )
+            }
+            loadGen3ToGen7TransferMetaAsync(bridge3,6){meta6->
+                if(loading.isShowing)loading.dismiss()
+                if(!snapshotsMatch())
+                    return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        title,"The destination or PA8 changed during preparation."
+                    )
+                if(meta6==null||meta6.abilityId!=meta5.abilityId)
+                    return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        "PA8 → PK6 blocked",
+                        "The reviewed normal ability slot does not have one exact unchanged mapping through Generations 5 and 6. Nothing was changed."
+                    )
+                val plan4=try{
+                    makeGen3ToGen4Plan(bridge3,meta5,false)
+                }catch(e:Exception){
+                    return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        "PA8 → PK6 blocked",
+                        (e.message?:"No safe Generation 6 conversion plan is available.")+
+                            "\n\nNothing was changed."
+                    )
+                }
+                val pk4=try{
+                    buildGen3ToGen4Pk4(pk3,bridge3,destination,plan4,false)
+                }catch(e:Exception){
+                    return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        "PA8 → PK6 blocked",
+                        (e.message?:"No safe native PK4 bridge is available.")+
+                            "\n\nNothing was changed."
+                    )
+                }
+                val bridge4=parsePk4(pk4,false)
+                    ?:return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        title,"The prepared native PK4 bridge could not be reopened."
+                    )
+                val pk5=try{
+                    buildGen4ToGen5Pk5(
+                        pk4,bridge4,destination,meta5,false
+                    )
+                }catch(e:Exception){
+                    return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        "PA8 → PK6 blocked",
+                        (e.message?:"No safe native PK5 bridge is available.")+
+                            "\n\nNothing was changed."
+                    )
+                }
+                val bridge5=parsePk5(pk5,false)
+                    ?:return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        title,"The prepared native PK5 bridge could not be reopened."
+                    )
+                val pk6=try{
+                    buildGen5ToGen6Pk6(
+                        pk5,bridge5,destination,trainer
+                    )
+                }catch(e:Exception){
+                    return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        "PA8 → PK6 blocked",
+                        (e.message?:"No safe native PK6 mapping is available.")+
+                            "\n\nNothing was changed."
+                    )
+                }
+                val converted6=parsePk6(
+                    pk6,0,PK6_STORED_SIZE,false,721
+                )?:return@loadGen3ToGen7TransferMetaAsync showDialog(
+                    title,"The prepared native PK6 could not be reopened."
+                )
+                if(!converted6.checksumValid||
+                    converted6.species!=review.source.species||
+                    converted6.tid!=review.source.tid||
+                    converted6.sid!=review.source.sid||
+                    !gen6Pk6PpUps(pk6).contentEquals(sourcePpUps))
+                    return@loadGen3ToGen7TransferMetaAsync showDialog(
+                        title,"The prepared PK6 did not preserve the reviewed identity or PP Ups."
+                    )
+
+                fun genderLabel(value:Int)=when(value){
+                    0->"male";1->"female";2->"genderless";else->"unknown"
+                }
+                fun pid(value:Long)="0x${value.toString(16).uppercase().padStart(8,'0')}"
+                val effects=review.source.effects+review.effects+listOf(
+                    "Destination: one native PK6 in ${trainer.exactGame}; loaded trainer ${trainer.trainerName} (${trainer.gender}) becomes current handler. Original Trainer ${review.source.originalTrainer}, TID/SID and source identity remain stored.",
+                    "Temporary bridge origin: $originTitle (ID $originGame). PK4 applies conversion date 20${plan4.metYear.toString().padStart(2,'0')}-${plan4.metMonth.toString().padStart(2,'0')}-${plan4.metDay.toString().padStart(2,'0')}; PK5 uses unspecified location 0; PK6 uses transfer marker 30001 and Egg location 0. These are PSE conversion fields, not verified Poké Transfer history.",
+                    "PID: source PA8 ${pid(review.source.pid)} → PK3/PK4 ${pid(bridge4.pid)} → PK5 ${pid(bridge5.pid)} → PK6 ${pid(converted6.pid)}. Adjustments are limited to the reviewed normal ability slot and shiny rules; PK6 explicitly stores nature ${converted6.nature}.",
+                    "Source PA8 gender ${genderLabel(review.source.gender)}, shiny ${review.source.shiny}, ability #${review.source.ability} slot ${review.source.abilityNumber} → bridge ability #${bridge3.ability} slot ${bridge3.abilityNumber} → PK6 gender ${genderLabel(converted6.gender)}, shiny ${converted6.shiny}, ability #${converted6.ability} slot ${converted6.abilityNumber}.",
+                    "Native PK6 preserves species, default form, TID/SID, nickname, Original Trainer, EXP, EVs, IVs, friendship, Pokérus, moves, current PP, PP Ups, Ball ID 4, met level ${review.source.metLevel}, OT gender and language from the reviewed bridges. Markings remain the reviewed zero value.",
+                    "Encryption constant is generated deterministically for PK6. Current handler changes to the loaded destination trainer. Relearn moves, handler geography, memories, affection and other Generation 6-only fields start empty because no bridge format supplies them.",
+                    "Post-Generation-3 species or moves, alternate forms, Eggs, held items, fateful records, hidden abilities, incompatible historical abilities, non-English or unrepresentable text, invalid PP/EV/IV/EXP states and ambiguous PID-sensitive species remain blocked.",
+                    "PSE writes only one chosen empty native PK6 slot, updates required Pokédex flags and native block checksums, retains a Keep-pinned destination backup and independent PA8 recovery snapshot, then reopens and verifies the exact persisted PK6. The PA8 Bank entry and original Legends: Arceus save remain unchanged."
+                )
+                val prepared=LegendsArceusGen6Prepared(
+                    selected,bank,review,destination,trainer,originGame,
+                    pk3,bridge3,meta5,plan4,pk4,bridge4,pk5,bridge5,
+                    pk6,converted6,file,openedUri,openedLabel,effects
+                )
+                val preview=buildString{
+                    append("Exact PA8 SHA-256: ${sha256(bank)}\n")
+                    append("Destination: ${trainer.exactGame}\n\n")
+                    effects.forEach{append("• ").append(it).append("\n\n")}
+                    append("Choose Legalise only if every disclosed transformation and omission is acceptable. Cancel leaves both sides byte-for-byte unchanged.")
+                }
+                AlertDialog.Builder(this)
+                    .setTitle("${review.source.nickname.ifBlank{"Pokémon #${review.source.species}"}} • PA8 → PK6")
+                    .setMessage(preview).setNegativeButton("Cancel",null)
+                    .setPositiveButton("Legalise and choose destination"){_,_->
+                        if(legendsArceusGen6SnapshotsMatch(prepared))
+                            chooseLegendsArceusToGen6Destination(prepared)
+                        else showDialog(title,
+                            "The destination or PA8 changed after review. Nothing was changed.")
+                    }.show()
+            }
+        }
+    }
+
+    private fun chooseLegendsArceusToGen6Destination(p:LegendsArceusGen6Prepared){
+        val title="Legends: Arceus PA8 → Gen 6 PK6"
+        if(!legendsArceusGen6SnapshotsMatch(p))
+            return showDialog(title,
+                "The destination or PA8 changed. Reopen PSE Bank.")
+        val info=boxStorageInfo(p.destination)
+            ?:return showDialog(title,
+                "Native Generation 6 PC storage could not be resolved.")
+        val empty=(0 until info.second).filter{
+            parsePk6(
+                p.destination,info.first+it*PK6_STORED_SIZE,
+                PK6_STORED_SIZE,false,info.third
+            )==null
+        }
+        if(empty.isEmpty())return showDialog(title,
+            "No empty native Generation 6 PC slot is available.")
+        val first=empty.first()
+        AlertDialog.Builder(this).setTitle("Choose native Gen 6 destination")
+            .setMessage("PSE will write the reviewed PK6 to one empty slot, update only required Pokédex and native integrity data, retain recovery data, and keep the PA8 Bank entry.")
+            .setItems(arrayOf(
+                "First Empty • Box ${first/30+1} • Slot ${first%30+1}",
+                "Choose Box / Slot"
+            )){_,which->
+                if(!legendsArceusGen6SnapshotsMatch(p))
+                    showDialog(title,
+                        "The destination or PA8 changed. Reopen PSE Bank.")
+                else if(which==0)transferLegendsArceusBankToGen6(p,first)
+                else showLegendsArceusToGen6BoxPicker(p)
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun showLegendsArceusToGen6BoxPicker(p:LegendsArceusGen6Prepared){
+        val title="Legends: Arceus PA8 → Gen 6 PK6"
+        if(!legendsArceusGen6SnapshotsMatch(p))
+            return showDialog(title,
+                "The destination or PA8 changed. Reopen PSE Bank.")
+        val info=boxStorageInfo(p.destination)?:return
+        val boxes=(0 until info.second/30).filter{box->
+            (0 until 30).any{slot->
+                parsePk6(
+                    p.destination,
+                    info.first+(box*30+slot)*PK6_STORED_SIZE,
+                    PK6_STORED_SIZE,false,info.third
+                )==null
+            }
+        }
+        if(boxes.isEmpty())return showDialog(title,
+            "All native Generation 6 PC boxes are full.")
+        AlertDialog.Builder(this).setTitle("Choose Gen 6 destination box")
+            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+                val box=boxes[which]
+                val slots=(0 until 30).filter{slot->
+                    parsePk6(
+                        p.destination,
+                        info.first+(box*30+slot)*PK6_STORED_SIZE,
+                        PK6_STORED_SIZE,false,info.third
+                    )==null
+                }
+                AlertDialog.Builder(this)
+                    .setTitle("Box ${box+1} • choose slot")
+                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
+                        transferLegendsArceusBankToGen6(
+                            p,box*30+slots[slotIndex]
+                        )
+                    }.setNegativeButton("Cancel",null).show()
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun transferLegendsArceusBankToGen6(
+        p:LegendsArceusGen6Prepared,target:Int
+    ){
+        val title="Legends: Arceus PA8 → Gen 6 PK6"
+        if(!legendsArceusGen6SnapshotsMatch(p)||p.submitted)
+            return showDialog(title,
+                "The destination or PA8 changed, or this conversion was already submitted. Reopen PSE Bank.")
+        val file=p.destinationFile
+        val fresh=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog(title,
+                "The destination save could not be read. Nothing was changed.")
+        p.submitted=true
+        var writeStarted=false
+        var backup:File?=null
+        var bankRecovery:File?=null
+        try{
+            require(fresh.contentEquals(p.destination)&&
+                generationForSize(fresh.size)==6){
+                "The prepared Generation 6 destination changed."
+            }
+            require(gen6BoxChecksumValid(fresh)&&
+                gen6BlockChecksumValid(fresh,20)){
+                "The destination storage or Pokédex checksum changed."
+            }
+            val info=boxStorageInfo(fresh)
+                ?:error("PSE could not resolve native Generation 6 PC storage.")
+            require(target in 0 until info.second){
+                "The selected Generation 6 slot is invalid."
+            }
+            val off=info.first+target*PK6_STORED_SIZE
+            require(parsePk6(
+                fresh,off,PK6_STORED_SIZE,false,info.third
+            )==null){
+                "The selected Generation 6 slot is no longer empty."
+            }
+
+            val bank=p.bankFile.readBytes()
+            require(bank.contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_pla_${sha256(bank)}.pa8"){
+                "The exact content-addressed PA8 Bank record changed."
+            }
+            val review=LegendsArceusToGen6Pk6.review(bank)
+            require(review==p.review){
+                "The reviewed PA8 mapping changed before writing."
+            }
+            val pk3=buildLegendsArceusGen3Pk3(review.source,p.originGame)
+            val parsedBridge=parsePk3(pk3,0,false)
+                ?:error("The refreshed native PK3 bridge could not be reopened.")
+            val abilityRows=canonicalGen3SpeciesAbilities(parsedBridge.species)
+                ?:error("Canonical Generation 3 ability data became unavailable.")
+            val bridgeAbility=abilityRows
+                .getOrElse(parsedBridge.abilityNumber-1){0}.takeIf{it!=0}
+                ?:abilityRows.firstOrNull()?.takeIf{it!=0}
+                ?:error("No destination-valid bridge ability remains.")
+            val bridge3=parsedBridge.copy(ability=bridgeAbility)
+            val sourcePpUps=gen3MovePpUps(pk3)
+            require(pk3.contentEquals(p.pk3)&&
+                sameGen4ToGen3Pk3(bridge3,p.bridge3)&&
+                sourcePpUps.contentEquals(review.source.ppUps.toIntArray())){
+                "The reviewed native PK3 bridge changed before writing."
+            }
+            val plan4=makeGen3ToGen4PlanWithDate(
+                bridge3,p.meta5,p.plan4.metYear,p.plan4.metMonth,
+                p.plan4.metDay,false
+            )
+            require(plan4==p.plan4){
+                "The reviewed Generation 6 conversion plan changed."
+            }
+            val pk4=buildGen3ToGen4Pk4(
+                pk3,bridge3,fresh,plan4,false
+            )
+            val bridge4=parsePk4(pk4,false)
+                ?:error("The refreshed native PK4 bridge could not be reopened.")
+            require(pk4.contentEquals(p.pk4)&&
+                sameGen3ToGen4Pk4(bridge4,p.bridge4)&&
+                gen4Pk4PpUps(pk4).contentEquals(sourcePpUps)){
+                "The reviewed native PK4 bridge changed before writing."
+            }
+            val pk5=buildGen4ToGen5Pk5(
+                pk4,bridge4,fresh,p.meta5,false
+            )
+            val bridge5=parsePk5(pk5,false)
+                ?:error("The refreshed native PK5 bridge could not be reopened.")
+            require(pk5.contentEquals(p.pk5)&&
+                sameGen4ToGen5Pk5(bridge5,p.bridge5)&&
+                gen5Pk5PpUps(pk5).contentEquals(sourcePpUps)){
+                "The reviewed native PK5 bridge changed before writing."
+            }
+            val pk6=buildGen5ToGen6Pk6(
+                pk5,bridge5,fresh,p.trainer
+            )
+            val converted6=parsePk6(
+                pk6,0,PK6_STORED_SIZE,false,721
+            )?:error("The refreshed native PK6 could not be reopened.")
+            require(pk6.contentEquals(p.pk6)&&
+                sameGen5ToGen6Pk6(converted6,p.converted6)&&
+                gen6Pk6PpUps(pk6).contentEquals(sourcePpUps)){
+                "The reviewed native PK6 changed before writing."
+            }
+
+            val work=fresh.copyOf()
+            pk6.copyInto(work,off)
+            val staged=parsePk6(
+                work,off,PK6_STORED_SIZE,false,info.third
+            )?:error("The staged PK6 could not be parsed.")
+            require(sameGen5ToGen6Pk6(staged,converted6)&&
+                gen6Pk6PpUps(pk6).contentEquals(sourcePpUps)){
+                "The staged PK6 differs from the reviewed conversion."
+            }
+
+            val allowed=HashSet<Int>()
+            for(i in off until off+PK6_STORED_SIZE)allowed.add(i)
+            val bit=staged.species-1
+            val dexByte=bit ushr 3
+            val shift=staged.gender.coerceIn(0,1) or
+                ((if(staged.shiny)1 else 0) shl 1)
+            allowed.add(0x15000+0x08+dexByte)
+            allowed.add(0x15000+0x08+0x60*(1+shift)+dexByte)
+            for(i in 5..8)
+                allowed.add(0x15000+0x08+0x60*i+dexByte)
+            val boxBlock=if(work.size==SIZE_G6_XY)53 else 56
+            for(id in intArrayOf(20,boxBlock)){
+                val checksum=gen6ChecksumOffset(work,id)
+                allowed.add(checksum)
+                allowed.add(checksum+1)
+            }
+            registerGen6Dex(
+                work,staged.species,staged.gender,
+                staged.shiny,staged.language
+            )
+            updateGen6BoxChecksum(work)
+            updateGen6DexChecksum(work)
+            require(work.indices.all{
+                it in allowed||work[it]==fresh[it]
+            }){
+                "The conversion changed data outside the reviewed PK6, Pokédex flags and native checksums."
+            }
+            require(gen6BoxChecksumValid(work)&&
+                gen6BlockChecksumValid(work,20)&&
+                gen6DexCaught(work,staged.species)){
+                "The staged Generation 6 save failed storage, Pokédex or checksum verification."
+            }
+
+            val recovery=File.createTempFile(
+                backupGameName(file)+"_PrePlaToGen6_",".backup",backupsDir()
+            )
+            backup=recovery
+            recovery.writeBytes(fresh)
+            require(recovery.readBytes().contentEquals(fresh)){
+                "The exact Generation 6 recovery backup did not verify."
+            }
+            retainGenToGen6SafetyBackup(recovery,fresh)
+            val bankCopy=File.createTempFile(
+                "PSE_PlaToG6_PA8Recovery_",".tmp",bankDir()
+            )
+            bankRecovery=bankCopy
+            bankCopy.writeBytes(p.bankBytes)
+            require(bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The independent PA8 recovery snapshot did not verify."
+            }
+            require(legendsArceusGen6SnapshotsMatch(p,false)&&
+                isBackupKept(recovery)&&
+                file.readBytes().contentEquals(fresh)&&
+                recovery.readBytes().contentEquals(fresh)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The source identity or retained recovery snapshots changed before writing."
+            }
+
+            writeStarted=true
+            file.writeBytes(work)
+            val written=file.readBytes()
+            require(written.contentEquals(work)&&written.indices.all{
+                it in allowed||written[it]==fresh[it]
+            }){
+                "The persisted Generation 6 save differs from the reviewed write scope."
+            }
+            require(gen6BoxChecksumValid(written)&&
+                gen6BlockChecksumValid(written,20)&&
+                gen6DexCaught(written,staged.species)){
+                "The persisted Generation 6 save failed checksum or Pokédex validation."
+            }
+            val actual=written.copyOfRange(off,off+PK6_STORED_SIZE)
+            val reopened=parsePk6(
+                actual,0,PK6_STORED_SIZE,false,info.third
+            )?:error("The persisted PK6 could not be reopened.")
+            require(actual.contentEquals(pk6)&&
+                sameGen5ToGen6Pk6(reopened,converted6)&&
+                gen6Pk6PpUps(actual).contentEquals(sourcePpUps)){
+                "The exact converted PK6 did not persist after reopening."
+            }
+            require(importedFile?.absolutePath==file.absolutePath&&
+                currentSourceUri==p.sourceUri&&
+                currentSourceLabel==p.sourceLabel&&
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_pla_${sha256(p.bankBytes)}.pa8"&&
+                LegendsArceusToGen6Pk6.review(
+                    p.bankFile.readBytes()
+                )==p.review&&file.readBytes().contentEquals(work)&&
+                isBackupKept(recovery)&&
+                recovery.readBytes().contentEquals(fresh)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The preserved PA8, destination or retained recovery snapshots changed after persistence."
+            }
+            runCatching{bankCopy.delete()}
+        }catch(e:Exception){
+            val bankRestored=runCatching{
+                val current=runCatching{
+                    p.bankFile.readBytes()
+                }.getOrNull()
+                if(current==null||!current.contentEquals(p.bankBytes))
+                    p.bankFile.writeBytes(p.bankBytes)
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                    p.bankFile.name=="switch_pla_${sha256(p.bankBytes)}.pa8"&&
+                    LegendsArceusToGen6Pk6.review(
+                        p.bankFile.readBytes()
+                    )==p.review
+            }.getOrDefault(false)
+            val destinationRestored=runCatching{
+                if(writeStarted)file.writeBytes(fresh)
+                val restored=file.readBytes()
+                restored.contentEquals(fresh)&&
+                    gen6BoxChecksumValid(restored)&&
+                    gen6BlockChecksumValid(restored,20)
+            }.getOrDefault(false)
+            if(bankRestored&&destinationRestored)
+                runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&destinationRestored->
+                    "The exact Generation 6 destination and PA8 Bank record were restored or kept and verified."
+                bankRestored->
+                    "The PA8 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                destinationRestored->
+                    "The exact Generation 6 destination was restored, but PA8 restoration was not verified. Keep the PA8 recovery snapshot for review."
+                else->
+                    "Automatic recovery could not be verified. Keep the retained destination backup and PA8 recovery snapshot for review."
+            }
+            showDialog("$title failed",
+                (e.message?:"Unknown error")+"\n\n"+recovery+
+                    (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                    (bankRecovery?.takeIf{it.exists()}?.let{
+                        "\nPA8 recovery snapshot: ${it.name}"
+                    }?:""))
+            return
+        }
+        Toast.makeText(this,
+            "PSE converted Legends: Arceus PA8 → Gen 6 PK6 to Box ${target/30+1} • Slot ${target%30+1}; PA8 preserved",
+            Toast.LENGTH_LONG).show()
+        showBank()
+    }
+
+
+
+
     private data class BdspGen3Prepared(
         val bankFile:File,
         val bankBytes:ByteArray,
@@ -55492,7 +56078,8 @@ private data class Gen2ToGen5LegalisePlan(
             3->"Native ${if(p.cachedLevel==null)"360-byte stored" else "376-byte party"} Legends: Arceus PA8 preserved. Review a backward PSE Legalise conversion into one chosen empty native PK3 slot in the loaded Ruby, Sapphire, Emerald, FireRed or LeafGreen save. The PA8 Bank entry and original Legends: Arceus save remain unchanged."
             4->"Native ${if(p.cachedLevel==null)"360-byte stored" else "376-byte party"} Legends: Arceus PA8 preserved. Review a backward PSE Legalise conversion through a verified in-memory PK3 bridge into one chosen empty native PK4 slot in the loaded Diamond, Pearl, Platinum, HeartGold or SoulSilver save. The PA8 Bank entry and original Legends: Arceus save remain unchanged."
             5->"Native ${if(p.cachedLevel==null)"360-byte stored" else "376-byte party"} Legends: Arceus PA8 preserved. Review a backward PSE Legalise conversion through verified in-memory PK3 and PK4 bridges into one chosen empty native PK5 slot in the loaded Black, White, Black 2 or White 2 save. The PA8 Bank entry and original Legends: Arceus save remain unchanged."
-            else->"Native Legends: Arceus PA8 preserved. Load a checksum-clean Generation 1 through Generation 5 destination to review a bounded backward conversion. Other destinations remain unavailable until their title-specific mappings are complete."
+            6->"Native ${if(p.cachedLevel==null)"360-byte stored" else "376-byte party"} Legends: Arceus PA8 preserved. Review a backward PSE Legalise conversion through verified in-memory PK3, PK4 and PK5 bridges into one chosen empty native PK6 slot in the loaded Pokémon X, Y, Omega Ruby or Alpha Sapphire save. The PA8 Bank entry and original Legends: Arceus save remain unchanged."
+            else->"Native Legends: Arceus PA8 preserved. Load a checksum-clean Generation 1 through Generation 6 destination to review a bounded backward conversion. Other destinations remain unavailable until their title-specific mappings are complete."
         }
         val b=AlertDialog.Builder(this)
             .setTitle("${p.nickname.ifBlank{"Pokémon #${p.species}"}} • Legends: Arceus PA8")
@@ -55511,6 +56098,9 @@ private data class Gen2ToGen5LegalisePlan(
         }
         if(currentGen==5)b.setPositiveButton("Review PA8 → PK5 Legalise"){_,_->
             prepareLegendsArceusToGen5Transfer(bankFile,p)
+        }
+        if(currentGen==6)b.setPositiveButton("Review PA8 → PK6 Legalise"){_,_->
+            prepareLegendsArceusToGen6Transfer(bankFile,p)
         }
         b.show()
     }
