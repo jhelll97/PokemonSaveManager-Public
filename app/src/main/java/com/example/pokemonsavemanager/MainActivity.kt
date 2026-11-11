@@ -15938,7 +15938,7 @@ class MainActivity : Activity() {
                         index in storedMirror until storedMirror+GEN1_BOX_SIZE)||
                     index==0x25A3+dexIndex/8||
                     index==0x25B6+dexIndex/8||
-                    index==GEN1_CHECKSUM||
+                    index==GEN1_CHECKSUM_OFFSET||
                     index==bankAll||
                     index in bankIndividuals until bankIndividuals+6
             require(work.indices.all{allowed(it)||work[it]==original[it]}){
