@@ -10503,13 +10503,19 @@ class SwitchReadOnlyActivity : Activity() {
                         entry.extension == "pk8") {
                         "This is not a current Sword/Shield Bank entry."
                     }
-                    require(SwordShieldPokemonReadOnly.read(entry.readBytes()) is SwordShieldSlotRead.Pokemon) {
+                    val bankRecord = entry.readBytes()
+                    require(SwordShieldPokemonReadOnly.read(bankRecord) is SwordShieldSlotRead.Pokemon) {
                         "The Bank record is invalid and cannot be restored."
+                    }
+                    val bankHash = SwordShieldPseBankRestoreEditing.sha256(bankRecord)
+                    require(entry.name == "switch_swsh_${bankHash}.pk8") {
+                        "The Bank filename no longer matches its native PK8 bytes."
                     }
                     dialog.dismiss()
                     startActivity(Intent(this, SwitchSwordShieldPseBankRestoreActivity::class.java).setData(source)
                         .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
                         .putExtra("pse.bank.entry", entry.name)
+                        .putExtra("pse.bank.sha256", bankHash)
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
                 } catch (error: Exception) {
                     AlertDialog.Builder(this).setTitle("Could not prepare Bank restore")
