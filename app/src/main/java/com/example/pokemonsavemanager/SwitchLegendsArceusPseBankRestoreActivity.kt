@@ -240,9 +240,11 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
             entry.extension.equals("pb7", true)
         val swordShield = entry.name.startsWith("switch_swsh_") &&
             entry.extension.equals("pk8", true)
+        val scarletViolet = entry.name.startsWith("switch_sv_") &&
+            entry.extension.equals("pk9", true)
         val legendsZa = entry.name.startsWith("switch_za_") &&
             entry.extension.equals("pa9", true)
-        if (entry.extension.equals("pk7", true) || letsGo || swordShield || legendsZa) {
+        if (entry.extension.equals("pk7", true) || letsGo || swordShield || scarletViolet || legendsZa) {
             require(!expectedBankSourceHash.isNullOrBlank()) {
                 "The reviewed PSE Bank hash is missing. Reopen PSE Bank."
             }
