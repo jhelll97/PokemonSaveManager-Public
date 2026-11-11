@@ -9076,9 +9076,9 @@ class SwitchReadOnlyActivity : Activity() {
             require(entry.name == "switch_za_${hash}.pa9") {
                 "The PSE Bank filename no longer matches its native PA9 bytes."
             }
-            LegendsZaToSwordShieldPk8.review(bank)
+            hash to LegendsZaToSwordShieldPk8.review(bank)
         }
-        val converted = result.getOrElse {
+        val (openedHash, converted) = result.getOrElse {
             AlertDialog.Builder(this).setTitle("Legends: Z-A -> Sword/Shield blocked")
                 .setMessage(
                     (it.message ?: "No safe conversion is available.") +
@@ -9114,7 +9114,7 @@ class SwitchReadOnlyActivity : Activity() {
                     ) { "The Legends: Z-A Bank entry changed." }
                     val bank = selected.readBytes()
                     val hash = SwordShieldPseBankRestoreEditing.sha256(bank)
-                    require(selected.name == "switch_za_${hash}.pa9") {
+                    require(hash == openedHash && selected.name == "switch_za_${hash}.pa9") {
                         "The PSE Bank entry changed. Reopen PSE Bank."
                     }
                     LegendsZaToSwordShieldPk8.review(bank)
@@ -9122,6 +9122,7 @@ class SwitchReadOnlyActivity : Activity() {
                         .setData(source)
                         .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
                         .putExtra("pse.bank.entry", selected.name)
+                        .putExtra("pse.bank.sha256", openedHash)
                         .putExtra("pse.bank.legalise", true)
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
                 } catch (error: Exception) {
