@@ -16056,6 +16056,357 @@ class MainActivity : Activity() {
         showBank()
     }
 
+    private fun sameSwordShieldGen1Source(
+        review:SwordShieldToGen1Review,shown:SwordShieldPokemonRead
+    ):Boolean=review.species==shown.species&&review.nickname==shown.nickname&&
+        review.originalTrainer==shown.originalTrainer&&review.tid==shown.tid&&
+        review.sid==shown.sid&&review.pid==shown.pid&&
+        review.encryptionConstant==shown.encryptionConstant&&
+        review.experience==shown.experience&&review.moves==shown.moves.map{it.id}&&
+        review.pp==shown.moves.map{it.pp}&&review.ppUps==shown.moves.map{it.ppUps}&&
+        review.ivs==shown.ivs&&review.evs==shown.evs
+
+    private fun buildSwordShieldGen2Bridge(
+        review:SwordShieldToGen1Review
+    ):ByteArray{
+        val growth=canonicalGen2Growth(review.species)
+            ?:error("The Generation 2 growth group is unavailable for this species.")
+        val level=gen2LevelForExperience(growth,review.experience).coerceIn(1,100)
+        val sourceDvs=IntArray(5){i->(review.ivs[i]/2).coerceIn(0,15)}
+        val expectedDvs=intArrayOf(
+            ((sourceDvs[1]and 1)shl 3)or((sourceDvs[2]and 1)shl 2)or
+                ((sourceDvs[3]and 1)shl 1)or(sourceDvs[4]and 1),
+            sourceDvs[1],sourceDvs[2],sourceDvs[3],sourceDvs[4]
+        )
+        val mon=ByteArray(32)
+        mon[0]=review.species.toByte()
+        for(i in 0..3){
+            mon[2+i]=review.moves[i].toByte()
+            mon[23+i]=if(review.moves[i]==0)0
+                else ((review.ppUps[i] shl 6) or (review.pp[i] and 0x3F)).toByte()
+        }
+        writeU16BE(mon,6,review.tid);writeU24BE(mon,8,review.experience)
+        mon[21]=(((sourceDvs[1] shl 4) or sourceDvs[2]) and 0xFF).toByte()
+        mon[22]=(((sourceDvs[3] shl 4) or sourceDvs[4]) and 0xFF).toByte()
+        mon[27]=review.friendship.toByte();mon[28]=review.pokerus.toByte()
+        mon[31]=level.toByte()
+        val ot=ByteArray(11);val nick=ByteArray(11)
+        writeGen1Text(ot,0,11,review.originalTrainer)
+        writeGen1Text(nick,0,11,review.nickname)
+        val payload=buildLetsGoGen2Payload(mon,ot,nick)
+        val converted=parseGen2BankPayload(payload)
+            ?:error("The prepared native Generation 2 bridge could not be reopened.")
+        require(converted.species==review.species&&
+            converted.nickname==review.nickname&&
+            converted.otName==review.originalTrainer&&
+            converted.tid==review.tid&&
+            converted.experience==review.experience&&
+            converted.level==level&&converted.heldItem==0&&
+            converted.moves.contentEquals(review.moves.toIntArray())&&
+            converted.movePP.contentEquals(review.pp.toIntArray())&&
+            converted.movePpUps.contentEquals(review.ppUps.toIntArray())&&
+            converted.statExp.contentEquals(IntArray(5))&&
+            converted.happiness==review.friendship&&
+            converted.pokerus==review.pokerus&&converted.caughtData==0&&
+            converted.dvs.contentEquals(expectedDvs)&&
+            converted.shiny==gen2Shiny(expectedDvs)&&!converted.isEgg){
+            "The native Generation 2 bridge did not preserve every reviewed field."
+        }
+        return payload
+    }
+
+    private fun prepareSwordShieldToGen1Transfer(
+        bankFile:File,shown:SwordShieldPokemonRead
+    ){
+        val title="Sword/Shield PK8 → Gen 1 PK1"
+        val file=importedFile?:return showDialog(
+            title,"Load a valid Pokémon Red, Blue or Yellow destination first."
+        )
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&
+            currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val destination=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The destination save could not be read.")
+        val integrity=verifyGen1SaveIntegrity(destination)
+        if(!bound()||generationForSize(destination.size)!=1||!integrity.first)
+            return showDialog(title,integrity.second)
+
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The PSE Bank path could not be verified.")
+        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The selected PK8 path could not be verified.")
+        if(selected.parentFile!=root||!selected.isFile||
+            !selected.extension.equals("pk8",true))
+            return showDialog(title,"The selected record is outside the Sword/Shield PSE Bank.")
+        val bank=runCatching{selected.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The preserved PK8 record could not be read.")
+        if(selected.name!="switch_swsh_${sha256(bank)}.pk8")
+            return showDialog(title,
+                "The PK8 filename does not match its exact SHA-256 content binding. Nothing was changed.")
+        val review=try{SwordShieldToGen1Pk1.review(bank)}catch(e:Exception){
+            return showDialog("PK8 → PK1 blocked",
+                (e.message?:"No safe native Generation 1 mapping is available.")+
+                    "\n\nThe PK8 Bank entry and Generation 1 destination were left unchanged.")
+        }
+        if(!sameSwordShieldGen1Source(review,shown))
+            return showDialog(title,
+                "The selected PK8 changed since the Bank screen opened. Reopen PSE Bank.")
+        val bridge=try{buildSwordShieldGen2Bridge(review)}catch(e:Exception){
+            return showDialog("PK8 → PK1 blocked",
+                (e.message?:"No safe native Generation 2 bridge is available.")+
+                    "\n\nNothing was changed.")
+        }
+        val converted=parseGen2BankPayload(bridge)
+            ?:return showDialog(title,"The reviewed bridge could not be reopened.")
+        val legalise=gen2ToGen1LegalisePlan(converted)
+        gen2ToGen1Rejection(converted,legalise)?.let{
+            return showDialog("PK8 → PK1 blocked",
+                "$it\n\nNo deterministic native Generation 1 mapping is available. Nothing was changed.")
+        }
+        val targets=availableGen1BoxTargets(destination)
+        if(targets.isEmpty())return showDialog(title,
+            "No writable Generation 1 PC Box has an empty native slot. Nothing was changed.")
+        if(!bound()||!runCatching{
+                file.readBytes().contentEquals(destination)&&
+                    selected.readBytes().contentEquals(bank)
+            }.getOrDefault(false))
+            return showDialog(title,
+                "The destination or PK8 changed during preparation. Nothing was changed.")
+
+        var metadataConsumed=false;var confirmationConsumed=false;var transferConsumed=false
+        loadGen1SpeciesMetaAsync(review.species){meta->
+            if(metadataConsumed||!bound()){
+                showDialog(title,
+                    "The destination identity or prepared PK8 changed. Reopen PSE Bank.")
+                return@loadGen1SpeciesMetaAsync
+            }
+            metadataConsumed=true
+            if(meta==null){
+                showDialog(title,
+                    "PSE could not resolve the Generation 1 species data needed for an exact native record.")
+                return@loadGen1SpeciesMetaAsync
+            }
+            if(!runCatching{
+                    file.readBytes().contentEquals(destination)&&
+                        selected.readBytes().contentEquals(bank)
+                }.getOrDefault(false)){
+                showDialog(title,
+                    "The destination or PK8 changed while conversion data was prepared.")
+                return@loadGen1SpeciesMetaAsync
+            }
+            val parts=try{
+                buildGen2ToGen1Record(bridge,converted,meta,legalise)
+            }catch(e:Exception){
+                showDialog("PK8 → PK1 blocked",
+                    (e.message?:"The native Generation 1 record could not be built.")+
+                        "\n\nNothing was changed.")
+                return@loadGen1SpeciesMetaAsync
+            }
+            val converted1=parseLetsGoGen1Record(parts.first,parts.second,parts.third)
+            val ppUps=IntArray(4){i->
+                (bridge[GEN2_BANK_HEADER_SIZE+23+i].toInt() ushr 6) and 3
+            }
+            if(converted1==null||converted1.species!=meta.internalIndex||
+                converted1.nickname!=converted.nickname||
+                converted1.otName!=converted.otName||
+                converted1.tid!=converted.tid||
+                converted1.experience!=converted.experience||
+                !converted1.moves.contentEquals(converted.moves)||
+                !converted1.movePP.contentEquals(converted.movePP)||
+                !converted1.movePpUps.contentEquals(ppUps)||
+                !converted1.statExp.contentEquals(converted.statExp)||
+                !converted1.dvs.contentEquals(converted.dvs)){
+                showDialog(title,
+                    "The prepared PK1 did not reopen with every reviewed native field.")
+                return@loadGen1SpeciesMetaAsync
+            }
+            val destinationGame=detectGen1GameFromPath(openedLabel?:file.name)
+            val effects=review.effects+listOf(
+                "Destination: one native PK1 in $destinationGame. The reviewed PK8 species maps to ${meta.name} (internal index ${meta.internalIndex}); stored level ${converted.level} is derived from retained EXP using its Generation 1 growth group.",
+                "Native PK1 preserves species, nickname, OT name and TID, EXP, current moves and PP, PP Ups ${ppUps.joinToString("/")}, zero Stat Exp, and DVs ${converted.dvs.joinToString("/")}. HP, types and boxed battle values are rebuilt from the documented Generation 1 species table.",
+                "PK8 IVs ${review.ivs.joinToString("/")} become PK1 DVs ${converted.dvs.joinToString("/")}. Attack, Defense, Speed and Special use floor(IV ÷ 2); HP DV is derived from their low bits. Independent PK8 HP and Special Defense IVs have no PK1 fields.",
+                "The source is ${if(review.shiny)"shiny" else "not shiny"}; the destination DV pattern is ${if(converted.shiny)"shiny" else "not shiny"}. This disclosed result may differ because Generation 1 stores no shiny flag.",
+                "Generation 1 stores no friendship, Pokérus or caught/met fields. Explicit Legalise omission review: ${legalise?.let{gen2ToGen1LegaliseChanges(it)}?:"no nonbaseline bridge values require an additional omission"}.",
+                "Choosing a compact PC Box selects its exact next empty PK1 slot. PSE updates Seen and Caught plus native box-bank and main checksums, retains a Keep-pinned destination backup and an independent PK8 recovery snapshot, then reopens and verifies the exact persisted record. The PK8 Bank entry and original Sword/Shield save remain unchanged."
+            )
+            val preview=buildString{
+                append("Exact PK8 SHA-256: ${sha256(bank)}\n")
+                append("Source: Pokémon Sword / Shield\nDestination: $destinationGame\n\n")
+                effects.forEach{append("• ").append(it).append("\n\n")}
+                append("Choose Legalise only if every disclosed transformation and omission is acceptable. Cancel leaves both sides byte-for-byte unchanged.")
+            }
+            val labels=targets.map{
+                "Box ${it.first} • next empty Slot ${GEN1_BOX_CAPACITY-it.second+1} • ${it.second} empty"
+            }.toTypedArray()
+            AlertDialog.Builder(this)
+                .setTitle("${review.nickname.ifBlank{"Pokémon #${review.species}"}} • PK8 → PK1")
+                .setMessage(preview).setNegativeButton("Cancel",null)
+                .setPositiveButton("Legalise and choose destination"){_,_->
+                    if(confirmationConsumed){
+                        showDialog(title,
+                            "This Legalise confirmation was already submitted. Reopen PSE Bank.")
+                        return@setPositiveButton
+                    }
+                    confirmationConsumed=true
+                    if(!bound()||!runCatching{
+                            file.readBytes().contentEquals(destination)&&
+                                selected.readBytes().contentEquals(bank)
+                        }.getOrDefault(false)){
+                        showDialog(title,
+                            "The destination or PK8 changed after review. Nothing was changed.")
+                        return@setPositiveButton
+                    }
+                    AlertDialog.Builder(this)
+                        .setTitle("Choose $destinationGame PC Box")
+                        .setItems(labels){_,which->
+                            if(transferConsumed||which !in targets.indices){
+                                showDialog(title,
+                                    "This destination choice was already handled. Reopen PSE Bank.")
+                                return@setItems
+                            }
+                            transferConsumed=true
+                            transferSwordShieldBankToGen1(
+                                selected,bank,review,bridge,converted,destination,
+                                meta,targets[which].first,file,legalise,openedUri,openedLabel
+                            )
+                        }.setNegativeButton("Cancel",null).show()
+                }.show()
+        }
+    }
+
+    private fun transferSwordShieldBankToGen1(
+        bankFile:File,expectedBank:ByteArray,
+        expectedReview:SwordShieldToGen1Review,expectedBridge:ByteArray,
+        expectedConverted:Gen2Pokemon,preparedDestination:ByteArray,
+        meta:Gen1SpeciesMeta,targetBox:Int,openedFile:File,
+        legalise:Gen2ToGen1LegalisePlan?,openedUri:Uri?,openedLabel:String?
+    ){
+        val title="Sword/Shield PK8 → Gen 1 PK1"
+        fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&
+            currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        if(!bound())return showDialog(title,
+            "The destination identity changed. Reopen PSE Bank. Nothing was changed.")
+        var sourceRecovery:File?=null
+        var bridgeFile:File?=null
+        try{
+            val destination=openedFile.readBytes()
+            require(destination.contentEquals(preparedDestination)&&
+                verifyGen1SaveIntegrity(destination).first){
+                "The prepared Generation 1 destination changed."
+            }
+            val bank=bankFile.readBytes()
+            require(bank.contentEquals(expectedBank)&&
+                bankFile.name=="switch_swsh_${sha256(bank)}.pk8"){
+                "The exact content-addressed PK8 Bank record changed."
+            }
+            val refreshed=SwordShieldToGen1Pk1.review(bank)
+            require(refreshed==expectedReview){
+                "The reviewed PK8 mapping changed before writing."
+            }
+            val bridge=buildSwordShieldGen2Bridge(refreshed)
+            require(bridge.contentEquals(expectedBridge)){
+                "The reviewed native bridge changed before writing."
+            }
+            val converted=parseGen2BankPayload(bridge)
+                ?:error("The refreshed bridge could not be reopened.")
+            require(sameGen2BankRecord(converted,expectedConverted)){
+                "The refreshed bridge differs from the reviewed conversion."
+            }
+            require(legalise==gen2ToGen1LegalisePlan(converted)){
+                "The reviewed Generation 1 Legalise omissions changed."
+            }
+            val recovery=File.createTempFile(
+                "PSE_SwShToG1_PK8Recovery_",".tmp",bankDir()
+            )
+            sourceRecovery=recovery
+            recovery.writeBytes(expectedBank)
+            require(recovery.readBytes().contentEquals(expectedBank)){
+                "The independent PK8 recovery snapshot did not verify."
+            }
+            val temporary=File.createTempFile(
+                "PSE_SwShToG1_ReviewedBridge_",".tmp",bankDir()
+            )
+            bridgeFile=temporary
+            temporary.writeBytes(bridge)
+            require(temporary.readBytes().contentEquals(bridge)&&
+                parseGen2BankPayload(temporary.readBytes())?.let{
+                    sameGen2BankRecord(it,converted)
+                }==true){
+                "The reviewed conversion bridge did not verify."
+            }
+            require(bound()&&openedFile.readBytes().contentEquals(destination)&&
+                bankFile.readBytes().contentEquals(expectedBank)&&
+                recovery.readBytes().contentEquals(expectedBank)){
+                "The destination, PK8 or recovery snapshot changed before writing."
+            }
+            transferGen2BankToGen1(
+                temporary,converted,bridge,preparedDestination,meta,targetBox,
+                openedFile,legalise,openedUri,openedLabel,title,
+                "PSE converted Sword/Shield PK8 → Gen 1 PK1 to Box $targetBox and verified; PK8 preserved"
+            )
+            val sourceOk=runCatching{
+                val current=runCatching{bankFile.readBytes()}.getOrNull()
+                if(current==null||!current.contentEquals(expectedBank))
+                    bankFile.writeBytes(expectedBank)
+                val restored=bankFile.readBytes()
+                restored.contentEquals(expectedBank)&&
+                    bankFile.name=="switch_swsh_${sha256(expectedBank)}.pk8"&&
+                    SwordShieldToGen1Pk1.review(restored)==expectedReview
+            }.getOrDefault(false)
+            val destinationNow=runCatching{openedFile.readBytes()}.getOrNull()
+            val succeeded=bridgeFile?.exists()==false&&sourceOk&&
+                destinationNow!=null&&!destinationNow.contentEquals(preparedDestination)&&
+                verifyGen1SaveIntegrity(destinationNow).first
+            if(succeeded){
+                runCatching{sourceRecovery?.delete()}
+            }else{
+                val destinationRestored=destinationNow?.contentEquals(preparedDestination)==true&&
+                    verifyGen1SaveIntegrity(destinationNow).first
+                if(sourceOk&&destinationRestored){
+                    runCatching{bridgeFile?.delete()}
+                    runCatching{sourceRecovery?.delete()}
+                }else if(!sourceOk){
+                    showDialog("$title source recovery required",
+                        "The Generation 1 transaction finished, but the exact PK8 Bank record could not be verified or restored. Keep ${sourceRecovery?.name?:"the retained PK8 recovery snapshot"} and do not edit either side.")
+                }
+            }
+        }catch(e:Exception){
+            val sourceRestored=runCatching{
+                val recovery=sourceRecovery?.readBytes()?:expectedBank
+                if(!runCatching{bankFile.readBytes().contentEquals(expectedBank)}
+                        .getOrDefault(false))bankFile.writeBytes(recovery)
+                bankFile.readBytes().contentEquals(expectedBank)&&
+                    SwordShieldToGen1Pk1.review(bankFile.readBytes())==expectedReview
+            }.getOrDefault(false)
+            val destinationRestored=runCatching{
+                val current=openedFile.readBytes()
+                if(!current.contentEquals(preparedDestination))
+                    openedFile.writeBytes(preparedDestination)
+                val restored=openedFile.readBytes()
+                restored.contentEquals(preparedDestination)&&
+                    verifyGen1SaveIntegrity(restored).first
+            }.getOrDefault(false)
+            if(sourceRestored&&destinationRestored){
+                runCatching{bridgeFile?.delete()}
+                runCatching{sourceRecovery?.delete()}
+            }
+            showDialog("$title failed",
+                (e.message?:"Unknown error")+"\n\n"+
+                    when{
+                        sourceRestored&&destinationRestored->
+                            "The exact Generation 1 destination and PK8 Bank record were restored or kept and verified."
+                        sourceRestored->
+                            "The PK8 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                        destinationRestored->
+                            "The Generation 1 destination was restored, but PK8 restoration was not verified. Keep the PK8 recovery snapshot for review."
+                        else->
+                            "Automatic two-sided recovery could not be verified. Keep all recovery artifacts for review."
+                    }+(sourceRecovery?.takeIf{it.exists()}?.let{
+                        "\n\nPK8 recovery snapshot: ${it.name}"
+                    }?:""))
+        }
+    }
+
     private fun showGen7BankEntry(bankFile:File,p:PokemonEntry){
         val currentGen=importedFile?.let{generationForSize(it.length().toInt())}?:0
         val message=when(currentGen){
@@ -37768,10 +38119,10 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun transferGen2BankToGen1(bankFile:File,expected:Gen2Pokemon,expectedBank:ByteArray,preparedDestination:ByteArray,meta:Gen1SpeciesMeta,targetBox:Int,openedFile:File,legalise:Gen2ToGen1LegalisePlan?=null,openedUri:Uri?,openedLabel:String?){
+    private fun transferGen2BankToGen1(bankFile:File,expected:Gen2Pokemon,expectedBank:ByteArray,preparedDestination:ByteArray,meta:Gen1SpeciesMeta,targetBox:Int,openedFile:File,legalise:Gen2ToGen1LegalisePlan?=null,openedUri:Uri?,openedLabel:String?,routeTitle:String="Gen 2 → Gen 1",successMessage:String?=null){
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
-        if(!bound()){showDialog("Gen 2 → Gen 1","The destination identity or prepared source changed. Reopen PSE Bank. Nothing was changed.");return}
-        if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog("Gen 2 → Gen 1","The active save changed after destination preparation. Reopen PSE Bank. Nothing was changed.");return}
+        if(!bound()){showDialog(routeTitle,"The destination identity or prepared source changed. Reopen PSE Bank. Nothing was changed.");return}
+        if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog(routeTitle,"The active save changed after destination preparation. Reopen PSE Bank. Nothing was changed.");return}
         val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;var writeStarted=false;var bankDeleteAttempted=false
         var safetyBackup:File?=null;var bankRecovery:File?=null
         try{
@@ -37829,11 +38180,11 @@ class MainActivity : Activity() {
                 destinationRestored->"The exact Gen 1 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
                 else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
             }
-            showDialog("Gen 2 → Gen 1 PSE conversion failed",(e.message?:"Unknown error")+"\n\n$recovery"+
+            showDialog("$routeTitle failed",(e.message?:"Unknown error")+"\n\n$recovery"+
                 (safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:"")+
                 (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery: "+it.name}?:""));return
         }
-        Toast.makeText(this,"PSE converted Gen 2 → Gen 1 to Box $targetBox and verified",Toast.LENGTH_LONG).show();showBank()
+        Toast.makeText(this,successMessage?:"PSE converted Gen 2 → Gen 1 to Box $targetBox and verified",Toast.LENGTH_LONG).show();showBank()
     }
 
     private data class Gen2Gen1BatchPrepared(val bankFile:File,val bankBytes:ByteArray,val source:Gen2Pokemon,val meta:Gen1SpeciesMeta,val legalise:Gen2ToGen1LegalisePlan?,val mon:ByteArray,val ot:ByteArray,val nick:ByteArray)
@@ -45771,12 +46122,20 @@ private data class Gen2ToGen5LegalisePlan(
             val read=LetsGoPokemonReadOnly.read(raw) as? LetsGoSlotRead.Pokemon
             read?.value?.let{Triple(file,raw,it)}
         }?:emptyList()
+        val swordShieldGen8Entries=bankDir().listFiles()?.filter{
+            it.isFile&&it.extension.equals("pk8",true)&&it.name.startsWith("switch_swsh_")
+        }?.sortedBy{it.name}?.mapNotNull{file->
+            val raw=runCatching{file.readBytes()}.getOrNull()?:return@mapNotNull null
+            val read=SwordShieldPokemonReadOnly.read(raw) as? SwordShieldSlotRead.Pokemon
+            read?.value?.let{Triple(file,raw,it)}
+        }?:emptyList()
         val standardGen7Entries=standardEntries.filter{it.first==7}
         val total = when(bankViewGeneration){
             1->gen1Entries.size
             2->gen2Entries.size
             3,4,5,6->standardEntries.count{it.first==bankViewGeneration}
             7->standardGen7Entries.size+letsGoGen7Entries.size
+            8->swordShieldGen8Entries.size
             else->0
         }
         // Gen 1 has exactly ten configured Bank Boxes. If an older build left overflow
@@ -45810,6 +46169,8 @@ private data class Gen2ToGen5LegalisePlan(
         if(bankViewGeneration==2){val quarantinedCount=gen2BankQuarantinedFiles().size;if(quarantinedCount>0)addButton(root,"Review quarantined Gen 2 records ($quarantinedCount)"){showGen2BankQuarantineRecovery()}}
         if(bankViewGeneration==7&&letsGoGen7Entries.isNotEmpty())addMutedLine(root,
             "${letsGoGen7Entries.size} preserved Let's Go PB7 source record${if(letsGoGen7Entries.size==1)"" else "s"} follow the native PK7 entries. PB7 conversions are reviewed one at a time and remain in Bank after a verified destination write.")
+        if(bankViewGeneration==8&&swordShieldGen8Entries.isNotEmpty())addMutedLine(root,
+            "${swordShieldGen8Entries.size} preserved Sword/Shield PK8 source record${if(swordShieldGen8Entries.size==1)"" else "s"}. Each backward route requires a separate disclosed Legalise review and preserves the native PK8 after a verified destination write.")
         if(bankViewGeneration==5&&bankMultiSelectMode){bankMultiSelectMode=false;selectedBankFiles.clear()}
         val selectBar=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
         val selectToggle=Button(this).apply{text=if(bankMultiSelectMode)"Cancel" else "Multi-select";setAllCaps(false);setOnClickListener{bankMultiSelectMode=!bankMultiSelectMode;selectedBankFiles.clear();showBank()}}
@@ -45912,13 +46273,17 @@ private data class Gen2ToGen5LegalisePlan(
                         grid.addView(letsGoGen7BankGridCell(local,pb7?.let{Pair(it.first,it.third)}))
                     }
                 }
+                8 -> {
+                    val pk8=swordShieldGen8Entries.getOrNull(idx)
+                    grid.addView(swordShieldGen8BankGridCell(local,pk8?.let{Pair(it.first,it.third)}))
+                }
                 else -> grid.addView(bankGridCell(local,null))
             }
         }
         root.addView(grid,LinearLayout.LayoutParams(-1,-2))
         val occupied=(total-start).coerceIn(0,30)
         addMutedLine(root,"$occupied / 30 occupied • $total total preserved Gen ${bankViewGeneration} Pokémon${if(currentGen==bankViewGeneration) " • current save Gen $currentGen" else ""}.")
-        if(bankViewGeneration in 8..9) addMutedLine(root,"Gen ${bankViewGeneration} storage has 30-slot Bank Boxes ready. Deposits will appear here as this generation's save engine is enabled.")
+        if(bankViewGeneration in 8..9&&total==0) addMutedLine(root,"Gen ${bankViewGeneration} storage has 30-slot Bank Boxes ready. Deposits will appear here as this generation's save engine is enabled.")
         when {
             bankViewGeneration==1&&total>GEN1_BANK_CAPACITY -> addMutedLine(root,"Legacy Gen 1 overflow is visible for recovery. New Gen 1 deposits remain blocked until fewer than ${GEN1_BANK_CAPACITY} records remain in the configured ${GEN1_BANK_BOX_COUNT} Bank Boxes.")
             bankViewGeneration==1&&total==GEN1_BANK_CAPACITY -> addMutedLine(root,"Gen 1 Bank is full: all ${GEN1_BANK_BOX_COUNT} Bank Boxes contain ${GEN1_BANK_CAPACITY} Pokémon. Withdraw or delete a Pokémon before depositing another.")
@@ -45927,6 +46292,60 @@ private data class Gen2ToGen5LegalisePlan(
 
         val shell=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(BG)}
         shell.addView(scroll,LinearLayout.LayoutParams(-1,0,1f));shell.addView(buildBottomNav("bank"),LinearLayout.LayoutParams(-1,-2));setContentView(shell)
+    }
+
+    private fun swordShieldGen8BankGridCell(
+        slot:Int,pair:Pair<File,SwordShieldPokemonRead>?
+    ):LinearLayout{
+        val cellWidth=((resources.displayMetrics.widthPixels-dp(44))/6).coerceAtLeast(dp(50))
+        return LinearLayout(this).apply{
+            orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER
+            setPadding(dp(2),dp(4),dp(2),dp(4))
+            setBackgroundColor(if(pair==null)Color.rgb(27,27,27) else CARD)
+            layoutParams=GridLayout.LayoutParams().apply{
+                width=cellWidth;height=dp(82)
+                setMargins(dp(1),dp(1),dp(1),dp(1))
+            }
+            if(pair!=null){
+                val(file,p)=pair;isClickable=true;isFocusable=true
+                setOnClickListener{
+                    if(bankMultiSelectMode)showDialog(
+                        "Sword/Shield PK8",
+                        "This Legalise route is reviewed one Pokémon at a time. Cancel multi-select, then open this PK8 record."
+                    )else showSwordShieldGen8BankEntry(file,p)
+                }
+                val sprite=ImageView(this@MainActivity).apply{
+                    scaleType=ImageView.ScaleType.FIT_CENTER
+                    contentDescription=p.nickname
+                }
+                addView(sprite,LinearLayout.LayoutParams(dp(52),dp(52)))
+                loadPokemonSprite(sprite,p.species,p.shiny)
+            }else addView(TextView(this@MainActivity).apply{
+                text="○";textSize=24f;gravity=Gravity.CENTER
+                setTextColor(Color.rgb(80,80,80))
+            },LinearLayout.LayoutParams(dp(52),dp(52)))
+            addView(TextView(this@MainActivity).apply{
+                text=(slot+1).toString();textSize=10f;gravity=Gravity.CENTER
+                setTextColor(if(pair==null)Color.rgb(100,100,100)else MUTED)
+            })
+        }
+    }
+
+    private fun showSwordShieldGen8BankEntry(
+        bankFile:File,p:SwordShieldPokemonRead
+    ){
+        val currentGen=importedFile?.let{generationForSize(it.length().toInt())}?:0
+        val message=when(currentGen){
+            1->"Native 344-byte Sword/Shield PK8 preserved. Review a backward PSE Legalise conversion into the exact next empty PK1 slot in one chosen Red, Blue or Yellow PC Box. The PK8 Bank entry and original Sword/Shield save remain unchanged."
+            else->"Native 344-byte Sword/Shield PK8 preserved. Load a checksum-clean Pokémon Red, Blue or Yellow destination to review the first bounded backward conversion. Other destinations remain unavailable until their title-specific mappings are complete."
+        }
+        val b=AlertDialog.Builder(this)
+            .setTitle("${p.nickname.ifBlank{"Pokémon #${p.species}"}} • Sword/Shield PK8")
+            .setMessage(message).setNegativeButton("Close",null)
+        if(currentGen==1)b.setPositiveButton("Review PK8 → PK1 Legalise"){_,_->
+            prepareSwordShieldToGen1Transfer(bankFile,p)
+        }
+        b.show()
     }
 
     private fun bankGridCell(slot: Int, pair: Pair<File, PokemonEntry>?): LinearLayout {
