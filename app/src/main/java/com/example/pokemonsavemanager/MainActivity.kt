@@ -23677,6 +23677,533 @@ class MainActivity : Activity() {
 
 
 
+    private data class ScarletVioletGen5Prepared(
+        val bankFile:File,
+        val bankBytes:ByteArray,
+        val review:ScarletVioletToGen5Review,
+        val destination:ByteArray,
+        val originGame:Int,
+        val pk3:ByteArray,
+        val bridge3:PokemonEntry,
+        val meta5:Gen3ToGen4Meta,
+        val plan4:Gen3ToGen4Plan,
+        val pk4:ByteArray,
+        val bridge4:PokemonEntry,
+        val pk5:ByteArray,
+        val converted5:PokemonEntry,
+        val destinationFile:File,
+        val sourceUri:Uri?,
+        val sourceLabel:String?,
+        val effects:List<String>,
+        var submitted:Boolean=false
+    )
+
+    private fun scarletVioletGen5SnapshotsMatch(
+        p:ScarletVioletGen5Prepared,requireOpen:Boolean=true
+    ):Boolean=(!requireOpen||!p.submitted)&&
+        importedFile?.absolutePath==p.destinationFile.absolutePath&&
+        currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&runCatching{
+            p.destinationFile.readBytes().contentEquals(p.destination)&&
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_sv_${sha256(p.bankBytes)}.pk9"
+        }.getOrDefault(false)
+
+    private fun prepareScarletVioletToGen5Transfer(
+        bankFile:File,shown:ScarletVioletPokemonRead,requestedOriginGame:Int?=null
+    ){
+        val title="Scarlet/Violet PK9 → Gen 5 PK5"
+        val file=importedFile?:return showDialog(title,
+            "Load a valid Black, White, Black 2 or White 2 destination first.")
+        val openedUri=currentSourceUri
+        val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&
+            currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val destination=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The destination save could not be read.")
+        val profile=detectGen5Profile(destination)
+            ?:return showDialog(title,
+                "Load a valid Black, White, Black 2 or White 2 save first.")
+        val destinationTitle=gen5GameNameFromPath(
+            openedLabel?:file.name,profile
+        )
+        if(!bound()||!gen5ChecksumTableValid(destination,profile)||
+            (0 until 24).any{!gen5BoxChecksumValid(destination,it,profile)})
+            return showDialog(title,
+                "The Generation 5 destination did not pass native box and checksum-table validation.")
+
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The PSE Bank path could not be verified.")
+        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+            ?:return showDialog(title,"The selected PK9 path could not be verified.")
+        if(selected.parentFile!=root||!selected.isFile||
+            !selected.extension.equals("pk9",true))
+            return showDialog(title,
+                "The selected record is outside the Scarlet/Violet PSE Bank.")
+        val bank=runCatching{selected.readBytes()}.getOrNull()
+            ?:return showDialog(title,"The preserved PK9 record could not be read.")
+        if(selected.name!="switch_sv_${sha256(bank)}.pk9")
+            return showDialog(title,
+                "The PK9 filename does not match its exact SHA-256 content binding. Nothing was changed.")
+        val review=try{ScarletVioletToGen5Pk5.review(bank)}catch(e:Exception){
+            return showDialog("PK9 → PK5 blocked",
+                (e.message?:"No safe native Generation 5 mapping is available.")+
+                    "\n\nThe PK9 Bank entry and Generation 5 destination were left unchanged.")
+        }
+        if(!sameScarletVioletGen3Source(review.source,shown))
+            return showDialog(title,
+                "The selected PK9 changed since the Bank screen opened. Reopen PSE Bank.")
+
+        val originGame=requestedOriginGame
+        if(originGame==null){
+            val choices=listOf(
+                1 to "Pokémon Sapphire",2 to "Pokémon Ruby",3 to "Pokémon Emerald",
+                4 to "Pokémon FireRed",5 to "Pokémon LeafGreen",
+                15 to "Pokémon Colosseum / XD"
+            )
+            AlertDialog.Builder(this)
+                .setTitle("Choose documented Gen 3 origin mapping")
+                .setMessage("This bounded PK5 route uses reviewed native PK3 and PK4 bridges only in memory. Choose the exact Generation 3 origin retained by PK5. This Legalise choice does not verify history. Destination family: ${profile.family}. Cancel leaves both files unchanged.")
+                .setItems(choices.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
+                    prepareScarletVioletToGen5Transfer(
+                        bankFile,shown,choices[which].first
+                    )
+                }.setNegativeButton("Cancel",null).show()
+            return
+        }
+        val originTitle=gen3CompatibleOriginTitle(originGame)
+            ?:return showDialog("PK9 → PK5 blocked",
+                "The selected bridge origin is not a documented native Generation 3 title.")
+
+        val pk3=try{
+            buildScarletVioletGen3Pk3(review.source,originGame)
+        }catch(e:Exception){
+            return showDialog("PK9 → PK5 blocked",
+                (e.message?:"No safe native PK3 bridge is available.")+
+                    "\n\nNothing was changed.")
+        }
+        val parsedBridge=parsePk3(pk3,0,false)
+            ?:return showDialog(title,
+                "The prepared native PK3 bridge could not be reopened.")
+        val abilityRows=canonicalGen3SpeciesAbilities(parsedBridge.species)
+            ?:return showDialog("PK9 → PK5 blocked",
+                "Canonical Generation 3 ability data is unavailable for species #${parsedBridge.species}.")
+        val bridgeAbility=abilityRows
+            .getOrElse(parsedBridge.abilityNumber-1){0}.takeIf{it!=0}
+            ?:abilityRows.firstOrNull()?.takeIf{it!=0}
+            ?:return showDialog("PK9 → PK5 blocked",
+                "No destination-valid normal Generation 3 ability exists for the bridge.")
+        val bridge3=parsedBridge.copy(ability=bridgeAbility)
+        val sourcePpUps=gen3MovePpUps(pk3)
+        if(sourcePpUps.any{it !in 0..3})
+            return showDialog("PK9 → PK5 blocked",
+                "The reviewed PK3 bridge contains invalid PP-Up data.")
+        fun snapshotsMatch()=bound()&&runCatching{
+            file.readBytes().contentEquals(destination)&&
+                selected.readBytes().contentEquals(bank)&&
+                selected.name=="switch_sv_${sha256(bank)}.pk9"
+        }.getOrDefault(false)
+        if(!snapshotsMatch())return showDialog(title,
+            "The destination or PK9 changed during preparation. Nothing was changed.")
+
+        val loading=AlertDialog.Builder(this).setTitle("Prepare PK9 → PK5")
+            .setMessage("Verifying historical Generation 5 ability data and preparing the native PK5…")
+            .setCancelable(false).create()
+        loading.show()
+        loadGen3ToGen4MetaAsync(bridge3,5,3){meta5,reason->
+            if(loading.isShowing)loading.dismiss()
+            if(!snapshotsMatch())return@loadGen3ToGen4MetaAsync showDialog(
+                title,"The destination or PK9 changed during preparation."
+            )
+            if(meta5==null)return@loadGen3ToGen4MetaAsync showDialog(
+                "PK9 → PK5 blocked",
+                (reason?:"Generation 5 species or ability data could not be verified.")+
+                    "\n\nNothing was changed."
+            )
+            val plan4=try{
+                makeGen3ToGen4Plan(bridge3,meta5,false)
+            }catch(e:Exception){
+                return@loadGen3ToGen4MetaAsync showDialog(
+                    "PK9 → PK5 blocked",
+                    (e.message?:"No safe Generation 5 conversion plan is available.")+
+                        "\n\nNothing was changed."
+                )
+            }
+            val pk4=try{
+                buildGen3ToGen4Pk4(pk3,bridge3,destination,plan4,false)
+            }catch(e:Exception){
+                return@loadGen3ToGen4MetaAsync showDialog(
+                    "PK9 → PK5 blocked",
+                    (e.message?:"No safe native PK4 bridge is available.")+
+                        "\n\nNothing was changed."
+                )
+            }
+            val bridge4=parsePk4(pk4,false)
+                ?:return@loadGen3ToGen4MetaAsync showDialog(
+                    title,"The prepared native PK4 bridge could not be reopened."
+                )
+            val pk5=try{
+                buildGen4ToGen5Pk5(pk4,bridge4,destination,meta5)
+            }catch(e:Exception){
+                return@loadGen3ToGen4MetaAsync showDialog(
+                    "PK9 → PK5 blocked",
+                    (e.message?:"No safe native PK5 mapping is available.")+
+                        "\n\nNothing was changed."
+                )
+            }
+            val converted5=parsePk5(pk5,false)
+                ?:return@loadGen3ToGen4MetaAsync showDialog(
+                    title,"The prepared native PK5 could not be reopened."
+                )
+            if(!converted5.checksumValid||
+                converted5.species!=review.source.species||
+                converted5.tid!=review.source.tid||
+                converted5.sid!=review.source.sid||
+                !gen5Pk5PpUps(pk5).contentEquals(sourcePpUps))
+                return@loadGen3ToGen4MetaAsync showDialog(title,
+                    "The prepared PK5 did not preserve the reviewed identity or PP Ups.")
+
+            fun genderLabel(value:Int)=when(value){
+                0->"male";1->"female";2->"genderless";else->"unknown"
+            }
+            fun pid(value:Long)="0x${value.toString(16).uppercase().padStart(8,'0')}"
+            val effects=review.source.effects+review.effects+listOf(
+                "Destination: one native PK5 in $destinationTitle (${profile.family} structure). Temporary bridge origin: $originTitle (ID $originGame); PK4 applies transfer date 20${plan4.metYear.toString().padStart(2,'0')}-${plan4.metMonth.toString().padStart(2,'0')}-${plan4.metDay.toString().padStart(2,'0')} and internal Pal Park location 55, while PK5 stores explicit unspecified met location 0. This is PSE provenance, not verified Poké Transfer history.",
+                "PID: source PK9 ${pid(review.source.pid)} → PK3/PK4 ${pid(bridge4.pid)} → PK5 ${pid(converted5.pid)}. Any final PID adjustment is limited to the reviewed Generation 5 normal ability slot and shiny rule; PK5 explicitly stores nature ${converted5.nature}.",
+                "Source PK9 gender ${genderLabel(review.source.gender)}, shiny ${review.source.shiny}, ability #${review.source.ability} slot ${review.source.abilityNumber} → historical bridge ability #${bridge3.ability} slot ${bridge3.abilityNumber} → PK5 gender ${genderLabel(converted5.gender)}, shiny ${converted5.shiny}, ability #${converted5.ability} slot ${converted5.abilityNumber}.",
+                "Native PK5 preserves species, TID/SID, nickname, OT, EXP, EVs, IVs, friendship, Pokérus, moves, current PP and PP Ups from the reviewed bridge. The bridge Poké Ball ID 4, met level ${review.source.metLevel}, OT gender ${review.source.originalTrainerGender}, zero markings and empty held-item field are retained.",
+                "Post-Generation-3 species or moves, alternate forms, Eggs, held items, fateful records, hidden abilities, incompatible historical abilities, non-English or unrepresentable text, invalid PP/EV/IV/EXP states and ambiguous PID-sensitive species remain blocked.",
+                "PSE writes only one chosen empty native PK5 slot, updates required Pokédex flags, the affected box CRC and checksum table, retains a Keep-pinned destination backup and independent PK9 recovery snapshot, then reopens and verifies the exact persisted PK5. The PK9 Bank entry and original Scarlet/Violet save remain unchanged."
+            )
+            val prepared=ScarletVioletGen5Prepared(
+                selected,bank,review,destination,originGame,pk3,bridge3,
+                meta5,plan4,pk4,bridge4,pk5,converted5,file,
+                openedUri,openedLabel,effects
+            )
+            val preview=buildString{
+                append("Exact PK9 SHA-256: ${sha256(bank)}\n")
+                append("Destination: $destinationTitle (${profile.family} structure)\n\n")
+                effects.forEach{append("• ").append(it).append("\n\n")}
+                append("Choose Legalise only if every disclosed transformation and omission is acceptable. Cancel leaves both sides byte-for-byte unchanged.")
+            }
+            AlertDialog.Builder(this)
+                .setTitle("${review.source.nickname.ifBlank{"Pokémon #${review.source.species}"}} • PK9 → PK5")
+                .setMessage(preview).setNegativeButton("Cancel",null)
+                .setPositiveButton("Legalise and choose destination"){_,_->
+                    if(scarletVioletGen5SnapshotsMatch(prepared))
+                        chooseScarletVioletToGen5Destination(prepared)
+                    else showDialog(title,
+                        "The destination or PK9 changed after review. Nothing was changed.")
+                }.show()
+        }
+    }
+
+    private fun chooseScarletVioletToGen5Destination(p:ScarletVioletGen5Prepared){
+        val title="Scarlet/Violet PK9 → Gen 5 PK5"
+        if(!scarletVioletGen5SnapshotsMatch(p))
+            return showDialog(title,
+                "The destination or PK9 changed. Reopen PSE Bank.")
+        val profile=detectGen5Profile(p.destination)
+            ?:return showDialog(title,
+                "The Generation 5 destination layout is no longer valid.")
+        val empty=(0 until 720).filter{index->
+            val off=0x00400+(index/30)*0x1000+(index%30)*136
+            parsePk5(p.destination.copyOfRange(off,off+136),false)==null
+        }
+        if(empty.isEmpty())return showDialog(title,
+            "No empty native Generation 5 PC slot is available.")
+        val first=empty.first()
+        AlertDialog.Builder(this).setTitle("Choose native Gen 5 destination")
+            .setMessage("PSE will write the reviewed PK5 to one empty slot, update only required Pokédex and native integrity data, retain recovery data, and keep the PK9 Bank entry.")
+            .setItems(arrayOf(
+                "First Empty • Box ${first/30+1} • Slot ${first%30+1}",
+                "Choose Box / Slot"
+            )){_,which->
+                if(!scarletVioletGen5SnapshotsMatch(p))
+                    showDialog(title,
+                        "The destination or PK9 changed. Reopen PSE Bank.")
+                else if(which==0)transferScarletVioletBankToGen5(p,first)
+                else showScarletVioletToGen5BoxPicker(p)
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun showScarletVioletToGen5BoxPicker(p:ScarletVioletGen5Prepared){
+        val title="Scarlet/Violet PK9 → Gen 5 PK5"
+        if(!scarletVioletGen5SnapshotsMatch(p))
+            return showDialog(title,
+                "The destination or PK9 changed. Reopen PSE Bank.")
+        val boxes=(0 until 24).filter{box->(0 until 30).any{slot->
+            val off=0x00400+box*0x1000+slot*136
+            parsePk5(p.destination.copyOfRange(off,off+136),false)==null
+        }}
+        if(boxes.isEmpty())return showDialog(title,
+            "All native Generation 5 PC boxes are full.")
+        AlertDialog.Builder(this).setTitle("Choose Gen 5 destination box")
+            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+                val box=boxes[which]
+                val slots=(0 until 30).filter{slot->
+                    val off=0x00400+box*0x1000+slot*136
+                    parsePk5(p.destination.copyOfRange(off,off+136),false)==null
+                }
+                AlertDialog.Builder(this)
+                    .setTitle("Box ${box+1} • choose slot")
+                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
+                        transferScarletVioletBankToGen5(
+                            p,box*30+slots[slotIndex]
+                        )
+                    }.setNegativeButton("Cancel",null).show()
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun transferScarletVioletBankToGen5(
+        p:ScarletVioletGen5Prepared,target:Int
+    ){
+        val title="Scarlet/Violet PK9 → Gen 5 PK5"
+        if(!scarletVioletGen5SnapshotsMatch(p)||p.submitted)
+            return showDialog(title,
+                "The destination or PK9 changed, or this conversion was already submitted. Reopen PSE Bank.")
+        val file=p.destinationFile
+        val original=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog(title,
+                "The destination save could not be read. Nothing was changed.")
+        p.submitted=true
+        var writeStarted=false
+        var backup:File?=null
+        var bankRecovery:File?=null
+        try{
+            require(original.contentEquals(p.destination)&&target in 0 until 720){
+                "The prepared Generation 5 destination changed or selected slot is invalid."
+            }
+            val profile=detectGen5Profile(original)
+                ?:error("The destination is no longer a valid Generation 5 save.")
+            require(gen5ChecksumTableValid(original,profile)&&
+                (0 until 24).all{gen5BoxChecksumValid(original,it,profile)}){
+                "The destination box checksums or checksum table changed."
+            }
+
+            val bank=p.bankFile.readBytes()
+            require(bank.contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_sv_${sha256(bank)}.pk9"){
+                "The exact content-addressed PK9 Bank record changed."
+            }
+            val review=ScarletVioletToGen5Pk5.review(bank)
+            require(review==p.review){
+                "The reviewed PK9 mapping changed before writing."
+            }
+            val pk3=buildScarletVioletGen3Pk3(review.source,p.originGame)
+            val parsedBridge=parsePk3(pk3,0,false)
+                ?:error("The refreshed native PK3 bridge could not be reopened.")
+            val abilityRows=canonicalGen3SpeciesAbilities(parsedBridge.species)
+                ?:error("Canonical Generation 3 ability data became unavailable.")
+            val bridgeAbility=abilityRows
+                .getOrElse(parsedBridge.abilityNumber-1){0}.takeIf{it!=0}
+                ?:abilityRows.firstOrNull()?.takeIf{it!=0}
+                ?:error("No destination-valid bridge ability remains.")
+            val bridge3=parsedBridge.copy(ability=bridgeAbility)
+            val sourcePpUps=gen3MovePpUps(pk3)
+            require(pk3.contentEquals(p.pk3)&&
+                sameGen4ToGen3Pk3(bridge3,p.bridge3)&&
+                sourcePpUps.contentEquals(review.source.ppUps.toIntArray())){
+                "The reviewed native PK3 bridge changed before writing."
+            }
+            val plan4=makeGen3ToGen4PlanWithDate(
+                bridge3,p.meta5,p.plan4.metYear,p.plan4.metMonth,
+                p.plan4.metDay,false
+            )
+            require(plan4==p.plan4){
+                "The reviewed Generation 5 conversion plan changed."
+            }
+            val pk4=buildGen3ToGen4Pk4(
+                pk3,bridge3,original,plan4,false
+            )
+            val bridge4=parsePk4(pk4,false)
+                ?:error("The refreshed native PK4 bridge could not be reopened.")
+            require(pk4.contentEquals(p.pk4)&&
+                sameGen3ToGen4Pk4(bridge4,p.bridge4)&&
+                gen4Pk4PpUps(pk4).contentEquals(sourcePpUps)){
+                "The reviewed native PK4 bridge changed before writing."
+            }
+            val pk5=buildGen4ToGen5Pk5(
+                pk4,bridge4,original,p.meta5
+            )
+            val converted5=parsePk5(pk5,false)
+                ?:error("The refreshed native PK5 could not be reopened.")
+            require(pk5.contentEquals(p.pk5)&&
+                sameGen4ToGen5Pk5(converted5,p.converted5)&&
+                gen5Pk5PpUps(pk5).contentEquals(sourcePpUps)){
+                "The reviewed native PK5 changed before writing."
+            }
+
+            val box=target/30
+            val slot=target%30
+            val offset=0x00400+box*0x1000+slot*136
+            require(parsePk5(
+                original.copyOfRange(offset,offset+136),false
+            )==null){
+                "The selected Generation 5 slot is no longer empty."
+            }
+            val save=original.copyOf()
+            pk5.copyInto(save,offset)
+            val staged=parsePk5(
+                save.copyOfRange(offset,offset+136),false
+            )?:error("The staged PK5 could not be parsed.")
+            require(sameGen4ToGen5Pk5(staged,converted5)&&
+                gen5Pk5PpUps(pk5).contentEquals(sourcePpUps)){
+                "The staged PK5 differs from the reviewed conversion."
+            }
+
+            val allowed=HashSet<Int>()
+            for(i in offset until offset+136)allowed.add(i)
+            val bit=staged.species-1
+            val maskByte=bit/8
+            val dex=profile.pokedexOffset
+            allowed.add(dex+0x08+maskByte)
+            for(region in 0..3){
+                allowed.add(dex+0x5C+region*0x54+maskByte)
+                allowed.add(dex+0x1AC+region*0x54+maskByte)
+            }
+            if(staged.species<=493){
+                val langBit=bit*7+1
+                allowed.add(
+                    dex+(if(profile.sequel)0x328 else 0x320)+langBit/8
+                )
+            }
+            val(_,dexLocal,dexMirror)=gen5PokedexBlock(profile)
+            for(i in 0..1){
+                allowed.add(dexLocal+i)
+                allowed.add(dexMirror+i)
+                allowed.add(0x00400+box*0x1000+0x0FF2+i)
+                allowed.add(profile.checksumTable+2+box*2+i)
+                allowed.add(profile.checksumBlockChecksumOffset+i)
+            }
+            registerGen1ToGen5Pokedex(save,profile,staged)
+            updateGen5BoxChecksum(save,box,profile)
+            require(save.indices.all{
+                it in allowed||save[it]==original[it]
+            }){
+                "The conversion changed data outside the selected PK5, required Pokédex flags, box CRC and checksum table."
+            }
+            require(gen5BoxChecksumValid(save,box,profile)&&
+                gen5ChecksumTableValid(save,profile)&&
+                gen1ToGen5DexRegistered(save,profile,staged)){
+                "The staged Generation 5 save failed storage, Pokédex or checksum verification."
+            }
+
+            val recovery=File.createTempFile(
+                backupGameName(file)+"_PreSVToGen5_",".backup",backupsDir()
+            )
+            backup=recovery
+            recovery.writeBytes(original)
+            require(recovery.readBytes().contentEquals(original)){
+                "The Generation 5 recovery backup did not verify."
+            }
+            retainGen6ToGen5SafetyBackup(recovery,original)
+            val bankCopy=File.createTempFile(
+                "PSE_SVToG5_PK9Recovery_",".tmp",bankDir()
+            )
+            bankRecovery=bankCopy
+            bankCopy.writeBytes(p.bankBytes)
+            require(bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The independent PK9 recovery snapshot did not verify."
+            }
+            require(scarletVioletGen5SnapshotsMatch(p,false)&&
+                file.readBytes().contentEquals(original)&&
+                isBackupKept(recovery)&&
+                recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The source identity or retained recovery snapshots changed before writing."
+            }
+
+            writeStarted=true
+            file.writeBytes(save)
+            val written=file.readBytes()
+            require(written.contentEquals(save)&&written.indices.all{
+                it in allowed||written[it]==original[it]
+            }){
+                "The persisted Generation 5 save differs from the reviewed write scope."
+            }
+            val writtenProfile=detectGen5Profile(written)
+                ?:error("The persisted Generation 5 save could not be reopened.")
+            require(gen5BoxChecksumValid(written,box,writtenProfile)&&
+                gen5ChecksumTableValid(written,writtenProfile)&&
+                gen1ToGen5DexRegistered(
+                    written,writtenProfile,converted5
+                )){
+                "The persisted Generation 5 save failed checksum or Pokédex validation."
+            }
+            val actual=written.copyOfRange(offset,offset+136)
+            val reopened=parsePk5(actual,false)
+                ?:error("The persisted PK5 could not be reopened.")
+            require(actual.contentEquals(pk5)&&
+                sameGen4ToGen5Pk5(reopened,converted5)&&
+                gen5Pk5PpUps(actual).contentEquals(sourcePpUps)){
+                "The exact converted PK5 did not persist after reopening."
+            }
+            require(importedFile?.absolutePath==file.absolutePath&&
+                currentSourceUri==p.sourceUri&&
+                currentSourceLabel==p.sourceLabel&&
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                p.bankFile.name=="switch_sv_${sha256(p.bankBytes)}.pk9"&&
+                ScarletVioletToGen5Pk5.review(
+                    p.bankFile.readBytes()
+                )==p.review&&file.readBytes().contentEquals(save)&&
+                isBackupKept(recovery)&&
+                recovery.readBytes().contentEquals(original)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The preserved PK9, destination or retained recovery snapshots changed after persistence."
+            }
+            runCatching{bankCopy.delete()}
+        }catch(e:Exception){
+            val bankRestored=runCatching{
+                val current=runCatching{
+                    p.bankFile.readBytes()
+                }.getOrNull()
+                if(current==null||!current.contentEquals(p.bankBytes))
+                    p.bankFile.writeBytes(p.bankBytes)
+                p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                    p.bankFile.name=="switch_sv_${sha256(p.bankBytes)}.pk9"&&
+                    ScarletVioletToGen5Pk5.review(
+                        p.bankFile.readBytes()
+                    )==p.review
+            }.getOrDefault(false)
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(original)
+                val restored=file.readBytes()
+                val restoredProfile=detectGen5Profile(restored)
+                    ?:error("The restored Generation 5 layout is invalid.")
+                restored.contentEquals(original)&&
+                    gen5ChecksumTableValid(restored,restoredProfile)&&
+                    (0 until 24).all{
+                        gen5BoxChecksumValid(restored,it,restoredProfile)
+                    }
+            }.getOrDefault(false)
+            if(bankRestored&&saveRestored)
+                runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&saveRestored->
+                    "The exact Generation 5 destination and PK9 Bank record were restored or kept and verified."
+                bankRestored->
+                    "The PK9 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                saveRestored->
+                    "The exact Generation 5 destination was restored, but PK9 restoration was not verified. Keep the PK9 recovery snapshot for review."
+                else->
+                    "Automatic recovery could not be verified. Keep the retained destination backup and PK9 recovery snapshot for review."
+            }
+            showDialog("$title failed",
+                (e.message?:"Unknown error")+"\n\n"+recovery+
+                    (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                    (bankRecovery?.takeIf{it.exists()}?.let{
+                        "\nPK9 recovery snapshot: ${it.name}"
+                    }?:""))
+            return
+        }
+        Toast.makeText(this,
+            "PSE converted Scarlet/Violet PK9 → Gen 5 PK5 to Box ${target/30+1} • Slot ${target%30+1}; PK9 preserved",
+            Toast.LENGTH_LONG).show()
+        showBank()
+    }
+
+
+
     private data class LegendsArceusGen6Prepared(
         val bankFile:File,
         val bankBytes:ByteArray,
@@ -58671,7 +59198,8 @@ private data class Gen2ToGen5LegalisePlan(
             2->"Native 344-byte Scarlet/Violet PK9 preserved. Review a backward PSE Legalise conversion into the exact next empty PK2 slot in one chosen Gold, Silver or Crystal PC Box. The PK9 Bank entry and original Scarlet/Violet save remain unchanged."
             3->"Native 344-byte Scarlet/Violet PK9 preserved. Review a backward PSE Legalise conversion into one chosen empty native PK3 slot in the loaded Ruby, Sapphire, Emerald, FireRed or LeafGreen save. The PK9 Bank entry and original Scarlet/Violet save remain unchanged."
             4->"Native 344-byte Scarlet/Violet PK9 preserved. Review a backward PSE Legalise conversion into one chosen empty native PK4 slot in the loaded Diamond, Pearl, Platinum, HeartGold or SoulSilver save. The PK9 Bank entry and original Scarlet/Violet save remain unchanged."
-            else->"Native 344-byte Scarlet/Violet PK9 preserved. Load a checksum-clean Generation 1, Generation 2, Generation 3 or Generation 4 destination to review a completed bounded backward conversion. Other destinations remain unavailable until their title-specific mappings are complete."
+            5->"Native 344-byte Scarlet/Violet PK9 preserved. Review a backward PSE Legalise conversion into one chosen empty native PK5 slot in the loaded Black, White, Black 2 or White 2 save. The PK9 Bank entry and original Scarlet/Violet save remain unchanged."
+            else->"Native 344-byte Scarlet/Violet PK9 preserved. Load a checksum-clean Generation 1 through Generation 5 destination to review a completed bounded backward conversion. Other destinations remain unavailable until their title-specific mappings are complete."
         }
         val b=AlertDialog.Builder(this)
             .setTitle("${p.nickname.ifBlank{"Pokémon #${p.species}"}} • Scarlet/Violet PK9")
@@ -58687,6 +59215,9 @@ private data class Gen2ToGen5LegalisePlan(
         }
         if(currentGen==4)b.setPositiveButton("Review PK9 → PK4 Legalise"){_,_->
             prepareScarletVioletToGen4Transfer(bankFile,p)
+        }
+        if(currentGen==5)b.setPositiveButton("Review PK9 → PK5 Legalise"){_,_->
+            prepareScarletVioletToGen5Transfer(bankFile,p)
         }
         b.show()
     }
