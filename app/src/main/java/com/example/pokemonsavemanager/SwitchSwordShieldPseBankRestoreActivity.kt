@@ -164,13 +164,15 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
                 val bank = readBankRecord()
                 SwordShieldPseBankRestoreEditing.stage(
                     source, hash, bank, destination.box, destination.position,
-                    registerCaughtEnglish = bankFile().extension.equals("pk7", true) ||
+                    registerCaughtEnglish = bankFile().extension.equals("pb7", true) ||
+                        bankFile().extension.equals("pk7", true) ||
                         bankFile().extension.equals("pse1", true) ||
                         bankFile().extension.equals("pse2", true) ||
                         bankFile().extension.equals("pk3", true) ||
                         bankFile().extension.equals("pk4", true) ||
                         bankFile().extension.equals("pk5", true) ||
-                        bankFile().extension.equals("pk6", true)
+                        bankFile().extension.equals("pk6", true),
+                    requireCaughtEnglishRecord = !bankFile().extension.equals("pb7", true)
                 )
             }
             runOnUiThread {

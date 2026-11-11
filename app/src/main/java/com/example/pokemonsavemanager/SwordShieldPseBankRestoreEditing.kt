@@ -88,7 +88,8 @@ object SwordShieldPseBankRestoreEditing {
         bankRecord: ByteArray,
         box: Int,
         position: Int,
-        registerCaughtEnglish: Boolean = false
+        registerCaughtEnglish: Boolean = false,
+        requireCaughtEnglishRecord: Boolean = true
     ): SwordShieldPseBankRestoreCopyPlan {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
@@ -105,7 +106,7 @@ object SwordShieldPseBankRestoreEditing {
             original, box, position, supplied
         )
         val (edited, dexRegistrations) = if (registerCaughtEnglish) {
-            registerCaughtEnglishDex(written.bytes, pokemon)
+            registerCaughtEnglishDex(written.bytes, pokemon, requireCaughtEnglishRecord)
         } else written.bytes to emptyList()
         verify(
             original, edited, supplied, box, position, written.absoluteOffset,
@@ -212,7 +213,8 @@ object SwordShieldPseBankRestoreEditing {
 
     private fun registerCaughtEnglishDex(
         source: ByteArray,
-        pokemon: SwordShieldPokemonRead
+        pokemon: SwordShieldPokemonRead,
+        requireAllocatedRecord: Boolean
     ): Pair<ByteArray, List<SwordShieldPseBankDexRegistration>> {
         require(pokemon.form == 0) {
             "Only the reviewed base form can receive the verified native Pokédex mapping."
@@ -224,8 +226,11 @@ object SwordShieldPseBankRestoreEditing {
         val matches = allocated.flatMap { region ->
             region.entries.filter { it.speciesId == pokemon.species }.map { region to it.number }
         }
-        require(matches.isNotEmpty()) {
-            "This save has no allocated native Sword/Shield regional Pokédex record for the converted species."
+        if (matches.isEmpty()) {
+            require(!requireAllocatedRecord) {
+                "This save has no allocated native Sword/Shield regional Pokédex record for the converted species."
+            }
+            return source.copyOf() to emptyList()
         }
         var edited = source.copyOf()
         val registrations = matches.map { (regionRead, number) ->
