@@ -41,6 +41,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Pokémon Legends: Z-A Pokémon detail dialog: the shared dark list surface, selectable teal PA9 data card and rounded actions while retaining every field, title-specific conditional action and Bank deposit behavior.
 - Let’s Go Pikachu/Eevee Pokémon Nickname editor: shared title hierarchy, cyan field label, teal validation and input cards, rounded actions, typography and spacing while retaining native PB7 validation, verified-copy saving, recovery backup and field navigation.
 - Let’s Go Pikachu/Eevee Pokémon Species editor: the shared editor hierarchy, teal validation and selector cards, cyan labels and rounded actions while retaining native species restrictions, exact-field review, verified-copy saving, recovery backup and field navigation.
+- Let’s Go Pikachu/Eevee Pokémon Level editor: the shared editor hierarchy, teal validation and numeric input cards, cyan labels and rounded actions while retaining native level restrictions, EXP and cached-stat rebuilding, verified-copy saving, recovery backup and field navigation.
 
 ## Still mismatched
 
