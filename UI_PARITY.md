@@ -23,6 +23,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Let’s Go Pikachu/Eevee Pokémon storage page: dark list surface, teal summary card, rounded slot and pager buttons, typography and spacing while retaining native ordering and paging.
 - Pokémon Sword/Shield Pokémon box page: the shared dark list surface, teal summary card, rounded native slot and pager buttons, typography and spacing while retaining native PK8 selection and box paging.
 - Brilliant Diamond/Shining Pearl Pokémon box page: the shared dark list surface, teal summary card, rounded native slot and pager buttons, typography and spacing while retaining native PB8 selection and box paging.
+- Pokémon Legends: Arceus pasture page: the shared dark list surface, teal summary card, rounded native editing, slot and pager buttons, typography and spacing while retaining pasture unlock, naming, PA8 selection and paging behavior.
 
 ## Still mismatched
 
@@ -30,7 +31,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Remaining Let’s Go party, storage-pool and Pokémon detail/editor screens.
 - Remaining Sword/Shield party and Pokémon detail/editor screens.
 - Remaining Brilliant Diamond/Shining Pearl party and Pokémon detail/editor screens.
-- Remaining Legends: Arceus box, pasture, party and Pokémon-storage screens.
+- Remaining Legends: Arceus party and Pokémon detail/editor screens.
 - Remaining Scarlet/Violet box, party and Pokémon-storage screens.
 - Remaining Legends: Z-A box, party and Pokémon-storage screens.
 - PSE Bank list, detail, destination and transfer-review screens.
