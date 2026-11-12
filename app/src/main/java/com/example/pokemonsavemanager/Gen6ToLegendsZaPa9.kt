@@ -19,10 +19,19 @@ object Gen6ToLegendsZaPa9 {
 
     fun inspectSource(record: ByteArray): Gen6Pk6Record = Gen6Pk6Adapter.decode(record)
 
+    fun review(record: ByteArray): Gen6ToLegendsZaReview =
+        reviewInternal(record, null, null)
+
     fun review(
         record: ByteArray,
         destinationTrainer: LegendsZaTrainerRead,
         metadata: Gen1ToSwordShieldMetadata
+    ): Gen6ToLegendsZaReview = reviewInternal(record, destinationTrainer, metadata)
+
+    private fun reviewInternal(
+        record: ByteArray,
+        destinationTrainer: LegendsZaTrainerRead?,
+        metadata: Gen1ToSwordShieldMetadata?
     ): Gen6ToLegendsZaReview {
         val source = inspectSource(record)
         val s = source.decryptedBytes
@@ -42,10 +51,15 @@ object Gen6ToLegendsZaPa9 {
         require(ability in 1..191 && abilitySlot in setOf(1,2,4)){
             "The source ability ID or slot is outside the reviewed Generation 6 range."
         }
-        require(destinationTrainer.languageId==2){"This bounded route currently requires an English Legends: Z-A destination trainer."}
-        require(metadata.baseFriendship in 0..255 && metadata.genderRate in -1..8){"The documented species friendship or gender mapping is invalid."}
-        require(metadata.abilityId==ability && metadata.abilityNumber==abilitySlot){"The documented Legends: Z-A ability does not exactly match PK6 ability #$ability in slot $abilitySlot."}
-        require(destinationGender(gender,metadata.genderRate)){"The PK6 gender does not match the documented Legends: Z-A species ratio."}
+        if (destinationTrainer != null || metadata != null) {
+            require(destinationTrainer != null && metadata != null) {
+                "Destination trainer and documented species metadata must be reviewed together."
+            }
+            require(destinationTrainer.languageId==2){"This bounded route currently requires an English Legends: Z-A destination trainer."}
+            require(metadata.baseFriendship in 0..255 && metadata.genderRate in -1..8){"The documented species friendship or gender mapping is invalid."}
+            require(metadata.abilityId==ability && metadata.abilityNumber==abilitySlot){"The documented Legends: Z-A ability does not exactly match PK6 ability #$ability in slot $abilitySlot."}
+            require(destinationGender(gender,metadata.genderRate)){"The PK6 gender does not match the documented Legends: Z-A species ratio."}
+        }
         require(language==2){"This bounded route supports English PK6 text only; other glyph translations remain blocked."}
         require(origin in origins){"Origin game ID $origin has no reviewed PK6 -> PA9 mapping."}
         require(ball in 1..25){"Ball ID $ball is outside the reviewed Generation 6 range."}
@@ -140,7 +154,10 @@ object Gen6ToLegendsZaPa9 {
             "Resort, Super Training, distributed training, affection, geography, country/region/console metadata and trainer memories are cleared. Source memory/affection values: ${memories.joinToString("/")}.",
             "Unmapped PK6 metadata bytes are omitted only by this explicit Legalise choice: $omittedMetadata.",
             "PA9 defaults: stat nature=nature; Alpha false; display Scale, size scalars, tracker, sociability, fullness/enjoyment, battle state/version, form argument, move records, Technical Record and Tera fields, Mega or temporary-form state and other PA9-only metadata zero; affixed ribbon none.",
-            "The PK6 Bank entry and Legends: Z-A source remain unchanged. One user-chosen empty native PA9 slot in a new copy is written with revision-aware caught/default-form, gender, shiny and English Pokédex registration, retained recovery, persisted reopen verification, and two-sided rollback."
+            if(destinationTrainer==null)
+                "The PK6 Bank entry remains unchanged. This PA9 is temporary in-memory conversion data only; no Legends: Z-A save or slot is opened or written."
+            else
+                "The PK6 Bank entry and Legends: Z-A source remain unchanged. One user-chosen empty native PA9 slot in a new copy is written with revision-aware caught/default-form, gender, shiny and English Pokédex registration, retained recovery, persisted reopen verification, and two-sided rollback."
         )
         return Gen6ToLegendsZaReview(native,species,sourceNick,effects)
     }
