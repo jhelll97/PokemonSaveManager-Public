@@ -45,6 +45,7 @@ object OmegaRubyUi {
             when (child) {
                 is EditText -> styleInput(context, child)
                 is Button -> styleAction(context, child)
+                is LinearLayout -> styleInputRow(context, child)
                 is TextView -> styleText(context, child, index)
             }
             val current = child.layoutParams
@@ -104,6 +105,17 @@ object OmegaRubyUi {
         input.background = roundedCard(context, fieldBackground)
         input.setPadding(dp(context, 14), dp(context, 10), dp(context, 14), dp(context, 10))
         input.minimumHeight = dp(context, 52)
+    }
+
+    private fun styleInputRow(context: Context, row: LinearLayout) {
+        for (index in 0 until row.childCount) {
+            val input = row.getChildAt(index) as? EditText ?: continue
+            styleInput(context, input)
+            (input.layoutParams as? LinearLayout.LayoutParams)?.let { params ->
+                params.rightMargin = dp(context, if (index < row.childCount - 1) 6 else 0)
+                input.layoutParams = params
+            }
+        }
     }
 
     private fun styleAction(context: Context, button: Button) {

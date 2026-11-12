@@ -13,10 +13,10 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Brilliant Diamond/Shining Pearl Trainer Data editor: the shared Omega Ruby page, card, field, label, action and spacing treatment while retaining its native fields and save-copy workflow.
 - Pokémon Legends: Arceus Trainer Data editor: the shared Omega Ruby page, card, field, label, action and spacing treatment while retaining its native fields and save-copy workflow.
 - Pokémon Scarlet/Violet Trainer Data editor: the shared Omega Ruby page, card, field, label, action and spacing treatment while retaining its native fields and save-copy workflow.
+- Pokémon Legends: Z-A Trainer Data editor: the shared Omega Ruby page, card, field, nested Play Time row, label, action and spacing treatment while retaining its native fields and save-copy workflow.
 
 ## Still mismatched
 
-- Trainer Data editor: Legends: Z-A.
 - Generation 1–7 Pokémon Boxes and Party variants.
 - Switch box, pasture, party and Pokémon-storage contents for every supported title.
 - PSE Bank list, detail, destination and transfer-review screens.
