@@ -1949,6 +1949,7 @@ class SwitchReadOnlyActivity : Activity() {
         val directory = File(filesDir, "pse_bank")
         val entries = directory.listFiles()?.filter {
             it.isFile && ((it.name.startsWith("switch_lgpe_") && it.extension.equals("pb7", true)) ||
+                it.extension.equals("pk7", true) ||
                 (it.name.startsWith("switch_swsh_") && it.extension.equals("pk8", true)) ||
                 (it.name.startsWith("switch_bdsp_") && it.extension.equals("pb8", true)) ||
                 (it.name.startsWith("switch_pla_") && it.extension.equals("pa8", true)) ||
@@ -1956,7 +1957,16 @@ class SwitchReadOnlyActivity : Activity() {
                 (it.name.startsWith("switch_za_") && it.extension.equals("pa9", true)))
         }?.sortedBy { it.name }.orEmpty()
         val labels = entries.map { file ->
-            if (file.extension.equals("pb7", true)) {
+            if (file.extension.equals("pk7", true)) {
+                runCatching { Gen7ToLetsGoPb7.review(file.readBytes(), verified.version) }
+                    .fold(
+                        onSuccess = { converted ->
+                            converted.sourceNickname.ifBlank { LetsGoSpeciesNames.name(converted.sourceSpecies) } +
+                                " (#${converted.sourceSpecies}) • Gen 7 PK7 -> ${verified.version.displayName} PB7 • Legalise"
+                        },
+                        onFailure = { file.name + " • blocked for ${verified.version.displayName}" }
+                    )
+            } else if (file.extension.equals("pb7", true)) {
                 val parsed = runCatching { LetsGoPokemonReadOnly.read(file.readBytes()) }.getOrNull()
                 val pokemon = (parsed as? LetsGoSlotRead.Pokemon)?.value
                 if (pokemon == null) file.name + " • unreadable"
@@ -2013,12 +2023,14 @@ class SwitchReadOnlyActivity : Activity() {
             .setTitle("PSE Bank • " + entries.size + " entries for ${verified.version.displayName}")
             .setPositiveButton("Close", null)
         if (entries.isEmpty()) {
-            builder.setMessage("No native Let's Go PB7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, Scarlet/Violet PK9, or Legends: Z-A PA9 entries are stored. Open Pokémon Boxes, choose a Pokémon, then tap Add to PSE Bank.")
+            builder.setMessage("No eligible Gen 7 PK7, native Let's Go PB7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, Scarlet/Violet PK9, or Legends: Z-A PA9 entries are stored. Open Pokémon Boxes, choose a Pokémon, then tap Add to PSE Bank.")
         } else {
             builder.setItems(labels.toTypedArray()) { _, index ->
                 if (session === bound) {
                     val selected = entries[index]
                     when {
+                        selected.extension.equals("pk7", true) ->
+                            showLetsGoGen7BankEntry(bound, selected, verified.version)
                         selected.extension.equals("pk8", true) ->
                             showLetsGoSwordShieldBankEntry(bound, selected, verified.version)
                         selected.extension.equals("pb8", true) ->
@@ -2035,6 +2047,87 @@ class SwitchReadOnlyActivity : Activity() {
             }
         }
         builder.show()
+    }
+
+    private fun showLetsGoGen7BankEntry(
+        bound: SwitchReadSession,
+        file: File,
+        destinationVersion: LetsGoVersion
+    ) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = runCatching { file.canonicalFile }.getOrNull()
+        val opened = runCatching {
+            require(entry != null && entry.parentFile == directory && entry.isFile &&
+                entry.extension.equals("pk7", true)) {
+                "This is not a current Generation 7 PSE Bank entry."
+            }
+            val bank = entry.readBytes()
+            val hash = LetsGoPseBankRestoreEditing.sha256(bank)
+            hash to Gen7ToLetsGoPb7.review(bank, destinationVersion)
+        }
+        val (openedHash, converted) = opened.getOrElse {
+            AlertDialog.Builder(this).setTitle("Gen 7 -> ${destinationVersion.displayName} blocked")
+                .setMessage(
+                    (it.message ?: "No safe conversion is available.") +
+                        "\n\nThe PK7 Bank entry and Let's Go save remain unchanged."
+                )
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val selected = entry ?: return
+        val p = LetsGoPseBankRestoreEditing.inspectBankRecord(converted.nativeRecord)
+        val message = buildString {
+            append("${LetsGoSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n")
+            append("Source: ${selected.name} • preserved checksum-valid 232-byte native PK7\n")
+            append("Reviewed Bank SHA-256: $openedHash\n")
+            append("Explicit destination: ${destinationVersion.displayName}\n")
+            append("Prepared destination: checksum-valid 260-byte native PB7\n\n")
+            append("Exact disclosed conversion effects\n• ")
+            append(converted.effects.joinToString("\n• "))
+            append(
+                "\n\nContinue only if you accept every disclosed Legalise effect. " +
+                    "This cross-title PSE conversion does not claim an official Bank, Transporter or HOME " +
+                    "transfer, trade, encounter record, legality certification, or provenance."
+            )
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Gen 7 -> ${destinationVersion.displayName} • PSE Legalise review")
+            .setMessage(message)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Legalise & choose destination") { _, _ ->
+                try {
+                    require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                    val current = bound.snapshot.inspectLetsGo() as? LetsGoValidation.Verified
+                        ?: error("Reopen a validated native Let's Go destination.")
+                    require(current.version == destinationVersion) {
+                        "The explicit destination title changed. Reopen PSE Bank."
+                    }
+                    val source = selectedSourceUri
+                        ?: error("Reopen the selected ${destinationVersion.displayName} save from PSE.")
+                    require(selected.parentFile == directory && selected.isFile &&
+                        selected.extension.equals("pk7", true)) {
+                        "The Generation 7 Bank entry changed."
+                    }
+                    val bank = selected.readBytes()
+                    val hash = LetsGoPseBankRestoreEditing.sha256(bank)
+                    require(hash == openedHash) {
+                        "The PSE Bank entry changed. Reopen PSE Bank."
+                    }
+                    Gen7ToLetsGoPb7.review(bank, destinationVersion)
+                    startActivity(Intent(this, SwitchLetsGoPseBankRestoreActivity::class.java)
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.bank.entry", selected.name)
+                        .putExtra("pse.bank.sha256", openedHash)
+                        .putExtra("pse.bank.legalise", true)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this).setTitle("Could not prepare Gen 7 conversion")
+                        .setMessage(error.message ?: "Both sources remain unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }.show()
     }
 
     private fun showLetsGoBdspBankEntry(
