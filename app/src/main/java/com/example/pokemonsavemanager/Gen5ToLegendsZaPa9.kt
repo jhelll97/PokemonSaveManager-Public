@@ -23,21 +23,53 @@ object Gen5ToLegendsZaPa9 {
         record: ByteArray,
         destinationTrainer: LegendsZaTrainerRead,
         metadata: Gen1ToSwordShieldMetadata
+    ): Gen5ToLegendsZaReview = reviewInternal(
+        record,
+        destinationTrainer.name,
+        destinationTrainer.gender,
+        destinationTrainer.languageId,
+        metadata,
+        "Legends: Z-A trainer",
+        true
+    )
+
+    fun reviewForLetsGo(
+        record: ByteArray,
+        destinationTrainer: LetsGoTrainerRead,
+        metadata: Gen1ToSwordShieldMetadata
+    ): Gen5ToLegendsZaReview = reviewInternal(
+        record,
+        destinationTrainer.name,
+        destinationTrainer.gender,
+        destinationTrainer.languageId,
+        metadata,
+        "${destinationTrainer.version.displayName} trainer",
+        false
+    )
+
+    private fun reviewInternal(
+        record: ByteArray,
+        destinationTrainerName: String,
+        destinationTrainerGender: Int,
+        destinationLanguageId: Int,
+        metadata: Gen1ToSwordShieldMetadata,
+        destinationTrainerLabel: String,
+        writesLegendsZaSave: Boolean
     ): Gen5ToLegendsZaReview {
         val source = Gen5ToSwordShieldPk8.inspectSource(record)
-        require(destinationTrainer.languageId == 2) {
-            "This bounded route currently requires an English Legends: Z-A destination trainer."
+        require(destinationLanguageId == 2) {
+            "This bounded route currently requires an English $destinationTrainerLabel."
         }
         require(metadata.baseFriendship in 0..255 && metadata.genderRate in -1..8) {
             "The documented species friendship or gender mapping is invalid."
         }
         require(metadata.abilityId == source.abilityId &&
             metadata.abilityNumber == source.abilitySlot) {
-            "The documented Legends: Z-A ability does not exactly match PK5 ability #" +
+            "The documented ability for $destinationTrainerLabel does not exactly match PK5 ability #" +
                 source.abilityId + " in slot " + source.abilitySlot + "."
         }
         require(gender(source.personality, metadata.genderRate) == source.gender) {
-            "The source gender does not match the documented Legends: Z-A species ratio."
+            "The source gender does not match the documented species ratio for $destinationTrainerLabel."
         }
         val profile = LegendsZaPersonalCatalogue.profile(source.species, 0)
             ?: error("Species #${source.species} form 0 has no verified Legends: Z-A profile.")
@@ -68,10 +100,10 @@ object Gen5ToLegendsZaPa9 {
                 !source.nickname.equals(speciesName, ignoreCase = true))
         val seed = MessageDigest.getInstance("SHA-256").apply {
             update(record)
-            update(destinationTrainer.name.toByteArray(StandardCharsets.UTF_8))
+            update(destinationTrainerName.toByteArray(StandardCharsets.UTF_8))
             update(byteArrayOf(
-                destinationTrainer.gender.toByte(),
-                destinationTrainer.languageId.toByte()
+                destinationTrainerGender.toByte(),
+                destinationLanguageId.toByte()
             ))
             update(intBytes(metadata.abilityId))
             update(intBytes(metadata.abilityNumber))
@@ -110,8 +142,8 @@ object Gen5ToLegendsZaPa9 {
         }
         if (nicknamed) packedIvs = packedIvs or 0x80000000L
         w32(pk, 0x74, packedIvs)
-        putText(pk, 0x78, destinationTrainer.name)
-        pk[0x92] = destinationTrainer.gender.toByte()
+        putText(pk, 0x78, destinationTrainerName)
+        pk[0x92] = destinationTrainerGender.toByte()
         pk[0x93] = 1
         pk[0xA2] = source.friendship.toByte()
         putText(pk, 0xB0, source.originalTrainer)
@@ -166,7 +198,7 @@ object Gen5ToLegendsZaPa9 {
                     " to 0x" + modernPid.toString(16).uppercase().padStart(8, '0') +
                     " only to preserve the Generation 5 non-shiny state under the later-generation shiny threshold; this is an explicit PID/provenance Legalise choice.")
             }
-            add("A deterministic encryption constant is bound to the exact PK5, Legends: Z-A trainer and reviewed ability mapping. The Legends: Z-A trainer becomes current handling trainer.")
+            add("A deterministic encryption constant is bound to the exact PK5, $destinationTrainerLabel and reviewed ability mapping. The $destinationTrainerLabel becomes current handling trainer in the generated record.")
             add("Generation 5 egg location #" + source.eggLocation +
                 " maps to 0 and met location #" + source.metLocation +
                 " maps to the documented later-generation transfer marker 30001; source egg and met dates are retained.")
@@ -179,7 +211,11 @@ object Gen5ToLegendsZaPa9 {
                 " are explicitly omitted because this bounded route has no exact PA9 mapping.")
             add("Alpha is false. Display Scale, size scalars, tracker, sociability, fullness/enjoyment, battle state/version, form argument, move records, Technical Record and Tera fields, Mega or temporary-form state and all other PA9-only metadata use reviewed native defaults; affixed ribbon is none.")
             addAll(downstream)
-            add("The PK5 Bank entry and Legends: Z-A source remain unchanged. One reviewed empty native PA9 box slot is written only to a new copy with revision-aware caught/default-form, gender, shiny and English Pokédex registration, retained recovery, persisted reopen verification and two-sided rollback.")
+            if (writesLegendsZaSave) {
+                add("The PK5 Bank entry and Legends: Z-A source remain unchanged. One reviewed empty native PA9 box slot is written only to a new copy with revision-aware caught/default-form, gender, shiny and English Pokédex registration, retained recovery, persisted reopen verification and two-sided rollback.")
+            } else {
+                add("The PK5 Bank entry remains unchanged. The PK7 and PA9 are temporary in-memory conversion data only; no Legends: Z-A save or slot is opened or written.")
+            }
         }
         return Gen5ToLegendsZaReview(
             converted.nativeRecord.copyOf(),

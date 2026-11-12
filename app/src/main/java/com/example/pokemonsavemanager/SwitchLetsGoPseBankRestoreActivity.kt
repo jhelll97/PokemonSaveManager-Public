@@ -66,7 +66,7 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid PB7 to the next unused native storage record in a new save copy. " +
-                "Same-format Let's Go PB7 records remain exact. Eligible Gen 6 PK6, Gen 7 PK7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, Scarlet/Violet PK9, and Legends: Z-A PA9 records require an explicit Legalise review before conversion to title-specific PB7. " +
+                "Same-format Let's Go PB7 records remain exact. Eligible Gen 5 PK5, Gen 6 PK6, Gen 7 PK7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, Scarlet/Violet PK9, and Legends: Z-A PA9 records require an explicit Legalise review before conversion to title-specific PB7. " +
                 "Eggs, save-bound partner forms, unsupported species/forms and destination-invalid moves remain protected."
             textSize = 16f
         })
@@ -153,6 +153,7 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
         val directory = File(filesDir, "pse_bank").canonicalFile
         val entry = File(directory, name).canonicalFile
         val native = entry.name.startsWith("switch_lgpe_") && entry.extension.equals("pb7", true)
+        val gen5 = entry.extension.equals("pk5", true)
         val gen6 = entry.extension.equals("pk6", true)
         val gen7 = entry.extension.equals("pk7", true)
         val swordShield = entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true)
@@ -161,7 +162,7 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
         val scarletViolet = entry.name.startsWith("switch_sv_") && entry.extension.equals("pk9", true)
         val legendsZa = entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true)
         require(entry.parentFile == directory && entry.isFile &&
-            (native || gen6 || gen7 || swordShield || bdsp || legendsArceus || scarletViolet || legendsZa)) {
+            (native || gen5 || gen6 || gen7 || swordShield || bdsp || legendsArceus || scarletViolet || legendsZa)) {
             "This is not a current Let's Go-compatible PSE Bank entry."
         }
         return entry
@@ -184,6 +185,27 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
             }
             LetsGoPseBankRestoreEditing.inspectBankRecord(bytes)
             PreparedLetsGoBank(bytes, hash, emptyList(), false)
+        } else if (entry.extension.equals("pk5", true)) {
+            require(legalise) {
+                "Generation 5 PK5 requires the reviewed Legalise choice from the Let's Go Bank screen."
+            }
+            val metadata = Gen1ToSwordShieldMetadata(
+                intent.getIntExtra("pse.gen5.friendship", -1),
+                intent.getIntExtra("pse.gen5.gender_rate", -2),
+                intent.getIntExtra("pse.gen5.ability_id", 0),
+                intent.getIntExtra("pse.gen5.ability_number", 0)
+            )
+            val destination = readSource()
+            require(LetsGoPseBankRestoreEditing.sha256(destination) == expectedHash) {
+                "The Let's Go source changed. Reopen it from PSE Bank."
+            }
+            val trainer = LetsGoTrainerReadOnly.read(destination)
+            require(trainer.version == version) {
+                "The explicit Let's Go destination title changed. Reopen PSE Bank."
+            }
+            val converted = Gen5ToLetsGoPb7.review(bytes, trainer, metadata)
+            LetsGoPseBankRestoreEditing.inspectBankRecord(converted.nativeRecord)
+            PreparedLetsGoBank(converted.nativeRecord, hash, converted.effects, true)
         } else if (entry.extension.equals("pk6", true)) {
             require(legalise) {
                 "Generation 6 PK6 requires the reviewed Legalise choice from the Let's Go Bank screen."
