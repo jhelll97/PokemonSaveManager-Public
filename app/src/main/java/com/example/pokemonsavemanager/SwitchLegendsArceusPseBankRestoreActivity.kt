@@ -109,6 +109,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                         bankFile().extension.equals("pb7", true) ||
                         bankFile().extension.equals("pk8", true) ||
                         bankFile().extension.equals("pb8", true) ||
+                        bankFile().extension.equals("pk9", true) ||
                         bankFile().extension.equals("pse1", true) ||
                         bankFile().extension.equals("pse2", true) ||
                         bankFile().extension.equals("pk3", true) ||
