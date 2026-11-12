@@ -30,6 +30,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Pokémon Sword/Shield Party selector: the shared dark list surface, rounded native slot actions, typography and spacing while retaining PK8 selection and party-count display.
 - Brilliant Diamond/Shining Pearl Party selector: the shared dark list surface, rounded native slot actions, typography and spacing while retaining PB8 selection and party-count display.
 - Pokémon Legends: Arceus Party selector: the shared dark list surface, rounded native slot actions, typography and spacing while retaining PA8 selection, Alpha/Noble labels and party-count display.
+- Pokémon Scarlet/Violet Party selector: the shared dark list surface, rounded native slot actions, typography and spacing while retaining PK9 selection and party-count display.
 
 ## Still mismatched
 
@@ -38,7 +39,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Remaining Sword/Shield Pokémon detail/editor screens.
 - Remaining Brilliant Diamond/Shining Pearl Pokémon detail/editor screens.
 - Remaining Legends: Arceus Pokémon detail/editor screens.
-- Remaining Scarlet/Violet party and Pokémon detail/editor screens.
+- Remaining Scarlet/Violet Pokémon detail/editor screens.
 - Remaining Legends: Z-A party and Pokémon detail/editor screens.
 - PSE Bank list, detail, destination and transfer-review screens.
 - Pokémon detail and field-editor flows across every supported generation and Switch title.
