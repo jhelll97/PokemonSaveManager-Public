@@ -1949,6 +1949,7 @@ class SwitchReadOnlyActivity : Activity() {
         val directory = File(filesDir, "pse_bank")
         val entries = directory.listFiles()?.filter {
             it.isFile && ((it.name.startsWith("switch_lgpe_") && it.extension.equals("pb7", true)) ||
+                it.extension.equals("pk3", true) ||
                 it.extension.equals("pk4", true) ||
                 it.extension.equals("pk5", true) ||
                 it.extension.equals("pk6", true) ||
@@ -1960,7 +1961,16 @@ class SwitchReadOnlyActivity : Activity() {
                 (it.name.startsWith("switch_za_") && it.extension.equals("pa9", true)))
         }?.sortedBy { it.name }.orEmpty()
         val labels = entries.map { file ->
-            if (file.extension.equals("pk4", true)) {
+            if (file.extension.equals("pk3", true)) {
+                runCatching { Gen3ToSwordShieldPk8.inspectSource(file.readBytes()) }
+                    .fold(
+                        onSuccess = { source ->
+                            source.nickname.ifBlank { LetsGoSpeciesNames.name(source.species) } +
+                                " (#${source.species}) • Gen 3 PK3 -> ${verified.version.displayName} PB7 • Legalise"
+                        },
+                        onFailure = { file.name + " • blocked for ${verified.version.displayName}" }
+                    )
+            } else if (file.extension.equals("pk4", true)) {
                 runCatching { Gen4ToSwordShieldPk8.inspectSource(file.readBytes()) }
                     .fold(
                         onSuccess = { source ->
@@ -2053,12 +2063,14 @@ class SwitchReadOnlyActivity : Activity() {
             .setTitle("PSE Bank • " + entries.size + " entries for ${verified.version.displayName}")
             .setPositiveButton("Close", null)
         if (entries.isEmpty()) {
-            builder.setMessage("No eligible Gen 4 PK4, Gen 5 PK5, Gen 6 PK6, Gen 7 PK7, native Let's Go PB7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, Scarlet/Violet PK9, or Legends: Z-A PA9 entries are stored. Open Pokémon Boxes, choose a Pokémon, then tap Add to PSE Bank.")
+            builder.setMessage("No eligible Gen 3 PK3, Gen 4 PK4, Gen 5 PK5, Gen 6 PK6, Gen 7 PK7, native Let's Go PB7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, Scarlet/Violet PK9, or Legends: Z-A PA9 entries are stored. Open Pokémon Boxes, choose a Pokémon, then tap Add to PSE Bank.")
         } else {
             builder.setItems(labels.toTypedArray()) { _, index ->
                 if (session === bound) {
                     val selected = entries[index]
                     when {
+                        selected.extension.equals("pk3", true) ->
+                            showLetsGoGen3BankEntry(bound, selected, verified.version)
                         selected.extension.equals("pk4", true) ->
                             showLetsGoGen4BankEntry(bound, selected, verified.version)
                         selected.extension.equals("pk5", true) ->
@@ -2083,6 +2095,128 @@ class SwitchReadOnlyActivity : Activity() {
             }
         }
         builder.show()
+    }
+
+    private fun showLetsGoGen3BankEntry(
+        bound: SwitchReadSession,
+        file: File,
+        destinationVersion: LetsGoVersion
+    ) {
+        if (session !== bound) return
+        val directory = File(filesDir, "pse_bank").canonicalFile
+        val entry = runCatching { file.canonicalFile }.getOrNull()
+        val opened = runCatching {
+            require(entry != null && entry.parentFile == directory && entry.isFile &&
+                entry.extension.equals("pk3", true)) {
+                "This is not a current Generation 3 PSE Bank entry."
+            }
+            val bank = entry.readBytes()
+            val source = Gen3ToSwordShieldPk8.inspectSource(bank)
+            val destination = bound.snapshot.bytesCopy()
+            val trainer = LetsGoTrainerReadOnly.read(destination)
+            require(trainer.version == destinationVersion && trainer.languageId == 2) {
+                "This bounded route requires the opened English ${destinationVersion.displayName} trainer."
+            }
+            Triple(bank, source, trainer)
+        }.getOrElse {
+            AlertDialog.Builder(this).setTitle("Gen 3 -> ${destinationVersion.displayName} blocked")
+                .setMessage(
+                    (it.message ?: "No safe conversion is available.") +
+                        "\n\nThe PK3 Bank entry and Let's Go save remain unchanged."
+                )
+                .setPositiveButton("Close", null).show()
+            return
+        }
+        val selected = entry ?: return
+        val openedHash = LetsGoPseBankRestoreEditing.sha256(opened.first)
+        val loading = AlertDialog.Builder(this)
+            .setTitle("Prepare Gen 3 -> ${destinationVersion.displayName}")
+            .setMessage("Loading documented species metadata and building a deterministic reviewed PB7 preview…")
+            .setCancelable(false).create()
+        loading.show()
+        reader.execute {
+            val prepared = runCatching {
+                val metadata = loadGen3SwordShieldMetadata(
+                    opened.second.species, opened.second.abilitySlot
+                )
+                require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                val current = selected.readBytes()
+                require(LetsGoPseBankRestoreEditing.sha256(current) == openedHash) {
+                    "The Generation 3 Bank entry changed during review."
+                }
+                metadata to Gen3ToLetsGoPb7.review(current, opened.third, metadata)
+            }
+            runOnUiThread {
+                if (loading.isShowing) loading.dismiss()
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                prepared.onSuccess { (metadata, converted) ->
+                    val p = LetsGoPseBankRestoreEditing.inspectBankRecord(converted.nativeRecord)
+                    val message = buildString {
+                        append("${LetsGoSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n")
+                        append("Source: ${selected.name} • preserved checksum-valid 80-byte native PK3\n")
+                        append("Reviewed Bank SHA-256: $openedHash\n")
+                        append("Explicit destination: ${destinationVersion.displayName}\n")
+                        append("Prepared destination: checksum-valid 260-byte native PB7\n\n")
+                        append("Exact disclosed conversion effects\n• ")
+                        append(converted.effects.joinToString("\n• "))
+                        append(
+                            "\n\nContinue only if you accept every disclosed Legalise effect. " +
+                                "This backward cross-title PSE conversion does not claim an official Pal Park, " +
+                                "Poké Transfer, Bank or HOME transfer, trade, encounter record, legality " +
+                                "certification, or provenance."
+                        )
+                    }
+                    AlertDialog.Builder(this)
+                        .setTitle("Gen 3 -> ${destinationVersion.displayName} • PSE Legalise review")
+                        .setMessage(message).setNegativeButton("Cancel", null)
+                        .setPositiveButton("Legalise & choose destination") { _, _ ->
+                            try {
+                                require(session === bound) { "The active save changed. Reopen PSE Bank." }
+                                val source = selectedSourceUri
+                                    ?: error("Reopen the selected ${destinationVersion.displayName} save from PSE.")
+                                require(selected.parentFile == directory && selected.isFile &&
+                                    selected.extension.equals("pk3", true)) {
+                                    "The Generation 3 Bank entry changed."
+                                }
+                                val currentBank = selected.readBytes()
+                                require(LetsGoPseBankRestoreEditing.sha256(currentBank) == openedHash) {
+                                    "The PSE Bank entry changed. Reopen PSE Bank."
+                                }
+                                val destination = readSelectedSwitchSource(source)
+                                require(LetsGoPseBankRestoreEditing.sha256(destination) ==
+                                    bound.snapshot.sourceSha256) {
+                                    "The Let's Go source changed. Reopen it from PSE."
+                                }
+                                val trainer = LetsGoTrainerReadOnly.read(destination)
+                                require(trainer.version == destinationVersion) {
+                                    "The explicit destination title changed. Reopen PSE Bank."
+                                }
+                                Gen3ToLetsGoPb7.review(currentBank, trainer, metadata)
+                                startActivity(Intent(this, SwitchLetsGoPseBankRestoreActivity::class.java)
+                                    .setData(source)
+                                    .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                                    .putExtra("pse.bank.entry", selected.name)
+                                    .putExtra("pse.bank.sha256", openedHash)
+                                    .putExtra("pse.bank.legalise", true)
+                                    .putExtra("pse.gen3.friendship", metadata.baseFriendship)
+                                    .putExtra("pse.gen3.gender_rate", metadata.genderRate)
+                                    .putExtra("pse.gen3.ability_id", metadata.abilityId)
+                                    .putExtra("pse.gen3.ability_number", metadata.abilityNumber)
+                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                            } catch (error: Exception) {
+                                AlertDialog.Builder(this).setTitle("Could not prepare Gen 3 conversion")
+                                    .setMessage(error.message ?: "Both sources remain unchanged.")
+                                    .setPositiveButton("Close", null).show()
+                            }
+                        }.show()
+                }.onFailure {
+                    AlertDialog.Builder(this).setTitle("Gen 3 -> ${destinationVersion.displayName} blocked")
+                        .setMessage((it.message ?: "No safe conversion is available.") +
+                            "\n\nThe PK3 Bank entry and Let's Go save remain unchanged.")
+                        .setPositiveButton("Close", null).show()
+                }
+            }
+        }
     }
 
     private fun showLetsGoGen4BankEntry(

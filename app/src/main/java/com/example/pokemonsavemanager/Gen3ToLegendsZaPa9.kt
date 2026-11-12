@@ -23,17 +23,49 @@ object Gen3ToLegendsZaPa9 {
         record: ByteArray,
         destinationTrainer: LegendsZaTrainerRead,
         metadata: Gen1ToSwordShieldMetadata
+    ): Gen3ToLegendsZaReview = reviewInternal(
+        record,
+        destinationTrainer.name,
+        destinationTrainer.gender,
+        destinationTrainer.languageId,
+        metadata,
+        "Legends: Z-A trainer",
+        true
+    )
+
+    fun reviewForLetsGo(
+        record: ByteArray,
+        destinationTrainer: LetsGoTrainerRead,
+        metadata: Gen1ToSwordShieldMetadata
+    ): Gen3ToLegendsZaReview = reviewInternal(
+        record,
+        destinationTrainer.name,
+        destinationTrainer.gender,
+        destinationTrainer.languageId,
+        metadata,
+        "${destinationTrainer.version.displayName} trainer",
+        false
+    )
+
+    private fun reviewInternal(
+        record: ByteArray,
+        destinationTrainerName: String,
+        destinationTrainerGender: Int,
+        destinationLanguageId: Int,
+        metadata: Gen1ToSwordShieldMetadata,
+        destinationTrainerLabel: String,
+        writesLegendsZaSave: Boolean
     ): Gen3ToLegendsZaReview {
         val source = Gen3ToSwordShieldPk8.inspectSource(record)
-        require(destinationTrainer.languageId == 2) {
-            "This bounded route currently requires an English Legends: Z-A destination trainer."
+        require(destinationLanguageId == 2) {
+            "This bounded route currently requires an English $destinationTrainerLabel."
         }
         require(metadata.baseFriendship in 0..255 && metadata.genderRate in -1..8) {
             "The documented species friendship or gender mapping is invalid."
         }
         require(metadata.abilityId in 1..255 &&
             metadata.abilityNumber == source.abilitySlot) {
-            "The documented Legends: Z-A ability does not match PK3 ability slot " +
+            "The documented ability for $destinationTrainerLabel does not match PK3 ability slot " +
                 source.abilitySlot + "."
         }
         val profile = LegendsZaPersonalCatalogue.profile(source.species, 0)
@@ -68,10 +100,10 @@ object Gen3ToLegendsZaPa9 {
         val ball = if (source.ball == 0) 4 else source.ball
         val seed = MessageDigest.getInstance("SHA-256").apply {
             update(record)
-            update(destinationTrainer.name.toByteArray(StandardCharsets.UTF_8))
+            update(destinationTrainerName.toByteArray(StandardCharsets.UTF_8))
             update(byteArrayOf(
-                destinationTrainer.gender.toByte(),
-                destinationTrainer.languageId.toByte()
+                destinationTrainerGender.toByte(),
+                destinationLanguageId.toByte()
             ))
             update(intBytes(metadata.abilityId))
             update(intBytes(metadata.abilityNumber))
@@ -109,8 +141,8 @@ object Gen3ToLegendsZaPa9 {
         }
         if (nicknamed) packedIvs = packedIvs or 0x80000000L
         w32(pk, 0x74, packedIvs)
-        putText(pk, 0x78, destinationTrainer.name)
-        pk[0x92] = destinationTrainer.gender.toByte()
+        putText(pk, 0x78, destinationTrainerName)
+        pk[0x92] = destinationTrainerGender.toByte()
         pk[0x93] = 1
         pk[0xA2] = source.friendship.toByte()
         putText(pk, 0xB0, source.originalTrainer)
@@ -162,7 +194,7 @@ object Gen3ToLegendsZaPa9 {
                     " to 0x" + modernPid.toString(16).uppercase().padStart(8, '0') +
                     " only to preserve the Gen 3 non-shiny state under the later-generation shiny threshold; this is an explicit PID/provenance Legalise choice.")
             }
-            add("A deterministic encryption constant is bound to the exact PK3, Legends: Z-A trainer and reviewed ability mapping. The Legends: Z-A trainer becomes current handling trainer.")
+            add("A deterministic encryption constant is bound to the exact PK3, $destinationTrainerLabel and reviewed ability mapping. The $destinationTrainerLabel becomes current handling trainer in the generated record.")
             add("Source met-location byte " + source.metLocation +
                 ", markings 0x" + source.markings.toString(16).uppercase().padStart(2, '0') +
                 " and ribbon/obedience word 0x" +
@@ -176,7 +208,11 @@ object Gen3ToLegendsZaPa9 {
             }
             add("Alpha is false. Display Scale, size scalars, tracker, sociability, fullness/enjoyment, battle state/version, form argument, move records, Technical Record and Tera fields, Mega or temporary-form state and all other PA9-only metadata use reviewed native defaults; affixed ribbon is none.")
             addAll(downstream)
-            add("The PK3 Bank entry and Legends: Z-A source remain unchanged. One reviewed empty native PA9 box slot is written only to a new copy with revision-aware caught/default-form, gender, shiny and English Pokédex registration, retained recovery, persisted reopen verification and two-sided rollback.")
+            if (writesLegendsZaSave) {
+                add("The PK3 Bank entry and Legends: Z-A source remain unchanged. One reviewed empty native PA9 box slot is written only to a new copy with revision-aware caught/default-form, gender, shiny and English Pokédex registration, retained recovery, persisted reopen verification and two-sided rollback.")
+            } else {
+                add("The PK3 Bank entry remains unchanged. The PK7 and PA9 are temporary in-memory conversion data only; no Legends: Z-A save or slot is opened or written.")
+            }
         }
         return Gen3ToLegendsZaReview(
             converted.nativeRecord.copyOf(),
