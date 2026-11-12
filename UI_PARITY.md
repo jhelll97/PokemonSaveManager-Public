@@ -37,6 +37,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Pokémon Sword/Shield Pokémon detail dialog: the shared dark list surface, selectable teal PK8 data card and rounded actions while retaining every field, conditional action and Bank deposit, removal and restore behavior.
 - Brilliant Diamond/Shining Pearl Pokémon detail dialog: the shared dark list surface, selectable teal PB8 data card and rounded actions while retaining every field, conditional action and Bank deposit behavior.
 - Pokémon Legends: Arceus Pokémon detail dialog: the shared dark list surface, selectable teal PA8 data card and rounded actions while retaining every field, title-specific conditional action and Bank deposit behavior.
+- Pokémon Scarlet/Violet Pokémon detail dialog: the shared dark list surface, selectable teal PK9 data card and rounded actions while retaining every field, title-specific conditional action and Bank deposit behavior.
 
 ## Still mismatched
 
@@ -45,7 +46,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Remaining Sword/Shield Pokémon editor screens.
 - Remaining Brilliant Diamond/Shining Pearl Pokémon editor screens.
 - Remaining Legends: Arceus Pokémon editor screens.
-- Remaining Scarlet/Violet Pokémon detail/editor screens.
+- Remaining Scarlet/Violet Pokémon editor screens.
 - Remaining Legends: Z-A Pokémon detail/editor screens.
 - PSE Bank list, detail, destination and transfer-review screens.
 - Pokémon detail and field-editor flows across every supported generation and Switch title.
