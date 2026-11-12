@@ -165,6 +165,7 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
                 BdspPseBankRestoreEditing.stage(
                     source, hash, bank, destination.box, destination.position,
                     registerCaughtEnglish = bankFile().extension.equals("pk8", true) ||
+                        bankFile().extension.equals("pa8", true) ||
                         bankFile().extension.equals("pb7", true) ||
                         bankFile().extension.equals("pk7", true) ||
                         bankFile().extension.equals("pse1", true) ||
