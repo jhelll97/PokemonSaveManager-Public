@@ -292,10 +292,39 @@ object Gen1ToSwordShieldPk8 {
         record: ByteArray,
         trainer: LegendsZaTrainerRead,
         metadata: Gen1ToSwordShieldMetadata
+    ): Gen1ToPk7Bridge = buildLegendsZaBridgeInternal(
+        record,
+        trainer.name,
+        trainer.gender,
+        trainer.languageId,
+        metadata,
+        "Legends: Z-A trainer"
+    )
+
+    internal fun buildLetsGoBridge(
+        record: ByteArray,
+        trainer: LetsGoTrainerRead,
+        metadata: Gen1ToSwordShieldMetadata
+    ): Gen1ToPk7Bridge = buildLegendsZaBridgeInternal(
+        record,
+        trainer.name,
+        trainer.gender,
+        trainer.languageId,
+        metadata,
+        "${trainer.version.displayName} trainer"
+    )
+
+    private fun buildLegendsZaBridgeInternal(
+        record: ByteArray,
+        trainerName: String,
+        trainerGender: Int,
+        trainerLanguageId: Int,
+        metadata: Gen1ToSwordShieldMetadata,
+        trainerLabel: String
     ): Gen1ToPk7Bridge {
         val source = inspectSource(record)
-        require(trainer.languageId == 2) {
-            "This bounded route currently requires an English Legends: Z-A destination trainer."
+        require(trainerLanguageId == 2) {
+            "This bounded route currently requires an English $trainerLabel."
         }
         validateMetadata(metadata)
         val profile = LegendsZaPersonalCatalogue.profile(source.species, 0)
@@ -312,7 +341,7 @@ object Gen1ToSwordShieldPk8 {
             }
         }
         val pk7 = buildPk7Bridge(
-            record, source, trainer.name, trainer.gender, trainer.languageId,
+            record, source, trainerName, trainerGender, trainerLanguageId,
             metadata, profile.growth, normalizedPp
         )
         return Gen1ToPk7Bridge(

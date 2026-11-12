@@ -18,10 +18,30 @@ object Gen1ToLegendsZaPa9 {
         record: ByteArray,
         destinationTrainer: LegendsZaTrainerRead,
         metadata: Gen1ToSwordShieldMetadata
+    ): Gen1ToLegendsZaReview = reviewInternal(
+        Gen1ToSwordShieldPk8.buildLegendsZaBridge(record, destinationTrainer, metadata),
+        metadata,
+        "Legends: Z-A trainer",
+        true
+    )
+
+    fun reviewForLetsGo(
+        record: ByteArray,
+        destinationTrainer: LetsGoTrainerRead,
+        metadata: Gen1ToSwordShieldMetadata
+    ): Gen1ToLegendsZaReview = reviewInternal(
+        Gen1ToSwordShieldPk8.buildLetsGoBridge(record, destinationTrainer, metadata),
+        metadata,
+        "${destinationTrainer.version.displayName} trainer",
+        false
+    )
+
+    private fun reviewInternal(
+        bridge: Gen1ToPk7Bridge,
+        metadata: Gen1ToSwordShieldMetadata,
+        destinationTrainerLabel: String,
+        writesLegendsZaSave: Boolean
     ): Gen1ToLegendsZaReview {
-        val bridge = Gen1ToSwordShieldPk8.buildLegendsZaBridge(
-            record, destinationTrainer, metadata
-        )
         val source = bridge.source
         val converted = Gen7ToLegendsZaPa9.review(bridge.pk7)
         val shiny = source.dvs.size >= 5 &&
@@ -55,15 +75,19 @@ object Gen1ToLegendsZaPa9 {
                 " is normalized to Legends: Z-A maximum PP " +
                 bridge.normalizedPp.joinToString("/") + " while retaining PP-Up counts " +
                 source.ppUps.joinToString("/") + "; unsupported moves remain blocked.")
-            add("SID is generated as 0. Encryption constant, PID and IVs are deterministic Legalise values bound to the PSE1 bytes, Legends: Z-A trainer and reviewed species metadata; PID does not certify origin.")
+            add("SID is generated as 0. Encryption constant, PID and IVs are deterministic Legalise values bound to the PSE1 bytes, $destinationTrainerLabel and reviewed species metadata; PID does not certify origin.")
             add("Ability " + metadata.abilityId + " in slot " +
                 metadata.abilityNumber + ", base friendship " +
                 metadata.baseFriendship + " and gender ratio " +
                 metadata.genderRate +
                 " are the documented metadata accepted for this PA9 review.")
-            add("The bridge uses generated Red origin ID 35, Poké Ball, Poké Transporter met location 30013, unset encounter date, English language and the Legends: Z-A trainer as handling trainer. The legacy PSE1 record does not identify Red, Blue or Yellow, so this is an explicit provenance Legalise choice.")
+            add("The bridge uses generated Red origin ID 35, Poké Ball, Poké Transporter met location 30013, unset encounter date, English language and the $destinationTrainerLabel as handling trainer. The legacy PSE1 record does not identify Red, Blue or Yellow, so this is an explicit provenance Legalise choice.")
             addAll(downstream)
-            add("The PSE1 Bank entry and Legends: Z-A source remain unchanged. One reviewed empty native PA9 box slot is written only to a new copy with the required native caught registration, retained recovery, persisted reopen verification and two-sided rollback.")
+            if (writesLegendsZaSave) {
+                add("The PSE1 Bank entry and Legends: Z-A source remain unchanged. One reviewed empty native PA9 box slot is written only to a new copy with the required native caught registration, retained recovery, persisted reopen verification and two-sided rollback.")
+            } else {
+                add("The PSE1 Bank entry remains unchanged. The PK7 and PA9 are temporary in-memory conversion data only; no Legends: Z-A save or slot is opened or written.")
+            }
         }
         return Gen1ToLegendsZaReview(
             converted.nativeRecord.copyOf(),
