@@ -1521,6 +1521,7 @@ class SwitchReadOnlyActivity : Activity() {
             setOnClickListener { dialog.dismiss(); if (session === bound) showLetsGoStorage(bound, page + 1) }
         }, LinearLayout.LayoutParams(0, -2, 1f))
         list.addView(nav)
+        OmegaRubyUi.styleStorageList(this, list)
         dialog.show()
     }
 

@@ -100,6 +100,39 @@ object OmegaRubyUi {
         }
     }
 
+    fun styleStorageList(context: Context, root: LinearLayout) {
+        root.setBackgroundColor(pageBackground)
+        root.setPadding(dp(context, 12), dp(context, 12), dp(context, 12), dp(context, 12))
+
+        for (index in 0 until root.childCount) {
+            val child = root.getChildAt(index)
+            when (child) {
+                is Button -> styleAction(context, child)
+                is TextView -> {
+                    child.textSize = 14f
+                    child.setTextColor(text)
+                    child.background = roundedCard(context)
+                    child.setPadding(dp(context, 14), dp(context, 12), dp(context, 14), dp(context, 12))
+                }
+                is LinearLayout -> {
+                    for (buttonIndex in 0 until child.childCount) {
+                        val button = child.getChildAt(buttonIndex) as? Button ?: continue
+                        styleAction(context, button)
+                        (button.layoutParams as? LinearLayout.LayoutParams)?.let { params ->
+                            params.leftMargin = dp(context, if (buttonIndex > 0) 4 else 0)
+                            params.rightMargin = dp(context, if (buttonIndex < child.childCount - 1) 4 else 0)
+                            button.layoutParams = params
+                        }
+                    }
+                }
+            }
+            (child.layoutParams as? LinearLayout.LayoutParams)?.let { params ->
+                params.bottomMargin = dp(context, if (child is TextView) 12 else 8)
+                child.layoutParams = params
+            }
+        }
+    }
+
     fun scrollingPage(context: Context, content: View): View = ScrollView(context).apply {
         setBackgroundColor(pageBackground)
         isFillViewport = true

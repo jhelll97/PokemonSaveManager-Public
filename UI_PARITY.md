@@ -20,11 +20,12 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Pokémon Legends: Arceus Party Move screen: the shared Omega Ruby workflow hierarchy, status card, review action, typography and spacing while retaining native PA8 party and pasture behavior.
 - Pokémon Scarlet/Violet Party Move screen: the shared Omega Ruby workflow hierarchy, status card, review action, typography and spacing while retaining native PK9 party and PC storage behavior.
 - Pokémon Legends: Z-A Party Move screen: the shared Omega Ruby workflow hierarchy, status card, review action, typography and spacing while retaining native PA9 bodies, box footers and party tails.
+- Let’s Go Pikachu/Eevee Pokémon storage page: dark list surface, teal summary card, rounded slot and pager buttons, typography and spacing while retaining native ordering and paging.
 
 ## Still mismatched
 
 - Generation 1–7 Pokémon Boxes and Party variants.
-- Remaining Let’s Go box, party and Pokémon-storage screens.
+- Remaining Let’s Go party, storage-pool and Pokémon detail/editor screens.
 - Remaining Sword/Shield box, party and Pokémon-storage screens.
 - Remaining Brilliant Diamond/Shining Pearl box, party and Pokémon-storage screens.
 - Remaining Legends: Arceus box, pasture, party and Pokémon-storage screens.
