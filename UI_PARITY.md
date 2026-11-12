@@ -25,6 +25,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Brilliant Diamond/Shining Pearl Pokémon box page: the shared dark list surface, teal summary card, rounded native slot and pager buttons, typography and spacing while retaining native PB8 selection and box paging.
 - Pokémon Legends: Arceus pasture page: the shared dark list surface, teal summary card, rounded native editing, slot and pager buttons, typography and spacing while retaining pasture unlock, naming, PA8 selection and paging behavior.
 - Pokémon Scarlet/Violet Pokémon box page: the shared dark list surface, teal summary card, rounded native slot and pager buttons, typography and spacing while retaining PK9 selection, ride-Pokémon separation and box paging.
+- Pokémon Legends: Z-A Pokémon box page: the shared dark list surface, teal summary card, rounded native slot and pager buttons, typography and spacing while retaining PA9 selection, box-footers, party tails and box paging.
 
 ## Still mismatched
 
@@ -34,7 +35,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Remaining Brilliant Diamond/Shining Pearl party and Pokémon detail/editor screens.
 - Remaining Legends: Arceus party and Pokémon detail/editor screens.
 - Remaining Scarlet/Violet party and Pokémon detail/editor screens.
-- Remaining Legends: Z-A box, party and Pokémon-storage screens.
+- Remaining Legends: Z-A party and Pokémon detail/editor screens.
 - PSE Bank list, detail, destination and transfer-review screens.
 - Pokémon detail and field-editor flows across every supported generation and Switch title.
 - Safe Backups screens.
