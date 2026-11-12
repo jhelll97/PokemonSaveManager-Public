@@ -60,7 +60,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid native PK9 to an empty PC-box slot you choose in a new save copy. " +
-                "Native PK9 entries remain byte-exact. Eligible Gen 1 PSE1, Gen 2 PSE2, Gen 3 PK3, Gen 4 PK4, Gen 5 PK5, Gen 6 PK6, Generation 7 PK7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, and Legends: Z-A PA9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Native PK9 entries remain byte-exact. Eligible Gen 1 PSE1, Gen 2 PSE2, Gen 3 PK3, Gen 4 PK4, Gen 5 PK5, Gen 6 PK6, Generation 7 PK7, Let's Go PB7, Sword/Shield PK8, BDSP PB8, Legends: Arceus PA8, and Legends: Z-A PA9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
                 "Unsupported species, forms, items, moves, limits, or text remain blocked; this PSE conversion does not certify encounter, ability, Tera, or moveset legality."
             textSize = 16f
         })
@@ -122,6 +122,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                         bankExtension.equals("pk3", true) ||
                         bankExtension.equals("pk4", true) ||
                         bankExtension.equals("pk5", true) ||
+                        bankExtension.equals("pb7", true) ||
                         bankExtension.equals("pk7", true)
                 )
             }
