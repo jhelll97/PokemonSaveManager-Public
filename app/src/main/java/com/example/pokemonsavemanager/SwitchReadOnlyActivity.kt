@@ -13191,7 +13191,9 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Next"; isEnabled = box < 31
             setOnClickListener { dialog.dismiss(); if (session === bound) showScarletVioletBox(bound, box + 1) }
         }, LinearLayout.LayoutParams(0, -2, 1f))
-        list.addView(nav); dialog.show()
+        list.addView(nav)
+        OmegaRubyUi.styleStorageList(this, list)
+        dialog.show()
     }
 
     private fun showScarletVioletPokemon(bound: SwitchReadSession, location: String, read: ScarletVioletSlotRead) {
