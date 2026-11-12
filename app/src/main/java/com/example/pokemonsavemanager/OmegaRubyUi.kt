@@ -100,6 +100,56 @@ object OmegaRubyUi {
         }
     }
 
+    fun stylePokemonEditor(context: Context, root: LinearLayout, status: TextView) {
+        root.setBackgroundColor(pageBackground)
+        root.setPadding(dp(context, 16), dp(context, 24), dp(context, 16), dp(context, 20))
+
+        for (index in 0 until root.childCount) {
+            val child = root.getChildAt(index)
+            when {
+                child is Button -> styleAction(context, child)
+                child is EditText -> styleInput(context, child)
+                child === status && child is TextView -> {
+                    child.textSize = 14f
+                    child.setTextColor(text)
+                    child.background = roundedCard(context)
+                    child.setPadding(dp(context, 14), dp(context, 12), dp(context, 14), dp(context, 12))
+                }
+                child is TextView && index == 0 -> {
+                    child.textSize = 28f
+                    child.typeface = Typeface.DEFAULT_BOLD
+                    child.setTextColor(text)
+                    child.setPadding(0, 0, 0, dp(context, 4))
+                }
+                child is TextView && index == 1 -> {
+                    child.textSize = 15f
+                    child.typeface = Typeface.DEFAULT_BOLD
+                    child.setTextColor(sectionText)
+                    child.setPadding(0, 0, 0, dp(context, 6))
+                }
+                child is TextView && index == 2 -> {
+                    child.textSize = 14f
+                    child.setTextColor(mutedText)
+                    child.setPadding(0, 0, 0, dp(context, 10))
+                }
+                child is TextView -> {
+                    val sizeSp = child.textSize / context.resources.displayMetrics.scaledDensity
+                    child.textSize = if (sizeSp >= 16f) 15f else 13f
+                    child.typeface = if (sizeSp >= 16f) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                    child.setTextColor(if (sizeSp >= 16f) sectionText else mutedText)
+                    child.setPadding(dp(context, 4), dp(context, 6), dp(context, 4), dp(context, 2))
+                }
+            }
+            val current = child.layoutParams
+            child.layoutParams = LinearLayout.LayoutParams(
+                current?.width ?: LinearLayout.LayoutParams.MATCH_PARENT,
+                current?.height ?: LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dp(context, if (child is EditText || child is Button || child === status) 10 else 4)
+            }
+        }
+    }
+
     fun styleStorageList(context: Context, root: LinearLayout) {
         root.setBackgroundColor(pageBackground)
         root.setPadding(dp(context, 12), dp(context, 12), dp(context, 12), dp(context, 12))
