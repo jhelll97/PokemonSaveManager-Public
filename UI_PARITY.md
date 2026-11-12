@@ -47,6 +47,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Let’s Go Pikachu/Eevee Pokémon Trainer ID editor: the shared editor hierarchy, teal validation and numeric input cards, cyan labels and rounded actions while retaining 16-bit ID bounds, exact-field review, derived shiny-status disclosure, verified-copy saving, recovery backup and field navigation.
 - Let’s Go Pikachu/Eevee Pokémon Move 1 editor: the shared editor hierarchy, teal validation and PP input cards, cyan labels and rounded actions while retaining the native move catalog, preserved PP Ups, exact PP limits, before-and-after review, verified-copy saving, recovery backup and field navigation.
 - Let’s Go Pikachu/Eevee Pokémon Move 2 editor: the shared editor hierarchy, teal validation and PP input cards, cyan labels and rounded actions while retaining empty-slot handling, the native move catalog, preserved PP Ups, exact PP limits, before-and-after review, verified-copy saving, recovery backup and field navigation.
+- Let’s Go Pikachu/Eevee Pokémon Move 3 editor: the shared editor hierarchy, teal validation and PP input cards, cyan labels and rounded actions while retaining empty-slot handling, the native move catalog, preserved PP Ups, exact PP limits, before-and-after review, verified-copy saving, recovery backup and field navigation.
 
 ## Still mismatched
 
