@@ -1666,9 +1666,9 @@ class SwitchReadOnlyActivity : Activity() {
                 )
             }
         })
-        val scroll = ScrollView(this).apply { addView(content) }
+        OmegaRubyUi.styleStorageList(this, content)
         val dialog = AlertDialog.Builder(this).setTitle("Storage #${slot.index + 1} • Pokémon Details")
-            .setView(scroll).setNegativeButton("Close", null).create()
+            .setView(OmegaRubyUi.scrollingPage(this, content)).setNegativeButton("Close", null).create()
         dialog.setOnShowListener {
             bank.setOnClickListener {
                 if (session !== bound) { dialog.dismiss(); return@setOnClickListener }
