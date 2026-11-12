@@ -28,13 +28,14 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Pokémon Legends: Z-A Pokémon box page: the shared dark list surface, teal summary card, rounded native slot and pager buttons, typography and spacing while retaining PA9 selection, box-footers, party tails and box paging.
 - Let’s Go Pikachu/Eevee Party selector: the shared dark list surface, rounded six-slot actions, typography and spacing while retaining native party pointers and Pokémon selection.
 - Pokémon Sword/Shield Party selector: the shared dark list surface, rounded native slot actions, typography and spacing while retaining PK8 selection and party-count display.
+- Brilliant Diamond/Shining Pearl Party selector: the shared dark list surface, rounded native slot actions, typography and spacing while retaining PB8 selection and party-count display.
 
 ## Still mismatched
 
 - Generation 1–7 Pokémon Boxes and Party variants.
 - Remaining Let’s Go storage-pool and Pokémon detail/editor screens.
 - Remaining Sword/Shield Pokémon detail/editor screens.
-- Remaining Brilliant Diamond/Shining Pearl party and Pokémon detail/editor screens.
+- Remaining Brilliant Diamond/Shining Pearl Pokémon detail/editor screens.
 - Remaining Legends: Arceus party and Pokémon detail/editor screens.
 - Remaining Scarlet/Violet party and Pokémon detail/editor screens.
 - Remaining Legends: Z-A party and Pokémon detail/editor screens.
