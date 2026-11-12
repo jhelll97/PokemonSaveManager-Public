@@ -68,6 +68,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Pokémon Sword/Shield Pokémon Experience editor: the shared editor hierarchy, teal validation and numeric input cards, cyan labels and rounded actions while retaining native box and party PK8 selection, species and form growth-curve bounds, Egg and unverified-form protection, derived Level and cached HP and battle-stat rebuilding, before-and-after review, verified-copy saving, recovery backup and field navigation.
 - Pokémon Sword/Shield Pokémon Original Trainer editor: the shared editor hierarchy, teal validation and text-input cards, cyan labels and rounded actions while retaining native box and party PK8 selection, exact trainer-name review, verified-copy saving, recovery backup and bidirectional field navigation.
 - Pokémon Sword/Shield Pokémon Trainer ID editor: the shared editor hierarchy, teal validation and numeric input cards, cyan labels and rounded actions while retaining native box and party PK8 selection, 0–65535 bounds, derived shiny-status review, verified-copy saving, recovery backup and bidirectional field navigation.
+- Pokémon Sword/Shield Pokémon Move 1 editor: the shared editor hierarchy, teal validation and PP input cards, cyan labels and rounded actions while retaining native box and party PK8 selection, the usable Sword/Shield move catalog, preserved PP Ups, exact PP limits, before-and-after review, verified-copy saving, recovery backup and bidirectional field navigation.
 
 ## Still mismatched
 
