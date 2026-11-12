@@ -10,10 +10,11 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Full-page Switch Pokémon Boxes selector.
 - Let’s Go Pikachu/Eevee Trainer Data editor: dark navy page, teal rounded status and input cards, cyan field labels, blue primary actions, matching typography and spacing.
 - Pokémon Sword/Shield Trainer Data editor: the same shared Omega Ruby page, card, field, label, action and spacing treatment while retaining its native fields and save-copy workflow.
+- Brilliant Diamond/Shining Pearl Trainer Data editor: the shared Omega Ruby page, card, field, label, action and spacing treatment while retaining its native fields and save-copy workflow.
 
 ## Still mismatched
 
-- Trainer Data editors: Brilliant Diamond/Shining Pearl, Legends: Arceus, Scarlet/Violet and Legends: Z-A.
+- Trainer Data editors: Legends: Arceus, Scarlet/Violet and Legends: Z-A.
 - Generation 1–7 Pokémon Boxes and Party variants.
 - Switch box, pasture, party and Pokémon-storage contents for every supported title.
 - PSE Bank list, detail, destination and transfer-review screens.
