@@ -16,13 +16,15 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Pokémon Legends: Z-A Trainer Data editor: the shared Omega Ruby page, card, field, nested Play Time row, label, action and spacing treatment while retaining its native fields and save-copy workflow.
 - Let’s Go Pikachu/Eevee Party Move screen: shared Omega Ruby title hierarchy, cyan section label, teal status card, blue review action, typography and spacing.
 - Pokémon Sword/Shield Party Move screen: the shared Omega Ruby workflow hierarchy, status card, review action, typography and spacing while retaining native PK8 movement behavior.
+- Brilliant Diamond/Shining Pearl Party Move screen: the shared Omega Ruby workflow hierarchy, status card, review action, typography and spacing while retaining native PB8 movement behavior.
 
 ## Still mismatched
 
 - Generation 1–7 Pokémon Boxes and Party variants.
 - Remaining Let’s Go box, party and Pokémon-storage screens.
 - Remaining Sword/Shield box, party and Pokémon-storage screens.
-- Brilliant Diamond/Shining Pearl, Legends: Arceus, Scarlet/Violet and Legends: Z-A box, pasture, party and Pokémon-storage screens.
+- Remaining Brilliant Diamond/Shining Pearl box, party and Pokémon-storage screens.
+- Legends: Arceus, Scarlet/Violet and Legends: Z-A box, pasture, party and Pokémon-storage screens.
 - PSE Bank list, detail, destination and transfer-review screens.
 - Pokémon detail and field-editor flows across every supported generation and Switch title.
 - Safe Backups screens.
