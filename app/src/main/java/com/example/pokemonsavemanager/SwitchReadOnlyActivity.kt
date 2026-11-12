@@ -1447,10 +1447,20 @@ class SwitchReadOnlyActivity : Activity() {
         val storage = bound.letsGoStorage ?: return
         val party = storage.party()
         val labels = party.map { "Party ${it.position}: " + (it.storage?.let { slot -> slotLabel(slot) } ?: "Empty") }
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        labels.forEachIndexed { position, label ->
+            list.addView(Button(this).apply {
+                text = label
+                isAllCaps = false
+                setOnClickListener {
+                    if (session === bound) party[position].storage?.let { showLetsGoPokemon(bound, it) }
+                }
+            })
+        }
+        OmegaRubyUi.styleStorageList(this, list)
         AlertDialog.Builder(this).setTitle("${bound.displayName} • Party")
-            .setItems(labels.toTypedArray()) { _, position ->
-                if (session === bound) party[position].storage?.let { showLetsGoPokemon(bound, it) }
-            }.setNegativeButton("Close", null).show()
+            .setView(OmegaRubyUi.scrollingPage(this, list))
+            .setNegativeButton("Close", null).show()
     }
 
     private fun showLetsGoStoragePoolMap(bound: SwitchReadSession) {

@@ -26,11 +26,12 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Pokémon Legends: Arceus pasture page: the shared dark list surface, teal summary card, rounded native editing, slot and pager buttons, typography and spacing while retaining pasture unlock, naming, PA8 selection and paging behavior.
 - Pokémon Scarlet/Violet Pokémon box page: the shared dark list surface, teal summary card, rounded native slot and pager buttons, typography and spacing while retaining PK9 selection, ride-Pokémon separation and box paging.
 - Pokémon Legends: Z-A Pokémon box page: the shared dark list surface, teal summary card, rounded native slot and pager buttons, typography and spacing while retaining PA9 selection, box-footers, party tails and box paging.
+- Let’s Go Pikachu/Eevee Party selector: the shared dark list surface, rounded six-slot actions, typography and spacing while retaining native party pointers and Pokémon selection.
 
 ## Still mismatched
 
 - Generation 1–7 Pokémon Boxes and Party variants.
-- Remaining Let’s Go party, storage-pool and Pokémon detail/editor screens.
+- Remaining Let’s Go storage-pool and Pokémon detail/editor screens.
 - Remaining Sword/Shield party and Pokémon detail/editor screens.
 - Remaining Brilliant Diamond/Shining Pearl party and Pokémon detail/editor screens.
 - Remaining Legends: Arceus party and Pokémon detail/editor screens.
