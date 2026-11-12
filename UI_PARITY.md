@@ -43,6 +43,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Let’s Go Pikachu/Eevee Pokémon Species editor: the shared editor hierarchy, teal validation and selector cards, cyan labels and rounded actions while retaining native species restrictions, exact-field review, verified-copy saving, recovery backup and field navigation.
 - Let’s Go Pikachu/Eevee Pokémon Level editor: the shared editor hierarchy, teal validation and numeric input cards, cyan labels and rounded actions while retaining native level restrictions, EXP and cached-stat rebuilding, verified-copy saving, recovery backup and field navigation.
 - Let’s Go Pikachu/Eevee Pokémon Experience editor: the shared editor hierarchy, teal validation and numeric input cards, cyan labels and rounded actions while retaining native growth-curve bounds, derived level and cached-stat rebuilding, verified-copy saving, recovery backup and field navigation.
+- Let’s Go Pikachu/Eevee Pokémon Original Trainer editor: the shared editor hierarchy, teal validation and text-input cards, cyan labels and rounded actions while retaining exact-field review, verified-copy saving, recovery backup and bidirectional field navigation.
 
 ## Still mismatched
 
