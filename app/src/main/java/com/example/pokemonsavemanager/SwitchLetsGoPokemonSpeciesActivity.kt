@@ -6,10 +6,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import java.util.concurrent.Executors
@@ -68,8 +66,7 @@ class SwitchLetsGoPokemonSpeciesActivity : Activity() {
         root.addView(status)
         root.addView(TextView(this).apply { text = "Species"; textSize = 16f })
         species = Spinner(this).apply {
-            adapter = ArrayAdapter(this@SwitchLetsGoPokemonSpeciesActivity,
-                android.R.layout.simple_spinner_dropdown_item,
+            adapter = OmegaRubyUi.selectorAdapter(this@SwitchLetsGoPokemonSpeciesActivity,
                 speciesIds.map { "#$it ${LetsGoSpeciesNames.name(it)}" })
             isEnabled = false
         }
@@ -103,7 +100,8 @@ class SwitchLetsGoPokemonSpeciesActivity : Activity() {
         }
         root.addView(inspectCopy)
         root.addView(Button(this).apply { text = "Back to Nickname"; setOnClickListener { if (!busy) finish() } })
-        setContentView(ScrollView(this).apply { addView(root) })
+        OmegaRubyUi.stylePokemonEditor(this, root, status)
+        setContentView(OmegaRubyUi.scrollingPage(this, root))
 
         setBusy(true)
         worker.execute {

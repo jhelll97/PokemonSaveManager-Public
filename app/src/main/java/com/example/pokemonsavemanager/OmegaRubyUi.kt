@@ -5,10 +5,13 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.View
+import android.view.ViewGroup
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.Spinner
 import android.widget.TextView
 
 /** Shared presentation primitives taken from the Omega Ruby reference screens. */
@@ -109,6 +112,7 @@ object OmegaRubyUi {
             when {
                 child is Button -> styleAction(context, child)
                 child is EditText -> styleInput(context, child)
+                child is Spinner -> styleSelector(context, child)
                 child === status && child is TextView -> {
                     child.textSize = 14f
                     child.setTextColor(text)
@@ -145,10 +149,28 @@ object OmegaRubyUi {
                 current?.width ?: LinearLayout.LayoutParams.MATCH_PARENT,
                 current?.height ?: LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
-                bottomMargin = dp(context, if (child is EditText || child is Button || child === status) 10 else 4)
+                bottomMargin = dp(context, if (child is EditText || child is Spinner || child is Button || child === status) 10 else 4)
             }
         }
     }
+
+    fun selectorAdapter(context: Context, values: List<String>): ArrayAdapter<String> =
+        object : ArrayAdapter<String>(context, android.R.layout.simple_spinner_item, values) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
+                (super.getView(position, convertView, parent) as TextView).apply {
+                    setTextColor(OmegaRubyUi.text)
+                    textSize = 16f
+                    setPadding(dp(context, 14), dp(context, 10), dp(context, 14), dp(context, 10))
+                }
+
+            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View =
+                (super.getDropDownView(position, convertView, parent) as TextView).apply {
+                    setTextColor(OmegaRubyUi.text)
+                    setBackgroundColor(fieldBackground)
+                    textSize = 16f
+                    setPadding(dp(context, 14), dp(context, 12), dp(context, 14), dp(context, 12))
+                }
+        }.apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
     fun styleStorageList(context: Context, root: LinearLayout) {
         root.setBackgroundColor(pageBackground)
@@ -230,6 +252,13 @@ object OmegaRubyUi {
         input.background = roundedCard(context, fieldBackground)
         input.setPadding(dp(context, 14), dp(context, 10), dp(context, 14), dp(context, 10))
         input.minimumHeight = dp(context, 52)
+    }
+
+    private fun styleSelector(context: Context, selector: Spinner) {
+        selector.background = roundedCard(context, fieldBackground)
+        selector.setPopupBackgroundDrawable(roundedCard(context, fieldBackground))
+        selector.setPadding(dp(context, 4), 0, dp(context, 4), 0)
+        selector.minimumHeight = dp(context, 52)
     }
 
     private fun styleInputRow(context: Context, row: LinearLayout) {
