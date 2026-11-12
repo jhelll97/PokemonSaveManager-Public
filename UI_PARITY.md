@@ -35,13 +35,14 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Let’s Go Pikachu/Eevee Storage Pool Map: the shared dark list surface and selectable teal information card while retaining every native pointer, CRC and read-only diagnostic detail.
 - Let’s Go Pikachu/Eevee Pokémon detail dialog: the shared dark list surface, selectable teal native-data card and rounded actions while retaining every field, conditional action and Bank deposit behavior.
 - Pokémon Sword/Shield Pokémon detail dialog: the shared dark list surface, selectable teal PK8 data card and rounded actions while retaining every field, conditional action and Bank deposit, removal and restore behavior.
+- Brilliant Diamond/Shining Pearl Pokémon detail dialog: the shared dark list surface, selectable teal PB8 data card and rounded actions while retaining every field, conditional action and Bank deposit behavior.
 
 ## Still mismatched
 
 - Generation 1–7 Pokémon Boxes and Party variants.
 - Remaining Let’s Go Pokémon editor screens.
 - Remaining Sword/Shield Pokémon editor screens.
-- Remaining Brilliant Diamond/Shining Pearl Pokémon detail/editor screens.
+- Remaining Brilliant Diamond/Shining Pearl Pokémon editor screens.
 - Remaining Legends: Arceus Pokémon detail/editor screens.
 - Remaining Scarlet/Violet Pokémon detail/editor screens.
 - Remaining Legends: Z-A Pokémon detail/editor screens.

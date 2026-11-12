@@ -12102,9 +12102,9 @@ class SwitchReadOnlyActivity : Activity() {
                 )
             }
         })
-        val scroll = ScrollView(this).apply { addView(content) }
+        OmegaRubyUi.styleStorageList(this, content)
         val dialog = AlertDialog.Builder(this).setTitle("$location • BDSP")
-            .setView(scroll).setNegativeButton("Close", null).create()
+            .setView(OmegaRubyUi.scrollingPage(this, content)).setNegativeButton("Close", null).create()
         if (nativeTarget != null) {
             dialog.setOnShowListener {
                 bank.setOnClickListener {
