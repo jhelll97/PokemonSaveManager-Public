@@ -65,6 +65,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Pokémon Sword/Shield Pokémon Nickname editor: the shared editor hierarchy, teal validation and text-input cards, cyan labels and rounded actions while retaining native box and party PK8 selection, 1–12 character validation, before-and-after review, verified-copy saving, recovery backup and field navigation.
 - Pokémon Sword/Shield Pokémon Species editor: the shared editor hierarchy, teal validation and selector cards, cyan labels and rounded actions while retaining native Galar, Isle of Armor and Crown Tundra species choices, Egg, form and Gigantamax restrictions, exact-field review, verified-copy saving, recovery backup and field navigation.
 - Pokémon Sword/Shield Pokémon Level editor: the shared editor hierarchy, teal validation and numeric input cards, cyan labels and rounded actions while retaining native box and party PK8 selection, 1–100 bounds, Egg protection, growth-group EXP and cached HP and battle-stat rebuilding, before-and-after review, verified-copy saving, recovery backup and field navigation.
+- Pokémon Sword/Shield Pokémon Experience editor: the shared editor hierarchy, teal validation and numeric input cards, cyan labels and rounded actions while retaining native box and party PK8 selection, species and form growth-curve bounds, Egg and unverified-form protection, derived Level and cached HP and battle-stat rebuilding, before-and-after review, verified-copy saving, recovery backup and field navigation.
 
 ## Still mismatched
 
