@@ -9,7 +9,6 @@ import android.provider.DocumentsContract
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import java.util.concurrent.Executors
 
@@ -136,7 +135,8 @@ class SwitchLegendsArceusTrainerActivity : Activity() {
             text = "Back to Trainer Data"
             setOnClickListener { if (!busy) finish() }
         })
-        setContentView(ScrollView(this).apply { addView(root) })
+        OmegaRubyUi.styleTrainerEditor(this, root)
+        setContentView(OmegaRubyUi.scrollingPage(this, root))
 
         setBusy(true)
         worker.execute {
