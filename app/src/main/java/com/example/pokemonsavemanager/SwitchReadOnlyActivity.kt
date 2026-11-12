@@ -5310,6 +5310,7 @@ class SwitchReadOnlyActivity : Activity() {
         val message = buildString {
             append("${LegendsArceusSpeciesNames.name(p.species)} (#${p.species}) • EXP ${p.experience}\n")
             append("Source: ${selected.name} • preserved 344-byte PA9\n")
+            append("Reviewed Bank SHA-256: $openedHash\n")
             append("Prepared destination: checksum-valid 360-byte native Legends: Arceus PA8\n\n")
             append("Exact disclosed conversion effects\n• ")
             append(converted.effects.joinToString("\n• "))
