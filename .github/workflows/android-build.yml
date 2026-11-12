@@ -57,7 +57,11 @@ jobs:
           set -uo pipefail
           log="$RUNNER_TEMP/compile-debug.log"
           for attempt in 1 2 3; do
-            gradle :app:compileDebugSources --no-daemon --max-workers=1 \
+            refresh=()
+            if [ "$attempt" -gt 1 ]; then
+              refresh=(--refresh-dependencies)
+            fi
+            gradle :app:compileDebugSources "${refresh[@]}" --no-daemon --max-workers=1 \
               -Pkotlin.compiler.execution.strategy=in-process \
               "-Dorg.gradle.jvmargs=-Xmx15360m -XX:MaxMetaspaceSize=512m -XX:+UseG1GC" \
               2>&1 | tee "$log"
@@ -65,13 +69,13 @@ jobs:
             if [ "$status" -eq 0 ]; then
               exit 0
             fi
-            if ! grep -Eq "Received status code (429|504)" "$log"; then
+            if ! grep -Eq "Received status code (429|504)|Could not resolve all artifacts for configuration 'classpath'" "$log"; then
               exit "$status"
             fi
             if [ "$attempt" -eq 3 ]; then
               exit "$status"
             fi
-            echo "Maven returned transient HTTP 429 or 504; retrying dependency resolution after a bounded backoff."
+            echo "Dependency resolution failed before source compilation; refreshing dependencies after a bounded backoff."
             sleep "$((attempt * 30))"
           done
 
