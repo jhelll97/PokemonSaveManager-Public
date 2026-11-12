@@ -1347,44 +1347,82 @@ class SwitchReadOnlyActivity : Activity() {
             SwitchGameFamily.LETS_GO_PIKACHU_EEVEE -> "Pokémon Storage"
             else -> "PC Boxes"
         }
-        val gap = (12 * resources.displayMetrics.density).toInt()
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(gap, gap, gap, gap)
+        inspectionMode = true
+        inspectionRoot.visibility = android.view.View.GONE
+        dashboardRoot.visibility = android.view.View.VISIBLE
+        dashboardRoot.removeAllViews()
+        val gap = (16 * resources.displayMetrics.density).toInt()
+        dashboardRoot.setPadding(gap, gap * 2, gap, gap)
+        dashboardRoot.background = android.graphics.drawable.GradientDrawable().apply {
+            setColor(Color.rgb(7, 16, 24))
         }
-        root.addView(TextView(this).apply {
-            text = "${bound.displayName} • Read-only\nChoose the same Party or PC Boxes view used by Gen 1. Native storage: $nativeStorage."
-            setPadding(0, 0, 0, gap)
+        dashboardRoot.addView(TextView(this).apply {
+            text = "Pokémon Boxes"
+            textSize = 28f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
         })
-        val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        dashboardRoot.addView(TextView(this).apply {
+            text = "Pokémon ${bound.displayName} • Viewer • Read-only"
+            textSize = 14f
+            setTextColor(Color.rgb(160, 180, 195))
+            setPadding(0, (4 * resources.displayMetrics.density).toInt(), 0, (12 * resources.displayMetrics.density).toInt())
+        })
+        val back = Button(this).apply {
+            text = "←  Back to PSE"
+            isAllCaps = false
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.rgb(13, 38, 55))
+            setOnClickListener {
+                dashboardRoot.visibility = android.view.View.GONE
+                inspectionRoot.visibility = android.view.View.VISIBLE
+                inspectionMode = false
+                refreshDashboard(false)
+            }
+        }
+        dashboardRoot.addView(back, LinearLayout.LayoutParams(-1, (48 * resources.displayMetrics.density).toInt()).apply {
+            bottomMargin = gap
+        })
+        val intro = TextView(this).apply {
+            text = "Native storage: $nativeStorage"
+            textSize = 14f
+            setTextColor(Color.rgb(160, 180, 195))
+            setPadding(0, 0, 0, gap / 2)
+        }
+        dashboardRoot.addView(intro)
+        val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; weightSum = 2f }
         val party = Button(this).apply {
             text = "Party"
             isAllCaps = false
+            textSize = 15f
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.rgb(45, 45, 45))
             isEnabled = bound.supports(SwitchReadCapability.PARTY)
         }
         val boxes = Button(this).apply {
             text = "PC Boxes"
             isAllCaps = false
+            textSize = 15f
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.rgb(25, 115, 205))
             isEnabled = bound.supports(SwitchReadCapability.PC_OR_BOXES) ||
                 bound.supports(SwitchReadCapability.PASTURES)
         }
-        tabs.addView(party, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = gap / 2 })
-        tabs.addView(boxes, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = gap / 2 })
-        root.addView(tabs)
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Pokémon Boxes")
-            .setView(root)
-            .setNegativeButton("←  Back to PSE", null)
-            .create()
+        tabs.addView(party, LinearLayout.LayoutParams(0, (52 * resources.displayMetrics.density).toInt(), 1f).apply { rightMargin = gap / 4 })
+        tabs.addView(boxes, LinearLayout.LayoutParams(0, (52 * resources.displayMetrics.density).toInt(), 1f).apply { leftMargin = gap / 4 })
+        dashboardRoot.addView(tabs, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = (8 * resources.displayMetrics.density).toInt()
+            bottomMargin = (10 * resources.displayMetrics.density).toInt()
+        })
         party.setOnClickListener {
-            dialog.dismiss()
             if (session === bound) openSwitchParty(bound)
         }
         boxes.setOnClickListener {
-            dialog.dismiss()
             if (session === bound) openSwitchStorage(bound)
         }
-        dialog.show()
+        // The activity shell already supplies the fixed bottom navigation used by
+        // every other page; keep it outside the scrolling content.
+        pageScroll.scrollTo(0, 0)
     }
 
     private fun slotLabel(slot: LetsGoStorageSlot): String {

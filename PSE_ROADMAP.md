@@ -1,4 +1,12 @@
-# Active priority — PSE Bank transfer fixes across Generations 1–7
+# Active priority — Omega Ruby UI parity across all games
+
+Match every supported game's save screens to the supplied Pokémon Omega Ruby UI reference before resuming feature development. This phase changes presentation only: retain each game's existing fields, actions, capabilities, and save behavior.
+
+Use one shared visual system for every game: dark navy page background, teal rounded cards, blue selected tabs/actions, consistent typography and spacing, matching page hierarchy, and fixed Home / Pokémon / Bank / Backups navigation. Apply it to Home/current-save and saved-game cards, editor grid, Pokémon Boxes and Party, PSE Bank, Trainer Data, Pokémon detail/editor flows, and Switch game screens. Preserve game-specific labels and data while using the same layout components.
+
+Reference review identified the Switch Pokémon Boxes selector as a legacy alert dialog; it is being migrated to the full-page pattern. Continue the screen-by-screen parity pass across all supported generations and Switch titles, keeping a list of remaining mismatches. Do not declare parity complete until every supported game's equivalent screens use the shared layout.
+
+After UI parity is complete, resume the feature roadmap below, starting with PSE Bank transfer coverage and fixes across supported generations.
 
 ## Scope extension — add Generations 8 and 9 PSE Bank transfers
 

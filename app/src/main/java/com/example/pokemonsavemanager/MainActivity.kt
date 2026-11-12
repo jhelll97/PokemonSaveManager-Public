@@ -8032,9 +8032,9 @@ class MainActivity : Activity() {
         })
         root.addView(TextView(this).apply {
             text = "$displayedGame • Gen $trainerGen"
-            textSize = 15f
+            textSize = 14f
             setTextColor(MUTED)
-            setPadding(0, dp(4), 0, dp(18))
+            setPadding(0, dp(4), 0, dp(12))
         })
 
         val gen2PlayTime = if (trainerGen == 2) {
@@ -8097,7 +8097,7 @@ class MainActivity : Activity() {
         } else {
             addButton(root, "✏️  Edit Trainer") { showTrainerEditor() }
         }
-        addButton(root, "←  Back to Home") { showHome() }
+        addButton(root, "←  Back to PSE") { showHome() }
         val shell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(BG) }
         shell.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         shell.addView(buildBottomNav("home"), LinearLayout.LayoutParams(-1, -2))
