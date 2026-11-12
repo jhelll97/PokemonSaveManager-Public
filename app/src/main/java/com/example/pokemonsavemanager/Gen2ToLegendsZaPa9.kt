@@ -18,10 +18,30 @@ object Gen2ToLegendsZaPa9 {
         record: ByteArray,
         destinationTrainer: LegendsZaTrainerRead,
         metadata: Gen1ToSwordShieldMetadata
+    ): Gen2ToLegendsZaReview = reviewInternal(
+        Gen2ToSwordShieldPk8.buildLegendsZaBridge(record, destinationTrainer, metadata),
+        metadata,
+        "Legends: Z-A trainer",
+        true
+    )
+
+    fun reviewForLetsGo(
+        record: ByteArray,
+        destinationTrainer: LetsGoTrainerRead,
+        metadata: Gen1ToSwordShieldMetadata
+    ): Gen2ToLegendsZaReview = reviewInternal(
+        Gen2ToSwordShieldPk8.buildLetsGoBridge(record, destinationTrainer, metadata),
+        metadata,
+        "${destinationTrainer.version.displayName} trainer",
+        false
+    )
+
+    private fun reviewInternal(
+        bridge: Gen2ToPk7Bridge,
+        metadata: Gen1ToSwordShieldMetadata,
+        destinationTrainerLabel: String,
+        writesLegendsZaSave: Boolean
     ): Gen2ToLegendsZaReview {
-        val bridge = Gen2ToSwordShieldPk8.buildLegendsZaBridge(
-            record, destinationTrainer, metadata
-        )
         val source = bridge.source
         val converted = Gen7ToLegendsZaPa9.review(bridge.pk7)
         val downstream = converted.effects.filterNot {
@@ -60,7 +80,7 @@ object Gen2ToLegendsZaPa9 {
                 " required flawless transfer values. The source shiny state (" +
                 source.shiny +
                 ") and DV-derived gender are retained through the generated PID and gender field.")
-            add("Nature is source EXP modulo 25. SID becomes 0. Encryption constant, PID and IVs are deterministic Legalise values bound to the exact PSE2 bytes, Legends: Z-A trainer and reviewed species metadata; PID does not certify origin.")
+            add("Nature is source EXP modulo 25. SID becomes 0. Encryption constant, PID and IVs are deterministic Legalise values bound to the exact PSE2 bytes, $destinationTrainerLabel and reviewed species metadata; PID does not certify origin.")
             add("Ability " + metadata.abilityId + " in slot " +
                 metadata.abilityNumber + " and gender ratio " +
                 metadata.genderRate +
@@ -77,9 +97,13 @@ object Gen2ToLegendsZaPa9 {
                     source.caughtData.toString(16).uppercase().padStart(4, '0') +
                     " is explicitly omitted because it has no exact PA9 field mapping.")
             }
-            add("The validated Legends: Z-A trainer becomes current handling trainer; OT gender defaults to male because the PSE2 record does not encode it. Geographic, ribbon, memory, relearn, marking and Hyper Training fields remain empty; Alpha, Scale, Mega and PA9-only fields use the reviewed downstream defaults.")
+            add("The validated $destinationTrainerLabel becomes current handling trainer; OT gender defaults to male because the PSE2 record does not encode it. Geographic, ribbon, memory, relearn, marking and Hyper Training fields remain empty; Alpha, Scale, Mega and PA9-only fields use the reviewed downstream defaults.")
             addAll(downstream)
-            add("The PSE2 Bank entry and Legends: Z-A source remain unchanged. One reviewed empty native PA9 box slot is written only to a new copy with the required native caught registration, retained recovery, persisted reopen verification and two-sided rollback.")
+            if (writesLegendsZaSave) {
+                add("The PSE2 Bank entry and Legends: Z-A source remain unchanged. One reviewed empty native PA9 box slot is written only to a new copy with the required native caught registration, retained recovery, persisted reopen verification and two-sided rollback.")
+            } else {
+                add("The PSE2 Bank entry remains unchanged. The PK7 and PA9 are temporary in-memory conversion data only; no Legends: Z-A save or slot is opened or written.")
+            }
         }
         return Gen2ToLegendsZaReview(
             converted.nativeRecord.copyOf(),

@@ -538,10 +538,39 @@ object Gen2ToSwordShieldPk8 {
         record: ByteArray,
         trainer: LegendsZaTrainerRead,
         metadata: Gen1ToSwordShieldMetadata
+    ): Gen2ToPk7Bridge = buildLegendsZaBridgeInternal(
+        record,
+        trainer.name,
+        trainer.gender,
+        trainer.languageId,
+        metadata,
+        "Legends: Z-A trainer"
+    )
+
+    internal fun buildLetsGoBridge(
+        record: ByteArray,
+        trainer: LetsGoTrainerRead,
+        metadata: Gen1ToSwordShieldMetadata
+    ): Gen2ToPk7Bridge = buildLegendsZaBridgeInternal(
+        record,
+        trainer.name,
+        trainer.gender,
+        trainer.languageId,
+        metadata,
+        "${trainer.version.displayName} trainer"
+    )
+
+    private fun buildLegendsZaBridgeInternal(
+        record: ByteArray,
+        trainerName: String,
+        trainerGender: Int,
+        trainerLanguageId: Int,
+        metadata: Gen1ToSwordShieldMetadata,
+        trainerLabel: String
     ): Gen2ToPk7Bridge {
         val source = inspectSource(record)
-        require(trainer.languageId == 2) {
-            "This bounded route currently requires an English Legends: Z-A destination trainer."
+        require(trainerLanguageId == 2) {
+            "This bounded route currently requires an English $trainerLabel."
         }
         require(metadata.baseFriendship in 0..255) { "The reviewed base friendship is invalid." }
         require(metadata.genderRate in -1..8) { "The reviewed gender ratio is invalid." }
@@ -569,8 +598,8 @@ object Gen2ToSwordShieldPk8 {
         }
         val seed = MessageDigest.getInstance("SHA-256").apply {
             update(record)
-            update(trainer.name.toByteArray(StandardCharsets.UTF_8))
-            update(byteArrayOf(trainer.gender.toByte(), trainer.languageId.toByte()))
+            update(trainerName.toByteArray(StandardCharsets.UTF_8))
+            update(byteArrayOf(trainerGender.toByte(), trainerLanguageId.toByte()))
             update(intBytes(metadata.baseFriendship))
             update(intBytes(metadata.genderRate))
             update(intBytes(metadata.abilityId))
@@ -621,8 +650,8 @@ object Gen2ToSwordShieldPk8 {
         }
         if (customNickname) packedIvs = packedIvs or 0x80000000L
         w32(pk, 0x74, packedIvs)
-        putText(pk, 0x78, trainer.name)
-        pk[0x92] = trainer.gender.toByte()
+        putText(pk, 0x78, trainerName)
+        pk[0x92] = trainerGender.toByte()
         pk[0x93] = 1
         pk[0xA2] = source.happiness.toByte()
         putText(pk, 0xB0, source.originalTrainer)
