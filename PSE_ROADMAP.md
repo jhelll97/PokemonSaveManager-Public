@@ -2272,3 +2272,13 @@ The BDSP restore activity now identifies the reviewed Let's Go PB7 source as a c
 This backward cross-title PSE conversion still does not claim an official HOME transfer, trade, encounter record, legality certification or verified provenance. Every PB7 -> PB8 transformation and omission remains disclosed before Legalise acceptance.
 
 Next bounded repair: inspect the implemented Sword/Shield PK8 -> BDSP PB8 route for the same missing caught-registration transaction while preserving exact reviewed source identity, explicit Legalise disclosure, one chosen empty native PB8 slot, whole-file MD5 update, retained recovery, persisted reopen and two-sided failure handling.
+
+## Sword/Shield -> BDSP caught-registration repair
+
+Inspection confirmed that the actual BDSP Bank screen already exposes content-addressed Sword/Shield PK8 entries, binds and rechecks the exact selected PK8 SHA-256, blocks eggs, held items, unsupported species, forms, abilities, moves, text and limits, and displays every retained, transformed, cleared and omitted PK8 field before the user accepts the backward Legalise conversion. The converter produces a checksum-valid native PB8, but the restore activity did not request BDSP's native caught registration for PK8 sources. A chosen empty slot could therefore receive the PB8 while the destination Pokédex remained incomplete.
+
+The BDSP restore activity now stages Sword/Shield PK8 sources with native caught registration. The single reviewed transaction writes only the chosen empty PB8 slot, updates the matching species' caught state, English language, gender, shiny, base-form and Spinda pattern fields where applicable, refreshes the whole-file MD5, and displays the exact Pokédex record in the final review. Existing verification reopens the generated PB8 and registration, rejects unrelated Pokédex or save-byte changes, rechecks the unchanged content-addressed PK8 and BDSP source, retains a verified recovery backup, reopens the persisted destination and removes a failed copy when possible.
+
+This backward PSE conversion still does not claim an official HOME transfer, trade, encounter record, legality certification or verified provenance. Its documented PK8 -> PB8 mapping and explicit Legalise choice remain unchanged.
+
+Next bounded repair: inspect the implemented Legends: Arceus PA8 -> BDSP PB8 route for the same missing caught-registration transaction while preserving exact reviewed source identity, explicit Legalise disclosure, one chosen empty native PB8 slot, whole-file MD5 update, retained recovery, persisted reopen and two-sided failure handling.
