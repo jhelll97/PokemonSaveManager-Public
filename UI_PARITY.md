@@ -56,6 +56,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Let’s Go Pikachu/Eevee Pokémon HP Stat Exp editor: the shared editor hierarchy, teal validation and numeric input cards, cyan labels and rounded actions while retaining the native 0–200 HP Awakening Value mapping, HP and CP rebuilding, before-and-after review, verified-copy saving, recovery backup and field navigation.
 - Let’s Go Pikachu/Eevee Pokémon Attack Stat Exp editor: the shared editor hierarchy, teal validation and numeric input cards, cyan labels and rounded actions while retaining the native 0–200 Attack Awakening Value mapping, Attack and CP rebuilding, before-and-after review, verified-copy saving, recovery backup and field navigation.
 - Let’s Go Pikachu/Eevee Pokémon Defense Stat Exp editor: the shared editor hierarchy, teal validation and numeric input cards, cyan labels and rounded actions while retaining the native 0–200 Defense Awakening Value mapping, Defense and CP rebuilding, before-and-after review, verified-copy saving, recovery backup and field navigation.
+- Let’s Go Pikachu/Eevee Pokémon Speed Stat Exp editor: the shared editor hierarchy, teal validation and numeric input cards, cyan labels and rounded actions while retaining the native 0–200 Speed Awakening Value mapping, Speed and CP rebuilding, before-and-after review, verified-copy saving, recovery backup and field navigation.
 
 ## Still mismatched
 
