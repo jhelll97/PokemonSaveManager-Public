@@ -11913,7 +11913,9 @@ class SwitchReadOnlyActivity : Activity() {
             text = "Next"; isEnabled = box < 39
             setOnClickListener { dialog.dismiss(); if (session === bound) showBdspBox(bound, box + 1) }
         }, LinearLayout.LayoutParams(0, -2, 1f))
-        list.addView(nav); dialog.show()
+        list.addView(nav)
+        OmegaRubyUi.styleStorageList(this, list)
+        dialog.show()
     }
 
     private fun showBdspPokemon(bound: SwitchReadSession, location: String, read: BdspSlotRead) {
