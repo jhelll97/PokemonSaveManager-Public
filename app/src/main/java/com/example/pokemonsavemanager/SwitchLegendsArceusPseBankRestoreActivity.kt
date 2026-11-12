@@ -107,6 +107,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                     LegendsArceusPseBankRestoreEditing.sha256(prepared.first), prepared.second,
                     bankFile().extension.equals("pk7", true) ||
                         bankFile().extension.equals("pb7", true) ||
+                        bankFile().extension.equals("pk8", true) ||
                         bankFile().extension.equals("pse1", true) ||
                         bankFile().extension.equals("pse2", true) ||
                         bankFile().extension.equals("pk3", true) ||
