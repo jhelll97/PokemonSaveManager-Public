@@ -61,6 +61,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Let’s Go Pikachu/Eevee Pokémon Evolution editor: the shared editor hierarchy, teal validation and evolution selector cards, cyan labels and rounded actions while retaining native Kanto evolution eligibility, protected partner, Egg and form identities, species-dependent HP, battle stat and CP rebuilding, before-and-after review, verified-copy saving and recovery backup.
 - Let’s Go Pikachu/Eevee Duplicate Pokémon flow: the shared detail hierarchy, teal validation card and rounded actions while retaining checksum-valid PB7 copying, protected Egg, partner, species, form, capacity and occupied-destination checks, next-unused storage placement, before-and-after review, verified-copy saving and recovery backup.
 - Let’s Go Pikachu/Eevee Delete Pokémon flow: the shared detail hierarchy, teal validation card and rounded actions while retaining checksum-valid PB7 removal, protected Egg, partner, species, form and final-party identities, storage compaction, affected party and partner pointer adjustments, before-and-after review, verified-copy saving and recovery backup.
+- Let’s Go Pikachu/Eevee Swap Pokémon screen: the shared detail hierarchy, teal validation card and rounded actions while retaining checksum-valid unassigned PB7 selection, protected party, partner, Egg, species and form identities, native destination choice, before-and-after review, verified-copy saving and recovery backup.
 
 ## Still mismatched
 
