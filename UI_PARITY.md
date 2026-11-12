@@ -29,6 +29,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Let’s Go Pikachu/Eevee Party selector: the shared dark list surface, rounded six-slot actions, typography and spacing while retaining native party pointers and Pokémon selection.
 - Pokémon Sword/Shield Party selector: the shared dark list surface, rounded native slot actions, typography and spacing while retaining PK8 selection and party-count display.
 - Brilliant Diamond/Shining Pearl Party selector: the shared dark list surface, rounded native slot actions, typography and spacing while retaining PB8 selection and party-count display.
+- Pokémon Legends: Arceus Party selector: the shared dark list surface, rounded native slot actions, typography and spacing while retaining PA8 selection, Alpha/Noble labels and party-count display.
 
 ## Still mismatched
 
@@ -36,7 +37,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Remaining Let’s Go storage-pool and Pokémon detail/editor screens.
 - Remaining Sword/Shield Pokémon detail/editor screens.
 - Remaining Brilliant Diamond/Shining Pearl Pokémon detail/editor screens.
-- Remaining Legends: Arceus party and Pokémon detail/editor screens.
+- Remaining Legends: Arceus Pokémon detail/editor screens.
 - Remaining Scarlet/Violet party and Pokémon detail/editor screens.
 - Remaining Legends: Z-A party and Pokémon detail/editor screens.
 - PSE Bank list, detail, destination and transfer-review screens.

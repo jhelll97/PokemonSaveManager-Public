@@ -12729,10 +12729,20 @@ class SwitchReadOnlyActivity : Activity() {
         val storage = bound.legendsArceusStorage ?: return
         val party = storage.party()
         val labels = party.map { "Party ${it.position}: ${legendsArceusLabel(it.read)}" }
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        labels.forEachIndexed { index, label ->
+            list.addView(Button(this).apply {
+                text = label
+                isAllCaps = false
+                setOnClickListener {
+                    if (session === bound) showLegendsArceusPokemon(bound, "Party ${party[index].position}", party[index].read)
+                }
+            })
+        }
+        OmegaRubyUi.styleStorageList(this, list)
         AlertDialog.Builder(this).setTitle("${bound.displayName} • Party ${storage.partyCount}/6")
-            .setItems(labels.toTypedArray()) { _, index ->
-                if (session === bound) showLegendsArceusPokemon(bound, "Party ${party[index].position}", party[index].read)
-            }.setNegativeButton("Close", null).show()
+            .setView(OmegaRubyUi.scrollingPage(this, list))
+            .setNegativeButton("Close", null).show()
     }
 
     private fun showLegendsArceusPasture(bound: SwitchReadSession, pasture: Int) {
