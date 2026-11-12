@@ -58,7 +58,7 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
         root.addView(TextView(this).apply { text = "Restore to Pokémon Boxes"; textSize = 20f })
         root.addView(TextView(this).apply {
             text = "PSE restores one checksum-valid native PB8 to an empty PC-box slot you choose in a new save copy. " +
-                "Native PB8 entries remain byte-exact. Eligible Gen 1 PSE1, Gen 2 PSE2, Gen 3 PK3, Gen 4 PK4, Gen 5 PK5, Gen 6 PK6, Gen 7 PK7, Sword/Shield PK8, Legends: Arceus PA8, Scarlet/Violet PK9, and Legends: Z-A PA9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
+                "Native PB8 entries remain byte-exact. Eligible Gen 1 PSE1, Gen 2 PSE2, Gen 3 PK3, Gen 4 PK4, Gen 5 PK5, Gen 6 PK6, Gen 7 PK7, Let's Go PB7, Sword/Shield PK8, Legends: Arceus PA8, Scarlet/Violet PK9, and Legends: Z-A PA9 entries require an explicit Legalise review that lists every retained, reset, or omitted field. " +
                 "Unsupported species, forms, items, moves, limits, or text remain blocked; this PSE conversion does not certify encounter or moveset legality."
             textSize = 16f
         })
@@ -164,7 +164,8 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
                 val bank = readBankRecord()
                 BdspPseBankRestoreEditing.stage(
                     source, hash, bank, destination.box, destination.position,
-                    registerCaughtEnglish = bankFile().extension.equals("pk7", true) ||
+                    registerCaughtEnglish = bankFile().extension.equals("pb7", true) ||
+                        bankFile().extension.equals("pk7", true) ||
                         bankFile().extension.equals("pse1", true) ||
                         bankFile().extension.equals("pse2", true) ||
                         bankFile().extension.equals("pk3", true) ||
