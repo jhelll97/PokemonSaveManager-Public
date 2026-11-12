@@ -32,11 +32,12 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Pokémon Legends: Arceus Party selector: the shared dark list surface, rounded native slot actions, typography and spacing while retaining PA8 selection, Alpha/Noble labels and party-count display.
 - Pokémon Scarlet/Violet Party selector: the shared dark list surface, rounded native slot actions, typography and spacing while retaining PK9 selection and party-count display.
 - Pokémon Legends: Z-A Party selector: the shared dark list surface, rounded native slot actions, typography and spacing while retaining PA9 selection, Alpha/Egg labels and party-count display.
+- Let’s Go Pikachu/Eevee Storage Pool Map: the shared dark list surface and selectable teal information card while retaining every native pointer, CRC and read-only diagnostic detail.
 
 ## Still mismatched
 
 - Generation 1–7 Pokémon Boxes and Party variants.
-- Remaining Let’s Go storage-pool and Pokémon detail/editor screens.
+- Remaining Let’s Go Pokémon detail/editor screens.
 - Remaining Sword/Shield Pokémon detail/editor screens.
 - Remaining Brilliant Diamond/Shining Pearl Pokémon detail/editor screens.
 - Remaining Legends: Arceus Pokémon detail/editor screens.

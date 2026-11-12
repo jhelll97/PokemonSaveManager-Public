@@ -1495,10 +1495,17 @@ class SwitchReadOnlyActivity : Activity() {
             append("All 21 native block CRCs passed. Pointed PB7 records are shown as checksum-valid details or explicit parser failures without compacting the list. ")
             append("No pointer change, party reorder, partner reassignment, compression, export, replacement or save writing.")
         }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@SwitchReadOnlyActivity).apply {
+                text = detail
+                setTextIsSelectable(true)
+            })
+        }
+        OmegaRubyUi.styleStorageList(this, content)
         AlertDialog.Builder(this).setTitle("Storage Pool Map • Read-only")
-            .setView(ScrollView(this).apply { addView(TextView(this@SwitchReadOnlyActivity).apply {
-                text = detail; textSize = 16f; setTextIsSelectable(true); setPadding(24, 16, 24, 16)
-            }) }).setPositiveButton("Close", null).show()
+            .setView(OmegaRubyUi.scrollingPage(this, content))
+            .setPositiveButton("Close", null).show()
     }
 
     private fun showLetsGoStorage(bound: SwitchReadSession, page: Int) {
