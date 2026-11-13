@@ -115,6 +115,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Pokémon Legends: Arceus Pokémon Original Trainer editor: the shared editor hierarchy, teal validation and text-input cards, cyan labels and rounded actions while retaining native pasture and party PA8 selection, 1–12 character validation, before-and-after review, verified-copy saving, recovery backup and bidirectional field navigation.
 - Pokémon Legends: Arceus Pokémon Trainer ID editor: the shared editor hierarchy, teal validation and numeric-input cards, cyan labels and rounded actions while retaining native pasture and party PA8 selection, 0–65535 bounds, derived shiny-status review, verified-copy saving, recovery backup and bidirectional field navigation.
 - Pokémon Legends: Arceus Pokémon Move 1 editor: the shared editor hierarchy, teal validation and PP input cards, cyan labels and rounded actions while retaining native pasture and party PA8 selection, the usable Legends: Arceus move catalog, exact current-PP limits, before-and-after review, verified-copy saving, recovery backup and bidirectional field navigation.
+- Pokémon Legends: Arceus Pokémon Move 2 editor: the shared editor hierarchy, teal validation and PP input cards, cyan labels and rounded actions while retaining native pasture and party PA8 selection, empty-slot handling, the usable Legends: Arceus move catalog, exact current-PP limits, before-and-after review, verified-copy saving, recovery backup and bidirectional field navigation.
 
 ## Still mismatched
 
