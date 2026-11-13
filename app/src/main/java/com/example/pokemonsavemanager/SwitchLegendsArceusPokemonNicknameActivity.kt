@@ -9,7 +9,6 @@ import android.provider.DocumentsContract
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import java.util.concurrent.Executors
 
@@ -92,7 +91,8 @@ class SwitchLegendsArceusPokemonNicknameActivity : Activity() {
         }
         root.addView(inspectCopy)
         root.addView(Button(this).apply { text = "Back to Pokémon"; setOnClickListener { if (!busy) finish() } })
-        setContentView(ScrollView(this).apply { addView(root) })
+        OmegaRubyUi.stylePokemonEditor(this, root, status)
+        setContentView(OmegaRubyUi.scrollingPage(this, root))
 
         setBusy(true)
         worker.execute {
