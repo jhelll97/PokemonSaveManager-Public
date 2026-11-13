@@ -13,7 +13,6 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
-import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import java.util.concurrent.Executors
@@ -95,7 +94,8 @@ class SwitchLegendsArceusPokemonMoveShopActivity : Activity() {
             text = "Back to Pokémon Details"
             setOnClickListener { if (!busy) finish() }
         })
-        setContentView(ScrollView(this).apply { addView(root) })
+        OmegaRubyUi.stylePokemonEditor(this, root, status)
+        setContentView(OmegaRubyUi.scrollingPage(this, root))
 
         moveSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
