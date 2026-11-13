@@ -11,7 +11,6 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import java.util.concurrent.Executors
@@ -88,7 +87,8 @@ class SwitchLegendsArceusPokemonEffortActivity : Activity() {
             text = "Back to Pokémon Details"
             setOnClickListener { if (!busy) finish() }
         })
-        setContentView(ScrollView(this).apply { addView(root) })
+        OmegaRubyUi.stylePokemonEditor(this, root, status)
+        setContentView(OmegaRubyUi.scrollingPage(this, root))
 
         statSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
