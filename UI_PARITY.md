@@ -87,6 +87,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Pokémon Sword/Shield Pokémon Swap flow: the shared editor hierarchy, teal validation card, cyan labels and rounded actions while retaining same-box checksum-valid PK8 selection, Egg, native-limit, species and form protections, exact-record exchange, byte-scope review, verified-copy saving, failed-copy cleanup and recovery backup.
 - Brilliant Diamond/Shining Pearl Pokémon Nickname editor: the shared editor hierarchy, teal validation and text-input cards, cyan labels and rounded actions while retaining native box and party PB8 selection, 1–12 character validation, before-and-after review, verified-copy saving, recovery backup and field navigation.
 - Brilliant Diamond/Shining Pearl Pokémon Species editor: the shared editor hierarchy, teal validation and selector cards, cyan labels and rounded actions while retaining native box and party PB8 selection, the native National Pokédex range, Egg and alternate-form restrictions, exact-field review, verified-copy saving, recovery backup and field navigation.
+- Brilliant Diamond/Shining Pearl Pokémon Level editor: the shared editor hierarchy, teal validation and numeric input cards, cyan labels and rounded actions while retaining native box and party PB8 selection, 1–100 bounds, Egg protection, growth-group EXP and cached HP and battle-stat rebuilding, before-and-after review, verified-copy saving, recovery backup and field navigation.
 
 ## Still mismatched
 
