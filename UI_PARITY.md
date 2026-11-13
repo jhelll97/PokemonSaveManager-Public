@@ -85,6 +85,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Pokémon Sword/Shield Pokémon Duplicate flow: the shared editor hierarchy, teal validation card, cyan labels and rounded actions while retaining checksum-valid native PK8 copying, first-empty-box destination selection, Egg, species, form, native-limit and full-storage protections, byte-scope review, verified-copy saving, failed-copy cleanup and recovery backup.
 - Pokémon Sword/Shield Pokémon Delete flow: the shared editor hierarchy, teal validation card, cyan labels and rounded actions while retaining native PC-box clearing or party compaction, Egg, native-limit, species, form and last-party-member protections, byte-scope review, verified-copy saving, failed-copy cleanup and byte-identical recovery backup containing the removed PK8.
 - Pokémon Sword/Shield Pokémon Swap flow: the shared editor hierarchy, teal validation card, cyan labels and rounded actions while retaining same-box checksum-valid PK8 selection, Egg, native-limit, species and form protections, exact-record exchange, byte-scope review, verified-copy saving, failed-copy cleanup and recovery backup.
+- Brilliant Diamond/Shining Pearl Pokémon Nickname editor: the shared editor hierarchy, teal validation and text-input cards, cyan labels and rounded actions while retaining native box and party PB8 selection, 1–12 character validation, before-and-after review, verified-copy saving, recovery backup and field navigation.
 
 ## Still mismatched
 
