@@ -7,7 +7,6 @@ import android.os.Bundle
 import android.provider.DocumentsContract
 import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
@@ -48,7 +47,8 @@ class SwitchLetsGoEventWorkExportActivity : Activity() {
         }
         root.addView(export)
         root.addView(Button(this).apply { text = "Back to PSE"; setOnClickListener { if (!busy) finish() } })
-        setContentView(ScrollView(this).apply { addView(root) })
+        OmegaRubyUi.styleWorkflowScreen(this, root, status)
+        setContentView(OmegaRubyUi.scrollingPage(this, root))
 
         setBusy(true)
         worker.execute {
