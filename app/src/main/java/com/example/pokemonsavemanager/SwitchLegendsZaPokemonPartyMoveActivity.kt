@@ -75,7 +75,7 @@ class SwitchLegendsZaPokemonPartyMoveActivity : Activity() {
             text = "Back to Pokémon Boxes"
             setOnClickListener { if (!busy) finish() }
         })
-        OmegaRubyUi.styleWorkflowScreen(this, root, status)
+        OmegaRubyUi.stylePokemonEditor(this, root, status)
         setContentView(OmegaRubyUi.scrollingPage(this, root))
 
         setBusy(true)
