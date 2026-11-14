@@ -8,7 +8,6 @@ import android.os.Bundle
 import android.provider.DocumentsContract
 import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import java.util.concurrent.Executors
 
@@ -74,7 +73,8 @@ class SwitchScarletVioletPokemonSwapActivity : Activity() {
             text = "Back to Pokémon Boxes"
             setOnClickListener { if (!busy) finish() }
         })
-        setContentView(ScrollView(this).apply { addView(root) })
+        OmegaRubyUi.stylePokemonEditor(this, root, status)
+        setContentView(OmegaRubyUi.scrollingPage(this, root))
 
         setBusy(true)
         worker.execute {
