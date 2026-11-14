@@ -9,6 +9,7 @@ The supplied Omega Ruby walkthrough is the visual source of truth. This work cha
 - Fixed Home / Pokémon / Bank / Backups navigation in the main application shell.
 - Full-page Switch Pokémon Boxes selector.
 - Let’s Go Pikachu/Eevee Trainer Data editor: dark navy page, teal rounded status and input cards, cyan field labels, blue primary actions, matching typography and spacing.
+- Let’s Go Pikachu/Eevee Events import flow: the shared workflow hierarchy, teal validation and status cards, cyan labels and rounded actions while retaining checksum-valid native fateful-event PB7 input, exact supplied 260-byte preservation, next-empty-storage destination selection, distribution-provenance disclosure, exact one-record, two-byte storage-count and two native-block-CRC scope, every existing Pokémon, party pointer and unrelated object, reviewed new-copy saving, failed-copy cleanup, verified-copy inspection and verified recovery backup.
 - Pokémon Sword/Shield Trainer Data editor: the same shared Omega Ruby page, card, field, label, action and spacing treatment while retaining its native fields and save-copy workflow.
 - Brilliant Diamond/Shining Pearl Trainer Data editor: the shared Omega Ruby page, card, field, label, action and spacing treatment while retaining its native fields and save-copy workflow.
 - Pokémon Legends: Arceus Trainer Data editor: the shared Omega Ruby page, card, field, label, action and spacing treatment while retaining its native fields and save-copy workflow.
