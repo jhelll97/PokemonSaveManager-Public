@@ -13,7 +13,6 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import java.util.concurrent.Executors
@@ -89,7 +88,8 @@ class SwitchLegendsArceusResearchCounterActivity : Activity() {
             text = "Back to Pokédex entry"
             setOnClickListener { if (!busy) finish() }
         })
-        setContentView(ScrollView(this).apply { addView(root) })
+        OmegaRubyUi.stylePokemonEditor(this, root, status)
+        setContentView(OmegaRubyUi.scrollingPage(this, root))
 
         counter.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(
