@@ -6,7 +6,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -56,9 +55,8 @@ class SwitchSwordShieldStarterChoiceActivity : Activity() {
         root.addView(status)
         root.addView(TextView(this).apply { text = "Saved starter record"; textSize = 18f })
         starter = Spinner(this).apply {
-            adapter = ArrayAdapter(
+            adapter = OmegaRubyUi.selectorAdapter(
                 this@SwitchSwordShieldStarterChoiceActivity,
-                android.R.layout.simple_spinner_dropdown_item,
                 choices
             )
         }
