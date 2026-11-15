@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -122,8 +121,8 @@ class SwitchScarletVioletPokemonNatureActivity : Activity() {
                     opened = bytes
                     current = pokemon
                     natureOptions = ScarletVioletPokemonNatureEditing.options()
-                    natureChoice.adapter = ArrayAdapter(
-                        this, android.R.layout.simple_spinner_dropdown_item,
+                    natureChoice.adapter = OmegaRubyUi.selectorAdapter(
+                        this@SwitchScarletVioletPokemonNatureActivity,
                         natureOptions.map(ScarletVioletPokemonNatureEditing::describe)
                     )
                     natureChoice.setSelection(natureOptions.indexOf(pokemon.nature))
