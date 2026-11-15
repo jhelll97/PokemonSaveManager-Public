@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -116,8 +115,8 @@ class SwitchScarletVioletPokemonOriginalTrainerGenderActivity : Activity() {
                 result.onSuccess { (bytes, displayName, pokemon) ->
                     opened = bytes
                     current = pokemon
-                    originalTrainerGender.adapter = ArrayAdapter(
-                        this, android.R.layout.simple_spinner_dropdown_item, listOf("Male", "Female")
+                    originalTrainerGender.adapter = OmegaRubyUi.selectorAdapter(
+                        this, listOf("Male", "Female")
                     )
                     originalTrainerGender.setSelection(pokemon.originalTrainerGender)
                     status.text = "$displayName • Native integrity verified\n" +
