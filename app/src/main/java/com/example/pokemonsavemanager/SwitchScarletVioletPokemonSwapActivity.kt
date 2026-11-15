@@ -74,6 +74,7 @@ class SwitchScarletVioletPokemonSwapActivity : Activity() {
             setOnClickListener { if (!busy) finish() }
         })
         OmegaRubyUi.stylePokemonEditor(this, root, status)
+        OmegaRubyUi.stylePickerButton(this, choose)
         setContentView(OmegaRubyUi.scrollingPage(this, root))
 
         setBusy(true)
