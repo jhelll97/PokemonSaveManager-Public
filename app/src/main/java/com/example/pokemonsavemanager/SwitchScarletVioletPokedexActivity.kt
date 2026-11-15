@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.text.InputType
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -66,8 +65,8 @@ class SwitchScarletVioletPokedexActivity : Activity() {
         }
         root.addView(status)
         action = Spinner(this).apply {
-            adapter = ArrayAdapter(this@SwitchScarletVioletPokedexActivity,
-                android.R.layout.simple_spinner_dropdown_item, listOf("Register as seen", "Register as caught"))
+            adapter = OmegaRubyUi.selectorAdapter(this@SwitchScarletVioletPokedexActivity,
+                listOf("Register as seen", "Register as caught"))
         }
         root.addView(action)
         form = EditText(this).apply {
@@ -77,18 +76,18 @@ class SwitchScarletVioletPokedexActivity : Activity() {
         }
         root.addView(form)
         gender = Spinner(this).apply {
-            adapter = ArrayAdapter(this@SwitchScarletVioletPokedexActivity,
-                android.R.layout.simple_spinner_dropdown_item, listOf("Male", "Female", "Genderless"))
+            adapter = OmegaRubyUi.selectorAdapter(this@SwitchScarletVioletPokedexActivity,
+                listOf("Male", "Female", "Genderless"))
         }
         root.addView(gender)
         shiny = Spinner(this).apply {
-            adapter = ArrayAdapter(this@SwitchScarletVioletPokedexActivity,
-                android.R.layout.simple_spinner_dropdown_item, listOf("Normal", "Shiny"))
+            adapter = OmegaRubyUi.selectorAdapter(this@SwitchScarletVioletPokedexActivity,
+                listOf("Normal", "Shiny"))
         }
         root.addView(shiny)
         language = Spinner(this).apply {
-            adapter = ArrayAdapter(this@SwitchScarletVioletPokedexActivity,
-                android.R.layout.simple_spinner_dropdown_item, ScarletVioletPokedexEditing.languageNames)
+            adapter = OmegaRubyUi.selectorAdapter(this@SwitchScarletVioletPokedexActivity,
+                ScarletVioletPokedexEditing.languageNames)
         }
         root.addView(language)
         root.addView(TextView(this).apply {
