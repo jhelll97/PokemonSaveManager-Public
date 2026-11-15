@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -119,9 +118,8 @@ class SwitchScarletVioletPokemonStatNatureActivity : Activity() {
                     opened = bytes
                     current = pokemon
                     statNatureOptions = ScarletVioletPokemonStatNatureEditing.options()
-                    statNatureChoice.adapter = ArrayAdapter(
-                        this, android.R.layout.simple_spinner_dropdown_item,
-                        statNatureOptions.map(ScarletVioletPokemonStatNatureEditing::describe)
+                    statNatureChoice.adapter = OmegaRubyUi.selectorAdapter(
+                        this, statNatureOptions.map(ScarletVioletPokemonStatNatureEditing::describe)
                     )
                     statNatureChoice.setSelection(statNatureOptions.indexOf(pokemon.statNature))
                     status.text = "$displayName • Native integrity verified\n" +
