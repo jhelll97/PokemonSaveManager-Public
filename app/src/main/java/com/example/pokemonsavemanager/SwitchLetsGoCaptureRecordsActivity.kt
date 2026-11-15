@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.text.InputType
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -53,15 +52,17 @@ class SwitchLetsGoCaptureRecordsActivity : Activity() {
         status = TextView(this).apply { text = "Validating the selected source…"; textSize = 16f; setTextIsSelectable(true) }
         root.addView(status)
         species = Spinner(this).apply {
-            adapter = ArrayAdapter(this@SwitchLetsGoCaptureRecordsActivity,
-                android.R.layout.simple_spinner_dropdown_item,
-                speciesIds.map { "#$it ${LetsGoSpeciesNames.name(it)}" })
+            adapter = OmegaRubyUi.selectorAdapter(
+                this@SwitchLetsGoCaptureRecordsActivity,
+                speciesIds.map { "#$it ${LetsGoSpeciesNames.name(it)}" }
+            )
         }
         root.addView(species)
         field = Spinner(this).apply {
-            adapter = ArrayAdapter(this@SwitchLetsGoCaptureRecordsActivity,
-                android.R.layout.simple_spinner_dropdown_item,
-                LetsGoCaptureRecordField.values().map { it.displayName })
+            adapter = OmegaRubyUi.selectorAdapter(
+                this@SwitchLetsGoCaptureRecordsActivity,
+                LetsGoCaptureRecordField.values().map { it.displayName }
+            )
         }
         root.addView(field)
         count = EditText(this).apply {
