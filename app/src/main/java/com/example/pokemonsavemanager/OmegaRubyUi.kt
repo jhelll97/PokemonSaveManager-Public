@@ -154,8 +154,8 @@ object OmegaRubyUi {
         }
     }
 
-    fun selectorAdapter(context: Context, values: List<String>): ArrayAdapter<String> =
-        object : ArrayAdapter<String>(context, android.R.layout.simple_spinner_item, values) {
+    fun <T> selectorAdapter(context: Context, values: List<T>): ArrayAdapter<T> =
+        object : ArrayAdapter<T>(context, android.R.layout.simple_spinner_item, values) {
             override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
                 (super.getView(position, convertView, parent) as TextView).apply {
                     setTextColor(OmegaRubyUi.text)
