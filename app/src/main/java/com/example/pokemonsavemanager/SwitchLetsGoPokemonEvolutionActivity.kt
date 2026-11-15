@@ -6,7 +6,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -110,9 +109,8 @@ class SwitchLetsGoPokemonEvolutionActivity : Activity() {
                     opened = value.bytes
                     current = value.pokemon
                     choices = value.choices
-                    target.adapter = ArrayAdapter(
+                    target.adapter = OmegaRubyUi.selectorAdapter(
                         this@SwitchLetsGoPokemonEvolutionActivity,
-                        android.R.layout.simple_spinner_dropdown_item,
                         choices.map { "#${it.species} ${LetsGoSpeciesNames.name(it.species)} • ${it.method}" }
                     )
                     status.text = "${value.displayName} • Native integrity verified\n" +
