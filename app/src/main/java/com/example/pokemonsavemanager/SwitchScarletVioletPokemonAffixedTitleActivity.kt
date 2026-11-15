@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -118,8 +117,8 @@ class SwitchScarletVioletPokemonAffixedTitleActivity : Activity() {
                     opened = bytes
                     current = pokemon
                     titleOptions = ScarletVioletPokemonAffixedTitleEditing.options(pokemon)
-                    titleChoice.adapter = ArrayAdapter(
-                        this, android.R.layout.simple_spinner_dropdown_item,
+                    titleChoice.adapter = OmegaRubyUi.selectorAdapter(
+                        this@SwitchScarletVioletPokemonAffixedTitleActivity,
                         titleOptions.map(ScarletVioletPokemonAffixedTitleEditing::name)
                     )
                     titleChoice.setSelection(titleOptions.indexOf(pokemon.affixedRibbon))
