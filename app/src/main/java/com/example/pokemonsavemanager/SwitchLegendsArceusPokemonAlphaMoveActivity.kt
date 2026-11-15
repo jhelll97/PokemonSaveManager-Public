@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -104,9 +103,8 @@ class SwitchLegendsArceusPokemonAlphaMoveActivity : Activity() {
                     }
                     opened = bytes
                     values = read
-                    moveSpinner.adapter = ArrayAdapter(
+                    moveSpinner.adapter = OmegaRubyUi.typedSelectorAdapter(
                         this,
-                        android.R.layout.simple_spinner_dropdown_item,
                         read.offerings
                     )
                     moveSpinner.setSelection(read.offerings.indexOfFirst { it.moveId == read.alphaMoveId }.coerceAtLeast(0))
