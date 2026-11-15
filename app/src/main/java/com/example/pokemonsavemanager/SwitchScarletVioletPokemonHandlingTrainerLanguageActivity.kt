@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -123,8 +122,8 @@ class SwitchScarletVioletPokemonHandlingTrainerLanguageActivity : Activity() {
                     opened = bytes
                     current = pokemon
                     val languages = ScarletVioletPokemonHandlingTrainerLanguageEditing.values()
-                    handlingTrainerLanguage.adapter = ArrayAdapter(
-                        this, android.R.layout.simple_spinner_dropdown_item,
+                    handlingTrainerLanguage.adapter = OmegaRubyUi.selectorAdapter(
+                        this@SwitchScarletVioletPokemonHandlingTrainerLanguageActivity,
                         languages.map(ScarletVioletPokemonHandlingTrainerLanguageEditing::name)
                     )
                     handlingTrainerLanguage.setSelection(languages.indexOf(pokemon.handlingTrainerLanguage))
