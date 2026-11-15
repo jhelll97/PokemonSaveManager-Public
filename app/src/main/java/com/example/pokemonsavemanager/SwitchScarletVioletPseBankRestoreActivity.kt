@@ -105,6 +105,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                     bankExtension.equals("pk4", true) ||
                     bankExtension.equals("pk5", true) ||
                     bankExtension.equals("pk7", true) ||
+                    bankExtension.equals("pa8", true) ||
                     bankExtension.equals("pa9", true)) {
                     require(pokemon.species in ScarletVioletPokedexReadOnly.supportedSpecies(source)) {
                         "Species #${pokemon.species} is not present in this Scarlet/Violet save's native Pokédex table."
@@ -125,7 +126,8 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                         bankExtension.equals("pb7", true) ||
                         bankExtension.equals("pk8", true) ||
                         bankExtension.equals("pb8", true) ||
-                        bankExtension.equals("pk7", true)
+                        bankExtension.equals("pk7", true) ||
+                        bankExtension.equals("pa8", true)
                 )
             }
             runOnUiThread {
