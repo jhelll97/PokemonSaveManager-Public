@@ -6,7 +6,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -139,8 +138,10 @@ class SwitchLegendsArceusPokemonSpeciesActivity : Activity() {
     }
 
     private fun updateSpeciesChoices() {
-        species.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
-            speciesIds.map { "#$it ${LegendsArceusSpeciesNames.name(it)}" })
+        species.adapter = OmegaRubyUi.selectorAdapter(
+            this,
+            speciesIds.map { "#$it ${LegendsArceusSpeciesNames.name(it)}" }
+        )
     }
 
     private fun setBusy(value: Boolean) {
