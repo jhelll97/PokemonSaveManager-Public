@@ -6,7 +6,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -125,9 +124,8 @@ class SwitchLegendsArceusPokemonEvolutionActivity : Activity() {
                     opened = value.bytes
                     current = value.pokemon
                     choices = value.choices
-                    target.adapter = ArrayAdapter(
+                    target.adapter = OmegaRubyUi.selectorAdapter(
                         this@SwitchLegendsArceusPokemonEvolutionActivity,
-                        android.R.layout.simple_spinner_dropdown_item,
                         choices.map { "#${it.species} ${LegendsArceusSpeciesNames.name(it.species)} • ${it.method}" }
                     )
                     val level = value.pokemon.cachedLevel?.toString() ?: "derived during review"
