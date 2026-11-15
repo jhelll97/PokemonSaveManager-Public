@@ -8,7 +8,6 @@ import android.os.Bundle
 import android.provider.DocumentsContract
 import android.view.View
 import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -111,9 +110,8 @@ class SwitchLegendsArceusPokemonEffortActivity : Activity() {
                 result.onSuccess { (bytes, read) ->
                     opened = bytes
                     values = read
-                    statSpinner.adapter = ArrayAdapter(
+                    statSpinner.adapter = OmegaRubyUi.selectorAdapter(
                         this,
-                        android.R.layout.simple_spinner_dropdown_item,
                         read.stats.filter { it.effortLevel < 10 }
                     )
                     updateLevelChoices()
@@ -137,9 +135,8 @@ class SwitchLegendsArceusPokemonEffortActivity : Activity() {
         if (values == null) return
         val stat = statSpinner.selectedItem as? LegendsArceusEffortStat ?: return
         val levels = (stat.effortLevel..10).toList()
-        levelSpinner.adapter = ArrayAdapter(
+        levelSpinner.adapter = OmegaRubyUi.selectorAdapter(
             this,
-            android.R.layout.simple_spinner_dropdown_item,
             levels
         )
         levelSpinner.setSelection(if (levels.size > 1) 1 else 0)
