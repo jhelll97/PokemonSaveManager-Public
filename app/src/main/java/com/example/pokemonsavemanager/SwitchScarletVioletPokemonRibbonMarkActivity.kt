@@ -8,7 +8,6 @@ import android.os.Bundle
 import android.provider.DocumentsContract
 import android.view.View
 import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -74,9 +73,8 @@ class SwitchScarletVioletPokemonRibbonMarkActivity : Activity() {
         root.addView(ribbonChoice)
         root.addView(TextView(this).apply { text = "Ownership"; textSize = 16f })
         ownershipChoice = Spinner(this).apply {
-            adapter = ArrayAdapter(
+            adapter = OmegaRubyUi.selectorAdapter(
                 this@SwitchScarletVioletPokemonRibbonMarkActivity,
-                android.R.layout.simple_spinner_dropdown_item,
                 listOf("Not owned", "Owned")
             )
             isEnabled = false
@@ -134,9 +132,8 @@ class SwitchScarletVioletPokemonRibbonMarkActivity : Activity() {
                     opened = bytes
                     current = pokemon
                     ribbonOptions = ScarletVioletPokemonRibbonMarkEditing.options()
-                    ribbonChoice.adapter = ArrayAdapter(
-                        this, android.R.layout.simple_spinner_dropdown_item,
-                        ribbonOptions.map(ScarletVioletPokemonRibbonMarkEditing::name)
+                    ribbonChoice.adapter = OmegaRubyUi.selectorAdapter(
+                        this, ribbonOptions.map(ScarletVioletPokemonRibbonMarkEditing::name)
                     )
                     ribbonChoice.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                         override fun onItemSelected(parent: AdapterView<*>?, view: View?, selected: Int, id: Long) {
