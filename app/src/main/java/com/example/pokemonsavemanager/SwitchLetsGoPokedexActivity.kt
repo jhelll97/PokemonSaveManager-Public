@@ -6,7 +6,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -55,18 +54,24 @@ class SwitchLetsGoPokedexActivity : Activity() {
         status = TextView(this).apply { text = "Validating the selected source…"; textSize = 16f; setTextIsSelectable(true) }
         root.addView(status)
         action = Spinner(this).apply {
-            adapter = ArrayAdapter(this@SwitchLetsGoPokedexActivity, android.R.layout.simple_spinner_dropdown_item,
-                listOf("Register as seen", "Register as caught"))
+            adapter = OmegaRubyUi.selectorAdapter(
+                this@SwitchLetsGoPokedexActivity,
+                listOf("Register as seen", "Register as caught")
+            )
         }
         root.addView(action)
         variant = Spinner(this).apply {
-            adapter = ArrayAdapter(this@SwitchLetsGoPokedexActivity, android.R.layout.simple_spinner_dropdown_item,
-                listOf("Male / genderless", "Female", "Shiny male / genderless", "Shiny female"))
+            adapter = OmegaRubyUi.selectorAdapter(
+                this@SwitchLetsGoPokedexActivity,
+                listOf("Male / genderless", "Female", "Shiny male / genderless", "Shiny female")
+            )
         }
         root.addView(variant)
         language = Spinner(this).apply {
-            adapter = ArrayAdapter(this@SwitchLetsGoPokedexActivity, android.R.layout.simple_spinner_dropdown_item,
-                LetsGoPokedexEditing.languages)
+            adapter = OmegaRubyUi.selectorAdapter(
+                this@SwitchLetsGoPokedexActivity,
+                LetsGoPokedexEditing.languages
+            )
         }
         root.addView(language)
         root.addView(TextView(this).apply { text = "Language is applied only when registering caught."; textSize = 14f })
