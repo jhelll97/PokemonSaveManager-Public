@@ -110,7 +110,7 @@ class SwitchLegendsArceusPokemonEffortActivity : Activity() {
                 result.onSuccess { (bytes, read) ->
                     opened = bytes
                     values = read
-                    statSpinner.adapter = OmegaRubyUi.selectorAdapter(
+                    statSpinner.adapter = OmegaRubyUi.typedSelectorAdapter(
                         this,
                         read.stats.filter { it.effortLevel < 10 }
                     )
@@ -135,7 +135,7 @@ class SwitchLegendsArceusPokemonEffortActivity : Activity() {
         if (values == null) return
         val stat = statSpinner.selectedItem as? LegendsArceusEffortStat ?: return
         val levels = (stat.effortLevel..10).toList()
-        levelSpinner.adapter = OmegaRubyUi.selectorAdapter(
+        levelSpinner.adapter = OmegaRubyUi.typedSelectorAdapter(
             this,
             levels
         )

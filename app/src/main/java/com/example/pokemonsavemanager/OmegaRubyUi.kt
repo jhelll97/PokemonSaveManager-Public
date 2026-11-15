@@ -154,7 +154,13 @@ object OmegaRubyUi {
         }
     }
 
-    fun <T> selectorAdapter(context: Context, values: List<T>): ArrayAdapter<T> =
+    fun selectorAdapter(context: Context, values: List<String>): ArrayAdapter<String> =
+        styledSelectorAdapter(context, values)
+
+    fun <T> typedSelectorAdapter(context: Context, values: List<T>): ArrayAdapter<T> =
+        styledSelectorAdapter(context, values)
+
+    private fun <T> styledSelectorAdapter(context: Context, values: List<T>): ArrayAdapter<T> =
         object : ArrayAdapter<T>(context, android.R.layout.simple_spinner_item, values) {
             override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
                 (super.getView(position, convertView, parent) as TextView).apply {
