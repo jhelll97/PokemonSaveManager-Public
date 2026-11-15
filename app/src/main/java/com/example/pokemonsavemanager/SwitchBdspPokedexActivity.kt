@@ -6,7 +6,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -46,14 +45,14 @@ class SwitchBdspPokedexActivity : Activity() {
         })
         status = TextView(this).apply { text = "Validating the selected source…"; textSize = 16f; setTextIsSelectable(true) }
         root.addView(status)
-        action = Spinner(this).apply { adapter = ArrayAdapter(this@SwitchBdspPokedexActivity,
-            android.R.layout.simple_spinner_dropdown_item, listOf("Register as seen", "Register as caught")) }
+        action = Spinner(this).apply { adapter = OmegaRubyUi.selectorAdapter(this@SwitchBdspPokedexActivity,
+            listOf("Register as seen", "Register as caught")) }
         root.addView(action)
-        variant = Spinner(this).apply { adapter = ArrayAdapter(this@SwitchBdspPokedexActivity,
-            android.R.layout.simple_spinner_dropdown_item, listOf("Male", "Female", "Shiny male", "Shiny female")) }
+        variant = Spinner(this).apply { adapter = OmegaRubyUi.selectorAdapter(this@SwitchBdspPokedexActivity,
+            listOf("Male", "Female", "Shiny male", "Shiny female")) }
         root.addView(variant)
-        language = Spinner(this).apply { adapter = ArrayAdapter(this@SwitchBdspPokedexActivity,
-            android.R.layout.simple_spinner_dropdown_item, BdspPokedexEditing.languages) }
+        language = Spinner(this).apply { adapter = OmegaRubyUi.selectorAdapter(this@SwitchBdspPokedexActivity,
+            BdspPokedexEditing.languages) }
         root.addView(language)
         root.addView(TextView(this).apply { text = "Language is applied only when registering caught."; textSize = 14f })
         review = Button(this).apply { text = "Review and save new copy"; setOnClickListener { reviewChange() } }
