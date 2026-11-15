@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.text.InputType
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -66,19 +65,17 @@ class SwitchLegendsArceusItemActivity : Activity() {
         root.addView(status)
 
         action = Spinner(this).apply {
-            adapter = ArrayAdapter(
+            adapter = OmegaRubyUi.selectorAdapter(
                 this@SwitchLegendsArceusItemActivity,
-                android.R.layout.simple_spinner_dropdown_item,
                 if (addMode) listOf("Add item") else listOf("Change quantity", "Remove item")
             )
         }
         root.addView(action)
 
         itemPicker = Spinner(this).apply {
-            adapter = ArrayAdapter(
+            adapter = OmegaRubyUi.selectorAdapter(
                 this@SwitchLegendsArceusItemActivity,
-                android.R.layout.simple_spinner_dropdown_item,
-                emptyList<String>()
+                emptyList()
             )
             visibility = if (addMode) android.view.View.VISIBLE else android.view.View.GONE
         }
@@ -139,9 +136,8 @@ class SwitchLegendsArceusItemActivity : Activity() {
                 result.onSuccess { (bytes, pocket, entry) ->
                     opened = bytes
                     if (addMode) {
-                        itemPicker.adapter = ArrayAdapter(
+                        itemPicker.adapter = OmegaRubyUi.selectorAdapter(
                             this,
-                            android.R.layout.simple_spinner_dropdown_item,
                             allowedIds.map { "${LegendsArceusItemNames.name(it)} (#$it)" }
                         )
                         quantity.setText("1")
