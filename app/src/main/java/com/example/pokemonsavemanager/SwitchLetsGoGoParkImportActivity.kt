@@ -9,7 +9,6 @@ import android.provider.DocumentsContract
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import java.util.concurrent.Executors
@@ -48,7 +47,8 @@ class SwitchLetsGoGoParkImportActivity : Activity() {
         review = Button(this).apply { text = "Review import and save new copy"; setOnClickListener { reviewImport() } }; root.addView(review)
         inspectCopy = Button(this).apply { text = "Inspect verified copy"; visibility = android.view.View.GONE; setOnClickListener { inspectVerifiedCopy() } }; root.addView(inspectCopy)
         root.addView(Button(this).apply { text = "Back to GO Park"; setOnClickListener { if (!busy) finish() } })
-        setContentView(ScrollView(this).apply { addView(root) })
+        OmegaRubyUi.styleWorkflowScreen(this, root, status)
+        setContentView(OmegaRubyUi.scrollingPage(this, root))
         setBusy(true)
         worker.execute {
             val result = runCatching {
