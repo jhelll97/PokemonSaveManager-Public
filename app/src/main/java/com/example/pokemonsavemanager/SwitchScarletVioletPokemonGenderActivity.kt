@@ -6,7 +6,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -76,11 +75,10 @@ class SwitchScarletVioletPokemonGenderActivity : Activity() {
         root.addView(status)
         root.addView(TextView(this).apply { text = "Gender"; textSize = 16f })
         gender = Spinner(this).apply {
-            adapter = ArrayAdapter(
+            adapter = OmegaRubyUi.selectorAdapter(
                 this@SwitchScarletVioletPokemonGenderActivity,
-                android.R.layout.simple_spinner_item,
                 listOf("Male", "Female", "Genderless")
-            ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+            )
             isEnabled = false
         }
         root.addView(gender)
