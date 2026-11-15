@@ -8,7 +8,6 @@ import android.os.Bundle
 import android.provider.DocumentsContract
 import android.view.View
 import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.RadioButton
@@ -123,9 +122,8 @@ class SwitchLegendsArceusPokemonMoveShopActivity : Activity() {
                     }
                     opened = bytes
                     values = read
-                    moveSpinner.adapter = ArrayAdapter(
+                    moveSpinner.adapter = OmegaRubyUi.typedSelectorAdapter(
                         this,
-                        android.R.layout.simple_spinner_dropdown_item,
                         read.offerings
                     )
                     moveSpinner.setSelection(0)
