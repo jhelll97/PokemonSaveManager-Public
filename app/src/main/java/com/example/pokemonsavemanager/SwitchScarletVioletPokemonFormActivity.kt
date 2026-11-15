@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -125,8 +124,8 @@ class SwitchScarletVioletPokemonFormActivity : Activity() {
                     opened = bytes
                     current = pokemon
                     formOptions = ScarletVioletPokemonFormEditing.forms(pokemon.species)
-                    formChoice.adapter = ArrayAdapter(
-                        this, android.R.layout.simple_spinner_dropdown_item,
+                    formChoice.adapter = OmegaRubyUi.selectorAdapter(
+                        this@SwitchScarletVioletPokemonFormActivity,
                         formOptions.map(ScarletVioletPokemonFormEditing::describe)
                     )
                     formChoice.setSelection(formOptions.indexOf(pokemon.form))
