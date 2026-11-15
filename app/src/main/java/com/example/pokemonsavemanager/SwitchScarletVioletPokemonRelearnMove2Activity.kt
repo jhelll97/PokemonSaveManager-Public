@@ -6,7 +6,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -78,11 +77,10 @@ class SwitchScarletVioletPokemonRelearnMove2Activity : Activity() {
         root.addView(TextView(this).apply { text = "Relearn Move 2"; textSize = 16f })
         moveOptions = ScarletVioletPokemonRelearnMove2Editing.options()
         move = Spinner(this).apply {
-            adapter = ArrayAdapter(
+            adapter = OmegaRubyUi.selectorAdapter(
                 this@SwitchScarletVioletPokemonRelearnMove2Activity,
-                android.R.layout.simple_spinner_item,
                 moveOptions.map { moveLabel(it) }
-            ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+            )
             isEnabled = false
         }
         root.addView(move)
