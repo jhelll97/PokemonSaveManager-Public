@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -124,8 +123,8 @@ class SwitchScarletVioletPokemonCurrentHandlerActivity : Activity() {
                     opened = bytes
                     current = pokemon
                     val handlers = ScarletVioletPokemonCurrentHandlerEditing.values()
-                    currentHandler.adapter = ArrayAdapter(
-                        this, android.R.layout.simple_spinner_dropdown_item,
+                    currentHandler.adapter = OmegaRubyUi.selectorAdapter(
+                        this@SwitchScarletVioletPokemonCurrentHandlerActivity,
                         handlers.map(ScarletVioletPokemonCurrentHandlerEditing::name)
                     )
                     currentHandler.setSelection(handlers.indexOf(pokemon.currentHandler))
