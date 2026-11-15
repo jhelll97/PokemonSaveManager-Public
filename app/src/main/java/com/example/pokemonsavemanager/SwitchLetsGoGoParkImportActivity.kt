@@ -6,7 +6,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -47,7 +46,7 @@ class SwitchLetsGoGoParkImportActivity : Activity() {
         review = Button(this).apply { text = "Review import and save new copy"; setOnClickListener { reviewImport() } }; root.addView(review)
         inspectCopy = Button(this).apply { text = "Inspect verified copy"; visibility = android.view.View.GONE; setOnClickListener { inspectVerifiedCopy() } }; root.addView(inspectCopy)
         root.addView(Button(this).apply { text = "Back to GO Park"; setOnClickListener { if (!busy) finish() } })
-        OmegaRubyUi.styleWorkflowScreen(this, root, status)
+        OmegaRubyUi.stylePokemonEditor(this, root, status)
         setContentView(OmegaRubyUi.scrollingPage(this, root))
         setBusy(true)
         worker.execute {
@@ -59,7 +58,7 @@ class SwitchLetsGoGoParkImportActivity : Activity() {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 result.onSuccess { (bytes, slots, read) ->
                     opened = bytes; emptySlots = slots
-                    target.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, slots.map { slotLabel(it) })
+                    target.adapter = OmegaRubyUi.selectorAdapter(this, slots.map { slotLabel(it) })
                     status.text = "${read.version.displayName} • All 21 native block CRCs passed\n${slots.size} canonical empty GO Park slots available."
                 }.onFailure { status.text = it.message ?: "The source could not be opened safely." }
                 setBusy(false)
