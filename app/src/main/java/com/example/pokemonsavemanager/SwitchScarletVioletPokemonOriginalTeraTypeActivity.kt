@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -68,9 +67,8 @@ class SwitchScarletVioletPokemonOriginalTeraTypeActivity : Activity() {
         root.addView(status)
         root.addView(TextView(this).apply { text = "Original Tera Type"; textSize = 16f })
         type = Spinner(this).apply {
-            adapter = ArrayAdapter(
+            adapter = OmegaRubyUi.selectorAdapter(
                 this@SwitchScarletVioletPokemonOriginalTeraTypeActivity,
-                android.R.layout.simple_spinner_dropdown_item,
                 ScarletVioletTeraTypes.editableValues.map(ScarletVioletTeraTypes::name)
             )
             isEnabled = false
