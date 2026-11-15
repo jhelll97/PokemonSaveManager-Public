@@ -9,7 +9,6 @@ import android.provider.DocumentsContract
 import android.text.InputType
 import android.view.View
 import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -119,9 +118,8 @@ class SwitchLegendsArceusResearchCounterActivity : Activity() {
                 result.onSuccess { (bytes, read) ->
                     opened = bytes
                     entry = read
-                    counter.adapter = ArrayAdapter(
+                    counter.adapter = OmegaRubyUi.selectorAdapter(
                         this,
-                        android.R.layout.simple_spinner_dropdown_item,
                         read.counters.mapIndexed { index, item ->
                             "${index + 1}. ${item.label} • ${item.value}"
                         }
