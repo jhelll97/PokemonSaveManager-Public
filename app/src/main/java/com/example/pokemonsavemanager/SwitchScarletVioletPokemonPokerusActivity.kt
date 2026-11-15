@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -69,9 +68,8 @@ class SwitchScarletVioletPokemonPokerusActivity : Activity() {
         root.addView(status)
         root.addView(TextView(this).apply { text = "Pokérus strain"; textSize = 16f })
         strainChoice = Spinner(this).apply {
-            adapter = ArrayAdapter(
+            adapter = OmegaRubyUi.selectorAdapter(
                 this@SwitchScarletVioletPokemonPokerusActivity,
-                android.R.layout.simple_spinner_dropdown_item,
                 (0..15).map { if (it == 0) "0 • None" else it.toString() }
             )
             isEnabled = false
@@ -79,9 +77,8 @@ class SwitchScarletVioletPokemonPokerusActivity : Activity() {
         root.addView(strainChoice)
         root.addView(TextView(this).apply { text = "Remaining infection days"; textSize = 16f })
         daysChoice = Spinner(this).apply {
-            adapter = ArrayAdapter(
+            adapter = OmegaRubyUi.selectorAdapter(
                 this@SwitchScarletVioletPokemonPokerusActivity,
-                android.R.layout.simple_spinner_dropdown_item,
                 (0..15).map(Int::toString)
             )
             isEnabled = false
