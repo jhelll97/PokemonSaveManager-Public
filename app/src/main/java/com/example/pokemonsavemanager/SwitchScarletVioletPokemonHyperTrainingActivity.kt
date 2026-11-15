@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -126,13 +125,12 @@ class SwitchScarletVioletPokemonHyperTrainingActivity : Activity() {
                     opened = openedResult.bytes
                     current = openedResult.pokemon
                     eligibleStats = openedResult.eligibleStats
-                    statSelector.adapter = ArrayAdapter(
-                        this,
-                        android.R.layout.simple_spinner_item,
+                    statSelector.adapter = OmegaRubyUi.selectorAdapter(
+                        this@SwitchScarletVioletPokemonHyperTrainingActivity,
                         eligibleStats.map { index ->
                             "${ScarletVioletPokemonHyperTrainingEditing.statName(index)} • IV ${openedResult.pokemon.ivs[index]}"
                         }
-                    ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+                    )
                     status.text = "${openedResult.displayName} • Native integrity verified\n" +
                         "$location • ${openedResult.pokemon.nickname.ifBlank { ScarletVioletSpeciesNames.name(openedResult.pokemon.species) }}\n" +
                         "Level: ${openedResult.pokemon.cachedLevel}\n" +
