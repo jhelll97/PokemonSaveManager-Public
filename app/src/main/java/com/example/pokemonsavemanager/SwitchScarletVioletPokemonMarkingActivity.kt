@@ -9,7 +9,6 @@ import android.provider.DocumentsContract
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.ArrayAdapter
 import android.widget.Spinner
 import android.widget.TextView
 import java.util.concurrent.Executors
@@ -72,11 +71,10 @@ class SwitchScarletVioletPokemonMarkingActivity : Activity() {
                 textSize = 16f
             })
             Spinner(this).apply {
-                adapter = ArrayAdapter(
+                adapter = OmegaRubyUi.selectorAdapter(
                     this@SwitchScarletVioletPokemonMarkingActivity,
-                    android.R.layout.simple_spinner_item,
                     listOf("None", "Blue", "Pink")
-                ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+                )
                 isEnabled = false
                 root.addView(this)
             }
