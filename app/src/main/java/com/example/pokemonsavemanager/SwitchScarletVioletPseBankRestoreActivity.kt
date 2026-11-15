@@ -127,7 +127,8 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                         bankExtension.equals("pk8", true) ||
                         bankExtension.equals("pb8", true) ||
                         bankExtension.equals("pk7", true) ||
-                        bankExtension.equals("pa8", true)
+                        bankExtension.equals("pa8", true) ||
+                        bankExtension.equals("pa9", true)
                 )
             }
             runOnUiThread {
