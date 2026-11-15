@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
@@ -159,6 +160,18 @@ object OmegaRubyUi {
 
     fun <T> typedSelectorAdapter(context: Context, values: List<T>): ArrayAdapter<T> =
         styledSelectorAdapter(context, values)
+
+    fun stylePickerButton(context: Context, button: Button) {
+        button.isAllCaps = false
+        button.textSize = 16f
+        button.typeface = Typeface.DEFAULT
+        button.setTextColor(text)
+        button.stateListAnimator = null
+        button.gravity = Gravity.CENTER_VERTICAL or Gravity.START
+        button.background = roundedCard(context, fieldBackground)
+        button.setPadding(dp(context, 14), dp(context, 10), dp(context, 14), dp(context, 10))
+        button.minimumHeight = dp(context, 52)
+    }
 
     private fun <T> styledSelectorAdapter(context: Context, values: List<T>): ArrayAdapter<T> =
         object : ArrayAdapter<T>(context, android.R.layout.simple_spinner_item, values) {

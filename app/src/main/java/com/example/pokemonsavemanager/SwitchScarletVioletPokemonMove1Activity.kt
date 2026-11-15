@@ -131,6 +131,7 @@ class SwitchScarletVioletPokemonMove1Activity : Activity() {
         root.addView(inspectCopy)
         root.addView(Button(this).apply { text = "Back to Pokémon"; setOnClickListener { if (!busy) finish() } })
         OmegaRubyUi.stylePokemonEditor(this, root, status)
+        OmegaRubyUi.stylePickerButton(this, move)
         setContentView(OmegaRubyUi.scrollingPage(this, root))
 
         setBusy(true)
