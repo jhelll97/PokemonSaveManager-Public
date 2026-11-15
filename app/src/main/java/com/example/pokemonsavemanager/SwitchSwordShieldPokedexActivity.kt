@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.text.InputType
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -55,17 +54,22 @@ class SwitchSwordShieldPokedexActivity : Activity() {
         })
         status = TextView(this).apply { text = "Validating the selected source…"; textSize = 16f; setTextIsSelectable(true) }
         root.addView(status)
-        action = Spinner(this).apply { adapter = ArrayAdapter(this@SwitchSwordShieldPokedexActivity,
-            android.R.layout.simple_spinner_dropdown_item, listOf("Register as seen", "Register as caught")) }
+        action = Spinner(this).apply { adapter = OmegaRubyUi.selectorAdapter(
+            this@SwitchSwordShieldPokedexActivity,
+            listOf("Register as seen", "Register as caught")
+        ) }
         root.addView(action)
-        variant = Spinner(this).apply { adapter = ArrayAdapter(this@SwitchSwordShieldPokedexActivity,
-            android.R.layout.simple_spinner_dropdown_item,
-            listOf("Male / genderless", "Female", "Shiny male / genderless", "Shiny female")) }
+        variant = Spinner(this).apply { adapter = OmegaRubyUi.selectorAdapter(
+            this@SwitchSwordShieldPokedexActivity,
+            listOf("Male / genderless", "Female", "Shiny male / genderless", "Shiny female")
+        ) }
         root.addView(variant)
         formIndex = EditText(this).apply { hint = "Native form index (0–61)"; inputType = InputType.TYPE_CLASS_NUMBER; setText("0") }
         root.addView(formIndex)
-        language = Spinner(this).apply { adapter = ArrayAdapter(this@SwitchSwordShieldPokedexActivity,
-            android.R.layout.simple_spinner_dropdown_item, SwordShieldPokedexEditing.languages) }
+        language = Spinner(this).apply { adapter = OmegaRubyUi.selectorAdapter(
+            this@SwitchSwordShieldPokedexActivity,
+            SwordShieldPokedexEditing.languages
+        ) }
         root.addView(language)
         root.addView(TextView(this).apply {
             text = "Language is applied only when registering caught. Special native indices 62 and 63 remain locked."
