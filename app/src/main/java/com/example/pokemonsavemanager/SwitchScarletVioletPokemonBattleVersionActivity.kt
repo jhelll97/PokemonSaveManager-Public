@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -114,9 +113,8 @@ class SwitchScarletVioletPokemonBattleVersionActivity : Activity() {
                 result.onSuccess { (bytes, displayName, read) ->
                     opened = bytes
                     values = read
-                    battleVersionSpinner.adapter = ArrayAdapter(
-                        this,
-                        android.R.layout.simple_spinner_dropdown_item,
+                    battleVersionSpinner.adapter = OmegaRubyUi.typedSelectorAdapter(
+                        this@SwitchScarletVioletPokemonBattleVersionActivity,
                         read.choices
                     )
                     battleVersionSpinner.setSelection(
