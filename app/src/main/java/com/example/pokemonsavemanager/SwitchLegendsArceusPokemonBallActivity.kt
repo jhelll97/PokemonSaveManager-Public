@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -100,9 +99,8 @@ class SwitchLegendsArceusPokemonBallActivity : Activity() {
                 result.onSuccess { (bytes, read) ->
                     opened = bytes
                     values = read
-                    ballSpinner.adapter = ArrayAdapter(
+                    ballSpinner.adapter = OmegaRubyUi.typedSelectorAdapter(
                         this,
-                        android.R.layout.simple_spinner_dropdown_item,
                         read.choices
                     )
                     ballSpinner.setSelection(read.choices.indexOfFirst { it.id == read.ball.id }.coerceAtLeast(0))
