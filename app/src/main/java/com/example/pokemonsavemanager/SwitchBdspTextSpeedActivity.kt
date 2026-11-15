@@ -6,7 +6,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Spinner
@@ -77,8 +76,10 @@ class SwitchBdspTextSpeedActivity : Activity() {
         root.addView(status)
         speed = Spinner(this).apply {
             contentDescription = "New ${setting.label}"
-            adapter = ArrayAdapter(this@SwitchBdspTextSpeedActivity, android.R.layout.simple_spinner_dropdown_item,
-                setting.choices)
+            adapter = OmegaRubyUi.selectorAdapter(
+                this@SwitchBdspTextSpeedActivity,
+                setting.choices
+            )
         }
         root.addView(speed)
         review = Button(this).apply { text = "Review and save new copy"; setOnClickListener { reviewChange() } }
