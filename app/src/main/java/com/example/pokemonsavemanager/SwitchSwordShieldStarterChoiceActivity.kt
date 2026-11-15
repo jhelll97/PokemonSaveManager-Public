@@ -9,7 +9,6 @@ import android.provider.DocumentsContract
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import java.util.concurrent.Executors
@@ -79,7 +78,8 @@ class SwitchSwordShieldStarterChoiceActivity : Activity() {
             text = "Back to Starter Choice"
             setOnClickListener { if (!busy) finish() }
         })
-        setContentView(ScrollView(this).apply { addView(root) })
+        OmegaRubyUi.stylePokemonEditor(this, root, status)
+        setContentView(OmegaRubyUi.scrollingPage(this, root))
 
         setBusy(true)
         worker.execute {
