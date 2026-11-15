@@ -49,9 +49,10 @@ class SwitchLetsGoCaptureTotalActivity : Activity() {
         status = TextView(this).apply { text = "Validating the selected source…"; textSize = 16f; setTextIsSelectable(true) }
         root.addView(status)
         field = Spinner(this).apply {
-            adapter = android.widget.ArrayAdapter(this@SwitchLetsGoCaptureTotalActivity,
-                android.R.layout.simple_spinner_dropdown_item,
-                LetsGoCaptureTotalField.values().map { it.displayName })
+            adapter = OmegaRubyUi.selectorAdapter(
+                this@SwitchLetsGoCaptureTotalActivity,
+                LetsGoCaptureTotalField.values().map { it.displayName }
+            )
         }
         root.addView(field)
         value = EditText(this).apply {
