@@ -12377,8 +12377,8 @@ class MainActivity : Activity() {
     }
 
 
-    private fun buildGen7ToGen1Bridge(raw:ByteArray,p:PokemonEntry):Pair<ByteArray,Gen2Pokemon>{
-        val (mon,ot,nick)=buildGen7ToGen2Record(raw,p)
+    private fun buildGen7ToGen1Bridge(raw:ByteArray,p:PokemonEntry,confirmedFormPlan:Gen7ToOlderFormPlan?=null):Pair<ByteArray,Gen2Pokemon>{
+        val (mon,ot,nick)=buildGen7ToGen2Record(raw,p,confirmedFormPlan)
         val bridge=ByteArray(GEN2_BANK_FILE_SIZE)
         bridge[0]='P'.code.toByte();bridge[1]='S'.code.toByte();bridge[2]='E'.code.toByte();bridge[3]='2'.code.toByte()
         bridge[4]=1;bridge[5]=1;bridge[6]=0;bridge[7]=0
@@ -12389,7 +12389,10 @@ class MainActivity : Activity() {
         return bridge to converted
     }
 
-    private fun prepareGen7ToGen1Transfer(bankFile:File,shown:PokemonEntry){
+    private fun prepareGen7ToGen1Transfer(
+        bankFile:File,shown:PokemonEntry,confirmedFormPlan:Gen7ToOlderFormPlan?=null,
+        reviewedBank:ByteArray?=null,reviewedDestination:ByteArray?=null
+    ){
         val file=importedFile?:return showDialog("Gen 7 → Gen 1","Load a valid Red, Blue or Yellow destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
@@ -12410,10 +12413,29 @@ class MainActivity : Activity() {
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
             source.tid!=shown.tid||source.sid!=shown.sid)
             return showDialog("Gen 7 → Gen 1","The selected Bank record changed or failed its PK7 checksum.")
-        gen7ToGen2Blocker(source)?.let{
+        if((reviewedBank!=null&&!bank.contentEquals(reviewedBank))||(reviewedDestination!=null&&!destination.contentEquals(reviewedDestination)))
+            return showDialog("Gen 7 → Gen 1","The source or destination changed after the form review. Nothing was changed.")
+        val availableFormPlan=gen7ToOlderBaseFormPlan(source)
+        if(confirmedFormPlan!=null&&confirmedFormPlan!=availableFormPlan)
+            return showDialog("Gen 7 → Gen 1","The reviewed base-form plan changed. Nothing was changed.")
+        gen7ToGen2Blocker(source,confirmedFormPlan)?.let{
+            if(source.form!=0&&availableFormPlan!=null&&confirmedFormPlan==null){
+                val review="Explicit PSE Legalise review. ${availableFormPlan.kind} ID ${availableFormPlan.sourceForm} has no native Generation 1 form field. PSE can convert it to the same species #${source.species}, native base form ${availableFormPlan.destinationForm}.\n\nThe destination uses the base species' Generation 1 typing, stats and identity; the source form appearance and regional/cosmetic identity are not preserved. Moves and every other supported field remain subject to the existing strict checks.\n\nCancel leaves the exact PK7 Bank record and destination byte-for-byte unchanged. Accepting this review authorizes only this form normalization; the PK7 remains unchanged until the chosen native Generation 1 record is written and reopened successfully. This is a PSE conversion, not an official trade, migration, legality certification or provenance claim."
+                var formConsumed=false
+                AlertDialog.Builder(this).setTitle("Gen 7 → Gen 1 form Legalise")
+                    .setMessage(review).setNegativeButton("Cancel",null)
+                    .setPositiveButton("Use native base form"){_,_->
+                        if(formConsumed){showDialog("Gen 7 → Gen 1","This form review was already submitted. Reopen PSE Bank.");return@setPositiveButton};formConsumed=true
+                        if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false)){
+                            showDialog("Gen 7 → Gen 1","The source or destination changed after review. Nothing was changed.");return@setPositiveButton
+                        }
+                        prepareGen7ToGen1Transfer(selected,source,availableFormPlan,bank.copyOf(),destination.copyOf())
+                    }.show()
+                return
+            }
             return showDialog("Gen 7 → Gen 1 blocked","$it\n\nThe Bank record and destination were left unchanged.")
         }
-        val bridgePair=try{buildGen7ToGen1Bridge(bank,source)}catch(e:Exception){
+        val bridgePair=try{buildGen7ToGen1Bridge(bank,source,confirmedFormPlan)}catch(e:Exception){
             return showDialog("Gen 7 → Gen 1 blocked",(e.message?:"No safe Generation 2 bridge is available.")+"\n\nNothing was changed.")
         }
         val bridge=bridgePair.first;val converted=bridgePair.second
@@ -12448,7 +12470,8 @@ class MainActivity : Activity() {
                 append(", while the source is ").append(if(source.shiny)"shiny" else "not shiny").append(".\n\n")
                 append(omissionNote).append("\n\n")
                 append("Gen 1 has no fields for SID ${source.sid}, PID ${"%08X".format(source.pid)}, nature ${source.nature}, ability ${source.ability}/slot ${source.abilityNumber}, gender ${source.gender}, origin game ID ${source.originGame}, Ball ${source.ball}, markings 0x${"%04X".format(source.markingValue)}, current handler ${source.currentHandler}, met/egg locations ${source.metLocation}/${source.eggLocation}, dates ${source.metYear}-${source.metMonth}-${source.metDay} and ${source.eggYear}-${source.eggMonth}-${source.eggDay}, relearn moves ${source.relearnMoves.joinToString("/")}, ribbons, geography, affection, memory, Resort state, or the independent Gen 7 HP/SpD IVs. Exact omitted PK7 metadata: ").append(omitted).append(". Gen 1 catch rate is set to 0 because held items are blocked and Generation 7 has no verified catch-rate source field. PSE does not assign intermediate provenance. ")
-                append("Eggs, held items, alternate forms, Hyper Training, fateful-event provenance, non-English text, unsupported moves/species and invalid values are blocked instead of discarded.\n\n")
+                if(confirmedFormPlan!=null)append("Accepted Legalise change: ${confirmedFormPlan.kind} ID ${confirmedFormPlan.sourceForm} becomes native base form ${confirmedFormPlan.destinationForm}; the destination uses the base species' Generation 1 identity, typing and stats. ")
+                append("Eggs, held items, unreviewed alternate forms, Hyper Training, fateful-event provenance, non-English text, unsupported moves/species and invalid values are blocked instead of discarded.\n\n")
                 append("Verified retained destination and PK7 Bank recovery snapshots are required. PSE writes one chosen native Gen 1 record, updates Seen/Caught and the main checksum, reopens the exact box record, then removes the Bank entry. Any failure restores or preserves both sides independently.")
             }
             val labels=targets.map{"Box ${it.first} • ${it.second} empty slot${if(it.second==1)"" else "s"}"}.toTypedArray()
@@ -12462,7 +12485,7 @@ class MainActivity : Activity() {
                     AlertDialog.Builder(this).setTitle("Choose Gen 1 destination box").setItems(labels){_,which->
                         if(transferConsumed||which !in targets.indices){showDialog("Gen 7 → Gen 1","This destination choice was already handled. Reopen PSE Bank.");return@setItems};transferConsumed=true
                         if(!bound()){showDialog("Gen 7 → Gen 1","The destination identity changed. Nothing was changed.");return@setItems}
-                        transferGen7BankToGen1(selected,source,bank,bridge,converted,destination,meta,targets[which].first,file,legalise,openedUri,openedLabel)
+                        transferGen7BankToGen1(selected,source,bank,bridge,converted,confirmedFormPlan,destination,meta,targets[which].first,file,legalise,openedUri,openedLabel)
                     }.setNegativeButton("Cancel",null).show()
                 }.show()
         }
@@ -12471,7 +12494,7 @@ class MainActivity : Activity() {
 
     private fun transferGen7BankToGen1(
         bankFile:File,expected:PokemonEntry,expectedBank:ByteArray,expectedBridge:ByteArray,expectedConverted:Gen2Pokemon,
-        preparedDestination:ByteArray,meta:Gen1SpeciesMeta,targetBox:Int,openedFile:File,
+        confirmedFormPlan:Gen7ToOlderFormPlan?,preparedDestination:ByteArray,meta:Gen1SpeciesMeta,targetBox:Int,openedFile:File,
         legalise:Gen2ToGen1LegalisePlan?,openedUri:Uri?,openedLabel:String?
     ){
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
@@ -12485,7 +12508,7 @@ class MainActivity : Activity() {
             val bank=bankFile.readBytes();require(bank.contentEquals(expectedBank)){"The selected Gen 7 Bank record changed after review."}
             val source=parsePk6(bank,0,PK6_STORED_SIZE,false,807)?:error("The selected PK7 is invalid.")
             require(source.checksumValid&&source.pid==expected.pid&&source.species==expected.species&&source.tid==expected.tid&&source.sid==expected.sid){"The selected Gen 7 Pokémon changed."}
-            val rebuilt=buildGen7ToGen1Bridge(bank,source);require(rebuilt.first.contentEquals(expectedBridge)&&sameGen2BankRecord(rebuilt.second,expectedConverted)){"The prepared backward conversion changed."}
+            val rebuilt=buildGen7ToGen1Bridge(bank,source,confirmedFormPlan);require(rebuilt.first.contentEquals(expectedBridge)&&sameGen2BankRecord(rebuilt.second,expectedConverted)){"The prepared backward conversion changed."}
             require(legalise==gen2ToGen1LegalisePlan(rebuilt.second)){"The reviewed Generation 1 omissions changed."}
             gen2ToGen1Rejection(rebuilt.second,legalise)?.let{error(it)}
             val converted=rebuilt.second;val bridge=rebuilt.first
@@ -33894,10 +33917,22 @@ class MainActivity : Activity() {
         b.show()
     }
 
-    private fun gen7ToGen2Blocker(p:PokemonEntry):String?=when{
+    private data class Gen7ToOlderFormPlan(
+        val species:Int,val sourceForm:Int,val destinationForm:Int,val kind:String
+    )
+
+    private val gen7AlolanBaseFormSpecies=setOf(19,20,26,27,28,37,38,50,51,52,53,74,75,76,88,89,103,105)
+
+    private fun gen7ToOlderBaseFormPlan(p:PokemonEntry):Gen7ToOlderFormPlan?=when{
+        p.form==1&&p.species in gen7AlolanBaseFormSpecies->Gen7ToOlderFormPlan(p.species,p.form,0,"Alolan regional form")
+        p.species==25&&p.form in 1..7->Gen7ToOlderFormPlan(p.species,p.form,0,"Generation 7 Pikachu cosmetic form")
+        else->null
+    }
+
+    private fun gen7ToGen2Blocker(p:PokemonEntry,confirmedFormPlan:Gen7ToOlderFormPlan?=null):String?=when{
         !p.checksumValid->"The source PK7 checksum is invalid."
         p.species !in 1..251->"Species #${p.species} did not exist in Generation 2."
-        p.form!=0->"This form has no verified native Generation 2 representation."
+        p.form!=0&&confirmedFormPlan!=gen7ToOlderBaseFormPlan(p)->"This form has no reviewed native Generation 2 base-form mapping."
         p.isEgg->"Egg state cannot be represented safely by this backward conversion."
         p.heldItem!=0->"Held item #${p.heldItem} uses a Generation 7 item ID and has no verified Generation 2 mapping."
         p.fatefulEncounter->"Fateful-event provenance cannot be represented in Generation 2."
@@ -33914,9 +33949,13 @@ class MainActivity : Activity() {
         else->null
     }
 
-    private fun buildGen7ToGen2Record(raw:ByteArray,p:PokemonEntry):Triple<ByteArray,ByteArray,ByteArray>{
+    private fun buildGen7ToGen2Record(
+        raw:ByteArray,p:PokemonEntry,confirmedFormPlan:Gen7ToOlderFormPlan?=null
+    ):Triple<ByteArray,ByteArray,ByteArray>{
         require(raw.size==PK6_STORED_SIZE&&parsePk6(raw,0,PK6_STORED_SIZE,false,807)?.let{it.checksumValid&&it.pid==p.pid&&it.species==p.species&&it.tid==p.tid&&it.sid==p.sid}==true){"The preserved Gen 7 Bank record changed or failed checksum validation."}
-        gen7ToGen2Blocker(p)?.let{error(it)}
+        val availableFormPlan=gen7ToOlderBaseFormPlan(p)
+        require(confirmedFormPlan==null||confirmedFormPlan==availableFormPlan){"The reviewed base-form plan changed."}
+        gen7ToGen2Blocker(p,confirmedFormPlan)?.let{error(it)}
         val growth=canonicalGen2Growth(p.species)?:error("The Generation 2 growth group is unavailable for this species.")
         val level=gen2LevelForExperience(growth,p.experience).coerceIn(1,100)
         val dvs=IntArray(5){i->(p.ivs[i]/2).coerceIn(0,15)}
@@ -33944,7 +33983,10 @@ class MainActivity : Activity() {
         return Triple(mon,ot,nick)
     }
 
-    private fun prepareGen7ToGen2Transfer(bankFile:File,shown:PokemonEntry){
+    private fun prepareGen7ToGen2Transfer(
+        bankFile:File,shown:PokemonEntry,confirmedFormPlan:Gen7ToOlderFormPlan?=null,
+        reviewedBank:ByteArray?=null,reviewedDestination:ByteArray?=null
+    ){
         val file=importedFile?:return showDialog("Gen 7 → Gen 2","Load a valid Gold, Silver or Crystal destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
@@ -33966,10 +34008,29 @@ class MainActivity : Activity() {
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
             source.tid!=shown.tid||source.sid!=shown.sid)
             return showDialog("Gen 7 → Gen 2","The selected Bank record changed or failed its PK7 checksum.")
-        gen7ToGen2Blocker(source)?.let{
+        if((reviewedBank!=null&&!bank.contentEquals(reviewedBank))||(reviewedDestination!=null&&!destination.contentEquals(reviewedDestination)))
+            return showDialog("Gen 7 → Gen 2","The source or destination changed after the form review. Nothing was changed.")
+        val availableFormPlan=gen7ToOlderBaseFormPlan(source)
+        if(confirmedFormPlan!=null&&confirmedFormPlan!=availableFormPlan)
+            return showDialog("Gen 7 → Gen 2","The reviewed base-form plan changed. Nothing was changed.")
+        gen7ToGen2Blocker(source,confirmedFormPlan)?.let{
+            if(source.form!=0&&availableFormPlan!=null&&confirmedFormPlan==null){
+                val review="Explicit PSE Legalise review. ${availableFormPlan.kind} ID ${availableFormPlan.sourceForm} has no native Generation 2 form field. PSE can convert it to the same species #${source.species}, native base form ${availableFormPlan.destinationForm}.\n\nThe destination uses the base species' Generation 2 typing, stats and identity; the source form appearance and regional/cosmetic identity are not preserved. Moves and every other supported field remain subject to the existing strict checks.\n\nCancel leaves the exact PK7 Bank record and destination byte-for-byte unchanged. Accepting this review authorizes only this form normalization; the PK7 remains unchanged until the chosen native Generation 2 record is written and reopened successfully. This is a PSE conversion, not an official trade, migration, legality certification or provenance claim."
+                var formConsumed=false
+                AlertDialog.Builder(this).setTitle("Gen 7 → Gen 2 form Legalise")
+                    .setMessage(review).setNegativeButton("Cancel",null)
+                    .setPositiveButton("Use native base form"){_,_->
+                        if(formConsumed){showDialog("Gen 7 → Gen 2","This form review was already submitted. Reopen PSE Bank.");return@setPositiveButton};formConsumed=true
+                        if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false)){
+                            showDialog("Gen 7 → Gen 2","The source or destination changed after review. Nothing was changed.");return@setPositiveButton
+                        }
+                        prepareGen7ToGen2Transfer(selected,source,availableFormPlan,bank.copyOf(),destination.copyOf())
+                    }.show()
+                return
+            }
             return showDialog("Gen 7 → Gen 2 blocked","$it\n\nThe Bank record and destination were left unchanged.")
         }
-        val conversion=try{buildGen7ToGen2Record(bank,source)}catch(e:Exception){
+        val conversion=try{buildGen7ToGen2Record(bank,source,confirmedFormPlan)}catch(e:Exception){
             return showDialog("Gen 7 → Gen 2 blocked",(e.message?:"No safe native Generation 2 mapping is available.")+"\n\nNothing was changed.")
         }
         val(mon,ot,nick)=conversion
@@ -33989,8 +34050,9 @@ class MainActivity : Activity() {
             append(source.evs.joinToString("/")).append(" become Stat Exp ").append(statExp.joinToString("/"))
             append("; Special uses the integer average of SpA/SpD EVs, rounded down. The experience-based level becomes ").append(mon[31].toInt()and 0xFF).append(".\n\n")
             append("The destination DV pattern is ").append(if(finalShiny)"shiny" else "not shiny").append("; the source is ").append(if(source.shiny)"shiny" else "not shiny")
+            if(confirmedFormPlan!=null)append(". Accepted Legalise change: ${confirmedFormPlan.kind} ID ${confirmedFormPlan.sourceForm} becomes native base form ${confirmedFormPlan.destinationForm}; the destination uses the base species' Generation 2 identity, typing and stats")
             append(". Gen 2 has no fields for SID ${source.sid}, PID ${"%08X".format(source.pid)}, nature ${source.nature}, ability ${source.ability}/slot ${source.abilityNumber}, gender ${source.gender}, Ball ${source.ball}, markings 0x${"%04X".format(source.markingValue)}, current handler ${source.currentHandler}, met/egg locations ${source.metLocation}/${source.eggLocation}, dates ${source.metYear}-${source.metMonth}-${source.metDay} and ${source.eggYear}-${source.eggMonth}-${source.eggDay}, relearn moves ${source.relearnMoves.joinToString("/")}, ribbons, geography, affection, memory, Resort state, fateful metadata, or the independent Gen 7 HP/SpD IVs. Origin game ID ${source.originGame} is omitted because Generation 2 has no origin field; PSE does not assign intermediate provenance. The held-item byte and caught-data fields are 0. Exact omitted PK7 metadata: ").append(omitted).append(". ")
-            append("Held items, Eggs, alternate forms, Hyper Training, unsupported species/moves/text and invalid values are blocked instead of discarded.\n\n")
+            append("Held items, Eggs, unreviewed alternate forms, Hyper Training, unsupported species/moves/text and invalid values are blocked instead of discarded.\n\n")
             append("Verified retained destination and PK7 Bank recovery snapshots are required. PSE writes one selected native Gen 2 box record, updates Owned/Seen and the primary checksum, reopens the exact record, then removes the Bank entry. Any failure restores or preserves both sides independently.")
         }
         val labels=targets.map{gen2BoxDestinationLabel(it.first,it.second,file,profile,openedUri,destination)}.toTypedArray()
@@ -34003,7 +34065,7 @@ class MainActivity : Activity() {
                 }
                 AlertDialog.Builder(this).setTitle("Choose Gen 2 PC Box").setItems(labels){_,which->
                     if(transferConsumed||which !in targets.indices){showDialog("Gen 7 → Gen 2","This destination choice was already handled. Reopen PSE Bank.");return@setItems};transferConsumed=true
-                    transferGen7BankToGen2(selected,source,bank,mon,ot,nick,targets[which].first,file,destination,openedUri,openedLabel,profile.key)
+                    transferGen7BankToGen2(selected,source,bank,mon,ot,nick,confirmedFormPlan,targets[which].first,file,destination,openedUri,openedLabel,profile.key)
                 }.setNegativeButton("Cancel",null).show()
             }.show()
     }
@@ -34011,7 +34073,8 @@ class MainActivity : Activity() {
 
     private fun transferGen7BankToGen2(
         bankFile:File,source:PokemonEntry,bankBytes:ByteArray,mon:ByteArray,ot:ByteArray,nick:ByteArray,
-        targetBox:Int,file:File,openedDestination:ByteArray,openedUri:Uri?,openedLabel:String?,profileKey:String
+        confirmedFormPlan:Gen7ToOlderFormPlan?,targetBox:Int,file:File,openedDestination:ByteArray,
+        openedUri:Uri?,openedLabel:String?,profileKey:String
     ){
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
@@ -34026,7 +34089,7 @@ class MainActivity : Activity() {
             val currentBank=bankFile.readBytes();require(currentBank.contentEquals(bankBytes)){"The selected Gen 7 Bank record changed."}
             val current=parsePk6(currentBank,0,PK6_STORED_SIZE,false,807)?:error("The Gen 7 Bank record is invalid.")
             require(current.checksumValid&&current.pid==source.pid&&current.species==source.species&&current.tid==source.tid&&current.sid==source.sid){"The selected Gen 7 Pokémon changed."}
-            val refreshed=buildGen7ToGen2Record(currentBank,current)
+            val refreshed=buildGen7ToGen2Record(currentBank,current,confirmedFormPlan)
             require(refreshed.first.contentEquals(mon)&&refreshed.second.contentEquals(ot)&&refreshed.third.contentEquals(nick)){"The prepared conversion changed."}
             val work=fresh.copyOf();val slot=appendGen2BoxPokemon(work,targetBox,mon,ot,nick)
             markGen2PokedexOwnedSeen(work,profile,source.species);updateGen2PrimaryChecksum(work,profile)
