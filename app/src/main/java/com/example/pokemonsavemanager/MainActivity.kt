@@ -12888,7 +12888,7 @@ class MainActivity : Activity() {
         }
         val originTitle=gen3CompatibleOriginTitle(originGame)
             ?:return showDialog("Gen 6 → Gen 3 blocked","Choose a documented Generation 3 origin title and ID. Nothing was changed.")
-        gen6ToGen5PreflightRejection(source,bridgeOriginLegalised)?.let{
+        gen6ToGen5PreflightRejection(source,bridgeOriginLegalised,allowExplicitOriginRewrite=originLegalised)?.let{
             return showDialog("Gen 6 → Gen 3 blocked","$it\n\nThe Bank record and destination were left unchanged.")
         }
         val originLabel=if(originLegalised)"user-selected $originTitle (ID $originGame)" else "preserve $originTitle (ID $originGame)"
@@ -34499,7 +34499,7 @@ class MainActivity : Activity() {
             return showDialog("Gen 6 → Gen 4","The selected Bank record changed or failed its PK6 checksum.")
         val sourceOriginTitle=gen4CompatibleOriginTitle(source.originGame)
         val originLegalised=sourceOriginTitle==null
-        gen6ToGen5PreflightRejection(source,originLegalised)?.let{
+        gen6ToGen5PreflightRejection(source,allowExplicitOriginRewrite=originLegalised)?.let{
             return showDialog("Gen 6 → Gen 4 blocked","$it\n\nThe Bank record and destination were left unchanged.")
         }
         val plan=if(sourceOriginTitle!=null)Gen6Gen5Plan(source.originGame,"preserve $sourceOriginTitle (ID ${source.originGame})",false)else requestedPlan
@@ -34709,7 +34709,9 @@ class MainActivity : Activity() {
         else->null
     }
 
-    private fun gen6ToGen5PreflightRejection(p:PokemonEntry,allowGen6OriginLegalise:Boolean=false):String?=when{
+    private fun gen6ToGen5PreflightRejection(
+        p:PokemonEntry,allowGen6OriginLegalise:Boolean=false,allowExplicitOriginRewrite:Boolean=false
+    ):String?=when{
         !p.checksumValid->"The source PK6 checksum is invalid."
         p.species !in 1..649->"Species #${p.species} did not exist in Generation 5."
         p.isEgg->"Egg records do not have a verified Gen 6 to Gen 5 PSE Bank mapping."
@@ -34733,7 +34735,7 @@ class MainActivity : Activity() {
         p.language !in setOf(1,2,3,4,5,7,8)->"Language ID ${p.language} is not a verified Generation 5 language value."
         p.ball !in 1..25->"Ball ID ${p.ball} has no verified Generation 5 mapping on this route."
         p.metLevel !in 1..100->"The met level is outside Generation 5 limits."
-        gen5CompatibleOriginTitle(p.originGame)==null&&(!allowGen6OriginLegalise||p.originGame !in 24..27)->"Origin game ID ${p.originGame} is neither a documented native Generation 1–5 title nor a Gen 6 title eligible for explicit origin Legalise."
+        gen5CompatibleOriginTitle(p.originGame)==null&&!allowExplicitOriginRewrite&&(!allowGen6OriginLegalise||p.originGame !in 24..27)->"Origin game ID ${p.originGame} is neither a documented native Generation 1–5 title nor a Gen 6 title eligible for explicit origin Legalise."
         !gen5ToGen6DateValid(p.metYear,p.metMonth,p.metDay)->"The met date is not a valid native date."
         !gen5ToGen6DateValid(p.eggYear,p.eggMonth,p.eggDay)->"The Egg date is not a valid native date."
         else->null
@@ -34761,7 +34763,7 @@ class MainActivity : Activity() {
         require(raw.size==PK6_STORED_SIZE){"The preserved Gen 6 Bank record has an unexpected size."}
         val profile=if(allowBridge)null else detectGen5Profile(destination)
         if(!allowBridge&&profile==null)error("A valid Generation 5 destination save is required.")
-        gen6ToGen5PreflightRejection(p,plan.legalised)?.let{error(it)}
+        gen6ToGen5PreflightRejection(p,plan.legalised,allowExplicitOriginRewrite=allowBridge&&plan.legalised)?.let{error(it)}
         require(gen5CompatibleOriginTitle(plan.originGame)!=null){
             "The selected origin game ID ${plan.originGame} is not a documented native Generation 1–5 title."
         }

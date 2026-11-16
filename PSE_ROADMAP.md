@@ -735,4 +735,28 @@ Generation 6 restores to Legends: Z-A now pass the reviewed Bank SHA with the se
 
 This remains an explicit PSE Legalise conversion. It does not claim an official transfer, HOME move, trade, encounter record, legality certification or verified provenance.
 
-The active PSE Bank transfer roadmap is complete. Every supported Legends: Z-A Bank source now has either the reviewed hash handoff and restore-side requirement or its existing content-addressed native identity check, alongside the established destination, checksum, recovery and reopen boundaries. Resume the Omega Ruby UI parity roadmap on the next valid successful event.
+The earlier Bank roadmap checkpoint covered the Legends: Z-A Bank identity work. The user has since supplied a screenshot set showing unresolved main-series transfer failures; the following user-directed work supersedes the prior Omega Ruby UI-parity handoff until these transfer reports are resolved.
+
+## User screenshot issues — main-series Bank transfer repairs (2026-11-16)
+
+Work on the active `pse-phone-auto-v2-test` branch of the public repository. Preserve the current safety model: never silently rewrite provenance, drop or replace moves, normalize forms, overwrite occupied destination slots, or remove a Bank record before the native destination has been written and reopened successfully. Keep explicit Legalise choices visible and cancellable, bind source and destination snapshots, and retain rollback/recovery behavior. No test or build work is requested in this feature-first phase.
+
+### Confirmed transfer failures to repair
+
+1. **Gen 6 → Gen 4 and Gen 6 → Gen 3 origin Legalise gets rejected in the PK5 bridge preflight.** The route presents an explicit destination-valid origin choice, but the Gen 5 bridge validator still rejects some newer origin IDs before conversion. The preflight now accepts that mismatch only when this bridge route has already offered and recorded the explicit origin rewrite; all other origin and record validation remains active. Continue with the same bounded treatment for any other route where an explicit user-selected mapping is offered but an earlier bridge validator prevents reaching it.
+2. **Gen 5 → Gen 1/2 move compatibility.** Screenshot errors identify at least one move absent from Gen 2. Keep the current no-write block until a safe, explicit per-move conversion or removal review can preserve the original record and explain every change.
+3. **Gen 7 → Gen 1/2 form compatibility.** Some forms have no verified native representation in the older destination. Keep blocking implicit form loss; add a precise, cancellable normalization choice only where a documented base-form mapping exists.
+4. **Gen 3 → Gen 4/5/6/7 ball mapping.** Ball ID 0 currently blocks routes without a verified mapping. Trace the PK3 decoder and canonical Gen 3 ball semantics; support only IDs with a documented exact mapping, otherwise keep a clear no-write rejection.
+5. **Gen 3 → Gen 5/7 ability validation.** Screenshots show ability ID 0 rejected even though canonical Gen 3 data can determine the ability from the saved slot/PID. Resolve the source ability from PSE's canonical Gen 3 metadata before validating or converting; retain exact destination ability verification and block ambiguous metadata.
+6. **Gen 1 → Gen 7 exact-field verification.** The current failure is generic. Identify the first mismatching destination-representable field, correct only the conversion/verification mismatch, and retain the exact reopened-record comparison. Keep intentionally unrepresentable fields disclosed rather than silently treating them as preserved.
+7. **Gen 2 → Gen 6 and Gen 2 → Gen 7 exact-field verification.** Find the first mismatching field in the prepared PK6/PK7 checks and repair the conversion or expected-value calculation while preserving PP Ups, moves, IV/EV mapping, ability, identity, native checksum/Pokédex updates, and scoped writes.
+
+### Screenshot states that are expected safety behavior
+
+- Gen 2 → Gen 5 reports no empty destination slot. Keep occupied slots unchanged; clarify that the user must free a slot or choose a save with capacity if needed.
+- “Choose documented origin mapping,” “Choose native destination,” and “Choose compatible origin” prompts are expected guarded flows when native history is unavailable or a destination slot must be selected. Keep their exact title/ID disclosure and Cancel path; fix only any route that subsequently blocks a valid, explicitly selected mapping.
+- For every blocked transfer, confirm the Bank record and destination remain byte-for-byte unchanged.
+
+### Completion and continuation
+
+Resolve the failures above by route, update this inventory with each verified implementation, then review the complete supported-generation/game matrix for remaining screenshot-backed defects. Continue the event-driven PSE development loop on matching new build events only; do not return to Omega Ruby UI parity until the screenshot-driven transfer list is addressed or the user changes priority.
