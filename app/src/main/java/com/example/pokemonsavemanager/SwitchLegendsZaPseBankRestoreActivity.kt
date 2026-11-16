@@ -272,6 +272,11 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                     "The reviewed Generation 2 Bank hash is missing. Reopen PSE Bank."
                 }
             }
+            entry.extension.equals("pk3", true) -> {
+                require(!expectedBankSourceHash.isNullOrBlank()) {
+                    "The reviewed Generation 3 Bank hash is missing. Reopen PSE Bank."
+                }
+            }
             entry.name.startsWith("switch_lgpe_") && entry.extension.equals("pb7", true) -> {
                 require(!expectedBankSourceHash.isNullOrBlank()) {
                     "The reviewed Let's Go Bank hash is missing. Reopen PSE Bank."
