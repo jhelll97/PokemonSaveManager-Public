@@ -57683,6 +57683,57 @@ private data class Gen2ToGen5LegalisePlan(
         else->null
     }
 
+    private fun gen2ForwardBuiltPkMismatch(
+        q:PokemonEntry,p:Gen2Pokemon,expectedName:String,custom:Boolean,abilityId:Int,abilityNumber:Int,
+        pid:Long,nature:Int,gender:Int,evs:IntArray,ppUps:IntArray,ivs:IntArray,language:Int,
+        fateful:Boolean,originGame:Int,encrypted:ByteArray,handlerName:String
+    ):String?=when{
+        !q.checksumValid->"checksum"
+        q.species!=p.species->"species"
+        q.nickname!=expectedName->"nickname"
+        q.isNicknamed!=custom->"nickname flag"
+        q.level!=p.level->"level"
+        q.heldItem!=0->"held item"
+        q.tid!=p.tid->"Trainer ID"
+        q.sid!=0->"Secret ID"
+        q.experience!=p.experience->"experience"
+        q.ability!=abilityId->"ability"
+        q.abilityNumber!=abilityNumber->"ability slot"
+        q.pid!=pid->"PID"
+        q.nature!=nature->"nature"
+        q.gender!=gender->"gender"
+        q.form!=0->"form"
+        !q.evs.contentEquals(evs)->"EVs"
+        !q.moves.contentEquals(p.moves)->"moves"
+        !q.movePP.contentEquals(p.movePP)->"move PP"
+        !gen6Pk6PpUps(encrypted).contentEquals(ppUps)->"PP-Up data"
+        !q.ivs.contentEquals(ivs)->"IVs"
+        q.isEgg->"Egg flag"
+        q.otName!=p.otName->"Original Trainer name"
+        q.friendship!=p.happiness->"friendship"
+        q.currentHandler!=1->"current handler"
+        gen6Pk6HandlerName(encrypted)!=handlerName->"current handler name"
+        q.pokerusDays!=(p.pokerus and 0xF)||q.pokerusStrain!=((p.pokerus ushr 4)and 0xF)->"Pokérus"
+        q.shiny!=p.shiny->"shiny state"
+        q.language!=language->"language"
+        q.markingValue!=0->"markings"
+        q.fatefulEncounter!=fateful->"fateful encounter flag"
+        q.relearnMoves.any{it!=0}->"relearn moves"
+        q.eggLocation!=0->"Egg location"
+        q.metLocation!=30017->"met location"
+        q.ball!=4->"Poké Ball"
+        q.metLevel!=p.level.coerceIn(1,100)->"met level"
+        q.otGender!=0->"Original Trainer gender"
+        q.originGame!=originGame->"origin game"
+        q.country!=0->"country"
+        q.region!=0->"region"
+        q.consoleRegion!=0->"console region"
+        q.eggYear!=0||q.eggMonth!=0||q.eggDay!=0->"Egg date"
+        q.metYear!=0||q.metMonth!=0||q.metDay!=0->"met date"
+        q.hyperTrainFlags!=0->"Hyper Training flags"
+        else->null
+    }
+
     private fun buildGen2ToGen6Pk6(bankBytes:ByteArray,p:Gen2Pokemon,destinationSave:ByteArray,trainer:TrainerData,meta:Gen1ToGen7TransferMeta,plan:Gen2ToGen6LegalisePlan):ByteArray {
         require(!p.isEgg){"Gen 2 Eggs cannot be converted to Gen 6 until egg-specific conversion is implemented."}
         require(bankBytes.size==GEN2_BANK_FILE_SIZE){"The preserved Gen 2 Bank record has an unexpected size."}
@@ -57710,19 +57761,8 @@ private data class Gen2ToGen5LegalisePlan(
         val language=currentGen6LanguageId(destinationSave).coerceIn(1,10);pk[0xE3]=language.toByte()
         updatePk6Checksum(pk);val enc=encryptPk6(pk)
         val q=parsePk6(enc,0,PK6_STORED_SIZE,false,721)?:error("The converted PK6 could not be parsed.")
-        require(
-            q.checksumValid&&q.species==p.species&&q.nickname==expectedName&&q.isNicknamed==custom&&q.level==p.level&&
-                q.heldItem==0&&q.tid==p.tid&&q.sid==0&&q.experience==p.experience&&q.ability==meta.abilityId&&
-                q.abilityNumber==meta.abilityNumber&&q.pid==pid&&q.nature==plan.nature&&q.gender==plan.gender&&q.form==0&&
-                q.evs.contentEquals(evs)&&q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(p.movePP)&&
-                gen6Pk6PpUps(enc).contentEquals(ppUps)&&q.ivs.contentEquals(ivs)&&!q.isEgg&&q.otName==p.otName&&
-                q.friendship==p.happiness&&q.currentHandler==1&&gen6Pk6HandlerName(enc)==trainer.trainerName&&
-                q.pokerusDays==(p.pokerus and 0xF)&&q.pokerusStrain==((p.pokerus ushr 4)and 0xF)&&q.shiny==p.shiny&&
-                q.language==language&&q.markingValue==0&&!q.fatefulEncounter&&q.relearnMoves.all{it==0}&&
-                q.eggLocation==0&&q.metLocation==30017&&q.ball==4&&q.metLevel==p.level.coerceIn(1,100)&&q.otGender==0&&
-                q.originGame==plan.originGame&&q.country==0&&q.region==0&&q.consoleRegion==0&&q.eggYear==0&&
-                q.eggMonth==0&&q.eggDay==0&&q.metYear==0&&q.metMonth==0&&q.metDay==0&&q.hyperTrainFlags==0
-        ){"The converted PK6 did not preserve every reviewed destination-representable field."}
+        val mismatch=gen2ForwardBuiltPkMismatch(q,p,expectedName,custom,meta.abilityId,meta.abilityNumber,pid,plan.nature,plan.gender,evs,ppUps,ivs,language,false,plan.originGame,enc,trainer.trainerName)
+        require(mismatch==null){"The converted PK6 differs in $mismatch."}
         return enc
     }
 
@@ -58093,19 +58133,8 @@ private data class Gen2ToGen5LegalisePlan(
         val language=currentGen7LanguageId(destinationSave).coerceIn(1,10);pk[0xE3]=language.toByte()
         updatePk6Checksum(pk);val enc=encryptPk6(pk)
         val q=parsePk6(enc,0,PK6_STORED_SIZE,false,807)?:error("The converted PK7 could not be parsed.")
-        require(
-            q.checksumValid&&q.species==p.species&&q.nickname==expectedName&&q.isNicknamed==custom&&q.level==p.level&&
-                q.heldItem==0&&q.tid==p.tid&&q.sid==0&&q.experience==p.experience&&q.ability==meta.abilityId&&
-                q.abilityNumber==meta.abilityNumber&&q.pid==pid&&q.nature==plan.nature&&q.gender==plan.gender&&q.form==0&&
-                q.evs.contentEquals(evs)&&q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(p.movePP)&&
-                gen6Pk6PpUps(enc).contentEquals(ppUps)&&q.ivs.contentEquals(ivs)&&!q.isEgg&&q.otName==p.otName&&
-                q.friendship==p.happiness&&q.currentHandler==1&&gen6Pk6HandlerName(enc)==trainer.trainerName&&
-                q.pokerusDays==(p.pokerus and 0xF)&&q.pokerusStrain==((p.pokerus ushr 4)and 0xF)&&q.shiny==p.shiny&&
-                q.language==language&&q.markingValue==0&&q.fatefulEncounter==fateful&&q.relearnMoves.all{it==0}&&
-                q.eggLocation==0&&q.metLocation==30017&&q.ball==4&&q.metLevel==p.level.coerceIn(1,100)&&q.otGender==0&&
-                q.originGame==plan.originGame&&q.country==0&&q.region==0&&q.consoleRegion==0&&q.eggYear==0&&
-                q.eggMonth==0&&q.eggDay==0&&q.metYear==0&&q.metMonth==0&&q.metDay==0&&q.hyperTrainFlags==0
-        ){"The converted PK7 did not preserve every reviewed destination-representable field."}
+        val mismatch=gen2ForwardBuiltPkMismatch(q,p,expectedName,custom,meta.abilityId,meta.abilityNumber,pid,plan.nature,plan.gender,evs,ppUps,ivs,language,fateful,plan.originGame,enc,trainer.trainerName)
+        require(mismatch==null){"The converted PK7 differs in $mismatch."}
         return enc
     }
 
