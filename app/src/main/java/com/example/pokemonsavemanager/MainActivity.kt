@@ -58730,18 +58730,21 @@ private data class Gen2ToGen5LegalisePlan(
                 require(bound()&&writtenProfile.key==openedProfile.key&&verifyGen2SaveIntegrity(written).first){"The complete persisted Gen 2 withdrawal or source identity did not verify."}
                 require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 2 destination changed before Bank cleanup."}
                 require(bound()){"The source identity changed before Bank cleanup."}
+                require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 recovery backup changed before Bank cleanup."}
                 val cleanup=bankFile.readBytes();require(cleanup.contentEquals(openedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true){"The selected Gen 2 Bank record changed before cleanup."};bankDeleteAttempted=true;require(bankFile.delete()){"The Bank entry could not be removed after destination verification."};require(!bankFile.exists()){"The removed Bank entry still exists."}
                 require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 2 destination changed after Bank cleanup."}
                 require(bound()){"The source identity changed after Bank cleanup."}
+                require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 recovery backup changed after Bank cleanup."}
             }catch(e:Exception){
-                val bankRestored=if(!writeStarted)true else runCatching{
+                val bankRestored=runCatching{
                     if(bankDeleteAttempted&&!bankFile.exists()){
                         require(bankFile.createNewFile()){"The Bank recovery path could not be reserved."}
                         bankFile.writeBytes(openedBank)
                     }
-                    require(bankFile.readBytes().contentEquals(openedBank)){"The original Bank record could not be verified; no existing record was overwritten."}
+                    val restored=bankFile.readBytes();require(restored.contentEquals(openedBank)){"The original Bank record could not be verified; no existing record was overwritten."}
+                    require(parseGen2BankPayload(restored)?.let{sameGen2BankRecord(it,opened)}==true){"The restored Gen 2 Bank record identity did not verify."}
                 }.isSuccess
-                val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false))
+                val destinationRestored=runCatching{if(writeStarted)file.writeBytes(fresh);val restored=file.readBytes();val restoredProfile=detectGen2Profile(restored);restored.contentEquals(fresh)&&restoredProfile?.key==openedProfile.key&&verifyGen2SaveIntegrity(restored).first}.getOrDefault(false)
                 val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 2 destination and Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
                 showDialog("Withdraw failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return@setItems
             }
