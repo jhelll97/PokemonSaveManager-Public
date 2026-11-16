@@ -626,3 +626,13 @@ Sword/Shield restores now require the converted species to exist in the loaded S
 This remains a PSE conversion under the explicit Legalise choice and does not claim an official HOME transfer, trade, encounter record, legality certification, or verified provenance.
 
 Next bounded repair: inspect the implemented BDSP PB8 -> Scarlet/Violet PK9 route for the same missing destination-save Pokédex preflight while preserving content-addressed source identity, explicit Legalise disclosure, the chosen empty native slot, caught registration, retained recovery, persisted reopen and two-sided failure handling.
+
+## BDSP -> Scarlet/Violet destination Pokédex preflight repair
+
+Inspection confirmed that the Scarlet/Violet Bank screen exposes content-addressed BDSP PB8 entries, requires the exact selected 344-byte PB8 SHA-256 to remain bound to its `switch_bdsp_<sha256>.pb8` filename, and requires explicit Legalise review before destination selection. The existing converter blocks Eggs, held items, unsupported species and forms, invalid abilities, text, origins, Ball values, dates, levels, handlers, moves, PP, Hyper Training and EV limits, then discloses every retained, transformed, cleared and omitted PB8 field. It produces a checksum-valid native PK9 and already stages the required native caught registration, but PB8 was absent from the destination-save Pokédex preflight.
+
+BDSP restores now require the converted species to exist in the loaded Scarlet/Violet save's native Pokédex table before any destination box or slot is offered. The existing reviewed transaction still writes only one user-chosen empty 344-byte PK9 slot, registers the converted form, gender, shiny state and English language only when required, refreshes the native SHA-256 footer, and exposes the exact Pokédex fields and byte scope in the final review. Verification reopens the exact PK9 and registration, rejects unrelated Pokédex, party, ride-Pokémon, PC-box or save-byte changes, rechecks the unchanged content-addressed PB8 and Scarlet/Violet sources, retains a verified recovery backup, reopens the persisted destination and removes a failed copy when possible.
+
+This remains a PSE conversion under the explicit Legalise choice and does not claim an official HOME transfer, trade, encounter record, legality certification, or verified provenance.
+
+Next bounded repair: re-inventory the remaining supported Bank route matrix after completing the Scarlet/Violet destination-Pokédex preflight pass, selecting the next concrete converter, source-identity or destination-transaction mismatch while preserving explicit Legalise disclosure and the established one-empty-slot safety boundary.
