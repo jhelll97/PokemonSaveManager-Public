@@ -3482,7 +3482,8 @@ class MainActivity : Activity() {
         val nickname = readGen3Text(data, offset+8, 10)
         val ot = readGen3Text(data, offset+0x14, 7)
         return PokemonEntry(
-            species, nickname, true, level, checksumOk, held, tid, sid, exp, 0, abilitySlot, pid,
+            species, nickname, true, level, checksumOk, held, tid, sid, exp,
+            canonicalGen3AbilityId(species,abilitySlot)?:0, abilitySlot, pid,
             (pid % 25L).toInt(), -1, 0, evs, moves, pp, ivs, isEgg, ot, friendship, 0,
             pokerus and 0xF, (pokerus ushr 4) and 0xF, shinyVal < 8, data[offset+0x12].toInt() and 0xFF,
             data[offset+0x1B].toInt() and 0xFF, false, IntArray(4), 0, metLoc,
@@ -50191,10 +50192,15 @@ class MainActivity : Activity() {
         gen3AbilityNames.getOrNull(ability)?.takeUnless { ability==0 }
     private fun canonicalGen3SpeciesAbilities(species:Int):IntArray? =
         gen3SpeciesAbilityRows.getOrNull(species-1)?.copyOf()
+    private fun canonicalGen3AbilityId(species:Int,slot:Int):Int? {
+        if(slot !in 1..2)return null
+        val abilities=canonicalGen3SpeciesAbilities(species)?:return null
+        return abilities.getOrNull(slot-1)?.takeIf{it in 1..77}
+            ?:abilities.firstOrNull{it in 1..77}
+    }
     private fun canonicalGen3AbilityLabel(species:Int,slot:Int):String? {
         if(slot !in 1..2)return null
-        val slots=canonicalGen3SpeciesAbilities(species)?:return null
-        val abilityId=slots.getOrElse(slot-1){0}.takeIf{it!=0}?:slots.firstOrNull()?:return null
+        val abilityId=canonicalGen3AbilityId(species,slot)?:return null
         val name=canonicalGen3AbilityName(abilityId)?:return null
         return "$name (slot $slot)"
     }
