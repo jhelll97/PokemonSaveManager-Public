@@ -442,6 +442,7 @@ class MainActivity : Activity() {
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedSource&&currentSourceLabel==openedLabel
         if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog("Move selected","The active save changed after destination selection. Reopen the Bank selection. Nothing was changed.");return}
         val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;val removed=ArrayList<Pair<File,ByteArray>>();var writeStarted=false
+        val recoveryProfileKey=detectGen2Profile(openedDestination)?.key
         var safetyBackup:File?=null
         try{
             require(bound()&&verifyGen2SaveIntegrity(fresh).first){"The captured Gen 2 batch source identity or full integrity changed."}
@@ -465,23 +466,32 @@ class MainActivity : Activity() {
             file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)){"The Gen 2 destination changed while the batch was written."};val writtenProfile=detectGen2Profile(written)?:error("The persisted Gen 2 destination failed checksum verification.");require(gen2ChecksumValid(written,writtenProfile)){"The persisted Gen 2 checksum is invalid."};val afterPayloads=gen2LocationPayloads(written,location,writtenProfile);require(afterPayloads.size==stagedPayloads.size&&sameGen2PayloadList(afterPayloads,stagedPayloads)){"The persisted Gen 2 box records changed after staging."}
             require(bound()&&writtenProfile.key==profile.key&&verifyGen2SaveIntegrity(written).first){"The persisted Gen 2 batch withdrawal or source identity did not verify."}
             for(i in refreshed.indices){val item=refreshed[i];val slot=slots[i];val persisted=parseGen2Box(written,targetBox).firstOrNull{it.slot==slot};require(persisted!=null&&sameGen2BankRecord(persisted,item.source)){"A persisted Gen 2 Bank record did not preserve every supported field."};require(gen2BoxRawCore(written,targetBox,slot).contentEquals(rawRecords[i])){"An exact Gen 2 Bank record did not persist."};require(gen2PokedexOwnedSeen(written,writtenProfile,item.source.species)){"A transferred species was not registered Seen and Owned after persistence."}}
-            for(item in refreshed){require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 2 destination changed before Bank cleanup."};require(bound()){"The source identity changed before a batch Bank cleanup."};val cleanup=item.bankFile.readBytes();require(cleanup.contentEquals(item.bankBytes)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,item.source)}==true){"A selected Gen 2 Bank record changed before cleanup."};removed.add(item.bankFile to item.bankBytes);require(item.bankFile.delete()){"A selected Gen 2 Bank record could not be removed after destination verification."};require(!item.bankFile.exists()){"A removed Gen 2 Bank record still exists."}}
+            for(item in refreshed){require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 2 destination changed before Bank cleanup."};require(bound()){"The source identity changed before a batch Bank cleanup."};require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 batch recovery backup changed before Bank cleanup."};val cleanup=item.bankFile.readBytes();require(cleanup.contentEquals(item.bankBytes)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,item.source)}==true){"A selected Gen 2 Bank record changed before cleanup."};removed.add(item.bankFile to item.bankBytes);require(item.bankFile.delete()){"A selected Gen 2 Bank record could not be removed after destination verification."};require(!item.bankFile.exists()){"A removed Gen 2 Bank record still exists."}}
             require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 2 destination changed after Bank cleanup."}
             require(bound()){"The source identity changed after batch Bank cleanup."}
+            require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 batch recovery backup changed after Bank cleanup."}
         }catch(e:Exception){
-            val bankRestored=if(!writeStarted)true else{
-                var restored=true
-                for((bank,bytes)in removed){
-                    val recovered=runCatching{
-                        if(bank.exists())require(bank.readBytes().contentEquals(bytes)){"A Bank recovery path changed; it was not overwritten."}
-                        else{require(bank.createNewFile()){"A Bank recovery path could not be reserved."};bank.writeBytes(bytes);require(bank.readBytes().contentEquals(bytes)){"A restored Bank record did not verify."}}
-                    }.isSuccess
-                    if(!recovered)restored=false
-                }
-                restored&&selected.all{runCatching{it.bankFile.readBytes().contentEquals(it.bankBytes)}.getOrDefault(false)}
+            var bankRestored=true
+            for(item in selected){
+                val attempted=removed.any{it.first.absolutePath==item.bankFile.absolutePath}
+                val recovered=runCatching{
+                    if(item.bankFile.exists())require(item.bankFile.readBytes().contentEquals(item.bankBytes)){"An existing Bank recovery path changed; it was not overwritten."}
+                    else{require(attempted){"A Bank record disappeared before PSE attempted its cleanup; it was not recreated."};require(item.bankFile.createNewFile()){"A Bank recovery path could not be reserved."};item.bankFile.writeBytes(item.bankBytes)}
+                    val restored=item.bankFile.readBytes();require(restored.contentEquals(item.bankBytes)&&parseGen2BankPayload(restored)?.let{sameGen2BankRecord(it,item.source)}==true){"A restored Gen 2 Bank record did not verify."};true
+                }.getOrDefault(false)
+                bankRestored=recovered&&bankRestored
             }
-            val destinationRestored=!writeStarted||(bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false))
-            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 2 destination and every selected Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank records until a verified backup and Bank contents have been reviewed."
+            val destinationRestored=runCatching{
+                if(writeStarted)file.writeBytes(fresh)
+                val restored=file.readBytes();val restoredProfile=detectGen2Profile(restored)
+                require(restored.contentEquals(fresh)&&restoredProfile?.key==recoveryProfileKey&&verifyGen2SaveIntegrity(restored).first){"The restored Gen 2 destination bytes, profile or integrity did not verify."};true
+            }.getOrDefault(false)
+            val recovery=when{
+                bankRestored&&destinationRestored->"The exact Gen 2 destination and every selected Bank record were restored or kept and verified."
+                bankRestored->"Every selected Gen 2 Bank record was restored or kept, but destination restoration was not verified. Use the retained destination backup before editing again."
+                destinationRestored->"The exact Gen 2 destination was restored, but one or more Bank records were not verified. Keep the remaining Bank records and recovery details for review."
+                else->"Automatic recovery could not be verified. Stop editing and keep the working save, retained backup and remaining Bank records for review."
+            }
             showDialog("Move selected failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         selectedBankFiles.clear();bankMultiSelectMode=false;Toast.makeText(this,"${selected.size} Gen 2 Pokémon moved to Box $targetBox and verified",Toast.LENGTH_LONG).show();showBank()
