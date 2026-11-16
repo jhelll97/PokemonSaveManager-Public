@@ -59821,22 +59821,32 @@ private data class Gen2ToGen5LegalisePlan(
     }
 
     private fun withdrawGen1BankToBox(bankFile:File,openedRaw:ByteArray,p:Gen1Pokemon) {
-        val f=importedFile?:return
-        val initial=runCatching{f.readBytes()}.getOrElse{showDialog("Withdraw","The loaded Gen 1 save could not be read. Nothing was changed.");return}
-        val initialIntegrity=verifyGen1SaveIntegrity(initial)
+        val file=importedFile?:return;val openedSource=currentSourceUri;val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedSource&&currentSourceLabel==openedLabel
+        fun exactBank(bytes:ByteArray)=bytes.contentEquals(openedRaw)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,p)}==true
+        val openedDestination=runCatching{file.readBytes()}.getOrElse{showDialog("Withdraw","The loaded Gen 1 save could not be read. Nothing was changed.");return}
+        val initialIntegrity=verifyGen1SaveIntegrity(openedDestination)
         if(!initialIntegrity.first){showDialog("Withdraw",initialIntegrity.second+" Nothing was changed.");return}
-        val targets=availableGen1BoxTargets(initial)
+        if(!bound()){showDialog("Withdraw","The loaded Gen 1 save identity changed. Reopen PSE Bank. Nothing was changed.");return}
+        val currentBank=runCatching{bankFile.readBytes()}.getOrNull()
+        if(currentBank==null||!exactBank(currentBank)){showDialog("Withdraw","The selected Gen 1 Bank record changed. Reopen PSE Bank. Nothing was changed.");return}
+        val targets=availableGen1BoxTargets(openedDestination)
         if(targets.isEmpty()){showDialog("Withdraw","No writable Gen 1 box has room.");return}
+        var consumed=false
         AlertDialog.Builder(this).setTitle("Withdraw to…").setItems(targets.map{(b,e)->"Box $b • $e empty"}.toTypedArray()){_,which->
+            if(consumed||which !in targets.indices){consumed=true;showDialog("Withdraw","This destination choice was already handled or is invalid. Reopen PSE Bank. Nothing was changed.");return@setItems}
+            consumed=true
+            if(!bound()){showDialog("Withdraw failed","The loaded Gen 1 save identity changed after the box list opened. Reopen PSE Bank. Nothing was changed.");return@setItems}
             val box=targets[which].first
-            val fresh=runCatching{f.readBytes()}.getOrElse{showDialog("Withdraw failed","The fresh Gen 1 save could not be read. Nothing was changed.");return@setItems}
-            val raw=runCatching{bankFile.readBytes()}.getOrElse{showDialog("Withdraw failed","The selected Bank record could not be read. Nothing was changed.");return@setItems}
-            val parsed=parseGen1BankPayload(raw)?:run{showDialog("Withdraw failed","The selected Bank record is invalid. Nothing was changed.");return@setItems}
+            val fresh=runCatching{file.readBytes()}.getOrElse{showDialog("Withdraw failed","The fresh Gen 1 save could not be read. Nothing was changed.");return@setItems}
+            var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null;var bankRecovery:File?=null
             try {
+                require(bound()&&fresh.contentEquals(openedDestination)){"The Gen 1 destination or its source identity changed after the box list opened."}
                 val freshIntegrity=verifyGen1SaveIntegrity(fresh);require(freshIntegrity.first){freshIntegrity.second}
                 val available=availableGen1BoxTargets(fresh).firstOrNull{it.first==box}?.second?:0
                 require(available>0){"Box $box is no longer writable or has become full."}
-                require(raw.contentEquals(openedRaw)&&sameGen1TransferRecord(parsed,p)){"The selected Bank record changed before withdrawal. Nothing was changed."}
+                val raw=bankFile.readBytes();require(exactBank(raw)){"The selected Gen 1 Bank record changed before withdrawal."}
+                val parsed=parseGen1BankPayload(raw)?:error("The selected Gen 1 Bank record is invalid.")
                 val before=parseGen1Box(fresh,box).pokemon.sortedBy{it.slot}
                 val d=fresh.copyOf();val o=GEN1_BANK_HEADER_SIZE
                 val slot=appendGen1BoxPokemon(d,box,raw.copyOfRange(o,o+GEN1_BOX_MON_SIZE),raw.copyOfRange(o+GEN1_BOX_MON_SIZE,o+GEN1_BOX_MON_SIZE+11),raw.copyOfRange(o+GEN1_BOX_MON_SIZE+11,GEN1_BANK_FILE_SIZE))
@@ -59847,19 +59857,43 @@ private data class Gen2ToGen5LegalisePlan(
                 val staged=parseGen1Box(d,box).pokemon.sortedBy{it.slot}
                 require(staged.size==before.size+1 && staged.take(before.size).zip(before).all{(a,b)->sameGen1TransferRecord(a,b)}){"The staged destination changed an existing Pokémon."}
                 val stagedAdded=staged.firstOrNull{it.slot==slot};require(stagedAdded!=null && sameGen1TransferRecord(stagedAdded,parsed)){"The staged withdrawn Pokémon did not preserve every supported field."}
-                f.writeBytes(d)
-                val written=f.readBytes();require(written.contentEquals(d)){"The destination save changed while the Gen 1 Bank withdrawal was being written."};val post=verifyGen1WriteState(written,box);require(post.first){post.second}
+                val backup=File.createTempFile(backupGameName(file)+"_PreGen1BankWithdraw_",".backup",backupsDir());safetyBackup=backup
+                backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The exact Gen 1 recovery backup did not verify."};retainGen2ToGen1SafetyBackup(backup,fresh)
+                val bankCopy=File.createTempFile("PSE_G1Withdraw_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
+                bankCopy.writeBytes(raw);require(exactBank(bankCopy.readBytes())){"The exact Gen 1 Bank recovery snapshot did not verify."}
+                require(bound()&&file.readBytes().contentEquals(fresh)&&exactBank(bankFile.readBytes())&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&exactBank(bankCopy.readBytes())){"The destination, Bank record or retained recovery snapshots changed before writing."}
+                writeStarted=true;file.writeBytes(d)
+                val written=file.readBytes();require(written.contentEquals(d)){"The destination save changed while the Gen 1 Bank withdrawal was being written."};val post=verifyGen1WriteState(written,box);require(post.first){post.second}
                 val after=parseGen1Box(written,box).pokemon.sortedBy{it.slot}
                 require(after.size==before.size+1 && after.take(before.size).zip(before).all{(a,b)->sameGen1TransferRecord(a,b)}){"An existing destination Pokémon changed after Bank withdrawal persistence."}
                 val q=after.firstOrNull{it.slot==slot};require(q!=null && sameGen1TransferRecord(q,parsed)){"The withdrawn Pokémon did not verify after re-reading the save."}
                 val bit2=dex-1;val mask2=1 shl(bit2%8);require((written[0x25A3+bit2/8].toInt() and mask2)!=0&&(written[0x25B6+bit2/8].toInt() and mask2)!=0){"Withdrawn Pokémon did not register Seen + Caught after the save was re-read."}
-                val committedRaw=bankFile.readBytes();require(committedRaw.contentEquals(raw) && parseGen1BankPayload(committedRaw)?.let{sameGen1TransferRecord(it,parsed)}==true){"The selected Bank record changed before cleanup. The destination save was restored."}
-                if(!bankFile.delete()){f.writeBytes(fresh);error("The Pokémon was written, but the Bank entry could not be removed. The save was restored to avoid duplication.")}
+                require(bound()&&file.readBytes().contentEquals(d)&&exactBank(bankFile.readBytes())&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&exactBank(bankCopy.readBytes())){"The verified destination or retained recovery snapshots changed before Bank cleanup."}
+                bankDeleteAttempted=true;require(bankFile.delete()&&!bankFile.exists()){"The Gen 1 Bank entry could not be removed after destination verification."}
+                require(bound()&&file.readBytes().contentEquals(d)&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&exactBank(bankCopy.readBytes())){"The verified destination or retained recovery snapshots changed after Bank cleanup."}
+                runCatching{bankCopy.delete()}
                 Toast.makeText(this,"Withdrawn to Box $box and verified",Toast.LENGTH_LONG).show();showGen1PokemonViewer("boxes",box)
             } catch(e:Exception) {
-                runCatching{f.writeBytes(fresh)};showDialog("Withdraw failed","${e.message?:"Unknown error"}\n\nThe fresh working save was restored and the Bank entry was kept where possible.")
+                val bankRestored=runCatching{
+                    if(bankDeleteAttempted&&!bankFile.exists()){require(bankFile.createNewFile()){"The Bank recovery path could not be reserved."};bankFile.writeBytes(openedRaw)}
+                    require(exactBank(bankFile.readBytes())){"The exact Gen 1 Bank record could not be restored or verified."};true
+                }.getOrDefault(false)
+                val destinationRestored=runCatching{
+                    if(writeStarted)file.writeBytes(fresh)
+                    val restored=file.readBytes();require(restored.contentEquals(fresh)){"The restored Gen 1 destination bytes did not verify."};require(verifyGen1SaveIntegrity(restored).first){"The restored Gen 1 destination integrity did not verify."};true
+                }.getOrDefault(false)
+                if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
+                val recovery=when{
+                    bankRestored&&destinationRestored->"The exact Gen 1 destination and Bank record were restored or kept and verified."
+                    bankRestored->"The Gen 1 Bank record was restored or kept, but destination restoration was not verified. Use the retained destination backup before editing again."
+                    destinationRestored->"The exact Gen 1 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
+                    else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
+                }
+                showDialog("Withdraw failed","${e.message?:"Unknown error"}\n\n$recovery"+
+                    (safetyBackup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                    (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery snapshot: ${it.name}"}?:""))
             }
-        }.setNegativeButton("Cancel",null).show()
+        }.setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
     }
 
     private fun gen1GridTile(p: Gen1Pokemon?, location: String, party: Boolean): LinearLayout {
