@@ -57638,19 +57638,50 @@ private data class Gen2ToGen5LegalisePlan(
         return IntArray(4){(bankBytes[o+23+it].toInt() ushr 6) and 3}
     }
 
-    private fun sameGen2ToGen6Pk6(a:PokemonEntry,b:PokemonEntry):Boolean =
-        a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.nickname==b.nickname&&
-            a.isNicknamed==b.isNicknamed&&a.level==b.level&&a.heldItem==b.heldItem&&a.tid==b.tid&&a.sid==b.sid&&
-            a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&
-            a.gender==b.gender&&a.form==b.form&&a.evs.contentEquals(b.evs)&&a.moves.contentEquals(b.moves)&&
-            a.movePP.contentEquals(b.movePP)&&a.ivs.contentEquals(b.ivs)&&a.isEgg==b.isEgg&&a.otName==b.otName&&
-            a.friendship==b.friendship&&a.currentHandler==b.currentHandler&&a.pokerusDays==b.pokerusDays&&
-            a.pokerusStrain==b.pokerusStrain&&a.shiny==b.shiny&&a.language==b.language&&a.markingValue==b.markingValue&&
-            a.fatefulEncounter==b.fatefulEncounter&&a.relearnMoves.contentEquals(b.relearnMoves)&&
-            a.eggLocation==b.eggLocation&&a.metLocation==b.metLocation&&a.ball==b.ball&&a.metLevel==b.metLevel&&
-            a.otGender==b.otGender&&a.originGame==b.originGame&&a.country==b.country&&a.region==b.region&&
-            a.consoleRegion==b.consoleRegion&&a.eggYear==b.eggYear&&a.eggMonth==b.eggMonth&&a.eggDay==b.eggDay&&
-            a.metYear==b.metYear&&a.metMonth==b.metMonth&&a.metDay==b.metDay&&a.hyperTrainFlags==b.hyperTrainFlags
+    private fun gen2ForwardPkMismatch(a:PokemonEntry,b:PokemonEntry):String?=when{
+        !a.checksumValid||!b.checksumValid->"checksum"
+        a.pid!=b.pid->"PID"
+        a.species!=b.species->"species"
+        a.nickname!=b.nickname->"nickname"
+        a.isNicknamed!=b.isNicknamed->"nickname flag"
+        a.level!=b.level->"level"
+        a.heldItem!=b.heldItem->"held item"
+        a.tid!=b.tid->"Trainer ID"
+        a.sid!=b.sid->"Secret ID"
+        a.experience!=b.experience->"experience"
+        a.ability!=b.ability->"ability"
+        a.abilityNumber!=b.abilityNumber->"ability slot"
+        a.nature!=b.nature->"nature"
+        a.gender!=b.gender->"gender"
+        a.form!=b.form->"form"
+        !a.evs.contentEquals(b.evs)->"EVs"
+        !a.moves.contentEquals(b.moves)->"moves"
+        !a.movePP.contentEquals(b.movePP)->"move PP"
+        !a.ivs.contentEquals(b.ivs)->"IVs"
+        a.isEgg!=b.isEgg->"Egg flag"
+        a.otName!=b.otName->"Original Trainer name"
+        a.friendship!=b.friendship->"friendship"
+        a.currentHandler!=b.currentHandler->"current handler"
+        a.pokerusDays!=b.pokerusDays||a.pokerusStrain!=b.pokerusStrain->"Pokérus"
+        a.shiny!=b.shiny->"shiny state"
+        a.language!=b.language->"language"
+        a.markingValue!=b.markingValue->"markings"
+        a.fatefulEncounter!=b.fatefulEncounter->"fateful encounter flag"
+        !a.relearnMoves.contentEquals(b.relearnMoves)->"relearn moves"
+        a.eggLocation!=b.eggLocation->"Egg location"
+        a.metLocation!=b.metLocation->"met location"
+        a.ball!=b.ball->"Poké Ball"
+        a.metLevel!=b.metLevel->"met level"
+        a.otGender!=b.otGender->"Original Trainer gender"
+        a.originGame!=b.originGame->"origin game"
+        a.country!=b.country->"country"
+        a.region!=b.region->"region"
+        a.consoleRegion!=b.consoleRegion->"console region"
+        a.eggYear!=b.eggYear||a.eggMonth!=b.eggMonth||a.eggDay!=b.eggDay->"Egg date"
+        a.metYear!=b.metYear||a.metMonth!=b.metMonth||a.metDay!=b.metDay->"met date"
+        a.hyperTrainFlags!=b.hyperTrainFlags->"Hyper Training flags"
+        else->null
+    }
 
     private fun buildGen2ToGen6Pk6(bankBytes:ByteArray,p:Gen2Pokemon,destinationSave:ByteArray,trainer:TrainerData,meta:Gen1ToGen7TransferMeta,plan:Gen2ToGen6LegalisePlan):ByteArray {
         require(!p.isEgg){"Gen 2 Eggs cannot be converted to Gen 6 until egg-specific conversion is implemented."}
@@ -57808,10 +57839,12 @@ private data class Gen2ToGen5LegalisePlan(
             require((0..3).all{i->source.moves[i]!=0||(source.movePP[i]==0&&expectedPpUps[i]==0)}){"An empty move slot contains PP or PP-Up data that cannot be preserved."}
             val pk6=buildGen2ToGen6Pk6(bank,source,fresh,trainer,meta,plan)
             val converted=parsePk6(pk6,0,PK6_STORED_SIZE,false,721)?:error("The refreshed PK6 could not be parsed.")
-            require(pk6.contentEquals(preparedPk6)&&sameGen2ToGen6Pk6(converted,prepared)&&gen6Pk6PpUps(pk6).contentEquals(expectedPpUps)){"The reviewed PK6 or PP-Up conversion changed before staging."}
+            val preparedMismatch=gen2ForwardPkMismatch(converted,prepared);val preparedPpUpsMatch=gen6Pk6PpUps(pk6).contentEquals(expectedPpUps)
+            require(pk6.contentEquals(preparedPk6)&&preparedMismatch==null&&preparedPpUpsMatch){"The reviewed PK6 differs in ${preparedMismatch?:if(!preparedPpUpsMatch)"PP-Up data" else "native record bytes"}."}
             val save=fresh.copyOf();pk6.copyInto(save,off)
             val stagedBytes=save.copyOfRange(off,off+PK6_STORED_SIZE);val staged=parsePk6(stagedBytes,0,PK6_STORED_SIZE,false,721)?:error("The staged PK6 could not be parsed.")
-            require(stagedBytes.contentEquals(pk6)&&sameGen2ToGen6Pk6(staged,converted)&&gen6Pk6PpUps(stagedBytes).contentEquals(expectedPpUps)){"The staged PK6 did not preserve every reviewed field and PP-Up value."}
+            val stagedMismatch=gen2ForwardPkMismatch(staged,converted);val stagedPpUpsMatch=gen6Pk6PpUps(stagedBytes).contentEquals(expectedPpUps)
+            require(stagedBytes.contentEquals(pk6)&&stagedMismatch==null&&stagedPpUpsMatch){"The staged PK6 differs in ${stagedMismatch?:if(!stagedPpUpsMatch)"PP-Up data" else "native record bytes"}."}
             registerGen6Dex(save,staged.species,staged.gender,staged.shiny,staged.language);updateGen6BoxChecksum(save);updateGen6DexChecksum(save)
             require(gen6BoxChecksumValid(save)&&gen6BlockChecksumValid(save,20)&&gen6DexCaught(save,staged.species)){"The staged Gen 6 checksums or Pokédex registration failed verification."}
             require(bound()&&bankFile.readBytes().contentEquals(expectedBank)&&file.readBytes().contentEquals(fresh)){"The source or destination changed during staging."}
@@ -57822,8 +57855,10 @@ private data class Gen2ToGen5LegalisePlan(
             writeStarted=true;file.writeBytes(save)
             val written=file.readBytes();require(written.contentEquals(save)){"The destination changed while it was written."}
             val actual=written.copyOfRange(off,off+PK6_STORED_SIZE);val reopened=parsePk6(actual,0,PK6_STORED_SIZE,false,721)?:error("The persisted PK6 could not be parsed.")
-            require(actual.contentEquals(pk6)&&sameGen2ToGen6Pk6(reopened,staged)&&gen6Pk6PpUps(actual).contentEquals(expectedPpUps)){"The exact converted PK6 or PP Ups did not persist."}
-            require(gen6BoxChecksumValid(written)&&gen6BlockChecksumValid(written,20)&&gen6DexCaught(written,reopened.species)){"The persisted Gen 6 checksums or Pokédex registration failed verification."}
+            val reopenedMismatch=gen2ForwardPkMismatch(reopened,staged);val reopenedPpUpsMatch=gen6Pk6PpUps(actual).contentEquals(expectedPpUps)
+            val reopenedDexMatches=gen6DexCaught(written,reopened.species)
+            require(actual.contentEquals(pk6)&&reopenedMismatch==null&&reopenedPpUpsMatch&&reopenedDexMatches){"Persisted PK6 verification failed: ${reopenedMismatch?:if(!reopenedPpUpsMatch)"PP-Up data" else if(!reopenedDexMatches)"Pokédex registration" else "native record bytes"}."}
+            require(gen6BoxChecksumValid(written)&&gen6BlockChecksumValid(written,20)){"The persisted Gen 6 checksum verification failed."}
             val cleanup=bankFile.readBytes()
             require(bound()&&cleanup.contentEquals(expectedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true&&file.readBytes().contentEquals(save)&&isBackupKept(backup)){"The Bank record, destination identity or retained backup changed before cleanup."}
             bankDeleteAttempted=true;require(bankFile.delete()&&!bankFile.exists()){"The Gen 2 Bank entry could not be removed after destination verification."}
@@ -57941,10 +57976,10 @@ private data class Gen2ToGen5LegalisePlan(
             require(bound()){"The destination identity changed before batch validation."}
             require(prepared.isNotEmpty()){"The prepared selection is empty."};require(prepared.map{it.bankFile.absolutePath}.distinct().size==prepared.size){"The prepared selection contains a duplicate Bank entry."};require(fresh.contentEquals(preparedDestination)&&generationForSize(fresh.size)==6&&gen6BoxChecksumValid(fresh)&&gen6BlockChecksumValid(fresh,20)){"The Gen 6 destination changed or is no longer valid."}
             val info=boxStorageInfo(fresh)?:error("PSE could not resolve Gen 6 PC storage.");require(targetBox in 0 until info.second/30){"The selected Gen 6 destination box is invalid."};val trainer=analyzeSave(file).trainer?:error("PSE could not re-read the destination trainer.")
-            val refreshed=prepared.map{item->val bank=item.bankFile.readBytes();require(bank.contentEquals(item.bankBytes)){"A selected Gen 2 Bank record changed after preparation."};val source=parseGen2BankPayload(bank)?:error("A selected Gen 2 Bank record is invalid.");require(sameGen2BankRecord(source,item.source)){"A selected Gen 2 Pokémon changed after preparation."};require(item.plan==gen2ToGen6LegalisePlan(source,item.meta,bank)){"A prepared Gen 6 Legalise plan no longer matches a selected Pokémon."};gen2ToGen6Rejection(source,item.plan,item.meta,bank)?.let{error(it)};val pk6=buildGen2ToGen6Pk6(bank,source,fresh,trainer,item.meta,item.plan);val converted=parsePk6(pk6,0,PK6_STORED_SIZE,false,721)?:error("A refreshed PK6 could not be parsed.");require(pk6.contentEquals(item.pk6)&&sameGen2ToGen6Pk6(converted,item.converted)){"A prepared PK6 conversion changed before staging."};Gen2Gen6BatchPrepared(item.bankFile,bank,source,item.meta,item.plan,pk6,converted)}
+            val refreshed=prepared.map{item->val bank=item.bankFile.readBytes();require(bank.contentEquals(item.bankBytes)){"A selected Gen 2 Bank record changed after preparation."};val source=parseGen2BankPayload(bank)?:error("A selected Gen 2 Bank record is invalid.");require(sameGen2BankRecord(source,item.source)){"A selected Gen 2 Pokémon changed after preparation."};require(item.plan==gen2ToGen6LegalisePlan(source,item.meta,bank)){"A prepared Gen 6 Legalise plan no longer matches a selected Pokémon."};gen2ToGen6Rejection(source,item.plan,item.meta,bank)?.let{error(it)};val pk6=buildGen2ToGen6Pk6(bank,source,fresh,trainer,item.meta,item.plan);val converted=parsePk6(pk6,0,PK6_STORED_SIZE,false,721)?:error("A refreshed PK6 could not be parsed.");val mismatch=gen2ForwardPkMismatch(converted,item.converted);require(pk6.contentEquals(item.pk6)&&mismatch==null){"A prepared PK6 differs in ${mismatch?:"native record bytes"}."};Gen2Gen6BatchPrepared(item.bankFile,bank,source,item.meta,item.plan,pk6,converted)}
             val empty=(0 until 30).filter{slot->parsePk6(fresh,info.first+(targetBox*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,info.third)==null};require(empty.size>=refreshed.size){"Gen 6 Box ${targetBox+1} no longer has room for the complete selection."}
             val work=fresh.copyOf();val allowed=HashSet<Int>();val expected=ArrayList<Triple<Int,ByteArray,PokemonEntry>>()
-            for(i in refreshed.indices){val item=refreshed[i];val target=targetBox*30+empty[i];val off=info.first+target*PK6_STORED_SIZE;require(parsePk6(work,off,PK6_STORED_SIZE,false,info.third)==null){"A destination slot is no longer empty."};item.pk6.copyInto(work,off);for(x in off until off+PK6_STORED_SIZE)allowed.add(x);val staged=parsePk6(work,off,PK6_STORED_SIZE,false,721)?:error("A staged PK6 could not be parsed.");require(sameGen2ToGen6Pk6(staged,item.converted)){"A staged PK6 did not preserve every converted field."};expected.add(Triple(target,item.pk6,staged))}
+            for(i in refreshed.indices){val item=refreshed[i];val target=targetBox*30+empty[i];val off=info.first+target*PK6_STORED_SIZE;require(parsePk6(work,off,PK6_STORED_SIZE,false,info.third)==null){"A destination slot is no longer empty."};item.pk6.copyInto(work,off);for(x in off until off+PK6_STORED_SIZE)allowed.add(x);val staged=parsePk6(work,off,PK6_STORED_SIZE,false,721)?:error("A staged PK6 could not be parsed.");val mismatch=gen2ForwardPkMismatch(staged,item.converted);require(mismatch==null){"A staged PK6 differs in $mismatch."};expected.add(Triple(target,item.pk6,staged))}
             for((_,_,mon) in expected){val bit=mon.species-1;val bd=bit ushr 3;val shift=(mon.gender.coerceIn(0,1)) or ((if(mon.shiny)1 else 0) shl 1);allowed.add(0x15000+0x08+bd);allowed.add(0x15000+0x08+0x60*(1+shift)+bd);for(r in 5..8)allowed.add(0x15000+0x08+0x60*r+bd);registerGen6Dex(work,mon.species,mon.gender,mon.shiny,mon.language)}
             val boxBlock=if(work.size==SIZE_G6_XY)53 else 56;for(id in intArrayOf(20,boxBlock)){val o=gen6ChecksumOffset(work,id);allowed.add(o);allowed.add(o+1)};updateGen6BoxChecksum(work);updateGen6DexChecksum(work)
             require(work.indices.all{it in allowed||work[it]==fresh[it]}){"Unrelated Gen 6 save data changed during batch staging."};require(gen6BoxChecksumValid(work)&&gen6BlockChecksumValid(work,20)&&expected.all{gen6DexCaught(work,it.third.species)}){"The staged Gen 6 checksums or Pokédex failed verification."}
@@ -57956,7 +57991,7 @@ private data class Gen2ToGen5LegalisePlan(
             require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The Gen 6 destination, selected Bank records or retained backup changed before writing. Nothing was written."}
             writeStarted=true
             file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)){"The destination changed while the batch was written."};require(gen6BoxChecksumValid(written)&&gen6BlockChecksumValid(written,20)){"The persisted Gen 6 save failed checksum validation."};require(written.indices.all{it in allowed||written[it]==fresh[it]}){"Unrelated Gen 6 data changed after persistence."}
-            for((target,bytes,staged) in expected){val off=info.first+target*PK6_STORED_SIZE;val actual=written.copyOfRange(off,off+PK6_STORED_SIZE);val q=parsePk6(actual,0,PK6_STORED_SIZE,false,721)?:error("A persisted PK6 could not be parsed.");require(actual.contentEquals(bytes)&&sameGen2ToGen6Pk6(q,staged)&&gen6DexCaught(written,q.species)){"A persisted PK6 or Pokédex registration did not verify."}}
+            for((target,bytes,staged) in expected){val off=info.first+target*PK6_STORED_SIZE;val actual=written.copyOfRange(off,off+PK6_STORED_SIZE);val q=parsePk6(actual,0,PK6_STORED_SIZE,false,721)?:error("A persisted PK6 could not be parsed.");val mismatch=gen2ForwardPkMismatch(q,staged);val dexMatches=gen6DexCaught(written,q.species);require(actual.contentEquals(bytes)&&mismatch==null&&dexMatches){"Persisted PK6 verification failed: ${mismatch?:if(!dexMatches)"Pokédex registration" else "native record bytes"}."}}
             require(bound()&&validGen2ToGen6Destination(written)){"The Gen 6 destination identity or PC/Pokédex integrity changed before batch Bank cleanup."}
             for(item in refreshed){require(bound()){"The destination identity changed before a batch Bank cleanup."}
                 require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 6 destination changed before Bank cleanup."}
@@ -58026,20 +58061,6 @@ private data class Gen2ToGen5LegalisePlan(
         val o=GEN2_BANK_HEADER_SIZE
         return IntArray(4){(bankBytes[o+23+it].toInt() ushr 6) and 3}
     }
-
-    private fun sameGen2ToGen7Pk7(a:PokemonEntry,b:PokemonEntry):Boolean =
-        a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.nickname==b.nickname&&
-            a.isNicknamed==b.isNicknamed&&a.level==b.level&&a.heldItem==b.heldItem&&a.tid==b.tid&&a.sid==b.sid&&
-            a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&
-            a.gender==b.gender&&a.form==b.form&&a.evs.contentEquals(b.evs)&&a.moves.contentEquals(b.moves)&&
-            a.movePP.contentEquals(b.movePP)&&a.ivs.contentEquals(b.ivs)&&a.isEgg==b.isEgg&&a.otName==b.otName&&
-            a.friendship==b.friendship&&a.currentHandler==b.currentHandler&&a.pokerusDays==b.pokerusDays&&
-            a.pokerusStrain==b.pokerusStrain&&a.shiny==b.shiny&&a.language==b.language&&a.markingValue==b.markingValue&&
-            a.fatefulEncounter==b.fatefulEncounter&&a.relearnMoves.contentEquals(b.relearnMoves)&&
-            a.eggLocation==b.eggLocation&&a.metLocation==b.metLocation&&a.ball==b.ball&&a.metLevel==b.metLevel&&
-            a.otGender==b.otGender&&a.originGame==b.originGame&&a.country==b.country&&a.region==b.region&&
-            a.consoleRegion==b.consoleRegion&&a.eggYear==b.eggYear&&a.eggMonth==b.eggMonth&&a.eggDay==b.eggDay&&
-            a.metYear==b.metYear&&a.metMonth==b.metMonth&&a.metDay==b.metDay&&a.hyperTrainFlags==b.hyperTrainFlags
 
     private fun buildGen2ToGen7Pk7(bankBytes:ByteArray,p:Gen2Pokemon,destinationSave:ByteArray,trainer:TrainerData,meta:Gen1ToGen7TransferMeta,plan:Gen2ToGen7LegalisePlan):ByteArray {
         require(!p.isEgg){"Gen 2 Eggs cannot be converted to Gen 7 until egg-specific conversion is implemented."}
@@ -58211,13 +58232,15 @@ private data class Gen2ToGen5LegalisePlan(
             require((0..3).all{i->source.moves[i]!=0||(source.movePP[i]==0&&expectedPpUps[i]==0)}){"An empty move slot contains PP or PP-Up data that cannot be preserved."}
             val pk7=buildGen2ToGen7Pk7(bank,source,fresh,trainer,meta,plan)
             val converted=parsePk6(pk7,0,PK6_STORED_SIZE,false,807)?:error("The refreshed PK7 could not be parsed.")
-            require(pk7.contentEquals(preparedPk7)&&sameGen2ToGen7Pk7(converted,prepared)&&gen6Pk6PpUps(pk7).contentEquals(expectedPpUps)){"The reviewed PK7 or PP-Up conversion changed before staging."}
+            val preparedMismatch=gen2ForwardPkMismatch(converted,prepared);val preparedPpUpsMatch=gen6Pk6PpUps(pk7).contentEquals(expectedPpUps)
+            require(pk7.contentEquals(preparedPk7)&&preparedMismatch==null&&preparedPpUpsMatch){"The reviewed PK7 differs in ${preparedMismatch?:if(!preparedPpUpsMatch)"PP-Up data" else "native record bytes"}."}
             val storageLength=info.second*PK6_STORED_SIZE
             val beforeStorage=fresh.copyOfRange(info.first,info.first+storageLength);val relative=target*PK6_STORED_SIZE
             val work=fresh.copyOf();pk7.copyInto(work,off)
             val stagedBytes=work.copyOfRange(off,off+PK6_STORED_SIZE)
             val staged=parsePk6(stagedBytes,0,PK6_STORED_SIZE,false,807)?:error("The staged PK7 could not be parsed.")
-            require(stagedBytes.contentEquals(pk7)&&sameGen2ToGen7Pk7(staged,converted)&&gen6Pk6PpUps(stagedBytes).contentEquals(expectedPpUps)){"The staged PK7 did not preserve every reviewed field and PP-Up value."}
+            val stagedMismatch=gen2ForwardPkMismatch(staged,converted);val stagedPpUpsMatch=gen6Pk6PpUps(stagedBytes).contentEquals(expectedPpUps)
+            require(stagedBytes.contentEquals(pk7)&&stagedMismatch==null&&stagedPpUpsMatch){"The staged PK7 differs in ${stagedMismatch?:if(!stagedPpUpsMatch)"PP-Up data" else "native record bytes"}."}
             fun pcIsolated(data:ByteArray):Boolean{val after=data.copyOfRange(info.first,info.first+storageLength);return after.indices.all{it in relative until relative+PK6_STORED_SIZE||after[it]==beforeStorage[it]}}
             require(pcIsolated(work)){"Unrelated Gen 7 PC data changed during staging."}
             registerGen7Dex(work,staged.species,staged.form,staged.gender,staged.shiny,staged.language);updateGen7SaveBlockChecksum(work,14,info.first,storageLength)
@@ -58233,7 +58256,9 @@ private data class Gen2ToGen5LegalisePlan(
             writeStarted=true;file.writeBytes(work)
             val written=file.readBytes();require(written.contentEquals(work)&&boxStorageInfo(written)==info){"The destination changed while it was written."}
             val actual=written.copyOfRange(off,off+PK6_STORED_SIZE);val reopened=parsePk6(actual,0,PK6_STORED_SIZE,false,807)?:error("The persisted PK7 could not be parsed.")
-            require(actual.contentEquals(pk7)&&sameGen2ToGen7Pk7(reopened,staged)&&gen6Pk6PpUps(actual).contentEquals(expectedPpUps)&&gen7DexRegistered(written,reopened)){"The exact converted PK7, PP Ups or Pokédex registration did not persist."}
+            val reopenedMismatch=gen2ForwardPkMismatch(reopened,staged);val reopenedPpUpsMatch=gen6Pk6PpUps(actual).contentEquals(expectedPpUps)
+            val reopenedDexMatches=gen7DexRegistered(written,reopened)
+            require(actual.contentEquals(pk7)&&reopenedMismatch==null&&reopenedPpUpsMatch&&reopenedDexMatches){"Persisted PK7 verification failed: ${reopenedMismatch?:if(!reopenedPpUpsMatch)"PP-Up data" else if(!reopenedDexMatches)"Pokédex registration" else "native record bytes"}."}
             val writtenChecks=validateGen7CoreChecksums(written);require(writtenChecks.first){writtenChecks.second};require(pcIsolated(written)){"Unrelated Gen 7 PC data changed after persistence."}
             val cleanup=bankFile.readBytes()
             require(bound()&&cleanup.contentEquals(expectedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true&&file.readBytes().contentEquals(work)&&isBackupKept(backup)){"The Bank record, destination identity or retained backup changed before cleanup."}
@@ -58353,10 +58378,10 @@ private data class Gen2ToGen5LegalisePlan(
             require(bound()){"The destination identity changed before batch validation."}
             require(prepared.isNotEmpty()){"The prepared selection is empty."};require(prepared.map{it.bankFile.absolutePath}.distinct().size==prepared.size){"The prepared selection contains a duplicate Bank entry."};require(fresh.contentEquals(preparedDestination)&&generationForSize(fresh.size)==7){"The Gen 7 destination changed or is no longer valid."};val checks=validateGen7CoreChecksums(fresh);require(checks.first){checks.second}
             val info=boxStorageInfo(fresh)?:error("PSE could not resolve Gen 7 PC storage.");require(targetBox in 0 until info.second/30){"The selected Gen 7 destination box is invalid."};val trainer=parseTrainerGen7(fresh,fresh.size)?:error("PSE could not re-read the destination trainer.")
-            val refreshed=prepared.map{item->val bank=item.bankFile.readBytes();require(bank.contentEquals(item.bankBytes)){"A selected Gen 2 Bank record changed after preparation."};val source=parseGen2BankPayload(bank)?:error("A selected Gen 2 Bank record is invalid.");require(sameGen2BankRecord(source,item.source)){"A selected Gen 2 Pokémon changed after preparation."};require(item.plan==gen2ToGen7LegalisePlan(source,item.meta,bank)){"A prepared Gen 7 Legalise plan no longer matches a selected Pokémon."};gen2ToGen7Rejection(source,item.plan,item.meta,bank)?.let{error(it)};val pk7=buildGen2ToGen7Pk7(bank,source,fresh,trainer,item.meta,item.plan);val converted=parsePk6(pk7,0,PK6_STORED_SIZE,false,807)?:error("A refreshed PK7 could not be parsed.");require(pk7.contentEquals(item.pk7)&&sameGen2ToGen7Pk7(converted,item.converted)){"A prepared PK7 conversion changed before staging."};Gen2Gen7BatchPrepared(item.bankFile,bank,source,item.meta,item.plan,pk7,converted)}
+            val refreshed=prepared.map{item->val bank=item.bankFile.readBytes();require(bank.contentEquals(item.bankBytes)){"A selected Gen 2 Bank record changed after preparation."};val source=parseGen2BankPayload(bank)?:error("A selected Gen 2 Bank record is invalid.");require(sameGen2BankRecord(source,item.source)){"A selected Gen 2 Pokémon changed after preparation."};require(item.plan==gen2ToGen7LegalisePlan(source,item.meta,bank)){"A prepared Gen 7 Legalise plan no longer matches a selected Pokémon."};gen2ToGen7Rejection(source,item.plan,item.meta,bank)?.let{error(it)};val pk7=buildGen2ToGen7Pk7(bank,source,fresh,trainer,item.meta,item.plan);val converted=parsePk6(pk7,0,PK6_STORED_SIZE,false,807)?:error("A refreshed PK7 could not be parsed.");val mismatch=gen2ForwardPkMismatch(converted,item.converted);require(pk7.contentEquals(item.pk7)&&mismatch==null){"A prepared PK7 differs in ${mismatch?:"native record bytes"}."};Gen2Gen7BatchPrepared(item.bankFile,bank,source,item.meta,item.plan,pk7,converted)}
             val empty=(0 until 30).filter{slot->parsePk6(fresh,info.first+(targetBox*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,info.third)==null};require(empty.size>=refreshed.size){"Gen 7 Box ${targetBox+1} no longer has room for the complete selection."}
             val storageLength=info.second*PK6_STORED_SIZE;val beforeStorage=fresh.copyOfRange(info.first,info.first+storageLength);val work=fresh.copyOf();val allowed=HashSet<Int>();val expected=ArrayList<Triple<Int,ByteArray,PokemonEntry>>()
-            for(i in refreshed.indices){val item=refreshed[i];val target=targetBox*30+empty[i];val off=info.first+target*PK6_STORED_SIZE;require(parsePk6(work,off,PK6_STORED_SIZE,false,info.third)==null){"A destination slot is no longer empty."};item.pk7.copyInto(work,off);for(x in target*PK6_STORED_SIZE until (target+1)*PK6_STORED_SIZE)allowed.add(x);val staged=parsePk6(work,off,PK6_STORED_SIZE,false,807)?:error("A staged PK7 could not be parsed.");require(sameGen2ToGen7Pk7(staged,item.converted)){"A staged PK7 did not preserve every converted field."};expected.add(Triple(target,item.pk7,staged))}
+            for(i in refreshed.indices){val item=refreshed[i];val target=targetBox*30+empty[i];val off=info.first+target*PK6_STORED_SIZE;require(parsePk6(work,off,PK6_STORED_SIZE,false,info.third)==null){"A destination slot is no longer empty."};item.pk7.copyInto(work,off);for(x in target*PK6_STORED_SIZE until (target+1)*PK6_STORED_SIZE)allowed.add(x);val staged=parsePk6(work,off,PK6_STORED_SIZE,false,807)?:error("A staged PK7 could not be parsed.");val mismatch=gen2ForwardPkMismatch(staged,item.converted);require(mismatch==null){"A staged PK7 differs in $mismatch."};expected.add(Triple(target,item.pk7,staged))}
             fun pcIsolated(data:ByteArray):Boolean{val after=data.copyOfRange(info.first,info.first+storageLength);return after.indices.all{it in allowed||after[it]==beforeStorage[it]}}
             require(pcIsolated(work)){"Unrelated Gen 7 PC data changed during batch staging."};for((_,_,mon) in expected)registerGen7Dex(work,mon.species,mon.form,mon.gender,mon.shiny,mon.language);updateGen7SaveBlockChecksum(work,14,info.first,storageLength);val dexInfo=gen7BlockInfo(work,6)?:error("Gen 7 Pokédex block layout is unavailable.");updateGen7SaveBlockChecksum(work,6,dexInfo.first,dexInfo.second);finalizeGen7Save(work)
             require(expected.all{gen7DexRegistered(work,it.third)}){"A staged Gen 7 Pokédex registration failed verification."};val stagedChecks=validateGen7CoreChecksums(work);require(stagedChecks.first){stagedChecks.second};require(pcIsolated(work)){"Unrelated Gen 7 PC data changed while rebuilding integrity data."}
@@ -58368,7 +58393,7 @@ private data class Gen2ToGen5LegalisePlan(
             require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The Gen 7 destination, selected Bank records or retained backup changed before writing. Nothing was written."}
             writeStarted=true
             file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)&&boxStorageInfo(written)==info){"The destination changed while the batch was written."};val writtenChecks=validateGen7CoreChecksums(written);require(writtenChecks.first){writtenChecks.second};require(pcIsolated(written)){"Unrelated Gen 7 PC data changed after persistence."}
-            for((target,bytes,staged) in expected){val off=info.first+target*PK6_STORED_SIZE;val actual=written.copyOfRange(off,off+PK6_STORED_SIZE);val q=parsePk6(actual,0,PK6_STORED_SIZE,false,807)?:error("A persisted PK7 could not be parsed.");require(actual.contentEquals(bytes)&&sameGen2ToGen7Pk7(q,staged)&&gen7DexRegistered(written,q)){"A persisted PK7 or Pokédex registration did not verify."}}
+            for((target,bytes,staged) in expected){val off=info.first+target*PK6_STORED_SIZE;val actual=written.copyOfRange(off,off+PK6_STORED_SIZE);val q=parsePk6(actual,0,PK6_STORED_SIZE,false,807)?:error("A persisted PK7 could not be parsed.");val mismatch=gen2ForwardPkMismatch(q,staged);val dexMatches=gen7DexRegistered(written,q);require(actual.contentEquals(bytes)&&mismatch==null&&dexMatches){"Persisted PK7 verification failed: ${mismatch?:if(!dexMatches)"Pokédex registration" else "native record bytes"}."}}
             require(bound()&&validGen2ToGen7Destination(written)){"The Gen 7 destination identity or core save-block integrity changed before batch Bank cleanup."}
             for(item in refreshed){require(bound()){"The destination identity changed before a batch Bank cleanup."}
                 require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 7 destination changed before Bank cleanup."}
