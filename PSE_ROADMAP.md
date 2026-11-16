@@ -506,3 +506,13 @@ Generation 3 restores now append the generated PB7 and stage its matching native
 This remains a PSE conversion under the explicit Legalise choice and does not claim an official transfer, trade, encounter record, legality certification, or verified provenance.
 
 Next bounded repair: inspect the implemented Generation 4 PK4 -> Let's Go PB7 route for the same missing native caught-registration transaction while preserving exact reviewed source identity, explicit Legalise disclosure, the next unused native storage record, block CRC updates, retained recovery, persisted reopen and two-sided failure handling.
+
+## Generation 4 -> Let's Go caught-registration repair
+
+Inspection confirmed that the Let's Go Bank screen accepts checksum-valid Generation 4 PK4 entries, binds and rechecks the exact selected 136-byte PK4 SHA-256, and requires explicit Legalise review before destination selection. The existing converter performs its deterministic PK7 and PA9 bridge entirely in memory, validates the resulting PB7 against the selected Let's Go title, and discloses that the route is not an official Poké Transfer, Bank or HOME transfer, trade, encounter record, legality certification, or verified provenance. PK4 was nevertheless absent from the native caught-registration selector.
+
+Generation 4 restores now append the generated PB7 and stage its matching native caught registration in the same reviewed copy. The converted gender and shiny state select the native seen and displayed variant, the English caught-language flag is recorded when required, and the storage and Pokédex block CRCs are refreshed. The review exposes the expanded byte scope and whether registration bytes change. Existing verification reopens the exact PB7 and registration, preserves other Pokémon, size records, party and partner pointers and unrelated bytes, rechecks the unchanged PK4 and Let's Go sources, retains a verified recovery backup, and removes a failed destination copy when possible.
+
+This remains a PSE conversion under the explicit Legalise choice and does not claim an official transfer, trade, encounter record, legality certification, or verified provenance.
+
+Next bounded repair: inspect the implemented Generation 5 PK5 -> Let's Go PB7 route for the same missing native caught-registration transaction while preserving exact reviewed source identity, explicit Legalise disclosure, the next unused native storage record, block CRC updates, retained recovery, persisted reopen and two-sided failure handling.

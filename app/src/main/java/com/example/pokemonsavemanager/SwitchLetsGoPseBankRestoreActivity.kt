@@ -107,7 +107,8 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
                         source, hash, bank.nativeRecord,
                         registerCaughtEnglish = bankFile().extension.equals("pse1", true) ||
                             bankFile().extension.equals("pse2", true) ||
-                            bankFile().extension.equals("pk3", true)
+                            bankFile().extension.equals("pk3", true) ||
+                            bankFile().extension.equals("pk4", true)
                     ),
                     bank,
                     verified.version
