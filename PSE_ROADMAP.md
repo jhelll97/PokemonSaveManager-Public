@@ -676,3 +676,13 @@ Generation 1 restores to Legends: Z-A now require the reviewed Bank SHA to be pr
 This remains a PSE conversion under the explicit Legalise choice and does not claim an official transfer, HOME move, trade, encounter record, legality certification, or verified provenance.
 
 Next bounded repair: inspect the implemented Generation 2 PSE2 -> Legends: Z-A PA9 route for the same missing reviewed-source hash requirement while preserving exact selected source identity, explicit Legalise disclosure, the chosen empty native slot, caught registration, retained recovery, persisted reopen and two-sided failure handling.
+
+## Generation 2 -> Legends: Z-A reviewed-source identity repair
+
+Inspection confirmed that the Legends: Z-A Bank screen accepts Generation 2 PSE2 entries and requires explicit Legalise review before destination selection. The existing converter requires the exact selected 62-byte PSE2 record, validates its header, source-title marker, species, item, level, experience, moves, PP, text, DVs, Stat Exp and legacy fields, binds documented gender and ability metadata, and discloses every retained, generated, normalized and omitted field through its deterministic in-memory PK7 bridge. It explicitly states that the PSE2 is the bound Bank source, but the restore screen did not require the reviewed Bank SHA before reading that record.
+
+Generation 2 restores to Legends: Z-A now require the reviewed Bank SHA to be present before the PSE2 is read and recheck the selected bytes against that exact SHA before conversion. The existing transaction still produces a checksum-valid PA9, requires the converted species in the destination save's native Pokédex, writes only one user-chosen empty 344-byte PA9 slot, stages native caught registration, refreshes the native SHA-256 footer, and exposes the exact Pokédex fields and byte scope in the final review. Verification reopens the PA9 and registration, rejects unrelated Pokédex, party, PC-box or save-byte changes, rechecks both unchanged sources, retains a verified recovery backup, reopens the persisted destination and removes a failed copy when possible.
+
+This remains a PSE conversion under the explicit Legalise choice and does not claim an official transfer, HOME move, trade, encounter record, legality certification, or verified provenance.
+
+Next bounded repair: inspect the implemented Generation 3 PK3 -> Legends: Z-A PA9 route for the same missing reviewed-source hash requirement while preserving exact selected source identity, explicit Legalise disclosure, the chosen empty native slot, caught registration, retained recovery, persisted reopen and two-sided failure handling.
