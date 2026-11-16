@@ -11664,14 +11664,36 @@ class MainActivity : Activity() {
 
 
 
-    private fun gen5ToGen2Blocker(p:PokemonEntry):String?=when{
+    private data class Gen5ToGen2RemovedMove(val sourceSlot:Int,val move:Int,val pp:Int,val ppUps:Int)
+    private data class Gen5ToGen2MovePlan(
+        val sourceMoves:List<Int>,val sourcePp:List<Int>,val sourcePpUps:List<Int>,
+        val destinationMoves:List<Int>,val destinationPp:List<Int>,val destinationPpUps:List<Int>,
+        val removed:List<Gen5ToGen2RemovedMove>
+    )
+
+    private fun gen5ToGen2MovePlan(raw:ByteArray,p:PokemonEntry):Gen5ToGen2MovePlan{
+        require(raw.size==136&&p.moves.size>=4&&p.movePP.size>=4){"The preserved PK5 move data is incomplete."}
+        val moves=(0..3).map{p.moves[it]};val pp=(0..3).map{p.movePP[it]};val ups=gen5Pk5PpUps(raw).toList()
+        require(ups.size==4&&ups.all{it in 0..3}){"The source PP-Up values could not be read safely."}
+        require((0..3).all{i->moves[i]!=0||(pp[i]==0&&ups[i]==0)}){"An empty move slot contains PP or PP-Up data that Generation 2 cannot preserve."}
+        require((0..3).all{i->moves[i]==0||pp[i] in 0..63}){"A move has invalid current PP."}
+        val removed=(0..3).filter{moves[it] !in 0..251}.map{Gen5ToGen2RemovedMove(it,moves[it],pp[it],ups[it])}
+        val kept=(0..3).filter{moves[it] in 1..251}
+        val order=if(removed.isEmpty())(0..3).toList() else kept
+        val finalMoves=List(4){i->order.getOrNull(i)?.let{moves[it]}?:0}
+        val finalPp=List(4){i->order.getOrNull(i)?.let{pp[it]}?:0}
+        val finalUps=List(4){i->order.getOrNull(i)?.let{ups[it]}?:0}
+        return Gen5ToGen2MovePlan(moves,pp,ups,finalMoves,finalPp,finalUps,removed)
+    }
+
+    private fun gen5ToGen2Blocker(p:PokemonEntry,allowReviewedMoveRemoval:Boolean=false):String?=when{
         !p.checksumValid->"The source PK5 checksum is invalid."
         p.species !in 1..251->"Species #${p.species} did not exist in Generation 2."
         p.form!=0->"This form has no verified native Generation 2 representation."
         p.isEgg->"Egg state cannot be represented safely by this backward conversion."
         p.heldItem!=0->"Held item #${p.heldItem} uses a Generation 5 item ID and has no verified Generation 2 mapping."
         p.fatefulEncounter->"Fateful-event provenance cannot be represented in Generation 2."
-        p.moves.any{it !in 0..251}->"At least one move did not exist in Generation 2."
+        p.moves.any{it !in 0..251}&&!allowReviewedMoveRemoval->"At least one move did not exist in Generation 2. Review and explicitly accept its removal before conversion."
         p.moves.indices.any{i->p.moves[i]==0&&p.movePP[i]!=0}->"An empty move slot contains PP data that Generation 2 cannot preserve."
         p.moves.indices.any{i->p.moves[i]!=0&&p.movePP[i] !in 0..63}->"A move has invalid current PP."
         p.language!=2->"Only English source text has a verified mapping to the native Generation 2 character table."
@@ -11683,9 +11705,13 @@ class MainActivity : Activity() {
         else->null
     }
 
-    private fun buildGen5ToGen2Record(raw:ByteArray,p:PokemonEntry):Triple<ByteArray,ByteArray,ByteArray>{
+    private fun buildGen5ToGen2Record(raw:ByteArray,p:PokemonEntry,confirmedMovePlan:Gen5ToGen2MovePlan?=null):Triple<ByteArray,ByteArray,ByteArray>{
         require(raw.size==136&&parsePk5(raw,false)?.let{it.checksumValid&&it.pid==p.pid&&it.species==p.species&&it.tid==p.tid&&it.sid==p.sid}==true){"The preserved Gen 5 Bank record changed or failed checksum validation."}
-        gen5ToGen2Blocker(p)?.let{error(it)}
+        val movePlan=gen5ToGen2MovePlan(raw,p)
+        require(confirmedMovePlan==null||confirmedMovePlan==movePlan){"The reviewed Generation 2 move-removal plan changed."}
+        val moveRemovalAccepted=movePlan.removed.isNotEmpty()&&confirmedMovePlan==movePlan
+        gen5ToGen2Blocker(p,moveRemovalAccepted)?.let{error(it)}
+        require(movePlan.removed.isEmpty()||moveRemovalAccepted){"Review and explicitly accept every unsupported move removal."}
         val growth=canonicalGen2Growth(p.species)?:error("The Generation 2 growth group is unavailable for this species.")
         val level=gen2LevelForExperience(growth,p.experience).coerceIn(1,100)
         val dvs=IntArray(5){i->(p.ivs[i]/2).coerceIn(0,15)}
@@ -11693,13 +11719,10 @@ class MainActivity : Activity() {
             val ev=when(i){0->p.evs[0];1->p.evs[1];2->p.evs[2];3->p.evs[3];else->(p.evs[4]+p.evs[5])/2}
             (ev*257).coerceIn(0,65535)
         }
-        val ups=gen5Pk5PpUps(raw)
-        require(ups.all{it in 0..3}){"The source PP-Up values could not be read safely."}
-        require((0..3).all{i->p.moves[i]!=0||ups[i]==0}){"An empty move slot contains PP-Up data that Generation 2 cannot preserve."}
         val mon=ByteArray(32);mon[0]=p.species.toByte();mon[1]=0
         for(i in 0..3){
-            mon[2+i]=p.moves[i].toByte()
-            mon[23+i]=if(p.moves[i]==0)0 else (((ups[i]shl 6)or(p.movePP[i]and 0x3F))).toByte()
+            val move=movePlan.destinationMoves[i];mon[2+i]=move.toByte()
+            mon[23+i]=if(move==0)0 else (((movePlan.destinationPpUps[i]shl 6)or(movePlan.destinationPp[i]and 0x3F))).toByte()
         }
         writeU16BE(mon,6,p.tid);writeU24BE(mon,8,p.experience)
         for(i in 0..4)writeU16BE(mon,11+i*2,statExp[i])
@@ -11713,7 +11736,10 @@ class MainActivity : Activity() {
         return Triple(mon,ot,nick)
     }
 
-    private fun prepareGen5ToGen2Transfer(bankFile:File,shown:PokemonEntry){
+    private fun prepareGen5ToGen2Transfer(
+        bankFile:File,shown:PokemonEntry,confirmedMovePlan:Gen5ToGen2MovePlan?=null,
+        reviewedBank:ByteArray?=null,reviewedDestination:ByteArray?=null
+    ){
         val file=importedFile?:return showDialog("Gen 5 → Gen 2","Load a valid Gold, Silver or Crystal destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
@@ -11735,10 +11761,44 @@ class MainActivity : Activity() {
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
             source.tid!=shown.tid||source.sid!=shown.sid)
             return showDialog("Gen 5 → Gen 2","The selected Bank record changed or failed its PK5 checksum.")
-        gen5ToGen2Blocker(source)?.let{
+        if(reviewedBank!=null&&!bank.contentEquals(reviewedBank)||reviewedDestination!=null&&!destination.contentEquals(reviewedDestination))
+            return showDialog("Gen 5 → Gen 2","The source or destination changed after the move-removal review. Nothing was changed.")
+        val movePlan=try{gen5ToGen2MovePlan(bank,source)}catch(e:Exception){
+            return showDialog("Gen 5 → Gen 2 blocked",(e.message?:"The source move data could not be reviewed safely.")+"\n\nThe Bank record and destination were left unchanged.")
+        }
+        if(confirmedMovePlan!=null&&confirmedMovePlan!=movePlan)
+            return showDialog("Gen 5 → Gen 2","The reviewed move-removal plan changed. Nothing was changed.")
+        gen5ToGen2Blocker(source,movePlan.removed.isNotEmpty())?.let{
             return showDialog("Gen 5 → Gen 2 blocked","$it\n\nThe Bank record and destination were left unchanged.")
         }
-        val conversion=try{buildGen5ToGen2Record(bank,source)}catch(e:Exception){
+        if(movePlan.removed.isNotEmpty()&&confirmedMovePlan==null){
+            val removalReview=buildString{
+                append("Explicit PSE Legalise review. Generation 2 has no native IDs for the following Gen 5 moves, so conversion remains blocked unless you accept removing exactly these entries:\n\n")
+                movePlan.removed.forEach{removed->
+                    append("• Source slot ${removed.sourceSlot+1}: move #${removed.move}, PP ${removed.pp}, PP Ups ${removed.ppUps}\n")
+                }
+                append("\nFinal native Generation 2 move slots after compacting the remaining moves:\n")
+                movePlan.destinationMoves.indices.forEach{i->
+                    val move=movePlan.destinationMoves[i]
+                    if(move==0)append("• Slot ${i+1}: Empty\n")
+                    else append("• Slot ${i+1}: move #$move, PP ${movePlan.destinationPp[i]}, PP Ups ${movePlan.destinationPpUps[i]}\n")
+                }
+                append("\nCancel leaves the exact PK5 Bank record and destination byte-for-byte unchanged. Accepting this review authorizes only the listed removals and slot compaction; the PK5 remains unchanged until the chosen native Generation 2 record is written and reopened successfully. This is a PSE conversion, not an official trade, migration, legality certification or provenance claim.")
+            }
+            var removalConsumed=false
+            AlertDialog.Builder(this).setTitle("Gen 5 → Gen 2 move Legalise")
+                .setMessage(removalReview).setNegativeButton("Cancel",null)
+                .setPositiveButton("Remove listed moves"){_,_->
+                    if(removalConsumed){showDialog("Gen 5 → Gen 2","This move-removal review was already submitted. Reopen PSE Bank.");return@setPositiveButton};removalConsumed=true
+                    if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false)){
+                        showDialog("Gen 5 → Gen 2","The source or destination changed after review. Nothing was changed.");return@setPositiveButton
+                    }
+                    prepareGen5ToGen2Transfer(selected,source,movePlan,bank.copyOf(),destination.copyOf())
+                }.show()
+            return
+        }
+        val acceptedMovePlan=confirmedMovePlan?.takeIf{it==movePlan}
+        val conversion=try{buildGen5ToGen2Record(bank,source,acceptedMovePlan)}catch(e:Exception){
             return showDialog("Gen 5 → Gen 2 blocked",(e.message?:"No safe native Generation 2 mapping is available.")+"\n\nNothing was changed.")
         }
         val(mon,ot,nick)=conversion
@@ -11751,14 +11811,26 @@ class MainActivity : Activity() {
         if(targets.isEmpty())return showDialog("Gen 5 → Gen 2","All 14 Generation 2 PC boxes are full or unavailable. Nothing was changed.")
         val review=buildString{
             append("PSE backward conversion; this is not an in-game trade, official migration or provenance claim. The source save stays unchanged, and the exact PK5 remains in Bank until the native Gen 2 write reopens successfully.\n\n")
-            append("Preserved: species, nickname, OT name/TID, EXP, moves, current PP, PP Ups, friendship and Pokérus. Gen 5 IVs ")
+            append("Preserved: species, nickname, OT name/TID, EXP, friendship and Pokérus. ")
+            if(movePlan.removed.isEmpty())append("All moves, current PP and PP Ups are preserved. ")
+            else{
+                append("Accepted Legalise change: ")
+                append(movePlan.removed.joinToString("; "){"source slot ${it.sourceSlot+1} move #${it.move} (PP ${it.pp}, PP Ups ${it.ppUps}) removed"})
+                append(". Final native slots: ")
+                append(movePlan.destinationMoves.indices.joinToString("; "){i->
+                    val move=movePlan.destinationMoves[i]
+                    if(move==0)"slot ${i+1} empty" else "slot ${i+1} move #$move (PP ${movePlan.destinationPp[i]}, PP Ups ${movePlan.destinationPpUps[i]})"
+                })
+                append(". Remaining move PP and PP Ups are preserved exactly. ")
+            }
+            append("Gen 5 IVs ")
             append(source.ivs.joinToString("/")).append(" become Gen 2 DVs ").append(finalDvs.joinToString("/"))
             append("; Atk, Def, Speed and Special use floor(IV ÷ 2), HP DV is derived from their low bits, and independent Gen 5 HP and SpD IVs have no Gen 2 fields. EVs ")
             append(source.evs.joinToString("/")).append(" become Stat Exp ").append(statExp.joinToString("/"))
             append("; Special uses the integer average of SpA/SpD EVs, rounded down. The experience-based level becomes ").append(mon[31].toInt()and 0xFF).append(".\n\n")
             append("The destination DV pattern is ").append(if(finalShiny)"shiny" else "not shiny").append("; the source is ").append(if(source.shiny)"shiny" else "not shiny")
             append(". Not represented: SID, PID, nature, ability, gender, Ball, markings, met/egg locations and dates, ribbons, fateful metadata, and the independent Gen 5 HP/SpD IVs. Origin game ID ${source.originGame} is omitted because Generation 2 has no origin field; PSE does not assign intermediate provenance. The held-item byte and caught-data fields are 0. ")
-            append("Held items, Eggs, alternate forms, unsupported species/moves/text and invalid values are blocked instead of discarded.\n\n")
+            append("Held items, Eggs, alternate forms, unsupported species/text and invalid values are blocked instead of discarded. Unsupported moves are removed only through the explicit, cancellable Legalise review above.\n\n")
             append("Verified retained destination and PK5 Bank recovery snapshots are required. PSE writes one selected native Gen 2 box record, updates Owned/Seen and the primary checksum, reopens the exact record, then removes the Bank entry. Any failure restores or preserves both sides independently.")
         }
         val labels=targets.map{gen2BoxDestinationLabel(it.first,it.second,file,profile,openedUri,destination)}.toTypedArray()
@@ -11771,7 +11843,7 @@ class MainActivity : Activity() {
                 }
                 AlertDialog.Builder(this).setTitle("Choose Gen 2 PC Box").setItems(labels){_,which->
                     if(transferConsumed||which !in targets.indices){showDialog("Gen 5 → Gen 2","This destination choice was already handled. Reopen PSE Bank.");return@setItems};transferConsumed=true
-                    transferGen5BankToGen2(selected,source,bank,mon,ot,nick,targets[which].first,file,destination,openedUri,openedLabel,profile.key)
+                    transferGen5BankToGen2(selected,source,bank,mon,ot,nick,acceptedMovePlan,targets[which].first,file,destination,openedUri,openedLabel,profile.key)
                 }.setNegativeButton("Cancel",null).show()
             }.show()
     }
@@ -11779,7 +11851,8 @@ class MainActivity : Activity() {
 
     private fun transferGen5BankToGen2(
         bankFile:File,source:PokemonEntry,bankBytes:ByteArray,mon:ByteArray,ot:ByteArray,nick:ByteArray,
-        targetBox:Int,file:File,openedDestination:ByteArray,openedUri:Uri?,openedLabel:String?,profileKey:String
+        confirmedMovePlan:Gen5ToGen2MovePlan?,targetBox:Int,file:File,openedDestination:ByteArray,
+        openedUri:Uri?,openedLabel:String?,profileKey:String
     ){
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
@@ -11794,7 +11867,7 @@ class MainActivity : Activity() {
             val currentBank=bankFile.readBytes();require(currentBank.contentEquals(bankBytes)){"The selected Gen 5 Bank record changed."}
             val current=parsePk5(currentBank,false)?:error("The Gen 5 Bank record is invalid.")
             require(current.checksumValid&&current.pid==source.pid&&current.species==source.species&&current.tid==source.tid&&current.sid==source.sid){"The selected Gen 5 Pokémon changed."}
-            val refreshed=buildGen5ToGen2Record(currentBank,current)
+            val refreshed=buildGen5ToGen2Record(currentBank,current,confirmedMovePlan)
             require(refreshed.first.contentEquals(mon)&&refreshed.second.contentEquals(ot)&&refreshed.third.contentEquals(nick)){"The prepared conversion changed."}
             val work=fresh.copyOf();val slot=appendGen2BoxPokemon(work,targetBox,mon,ot,nick)
             markGen2PokedexOwnedSeen(work,profile,source.species);updateGen2PrimaryChecksum(work,profile)
