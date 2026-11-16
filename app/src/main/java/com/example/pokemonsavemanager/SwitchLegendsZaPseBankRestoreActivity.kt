@@ -117,7 +117,8 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                         bankFile().extension.equals("pk5", true) ||
                         bankFile().extension.equals("pk6", true) ||
                         bankFile().extension.equals("pk7", true) ||
-                        bankFile().extension.equals("pb7", true)
+                        bankFile().extension.equals("pb7", true) ||
+                        bankFile().extension.equals("pk8", true)
                 )
             }
             runOnUiThread {
