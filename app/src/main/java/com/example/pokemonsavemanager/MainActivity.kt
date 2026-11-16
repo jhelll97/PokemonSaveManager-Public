@@ -50987,19 +50987,53 @@ class MainActivity : Activity() {
         val language=currentGen7LanguageId(destinationSave).coerceIn(1,10);pk[0xE3]=language.toByte()
         updatePk6Checksum(pk);val encrypted=encryptPk6(pk)
         val q=parsePk6(encrypted,0,PK6_STORED_SIZE,false,807)?:throw IllegalArgumentException("The converted PK7 could not be parsed.")
-        require(
-            q.checksumValid&&q.species==dex&&q.nickname==nickname&&q.isNicknamed==custom&&q.level==p.level&&
-                q.heldItem==0&&q.tid==p.tid&&q.sid==0&&q.experience==transferExp&&q.ability==transferMeta.abilityId&&
-                q.abilityNumber==transferMeta.abilityNumber&&q.pid==pid&&q.nature==nature&&q.gender==gender&&q.form==0&&
-                q.evs.all{it==0}&&q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(healedPp)&&
-                gen6Pk6PpUps(encrypted).contentEquals(p.movePpUps)&&q.ivs.contentEquals(ivs)&&!q.isEgg&&
-                q.otName==p.otName&&q.friendship==transferMeta.baseFriendship&&q.currentHandler==1&&
-                gen6Pk6HandlerName(encrypted)==trainer.trainerName&&q.pokerusDays==0&&q.pokerusStrain==0&&q.shiny==shiny&&
-                q.language==language&&q.markingValue==0&&q.fatefulEncounter==fateful&&q.relearnMoves.all{it==0}&&
-                q.eggLocation==0&&q.metLocation==30013&&q.ball==4&&q.metLevel==p.level.coerceIn(1,100)&&q.otGender==0&&
-                q.originGame==35&&q.country==0&&q.region==0&&q.consoleRegion==0&&q.eggYear==0&&q.eggMonth==0&&q.eggDay==0&&
-                q.metYear==metYear&&q.metMonth==metMonth&&q.metDay==metDay&&q.hyperTrainFlags==0
-        ){"The converted PK7 failed exact converted-field verification."}
+        val mismatch=when{
+            !q.checksumValid->"PK7 checksum"
+            q.species!=dex->"species"
+            q.nickname!=nickname->"nickname"
+            q.isNicknamed!=custom->"nickname flag"
+            q.level!=p.level->"level"
+            q.heldItem!=0->"held item"
+            q.tid!=p.tid->"Trainer ID"
+            q.sid!=0->"Secret ID"
+            q.experience!=transferExp->"experience"
+            q.ability!=transferMeta.abilityId->"ability"
+            q.abilityNumber!=transferMeta.abilityNumber->"ability slot"
+            q.pid!=pid->"PID"
+            q.nature!=nature->"nature"
+            q.gender!=gender->"gender"
+            q.form!=0->"form"
+            q.evs.any{it!=0}->"EVs"
+            !q.moves.contentEquals(p.moves)->"moves"
+            !q.movePP.contentEquals(healedPp)->"move PP"
+            !gen6Pk6PpUps(encrypted).contentEquals(p.movePpUps)->"move PP Ups"
+            !q.ivs.contentEquals(ivs)->"IVs"
+            q.isEgg->"Egg flag"
+            q.otName!=p.otName->"Original Trainer name"
+            q.friendship!=transferMeta.baseFriendship->"friendship"
+            q.currentHandler!=1->"current handler"
+            gen6Pk6HandlerName(encrypted)!=trainer.trainerName->"current handler name"
+            q.pokerusDays!=0||q.pokerusStrain!=0->"Pokérus"
+            q.shiny!=shiny->"shiny state"
+            q.language!=language->"language"
+            q.markingValue!=0->"markings"
+            q.fatefulEncounter!=fateful->"fateful encounter flag"
+            q.relearnMoves.any{it!=0}->"relearn moves"
+            q.eggLocation!=0->"Egg location"
+            q.metLocation!=30013->"met location"
+            q.ball!=4->"Poké Ball"
+            q.metLevel!=p.level.coerceIn(1,100)->"met level"
+            q.otGender!=0->"Original Trainer gender"
+            q.originGame!=35->"origin game"
+            q.country!=0->"country"
+            q.region!=0->"region"
+            q.consoleRegion!=0->"console region"
+            q.eggYear!=0||q.eggMonth!=0||q.eggDay!=0->"Egg date"
+            q.metYear!=metYear||q.metMonth!=metMonth||q.metDay!=metDay->"met date"
+            q.hyperTrainFlags!=0->"Hyper Training flags"
+            else->null
+        }
+        require(mismatch==null){"The converted PK7 failed exact converted-field verification ($mismatch)."}
         return encrypted
     }
 
