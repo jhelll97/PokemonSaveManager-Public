@@ -586,3 +586,13 @@ Scarlet/Violet restores now append the generated PB7 and stage its matching nati
 This remains a PSE conversion under the explicit Legalise choice and does not claim an official transfer, trade, encounter record, legality certification, or verified provenance.
 
 Next bounded repair: inspect the implemented Legends: Z-A PA9 -> Let's Go PB7 route for the same missing native caught-registration transaction while preserving content-addressed source identity, explicit Legalise disclosure, the next unused native storage record, block CRC updates, retained recovery, persisted reopen and two-sided failure handling.
+
+## Legends: Z-A -> Let's Go caught-registration repair
+
+Inspection confirmed that the Let's Go Bank screen exposes content-addressed Legends: Z-A PA9 entries, verifies the exact selected 344-byte PA9 against its SHA-256 filename, and requires explicit Legalise review before destination selection. The existing converter validates the native PA9, converts it directly to a checksum-valid PB7 for the selected Let's Go title, and discloses that the backward route is not an official HOME transfer, trade, encounter record, legality certification, or verified provenance. PA9 was nevertheless absent from the native caught-registration selector.
+
+Legends: Z-A restores now append the generated PB7 and stage its matching native caught registration in the same reviewed copy. The converted gender and shiny state select the native seen and displayed variant, the English caught-language flag is recorded when required, and the storage and Pokédex block CRCs are refreshed. The final review exposes the expanded byte scope and whether registration bytes change. Existing verification reopens the exact PB7 and registration, preserves other Pokémon, size records, party and partner pointers and unrelated bytes, rechecks the unchanged content-addressed PA9 and Let's Go sources, retains a verified recovery backup, and removes a failed destination copy when possible.
+
+This remains a PSE conversion under the explicit Legalise choice and does not claim an official transfer, trade, encounter record, legality certification, or verified provenance.
+
+Next bounded repair: re-inventory the remaining supported Bank route matrix after completing the Let's Go native caught-registration pass, selecting the next existing converter or destination transaction mismatch before adding another format path while preserving exact source identity, explicit Legalise disclosure and the established one-empty-slot safety boundary.

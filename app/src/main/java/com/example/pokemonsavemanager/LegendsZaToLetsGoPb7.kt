@@ -261,7 +261,7 @@ object LegendsZaToLetsGoPb7 {
             "PA9 Handling Trainer language, handling memories, OT memories, geography, sociability, fullness/enjoyment, status 0x${sourceStatus.toString(16).uppercase()}, Battle Version $sourceBattleVersion, Form Argument $sourceFormArgument, Mega metadata, Tera metadata and other PA9-only bytes remain PB7 defaults.",
             "PA9 move-record and Technical Record bytes ${moveRecords.joinToString(" ") { "%02X".format(it) }} are cleared.",
             if (tracker.all { it == 0.toByte() }) "No source HOME tracker bytes require omission." else "Source HOME tracker bytes ${tracker.joinToString(" ") { "%02X".format(it) }} are cleared; PSE does not invent or claim an official HOME identity.",
-            "The PA9 Bank entry and Let's Go source save remain unchanged. PSE writes exactly the next unused native PB7 storage record in a new copy, updates the native storage count and block CRCs, retains a recovery backup, reopens the persisted destination, removes a failed copy when possible, and re-verifies both unchanged sources."
+            "The PA9 Bank entry and Let's Go source save remain unchanged. PSE writes exactly the next unused native PB7 storage record in a new copy, updates the native storage count and block CRCs, and registers the converted gender, shiny state and English language in the matching native caught entry when required. It refreshes the Pokédex block CRC, retains a verified recovery backup, reopens the persisted destination, removes a failed copy when possible, and re-verifies both unchanged sources."
         )
         return LegendsZaToLetsGoReview(native, species, nickname, destinationVersion, effects)
     }
