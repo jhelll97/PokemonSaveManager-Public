@@ -10338,8 +10338,11 @@ class MainActivity : Activity() {
     }
 
     private fun showGen4BankEntry(bankFile:File,p:PokemonEntry){
+        val openedRaw=runCatching{bankFile.readBytes()}.getOrNull()?:return showDialog("PSE Bank","The selected Gen 4 Bank record could not be read.")
+        val opened=if(openedRaw.size==136)parsePk4(openedRaw,false)else null
+        if(opened==null||!opened.checksumValid||opened.pid!=p.pid||opened.species!=p.species||opened.tid!=p.tid||opened.sid!=p.sid)return showDialog("PSE Bank","The selected Gen 4 Bank record changed. Reopen PSE Bank and try again.")
         val currentGen=importedFile?.let{generationForSize(it.length().toInt())}?:0
-        val b=AlertDialog.Builder(this).setTitle("${p.nickname.ifBlank{"Pokémon #${p.species}"}} • Gen 4 Bank")
+        val b=AlertDialog.Builder(this).setTitle("${opened.nickname.ifBlank{"Pokémon #${opened.species}"}} • Gen 4 Bank")
             .setMessage(when(currentGen){
                 1 -> "Original 136-byte PK4 preserved. Review a direct backward PSE conversion into an empty native Gen 1 PC box."
                 2 -> "Original 136-byte PK4 preserved. Review a direct backward PSE conversion into an empty native Gen 2 PC box."
@@ -10352,13 +10355,13 @@ class MainActivity : Activity() {
             })
             .setNegativeButton("Close",null)
             .setNeutralButton("Delete"){_,_->AlertDialog.Builder(this).setTitle("Delete Bank entry?").setMessage("This permanently removes the preserved Gen 4 PK4 copy.").setNegativeButton("Cancel",null).setPositiveButton("Delete"){_,_->if(bankFile.delete()){Toast.makeText(this,"Bank entry deleted",Toast.LENGTH_SHORT).show();showBank()}else showDialog("PSE Bank","The Bank entry could not be deleted.")}.show()}
-        if(currentGen==1)b.setPositiveButton("PSE Convert to Gen 1"){_,_->prepareGen4ToGen1Transfer(bankFile,p)}
-        if(currentGen==2)b.setPositiveButton("PSE Convert to Gen 2"){_,_->prepareGen4ToGen2Transfer(bankFile,p)}
-        if(currentGen==3)b.setPositiveButton("PSE Convert to Gen 3"){_,_->prepareGen4ToGen3Transfer(bankFile,p)}
-        if(currentGen==4)b.setPositiveButton("Withdraw to Gen 4"){_,_->chooseGen4BankWithdrawDestination(bankFile,p)}
-        if(currentGen==5)b.setPositiveButton("PSE Convert to Gen 5"){_,_->prepareGen4ToGen5Transfer(bankFile,p)}
-        if(currentGen==6)b.setPositiveButton("PSE Convert to Gen 6"){_,_->prepareGen4ToGen6Transfer(bankFile,p)}
-        if(currentGen==7)b.setPositiveButton("PSE Convert to Gen 7"){_,_->prepareGen4ForwardTransfer(bankFile,p)}
+        if(currentGen==1)b.setPositiveButton("PSE Convert to Gen 1"){_,_->prepareGen4ToGen1Transfer(bankFile,opened)}
+        if(currentGen==2)b.setPositiveButton("PSE Convert to Gen 2"){_,_->prepareGen4ToGen2Transfer(bankFile,opened)}
+        if(currentGen==3)b.setPositiveButton("PSE Convert to Gen 3"){_,_->prepareGen4ToGen3Transfer(bankFile,opened)}
+        if(currentGen==4)b.setPositiveButton("Withdraw to Gen 4"){_,_->chooseGen4BankWithdrawDestination(bankFile,opened,openedRaw)}
+        if(currentGen==5)b.setPositiveButton("PSE Convert to Gen 5"){_,_->prepareGen4ToGen5Transfer(bankFile,opened)}
+        if(currentGen==6)b.setPositiveButton("PSE Convert to Gen 6"){_,_->prepareGen4ToGen6Transfer(bankFile,opened)}
+        if(currentGen==7)b.setPositiveButton("PSE Convert to Gen 7"){_,_->prepareGen4ForwardTransfer(bankFile,opened)}
         b.show()
     }
 
@@ -36380,44 +36383,88 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun chooseGen4BankWithdrawDestination(bankFile:File,p:PokemonEntry){
+    private fun chooseGen4BankWithdrawDestination(bankFile:File,p:PokemonEntry,openedBank:ByteArray){
         val file=importedFile ?: return showDialog("Withdraw","Import a Gen 4 destination save first.")
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         val data=runCatching{file.readBytes()}.getOrDefault(ByteArray(0)); val profile=detectGen4Profile(data) ?: return showDialog("Withdraw blocked","Load a valid Gen 4 save to withdraw an original PK4 Bank record.")
         val v=gen4Validation(data,profile); if(!v.generalChecksum || !v.storageChecksum || v.badPk4!=0)return showDialog("Withdraw blocked","The loaded Gen 4 save did not pass validation.")
         val raw=runCatching{bankFile.readBytes()}.getOrDefault(ByteArray(0)); val source=if(raw.size==136)parsePk4(raw,false)else null
-        if(source==null || !source.checksumValid)return showDialog("Withdraw","This Bank entry is not a valid PK4 record.")
+        if(!raw.contentEquals(openedBank)||source==null||!source.checksumValid||source.pid!=p.pid||source.species!=p.species||source.tid!=p.tid||source.sid!=p.sid)return showDialog("Withdraw","The selected Gen 4 Bank record changed. Reopen PSE Bank. Nothing was changed.")
         val empties=gen4EmptyBoxSlots(data,profile); if(empties.isEmpty())return showDialog("Withdraw","No empty Gen 4 PC slot is available.")
         val first=empties.first()
-        AlertDialog.Builder(this).setTitle("Withdraw ${p.nickname.ifBlank{"Pokémon"}} to…").setItems(arrayOf("First empty slot • Box ${first/30+1} • Slot ${first%30+1}","Choose a box / slot")){_,which->if(which==0)withdrawGen4BankToSlot(bankFile,p,first)else showGen4BankBoxPicker(bankFile,p,data,profile)}.setNegativeButton("Cancel",null).show()
+        var consumed=false
+        AlertDialog.Builder(this).setTitle("Withdraw ${p.nickname.ifBlank{"Pokémon"}} to…").setItems(arrayOf("First empty slot • Box ${first/30+1} • Slot ${first%30+1}","Choose a box / slot")){_,which->
+            if(consumed){return@setItems};consumed=true
+            if(which==0)withdrawGen4BankToSlot(bankFile,p,first,file,data,openedUri,openedLabel,openedBank)
+            else showGen4BankBoxPicker(bankFile,p,file,data,profile,openedUri,openedLabel,openedBank)
+        }.setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
     }
 
-    private fun showGen4BankBoxPicker(bankFile:File,p:PokemonEntry,data:ByteArray,profile:Gen4Profile){
+    private fun showGen4BankBoxPicker(bankFile:File,p:PokemonEntry,file:File,data:ByteArray,profile:Gen4Profile,openedUri:Uri?,openedLabel:String?,openedBank:ByteArray){
         val boxes=(0 until 18).filter{b->(0 until 30).any{s->val g=b*30+s;val o=gen4BoxSlotOffset(data,profile,g);val r=data.copyOfRange(o,o+136);r.all{it==0.toByte()}||parsePk4(r,false)==null}}
+        var boxConsumed=false
         AlertDialog.Builder(this).setTitle("Choose Gen 4 destination box").setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,w->
+            if(boxConsumed||w !in boxes.indices){boxConsumed=true;return@setItems};boxConsumed=true
             val b=boxes[w];val empties=(0 until 30).filter{s->val g=b*30+s;val o=gen4BoxSlotOffset(data,profile,g);val r=data.copyOfRange(o,o+136);r.all{it==0.toByte()}||parsePk4(r,false)==null}
-            AlertDialog.Builder(this).setTitle("Box ${b+1} • choose slot").setItems(empties.map{"Slot ${it+1}"}.toTypedArray()){_,sw->withdrawGen4BankToSlot(bankFile,p,b*30+empties[sw])}.setNegativeButton("Cancel",null).show()
-        }.setNegativeButton("Cancel",null).show()
+            var slotConsumed=false
+            AlertDialog.Builder(this).setTitle("Box ${b+1} • choose slot").setItems(empties.map{"Slot ${it+1}"}.toTypedArray()){_,sw->
+                if(slotConsumed||sw !in empties.indices){slotConsumed=true;return@setItems};slotConsumed=true
+                withdrawGen4BankToSlot(bankFile,p,b*30+empties[sw],file,data,openedUri,openedLabel,openedBank)
+            }.setNegativeButton("Cancel"){_,_->slotConsumed=true}.setOnCancelListener{slotConsumed=true}.show()
+        }.setNegativeButton("Cancel"){_,_->boxConsumed=true}.setOnCancelListener{boxConsumed=true}.show()
     }
 
-    private fun withdrawGen4BankToSlot(bankFile:File,p:PokemonEntry,target:Int){
-        val file=importedFile?:return; val original=try{file.readBytes()}catch(e:Exception){showDialog("Withdraw",e.message?:"Could not read save");return}
+    private fun withdrawGen4BankToSlot(bankFile:File,p:PokemonEntry,target:Int,file:File,openedDestination:ByteArray,openedUri:Uri?,openedLabel:String?,openedBank:ByteArray){
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val original=try{file.readBytes()}catch(e:Exception){showDialog("Withdraw",e.message?:"Could not read save");return}
+        var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null;var bankRecovery:File?=null
         try{
+            require(bound()&&original.contentEquals(openedDestination)){"The Gen 4 destination or source identity changed after slot selection."}
             require(target in 0 until 540){"Invalid Gen 4 PC slot"}; val profile=detectGen4Profile(original) ?: throw IllegalStateException("A valid Gen 4 destination save is required")
             val before=gen4Validation(original,profile); if(!before.generalChecksum || !before.storageChecksum || before.badPk4!=0)throw IllegalStateException("Gen 4 destination did not pass validation")
-            val raw=bankFile.readBytes(); val source=if(raw.size==136)parsePk4(raw,false)else null; require(source!=null && source.checksumValid){"The Bank PK4 record is invalid"}
+            val raw=bankFile.readBytes(); val source=if(raw.size==136)parsePk4(raw,false)else null; require(raw.contentEquals(openedBank)&&source!=null&&source.checksumValid&&source.pid==p.pid&&source.species==p.species&&source.tid==p.tid&&source.sid==p.sid){"The Bank PK4 record changed or is invalid"}
             val save=original.copyOf(); val off=gen4BoxSlotOffset(save,profile,target); val old=save.copyOfRange(off,off+136)
             if(!(old.all{it==0.toByte()} || parsePk4(old,false)==null))throw IllegalStateException("Destination slot is no longer empty")
             raw.copyInto(save,off); val staged=parsePk4(save.copyOfRange(off,off+136),false) ?: throw IllegalStateException("PK4 could not be parsed after placement")
             if(!staged.checksumValid || staged.pid!=source.pid || staged.species!=source.species)throw IllegalStateException("Placed PK4 failed verification")
             val activeStorage=gen4ActiveBlock(save,profile.storageStart,profile.storageSize);updateGen4BlockChecksum(save,activeStorage*0x40000+profile.storageStart,profile.storageSize,profile)
             val after=gen4Validation(save,profile);if(!after.generalChecksum || !after.storageChecksum || after.badPk4!=0)throw IllegalStateException("Gen 4 checksum verification failed")
-            file.writeBytes(save);val verify=file.readBytes();val vp=detectGen4Profile(verify)?:throw IllegalStateException("Written save layout could not be re-read");val vv=gen4Validation(verify,vp)
+            val backup=File.createTempFile(backupGameName(file)+"_PreGen4BankWithdraw_",".backup",backupsDir());safetyBackup=backup
+            backup.writeBytes(original);require(backup.readBytes().contentEquals(original)){"The exact Gen 4 recovery backup did not verify."};retainGen2ToGen4SafetyBackup(backup,original)
+            val bankCopy=File.createTempFile("PSE_G4Withdraw_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
+            bankCopy.writeBytes(raw);require(bankCopy.readBytes().contentEquals(raw)){"The exact PK4 Bank recovery snapshot did not verify."}
+            require(bound()&&file.readBytes().contentEquals(original)&&bankFile.readBytes().contentEquals(raw)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The destination, Bank record or retained recovery snapshots changed before writing."}
+            writeStarted=true;file.writeBytes(save);val verify=file.readBytes();val vp=detectGen4Profile(verify)?:throw IllegalStateException("Written save layout could not be re-read");val vv=gen4Validation(verify,vp)
             if(!vv.generalChecksum || !vv.storageChecksum || vv.badPk4!=0)throw IllegalStateException("Written Gen 4 save failed verification")
             val vo=gen4BoxSlotOffset(verify,vp,target);val actual=verify.copyOfRange(vo,vo+136);val mon=parsePk4(actual,false)
-            if(!actual.contentEquals(raw)||mon==null||!mon.checksumValid||mon.pid!=source.pid||mon.species!=source.species)throw IllegalStateException("Withdrawn PK4 did not verify after re-read")
-            if(!bankFile.delete()){file.writeBytes(original);throw IllegalStateException("The destination verified, but the Bank entry could not be removed; the save was restored to avoid duplication")}
+            if(!actual.contentEquals(raw)||mon==null||!mon.checksumValid||mon.pid!=source.pid||mon.species!=source.species||mon.tid!=source.tid||mon.sid!=source.sid)throw IllegalStateException("Withdrawn PK4 did not verify after re-read")
+            require(bound()&&file.readBytes().contentEquals(save)&&bankFile.readBytes().contentEquals(raw)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The verified destination or retained recovery snapshots changed before Bank cleanup."}
+            bankDeleteAttempted=true;require(bankFile.delete()&&!bankFile.exists()){"The destination verified, but the Bank entry could not be removed"}
+            require(bound()&&file.readBytes().contentEquals(save)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The verified destination or retained recovery snapshots changed after Bank cleanup."}
+            runCatching{bankCopy.delete()}
             Toast.makeText(this,"Withdrawn to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show();showBank()
-        }catch(e:Exception){runCatching{file.writeBytes(original)};showDialog("Gen 4 withdraw failed","${e.message?:"Unknown error"}. The original working copy was restored and the Bank entry was kept.")}
+        }catch(e:Exception){
+            val bankRestored=runCatching{
+                if(bankDeleteAttempted&&!bankFile.exists()){require(bankFile.createNewFile()){ "The Bank recovery path could not be reserved." };bankFile.writeBytes(openedBank)}
+                val restored=bankFile.readBytes();val parsed=if(restored.size==136)parsePk4(restored,false)else null
+                require(restored.contentEquals(openedBank)&&parsed!=null&&parsed.checksumValid&&parsed.pid==p.pid&&parsed.species==p.species&&parsed.tid==p.tid&&parsed.sid==p.sid){"The exact Gen 4 Bank record could not be restored or verified."};true
+            }.getOrDefault(false)
+            val destinationRestored=runCatching{
+                if(writeStarted)file.writeBytes(original)
+                val restored=file.readBytes();val rp=detectGen4Profile(restored)?:error("The restored Gen 4 layout is invalid.");val rv=gen4Validation(restored,rp)
+                require(restored.contentEquals(original)&&rv.generalChecksum&&rv.storageChecksum&&rv.badPk4==0){"The restored Gen 4 destination did not verify."};true
+            }.getOrDefault(false)
+            if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&destinationRestored->"The exact Gen 4 destination and PK4 Bank record were restored or kept and verified."
+                bankRestored->"The PK4 Bank record was restored or kept, but destination restoration was not verified. Use the retained destination backup before editing again."
+                destinationRestored->"The exact Gen 4 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
+                else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
+            }
+            showDialog("Gen 4 withdraw failed","${e.message?:"Unknown error"}\n\n"+recovery+
+                (safetyBackup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery snapshot: ${it.name}"}?:""))
+        }
     }
 
     private fun showGen4PokemonViewer(tab:String="party",boxIndex:Int=0) {
