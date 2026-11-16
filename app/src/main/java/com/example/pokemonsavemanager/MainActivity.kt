@@ -51530,18 +51530,82 @@ class MainActivity : Activity() {
         val file=importedFile?:return;val data=runCatching{file.readBytes()}.getOrNull()?:return;if(!data.contentEquals(preparedDestination))return showDialog("Gen 1 → Gen 5 multi-transfer","The destination changed while conversions were prepared. Nothing was written.");val targets=(0 until 24).mapNotNull{box->val empty=(0 until 30).count{slot->val o=0x00400+box*0x1000+slot*136;parsePk5(data.copyOfRange(o,o+136),false)==null};if(empty>=prepared.size)box to empty else null};if(targets.isEmpty())return showDialog("Gen 1 → Gen 5 multi-transfer","No single Gen 5 PC box has room for the complete batch.");var selected=0;AlertDialog.Builder(this).setTitle("Convert ${prepared.size} Gen 1 Pokémon → Gen 5").setMessage("Every PK5 conversion will be staged, registered, checksummed, persisted and re-read before any Gen 1 Bank entry is removed.").setSingleChoiceItems(targets.map{"Box ${it.first+1} • ${it.second} empty slots"}.toTypedArray(),selected){_,which->selected=which}.setNegativeButton("Cancel",null).setPositiveButton("Convert"){_,_->transferSelectedGen1BankToGen5(prepared,preparedDestination,targets[selected].first)}.show()
     }
     private fun transferSelectedGen1BankToGen5(prepared:List<Gen1Gen5BatchPrepared>,preparedDestination:ByteArray,box:Int){
-        val file=importedFile?:return;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;val removed=ArrayList<Pair<File,ByteArray>>()
-        try{require(prepared.isNotEmpty()){"No Gen 1 Bank entries were prepared."};require(prepared.map{it.bankFile.absolutePath}.distinct().size==prepared.size){"The prepared selection contains a duplicate."};require(fresh.contentEquals(preparedDestination)){"The Gen 5 destination changed after preparation."};val profile=detectGen5Profile(fresh)?:error("The destination is no longer a valid Gen 5 save.");require(box in 0..23){"Invalid Gen 5 destination box."};require(gen5ChecksumTableValid(fresh,profile)&&(0 until 24).all{gen5BoxChecksumValid(fresh,it,profile)}){"The fresh Gen 5 destination failed storage validation."}
+        val file=importedFile?:return
+        val openedFile=file;val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val fresh=runCatching{file.readBytes()}.getOrNull()?:return
+        val removed=ArrayList<Pair<File,ByteArray>>();var writeStarted=false;var safetyBackup:File?=null
+        try{
+            require(bound()){"The Gen 5 destination identity changed. Nothing was changed."}
+            require(prepared.isNotEmpty()){"No Gen 1 Bank entries were prepared."}
+            require(prepared.map{it.bankFile.absolutePath}.distinct().size==prepared.size){"The prepared selection contains a duplicate."}
+            require(fresh.contentEquals(preparedDestination)){"The Gen 5 destination changed after preparation."}
+            val profile=detectGen5Profile(fresh)?:error("The destination is no longer a valid Gen 5 save.")
+            require(box in 0..23){"Invalid Gen 5 destination box."}
+            require(gen5ChecksumTableValid(fresh,profile)&&(0 until 24).all{gen5BoxChecksumValid(fresh,it,profile)}){"The fresh Gen 5 destination failed storage validation."}
             fun samePk5(a:PokemonEntry,b:PokemonEntry)=a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.otName==b.otName&&a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&a.gender==b.gender&&a.shiny==b.shiny&&a.originGame==b.originGame&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.language==b.language&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)
-            val refreshed=prepared.map{item->val bytes=item.bankFile.readBytes();require(bytes.contentEquals(item.bankBytes)){"A selected Bank record changed after preparation."};val source=parseGen1BankPayload(bytes)?:error("A selected Bank record is invalid.");require(sameGen1TransferRecord(source,item.source)){"A selected Bank record no longer matches its prepared source."};val pk5=buildGen1ToGen5Pk5(bytes,source,fresh,item.meta);val q=parsePk5(pk5,false)?:error("A refreshed PK5 could not be parsed.");require(pk5.contentEquals(item.pk5)&&samePk5(q,item.converted)){"A prepared conversion changed before confirmation."};Gen1Gen5BatchPrepared(item.bankFile,bytes,source,item.meta,pk5,q)}
-            val empty=(0 until 30).filter{slot->val o=0x00400+box*0x1000+slot*136;parsePk5(fresh.copyOfRange(o,o+136),false)==null};require(empty.size>=refreshed.size){"Gen 5 Box ${box+1} no longer has room for the complete batch."};val work=fresh.copyOf();val allowed=HashSet<Int>();val expected=ArrayList<Triple<Int,ByteArray,PokemonEntry>>()
-            for(i in refreshed.indices){val item=refreshed[i];val slot=empty[i];val target=box*30+slot;val off=0x00400+box*0x1000+slot*136;require(parsePk5(work.copyOfRange(off,off+136),false)==null){"A destination slot is no longer empty."};item.pk5.copyInto(work,off);for(x in off until off+136)allowed.add(x);val staged=parsePk5(work.copyOfRange(off,off+136),false)?:error("A staged PK5 could not be parsed.");require(samePk5(staged,item.converted)){"A staged PK5 did not preserve every supported converted field."};expected.add(Triple(target,item.pk5,staged))}
-            val(len,dexLocal,dexMirror)=gen5PokedexBlock(profile);allowed.add(dexLocal);allowed.add(dexLocal+1);allowed.add(dexMirror);allowed.add(dexMirror+1);for((_,_,mon) in expected){val bit=mon.species-1;val byte=bit/8;val region=(if(mon.shiny)2 else 0) or (mon.gender and 1);allowed.add(profile.pokedexOffset+0x08+byte);allowed.add(profile.pokedexOffset+0x5C+region*0x54+byte);for(r in 0..3)allowed.add(profile.pokedexOffset+0x1AC+r*0x54+byte);if(mon.species<=493){val lb=profile.pokedexOffset+(if(profile.sequel)0x328 else 0x320);allowed.add(lb+(bit*7+1)/8)};registerGen1ToGen5Pokedex(work,profile,mon)}
-            val boxBase=0x00400+box*0x1000;allowed.add(boxBase+0x0FF2);allowed.add(boxBase+0x0FF3);val boxMirror=profile.checksumTable+2+box*2;allowed.add(boxMirror);allowed.add(boxMirror+1);allowed.add(profile.checksumBlockChecksumOffset);allowed.add(profile.checksumBlockChecksumOffset+1);updateGen5BoxChecksum(work,box,profile)
-            require(work.indices.all{it in allowed||work[it]==fresh[it]}){"Unrelated Gen 5 save data changed during staging."};require(gen5BoxChecksumValid(work,box,profile)&&gen5ChecksumTableValid(work,profile)&&expected.all{gen1ToGen5DexRegistered(work,profile,it.third)}){"The staged Gen 5 checksums or Pokédex failed verification."}
-            file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)){"The destination changed while the batch was written."};val wp=detectGen5Profile(written)?:error("The persisted Gen 5 layout could not be re-read.");require(gen5BoxChecksumValid(written,box,wp)&&gen5ChecksumTableValid(written,wp)){"The persisted Gen 5 save failed checksum validation."};require(written.indices.all{it in allowed||written[it]==fresh[it]}){"Unrelated Gen 5 data changed after persistence."};for((target,bytes,staged) in expected){val off=0x00400+(target/30)*0x1000+(target%30)*136;val actual=written.copyOfRange(off,off+136);val q=parsePk5(actual,false)?:error("A persisted PK5 could not be parsed.");require(actual.contentEquals(bytes)&&samePk5(q,staged)&&gen1ToGen5DexRegistered(written,wp,q)){"A persisted PK5 or Pokédex registration did not verify."}}
-            for(item in refreshed){val current=item.bankFile.readBytes();require(current.contentEquals(item.bankBytes)&&parseGen1BankPayload(current)?.let{sameGen1TransferRecord(it,item.source)}==true){"A Bank record changed before cleanup; the destination was restored."};removed.add(item.bankFile to item.bankBytes);require(item.bankFile.delete()){"A Bank record could not be removed after destination verification."}}
-        }catch(e:Exception){for((bank,bytes) in removed)runCatching{bank.writeBytes(bytes)};runCatching{file.writeBytes(fresh)};showDialog("Gen 1 → Gen 5 multi-transfer failed","${e.message?:"Unknown error"}\n\nThe exact destination snapshot and every selected Bank record were restored.");return};selectedBankFiles.clear();bankMultiSelectMode=false;Toast.makeText(this,"Transferred ${prepared.size} Gen 1 Pokémon → Gen 5 and verified",Toast.LENGTH_LONG).show();showBank()
+            val refreshed=prepared.map{item->
+                val bytes=item.bankFile.readBytes();require(bytes.contentEquals(item.bankBytes)){"A selected Bank record changed after preparation."}
+                val source=parseGen1BankPayload(bytes)?:error("A selected Bank record is invalid.")
+                require(sameGen1TransferRecord(source,item.source)){"A selected Bank record no longer matches its prepared source."}
+                val pk5=buildGen1ToGen5Pk5(bytes,source,fresh,item.meta)
+                val q=parsePk5(pk5,false)?:error("A refreshed PK5 could not be parsed.")
+                require(pk5.contentEquals(item.pk5)&&samePk5(q,item.converted)&&gen5Pk5PpUps(pk5).contentEquals(source.movePpUps)){"A prepared conversion or PP-Up value changed before confirmation."}
+                Gen1Gen5BatchPrepared(item.bankFile,bytes,source,item.meta,pk5,q)
+            }
+            val empty=(0 until 30).filter{slot->val o=0x00400+box*0x1000+slot*136;parsePk5(fresh.copyOfRange(o,o+136),false)==null}
+            require(empty.size>=refreshed.size){"Gen 5 Box ${box+1} no longer has room for the complete batch."}
+            val work=fresh.copyOf();val allowed=HashSet<Int>();val expected=ArrayList<Triple<Int,ByteArray,PokemonEntry>>()
+            for(i in refreshed.indices){
+                val item=refreshed[i];val slot=empty[i];val target=box*30+slot;val off=0x00400+box*0x1000+slot*136
+                require(parsePk5(work.copyOfRange(off,off+136),false)==null){"A destination slot is no longer empty."}
+                item.pk5.copyInto(work,off);for(x in off until off+136)allowed.add(x)
+                val stagedBytes=work.copyOfRange(off,off+136);val staged=parsePk5(stagedBytes,false)?:error("A staged PK5 could not be parsed.")
+                require(stagedBytes.contentEquals(item.pk5)&&samePk5(staged,item.converted)&&gen5Pk5PpUps(stagedBytes).contentEquals(item.source.movePpUps)){"A staged PK5 did not preserve every supported converted field and PP-Up value."}
+                expected.add(Triple(target,item.pk5,staged))
+            }
+            val(_,dexLocal,dexMirror)=gen5PokedexBlock(profile);allowed.add(dexLocal);allowed.add(dexLocal+1);allowed.add(dexMirror);allowed.add(dexMirror+1)
+            for((_,_,mon) in expected){
+                val bit=mon.species-1;val byte=bit/8;val region=(if(mon.shiny)2 else 0) or (mon.gender and 1)
+                allowed.add(profile.pokedexOffset+0x08+byte);allowed.add(profile.pokedexOffset+0x5C+region*0x54+byte)
+                for(r in 0..3)allowed.add(profile.pokedexOffset+0x1AC+r*0x54+byte)
+                if(mon.species<=493){val lb=profile.pokedexOffset+(if(profile.sequel)0x328 else 0x320);allowed.add(lb+(bit*7+1)/8)}
+                registerGen1ToGen5Pokedex(work,profile,mon)
+            }
+            val boxBase=0x00400+box*0x1000;allowed.add(boxBase+0x0FF2);allowed.add(boxBase+0x0FF3)
+            val boxMirror=profile.checksumTable+2+box*2;allowed.add(boxMirror);allowed.add(boxMirror+1);allowed.add(profile.checksumBlockChecksumOffset);allowed.add(profile.checksumBlockChecksumOffset+1)
+            updateGen5BoxChecksum(work,box,profile)
+            require(work.indices.all{it in allowed||work[it]==fresh[it]}){"Unrelated Gen 5 save data changed during staging."}
+            require(gen5BoxChecksumValid(work,box,profile)&&gen5ChecksumTableValid(work,profile)&&expected.all{gen1ToGen5DexRegistered(work,profile,it.third)}){"The staged Gen 5 checksums or Pokédex failed verification."}
+            require(bound()&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination or a selected Bank record changed before backup. Nothing was written."}
+            val recovery=File.createTempFile(backupGameName(file)+"_PreGen1BatchToGen5_",".backup",backupsDir());safetyBackup=recovery
+            recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The exact Gen 5 batch recovery backup did not verify."};retainGen2ToGen5SafetyBackup(recovery,fresh)
+            require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination, selected Bank records or retained recovery backup changed before writing."}
+            writeStarted=true;file.writeBytes(work)
+            val written=file.readBytes();require(written.contentEquals(work)){"The destination changed while the batch was written."}
+            val wp=detectGen5Profile(written)?:error("The persisted Gen 5 layout could not be re-read.")
+            require(gen5BoxChecksumValid(written,box,wp)&&gen5ChecksumTableValid(written,wp)){"The persisted Gen 5 save failed checksum validation."}
+            require(written.indices.all{it in allowed||written[it]==fresh[it]}){"Unrelated Gen 5 data changed after persistence."}
+            for((target,bytes,staged) in expected){
+                val off=0x00400+(target/30)*0x1000+(target%30)*136;val actual=written.copyOfRange(off,off+136)
+                val q=parsePk5(actual,false)?:error("A persisted PK5 could not be parsed.")
+                require(actual.contentEquals(bytes)&&samePk5(q,staged)&&gen5Pk5PpUps(actual).contentEquals(gen5Pk5PpUps(bytes))&&gen1ToGen5DexRegistered(written,wp,q)){"A persisted PK5, PP-Up value or Pokédex registration did not verify."}
+            }
+            for(item in refreshed){
+                require(bound()&&file.readBytes().contentEquals(work)&&isBackupKept(recovery)){"The verified destination identity, data or retained backup changed before Bank cleanup."}
+                val current=item.bankFile.readBytes();require(current.contentEquals(item.bankBytes)&&parseGen1BankPayload(current)?.let{sameGen1TransferRecord(it,item.source)}==true){"A Bank record changed before cleanup; the destination was restored."}
+                removed.add(item.bankFile to item.bankBytes);require(item.bankFile.delete()&&!item.bankFile.exists()){"A Bank record could not be removed after destination verification."}
+            }
+            require(bound()&&file.readBytes().contentEquals(work)){"The verified Gen 5 destination changed after Bank cleanup."}
+        }catch(e:Exception){
+            for((bank,bytes) in removed)runCatching{if(!bank.exists())require(bank.createNewFile()){"A Bank recovery path could not be reserved."};bank.writeBytes(bytes)}
+            val banksRestored=prepared.all{item->runCatching{val bytes=item.bankFile.readBytes();bytes.contentEquals(item.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,item.source)}==true}.getOrDefault(false)}
+            val saveRestored=!writeStarted||runCatching{file.writeBytes(fresh);val restored=file.readBytes();val p=detectGen5Profile(restored);restored.contentEquals(fresh)&&p!=null&&gen5ChecksumTableValid(restored,p)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,p)}}.getOrDefault(false)
+            val recovery=if(banksRestored&&saveRestored)"The exact Gen 5 destination and every selected Gen 1 Bank record were restored or kept and verified." else "Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
+            showDialog("Gen 1 → Gen 5 multi-transfer failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
+        }
+        selectedBankFiles.clear();bankMultiSelectMode=false
+        Toast.makeText(this,"Transferred ${prepared.size} Gen 1 Pokémon → Gen 5 and verified",Toast.LENGTH_LONG).show();showBank()
     }
 
     private fun buildGen1ToGen6Pk6(bankBytes:ByteArray,p:Gen1Pokemon,destination:ByteArray,trainer:TrainerData,meta:Gen1ToGen5Meta):ByteArray{
