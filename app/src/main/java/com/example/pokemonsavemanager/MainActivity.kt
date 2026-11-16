@@ -52286,27 +52286,63 @@ class MainActivity : Activity() {
             fun legalisedField(index:Int)=index in payload+8..payload+11||index in payload+14..payload+16||index in payload+29..payload+32
             require(originalBankBytes.indices.all{i->originalBankBytes[i]==preparedBankBytes[i]||legalisedField(i)}){"The prepared source changed outside the reviewed legalisation fields."}
             for(i in 0..3)require((originalBankBytes[payload+29+i].toInt()and 0xC0)==(preparedBankBytes[payload+29+i].toInt()and 0xC0)){"Move legalisation changed a preserved PP-Up value."}
-            fun samePk7(a:PokemonEntry,b:PokemonEntry)=
-                a.species==b.species&&a.nickname==b.nickname&&a.isNicknamed==b.isNicknamed&&a.level==b.level&&a.checksumValid&&b.checksumValid&&
-                    a.heldItem==b.heldItem&&a.tid==b.tid&&a.sid==b.sid&&a.experience==b.experience&&a.ability==b.ability&&
-                    a.abilityNumber==b.abilityNumber&&a.pid==b.pid&&a.nature==b.nature&&a.gender==b.gender&&a.form==b.form&&
-                    a.evs.contentEquals(b.evs)&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.ivs.contentEquals(b.ivs)&&
-                    a.isEgg==b.isEgg&&a.otName==b.otName&&a.friendship==b.friendship&&a.currentHandler==b.currentHandler&&
-                    a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.shiny==b.shiny&&a.language==b.language&&
-                    a.markingValue==b.markingValue&&a.fatefulEncounter==b.fatefulEncounter&&a.relearnMoves.contentEquals(b.relearnMoves)&&
-                    a.eggLocation==b.eggLocation&&a.metLocation==b.metLocation&&a.ball==b.ball&&a.metLevel==b.metLevel&&
-                    a.otGender==b.otGender&&a.originGame==b.originGame&&a.country==b.country&&a.region==b.region&&
-                    a.consoleRegion==b.consoleRegion&&a.eggYear==b.eggYear&&a.eggMonth==b.eggMonth&&a.eggDay==b.eggDay&&
-                    a.metYear==b.metYear&&a.metMonth==b.metMonth&&a.metDay==b.metDay&&a.hyperTrainFlags==b.hyperTrainFlags
+            fun pk7Mismatch(a:PokemonEntry,b:PokemonEntry):String?=when{
+                !a.checksumValid||!b.checksumValid->"PK7 checksum"
+                a.species!=b.species->"species"
+                a.nickname!=b.nickname->"nickname"
+                a.isNicknamed!=b.isNicknamed->"nickname flag"
+                a.level!=b.level->"level"
+                a.heldItem!=b.heldItem->"held item"
+                a.tid!=b.tid->"Trainer ID"
+                a.sid!=b.sid->"Secret ID"
+                a.experience!=b.experience->"experience"
+                a.ability!=b.ability->"ability"
+                a.abilityNumber!=b.abilityNumber->"ability slot"
+                a.pid!=b.pid->"PID"
+                a.nature!=b.nature->"nature"
+                a.gender!=b.gender->"gender"
+                a.form!=b.form->"form"
+                !a.evs.contentEquals(b.evs)->"EVs"
+                !a.moves.contentEquals(b.moves)->"moves"
+                !a.movePP.contentEquals(b.movePP)->"move PP"
+                !a.ivs.contentEquals(b.ivs)->"IVs"
+                a.isEgg!=b.isEgg->"Egg flag"
+                a.otName!=b.otName->"Original Trainer name"
+                a.friendship!=b.friendship->"friendship"
+                a.currentHandler!=b.currentHandler->"current handler"
+                a.pokerusDays!=b.pokerusDays||a.pokerusStrain!=b.pokerusStrain->"Pokérus"
+                a.shiny!=b.shiny->"shiny state"
+                a.language!=b.language->"language"
+                a.markingValue!=b.markingValue->"markings"
+                a.fatefulEncounter!=b.fatefulEncounter->"fateful encounter flag"
+                !a.relearnMoves.contentEquals(b.relearnMoves)->"relearn moves"
+                a.eggLocation!=b.eggLocation->"Egg location"
+                a.metLocation!=b.metLocation->"met location"
+                a.ball!=b.ball->"Poké Ball"
+                a.metLevel!=b.metLevel->"met level"
+                a.otGender!=b.otGender->"Original Trainer gender"
+                a.originGame!=b.originGame->"origin game"
+                a.country!=b.country->"country"
+                a.region!=b.region->"region"
+                a.consoleRegion!=b.consoleRegion->"console region"
+                a.eggYear!=b.eggYear||a.eggMonth!=b.eggMonth||a.eggDay!=b.eggDay->"Egg date"
+                a.metYear!=b.metYear||a.metMonth!=b.metMonth||a.metDay!=b.metDay->"met date"
+                a.hyperTrainFlags!=b.hyperTrainFlags->"Hyper Training flags"
+                else->null
+            }
             require(convertedPk7.size==PK6_STORED_SIZE){"The reviewed PK7 has an unexpected size."}
             val prepared=parsePk6(convertedPk7,0,PK6_STORED_SIZE,false,807)?:error("The reviewed PK7 could not be reopened.")
-            require(samePk7(prepared,converted)&&prepared.tid==preparedSource.tid&&gen6Pk6PpUps(convertedPk7).contentEquals(preparedSource.movePpUps)){"The reviewed PK7 no longer matches the confirmed conversion."}
+            val preparedMismatch=pk7Mismatch(prepared,converted)
+            val preparedPpUpsMatch=gen6Pk6PpUps(convertedPk7).contentEquals(preparedSource.movePpUps)
+            require(preparedMismatch==null&&prepared.tid==preparedSource.tid&&preparedPpUpsMatch){"The reviewed PK7 differs in ${preparedMismatch?:if(prepared.tid!=preparedSource.tid)"Trainer ID" else "PP-Up data"}."}
             val offset=boxOffset+target*PK6_STORED_SIZE;require(parsePk6(fresh,offset,PK6_STORED_SIZE,false,maxSpecies)==null){"The selected Gen 7 slot is no longer empty."}
             val beforeStorage=fresh.copyOfRange(boxOffset,boxOffset+storageLength);val selectedStart=target*PK6_STORED_SIZE;val selectedEnd=selectedStart+PK6_STORED_SIZE
             fun pcIsolated(data:ByteArray):Boolean{if(data.size!=fresh.size)return false;val after=data.copyOfRange(boxOffset,boxOffset+storageLength);return after.indices.all{it in selectedStart until selectedEnd||after[it]==beforeStorage[it]}}
             val work=fresh.copyOf();convertedPk7.copyInto(work,offset)
             val stagedBytes=work.copyOfRange(offset,offset+PK6_STORED_SIZE);val staged=parsePk6(stagedBytes,0,PK6_STORED_SIZE,false,807)?:error("The staged PK7 could not be parsed.")
-            require(stagedBytes.contentEquals(convertedPk7)&&samePk7(staged,prepared)&&gen6Pk6PpUps(stagedBytes).contentEquals(preparedSource.movePpUps)){"The staged PK7 did not preserve every reviewed converted field."}
+            val stagedMismatch=pk7Mismatch(staged,prepared)
+            val stagedPpUpsMatch=gen6Pk6PpUps(stagedBytes).contentEquals(preparedSource.movePpUps)
+            require(stagedMismatch==null&&stagedBytes.contentEquals(convertedPk7)&&stagedPpUpsMatch){"The staged PK7 differs in ${stagedMismatch?:if(!stagedPpUpsMatch)"PP-Up data" else "native record bytes"}."}
             require(pcIsolated(work)){"Unrelated Gen 7 PC data changed during staging."}
             registerGen7Dex(work,staged.species,staged.form,staged.gender,staged.shiny,staged.language);updateGen7SaveBlockChecksum(work,14,boxOffset,storageLength)
             val dexInfo=gen7BlockInfo(work,6)?:error("Gen 7 Pokédex block layout is unavailable.");updateGen7SaveBlockChecksum(work,6,dexInfo.first,dexInfo.second);finalizeGen7Save(work)
@@ -52318,7 +52354,10 @@ class MainActivity : Activity() {
             writeStarted=true;file.writeBytes(work)
             val written=file.readBytes();require(written.contentEquals(work)&&boxStorageInfo(written)==info){"The persisted Gen 7 destination or PC layout changed unexpectedly."}
             val actual=written.copyOfRange(offset,offset+PK6_STORED_SIZE);val reopened=parsePk6(actual,0,PK6_STORED_SIZE,false,807)?:error("The persisted PK7 could not be parsed.")
-            require(actual.contentEquals(convertedPk7)&&samePk7(reopened,prepared)&&gen6Pk6PpUps(actual).contentEquals(preparedSource.movePpUps)&&gen7DexRegistered(written,reopened)){"The exact PK7, PP-Up values or Pokédex registration did not persist."}
+            val reopenedMismatch=pk7Mismatch(reopened,prepared)
+            val reopenedPpUpsMatch=gen6Pk6PpUps(actual).contentEquals(preparedSource.movePpUps)
+            val reopenedDexMatches=gen7DexRegistered(written,reopened)
+            require(actual.contentEquals(convertedPk7)&&reopenedMismatch==null&&reopenedPpUpsMatch&&reopenedDexMatches){"Persisted PK7 verification failed: ${reopenedMismatch?:if(!reopenedPpUpsMatch)"PP-Up data" else if(!reopenedDexMatches)"Pokédex registration" else "native record bytes"}."}
             val writtenChecks=validateGen7CoreChecksums(written);require(writtenChecks.first){writtenChecks.second};require(pcIsolated(written)){"Unrelated Gen 7 PC data changed after persistence."}
             val cleanup=bankFile.readBytes()
             require(bound()&&cleanup.contentEquals(originalBankBytes)&&parseGen1BankPayload(cleanup)?.let{sameGen1TransferRecord(it,originalSource)}==true&&file.readBytes().contentEquals(work)&&isBackupKept(recovery)){"The Bank record, destination identity or retained backup changed before cleanup."}
