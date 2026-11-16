@@ -31,8 +31,10 @@ object SwordShieldToLetsGoPb7 {
             add(
                 "The original PK8 Bank entry and Let's Go source save remain unchanged. PSE writes only the " +
                     "next unused native PB7 storage record in a new copy, updates the native storage count and " +
-                    "block CRCs, retains a verified recovery backup, reopens the persisted destination, removes " +
-                    "a failed copy when possible, and re-verifies both unchanged sources."
+                    "block CRCs, and registers the converted gender, shiny state and English language in the " +
+                    "matching native caught entry when required. It refreshes the Pokédex block CRC, retains a " +
+                    "verified recovery backup, reopens the persisted destination, removes a failed copy when " +
+                    "possible, and re-verifies both unchanged sources."
             )
         }
         return SwordShieldToLetsGoReview(
