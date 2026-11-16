@@ -57347,7 +57347,7 @@ private data class Gen2ToGen5LegalisePlan(
             val pk5=try{buildGen2ToGen5Pk5(bank,source,destination,meta,plan)}catch(e:Exception){return@loadGen1ToGen5MetaAsync showDialog("Gen 2 → Gen 5",e.message?:"Conversion failed")}
             val converted=parsePk5(pk5,false)?:return@loadGen1ToGen5MetaAsync showDialog("Gen 2 → Gen 5","The prepared PK5 could not be reopened and validated.")
             val targets=(0 until 24*30).filter{slot->val off=0x00400+(slot/30)*0x1000+(slot%30)*136;val raw=destination.copyOfRange(off,off+136);parsePk5(raw,false)==null&&raw.all{it==0.toByte()}}
-            if(targets.isEmpty())return@loadGen1ToGen5MetaAsync showDialog("Gen 2 → Gen 5","No empty Gen 5 PC slot is available. Nothing was changed.")
+            if(targets.isEmpty())return@loadGen1ToGen5MetaAsync showDialog("Gen 2 → Gen 5","All Gen 5 PC slots are occupied. Free at least one destination slot or load another valid Gen 5 save, then reopen PSE Bank. The Bank record and destination were left unchanged.")
             val target=targets.first()
             val preview=buildString{
                 append("PSE Bank conversion preview\n\n")
@@ -57465,7 +57465,7 @@ private data class Gen2ToGen5LegalisePlan(
         if(binding!=null&&(!destination.contentEquals(binding.destination)||binding.bankImages.size!=selected.size||!binding.bankImages.zip(selected).all{(image,item)->image.first==item.first.absolutePath&&image.second.contentEquals(item.second)}))return showDialog("Gen 2 → Gen 5 multi-transfer","The original destination or ordered Bank selection changed after Legalise confirmation. Nothing was changed.")
         fun snapshotsMatch()=bound()&&runCatching{file.readBytes().contentEquals(destination)&&selected.all{it.first.readBytes().contentEquals(it.second)}}.getOrDefault(false)
         val targets=(0 until 24).mapNotNull{box->val empty=(0 until 30).filter{slot->val off=gen2ToGen5BoxSlotOffset(box*30+slot);val raw=destination.copyOfRange(off,off+136);parsePk5(raw,false)==null&&raw.all{it==0.toByte()}};if(empty.size>=selected.size)box to empty else null}
-        if(targets.isEmpty())return showDialog("Gen 2 → Gen 5 multi-transfer","No single Gen 5 PC box has room for all ${selected.size} selected Pokémon. Nothing was changed.")
+        if(targets.isEmpty())return showDialog("Gen 2 → Gen 5 multi-transfer","No single Gen 5 PC box has ${selected.size} empty slots for the complete selection. Free enough slots in one destination box, reduce the Bank selection, or load another valid Gen 5 save, then reopen PSE Bank. Every selected Bank record and the destination were left unchanged.")
         val prepared=ArrayList<Gen2Gen5BatchPrepared>();val requiredPlans=linkedMapOf<String,Gen2ToGen5LegalisePlan>()
         fun stop(message:String){showDialog("Gen 2 → Gen 5 multi-transfer",message+" Every selected Bank record and the destination were left unchanged.")}
         var expectedIndex=0;var pickerOffered=false;var transferConsumed=false

@@ -753,7 +753,7 @@ Work on the active `pse-phone-auto-v2-test` branch of the public repository. Pre
 
 ### Screenshot states that are expected safety behavior
 
-- Gen 2 → Gen 5 reports no empty destination slot. Keep occupied slots unchanged; clarify that the user must free a slot or choose a save with capacity if needed.
+- Gen 2 → Gen 5 occupied-capacity guidance — implemented. Single transfer now states that all destination PC slots are occupied and directs the user to free a slot or load another valid save. Multi-transfer states the exact number of empty slots required in one box and offers the safe choices to free capacity, reduce the selection or load another save. Both paths keep every occupied slot, Bank record and destination byte unchanged.
 - “Choose documented origin mapping,” “Choose native destination,” and “Choose compatible origin” prompts are expected guarded flows when native history is unavailable or a destination slot must be selected. Keep their exact title/ID disclosure and Cancel path; fix only any route that subsequently blocks a valid, explicitly selected mapping.
 - For every blocked transfer, confirm the Bank record and destination remain byte-for-byte unchanged.
 
