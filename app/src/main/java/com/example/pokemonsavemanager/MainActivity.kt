@@ -11470,8 +11470,8 @@ class MainActivity : Activity() {
         b.show()
     }
 
-    private fun buildGen5ToGen1Bridge(raw:ByteArray,p:PokemonEntry):Pair<ByteArray,Gen2Pokemon>{
-        val (mon,ot,nick)=buildGen5ToGen2Record(raw,p)
+    private fun buildGen5ToGen1Bridge(raw:ByteArray,p:PokemonEntry,confirmedMovePlan:Gen5ToGen2MovePlan?=null):Pair<ByteArray,Gen2Pokemon>{
+        val (mon,ot,nick)=buildGen5ToGen2Record(raw,p,confirmedMovePlan,165)
         val bridge=ByteArray(GEN2_BANK_FILE_SIZE)
         bridge[0]='P'.code.toByte();bridge[1]='S'.code.toByte();bridge[2]='E'.code.toByte();bridge[3]='2'.code.toByte()
         bridge[4]=1;bridge[5]=1;bridge[6]=0;bridge[7]=0
@@ -11482,7 +11482,10 @@ class MainActivity : Activity() {
         return bridge to converted
     }
 
-    private fun prepareGen5ToGen1Transfer(bankFile:File,shown:PokemonEntry){
+    private fun prepareGen5ToGen1Transfer(
+        bankFile:File,shown:PokemonEntry,confirmedMovePlan:Gen5ToGen2MovePlan?=null,
+        reviewedBank:ByteArray?=null,reviewedDestination:ByteArray?=null
+    ){
         val file=importedFile?:return showDialog("Gen 5 → Gen 1","Load a valid Red, Blue or Yellow destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
@@ -11503,10 +11506,44 @@ class MainActivity : Activity() {
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
             source.tid!=shown.tid||source.sid!=shown.sid)
             return showDialog("Gen 5 → Gen 1","The selected Bank record changed or failed its PK5 checksum.")
-        gen5ToGen2Blocker(source)?.let{
+        if((reviewedBank!=null&&!bank.contentEquals(reviewedBank))||(reviewedDestination!=null&&!destination.contentEquals(reviewedDestination)))
+            return showDialog("Gen 5 → Gen 1","The source or destination changed after the move-removal review. Nothing was changed.")
+        val movePlan=try{gen5MovePlan(bank,source,165)}catch(e:Exception){
+            return showDialog("Gen 5 → Gen 1 blocked",(e.message?:"The source move data could not be reviewed safely.")+"\n\nThe Bank record and destination were left unchanged.")
+        }
+        if(confirmedMovePlan!=null&&confirmedMovePlan!=movePlan)
+            return showDialog("Gen 5 → Gen 1","The reviewed move-removal plan changed. Nothing was changed.")
+        gen5ToGen2Blocker(source,movePlan.removed.isNotEmpty())?.let{
             return showDialog("Gen 5 → Gen 1 blocked","$it\n\nThe Bank record and destination were left unchanged.")
         }
-        val bridgePair=try{buildGen5ToGen1Bridge(bank,source)}catch(e:Exception){
+        if(movePlan.removed.isNotEmpty()&&confirmedMovePlan==null){
+            val removalReview=buildString{
+                append("Explicit PSE Legalise review. Generation 1 has no native IDs for the following Gen 5 moves, so conversion remains blocked unless you accept removing exactly these entries:\n\n")
+                movePlan.removed.forEach{removed->
+                    append("• Source slot ${removed.sourceSlot+1}: move #${removed.move}, PP ${removed.pp}, PP Ups ${removed.ppUps}\n")
+                }
+                append("\nFinal native Generation 1 move slots after compacting the remaining moves:\n")
+                movePlan.destinationMoves.indices.forEach{i->
+                    val move=movePlan.destinationMoves[i]
+                    if(move==0)append("• Slot ${i+1}: Empty\n")
+                    else append("• Slot ${i+1}: move #$move, PP ${movePlan.destinationPp[i]}, PP Ups ${movePlan.destinationPpUps[i]}\n")
+                }
+                append("\nCancel leaves the exact PK5 Bank record and destination byte-for-byte unchanged. Accepting this review authorizes only the listed removals and slot compaction; the PK5 remains unchanged until the chosen native Generation 1 record is written and reopened successfully. This is a PSE conversion, not an official trade, migration, legality certification or provenance claim.")
+            }
+            var removalConsumed=false
+            AlertDialog.Builder(this).setTitle("Gen 5 → Gen 1 move Legalise")
+                .setMessage(removalReview).setNegativeButton("Cancel",null)
+                .setPositiveButton("Remove listed moves"){_,_->
+                    if(removalConsumed){showDialog("Gen 5 → Gen 1","This move-removal review was already submitted. Reopen PSE Bank.");return@setPositiveButton};removalConsumed=true
+                    if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false)){
+                        showDialog("Gen 5 → Gen 1","The source or destination changed after review. Nothing was changed.");return@setPositiveButton
+                    }
+                    prepareGen5ToGen1Transfer(selected,source,movePlan,bank.copyOf(),destination.copyOf())
+                }.show()
+            return
+        }
+        val acceptedMovePlan=confirmedMovePlan?.takeIf{it==movePlan}
+        val bridgePair=try{buildGen5ToGen1Bridge(bank,source,acceptedMovePlan)}catch(e:Exception){
             return showDialog("Gen 5 → Gen 1 blocked",(e.message?:"No safe Generation 2 bridge is available.")+"\n\nNothing was changed.")
         }
         val bridge=bridgePair.first;val converted=bridgePair.second
@@ -11532,7 +11569,19 @@ class MainActivity : Activity() {
             }
             val review=buildString{
                 append("PSE backward conversion; this is not an in-game trade, official migration or provenance claim. The source save stays unchanged, and the exact PK5 remains in Bank until the native Gen 1 write reopens successfully.\n\n")
-                append("Preserved: species, nickname, OT name/TID, EXP, moves, current PP and PP Ups. Gen 5 IVs ")
+                append("Preserved: species, nickname, OT name/TID and EXP. ")
+                if(movePlan.removed.isEmpty())append("All moves, current PP and PP Ups are preserved. ")
+                else{
+                    append("Accepted Legalise change: ")
+                    append(movePlan.removed.joinToString("; "){"source slot ${it.sourceSlot+1} move #${it.move} (PP ${it.pp}, PP Ups ${it.ppUps}) removed"})
+                    append(". Final native slots: ")
+                    append(movePlan.destinationMoves.indices.joinToString("; "){i->
+                        val move=movePlan.destinationMoves[i]
+                        if(move==0)"slot ${i+1} empty" else "slot ${i+1} move #$move (PP ${movePlan.destinationPp[i]}, PP Ups ${movePlan.destinationPpUps[i]})"
+                    })
+                    append(". Remaining move PP and PP Ups are preserved exactly. ")
+                }
+                append("Gen 5 IVs ")
                 append(source.ivs.joinToString("/")).append(" become Gen 1 DVs ").append(finalDvs.joinToString("/"))
                 append("; Atk, Def, Speed and Special use floor(IV ÷ 2), HP DV is derived from their low bits, and independent Gen 5 HP and SpD IVs have no Gen 1 fields. EVs become Stat Exp ")
                 append(finalStatExp).append("; Special uses the integer average of SpA/SpD EVs, rounded down. The experience-based level becomes ")
@@ -11540,7 +11589,7 @@ class MainActivity : Activity() {
                 append(", while the source is ").append(if(source.shiny)"shiny" else "not shiny").append(".\n\n")
                 append(omissionNote).append("\n\n")
                 append("Gen 1 has no fields for SID ${source.sid}, PID ${"%08X".format(source.pid)}, nature ${source.nature}, ability ${source.ability}/slot ${source.abilityNumber}, gender ${source.gender}, origin game ID ${source.originGame}, Ball ${source.ball}, met/egg locations and dates, ribbons, markings, fateful metadata, or the independent Gen 5 HP/SpD IVs. Gen 1 catch rate is set to 0 because held items are blocked and Generation 5 has no verified catch-rate source field. ")
-                append("Eggs, held items, alternate forms, non-English text, unsupported moves/species and invalid values are blocked instead of discarded.\n\n")
+                append("Eggs, held items, alternate forms, non-English text, unsupported species and invalid values are blocked instead of discarded. Unsupported moves are removed only through the explicit, cancellable Legalise review above.\n\n")
                 append("Verified retained destination and PK5 Bank recovery snapshots are required. PSE writes one chosen native Gen 1 record, updates Seen/Caught and the main checksum, reopens the exact box record, then removes the Bank entry. Any failure restores or preserves both sides independently.")
             }
             val labels=targets.map{"Box ${it.first} • ${it.second} empty slot${if(it.second==1)"" else "s"}"}.toTypedArray()
@@ -11554,7 +11603,7 @@ class MainActivity : Activity() {
                     AlertDialog.Builder(this).setTitle("Choose Gen 1 destination box").setItems(labels){_,which->
                         if(transferConsumed||which !in targets.indices){showDialog("Gen 5 → Gen 1","This destination choice was already handled. Reopen PSE Bank.");return@setItems};transferConsumed=true
                         if(!bound()){showDialog("Gen 5 → Gen 1","The destination identity changed. Nothing was changed.");return@setItems}
-                        transferGen5BankToGen1(selected,source,bank,bridge,converted,destination,meta,targets[which].first,file,legalise,openedUri,openedLabel)
+                        transferGen5BankToGen1(selected,source,bank,bridge,converted,acceptedMovePlan,destination,meta,targets[which].first,file,legalise,openedUri,openedLabel)
                     }.setNegativeButton("Cancel",null).show()
                 }.show()
         }
@@ -11563,7 +11612,7 @@ class MainActivity : Activity() {
 
     private fun transferGen5BankToGen1(
         bankFile:File,expected:PokemonEntry,expectedBank:ByteArray,expectedBridge:ByteArray,expectedConverted:Gen2Pokemon,
-        preparedDestination:ByteArray,meta:Gen1SpeciesMeta,targetBox:Int,openedFile:File,
+        confirmedMovePlan:Gen5ToGen2MovePlan?,preparedDestination:ByteArray,meta:Gen1SpeciesMeta,targetBox:Int,openedFile:File,
         legalise:Gen2ToGen1LegalisePlan?,openedUri:Uri?,openedLabel:String?
     ){
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
@@ -11577,7 +11626,7 @@ class MainActivity : Activity() {
             val bank=bankFile.readBytes();require(bank.contentEquals(expectedBank)){"The selected Gen 5 Bank record changed after review."}
             val source=parsePk5(bank,false)?:error("The selected PK5 is invalid.")
             require(source.checksumValid&&source.pid==expected.pid&&source.species==expected.species&&source.tid==expected.tid&&source.sid==expected.sid){"The selected Gen 5 Pokémon changed."}
-            val rebuilt=buildGen5ToGen1Bridge(bank,source);require(rebuilt.first.contentEquals(expectedBridge)&&sameGen2BankRecord(rebuilt.second,expectedConverted)){"The prepared backward conversion changed."}
+            val rebuilt=buildGen5ToGen1Bridge(bank,source,confirmedMovePlan);require(rebuilt.first.contentEquals(expectedBridge)&&sameGen2BankRecord(rebuilt.second,expectedConverted)){"The prepared backward conversion changed."}
             require(legalise==gen2ToGen1LegalisePlan(rebuilt.second)){"The reviewed Generation 1 omissions changed."}
             gen2ToGen1Rejection(rebuilt.second,legalise)?.let{error(it)}
             val converted=rebuilt.second;val bridge=rebuilt.first
@@ -11666,25 +11715,28 @@ class MainActivity : Activity() {
 
     private data class Gen5ToGen2RemovedMove(val sourceSlot:Int,val move:Int,val pp:Int,val ppUps:Int)
     private data class Gen5ToGen2MovePlan(
-        val sourceMoves:List<Int>,val sourcePp:List<Int>,val sourcePpUps:List<Int>,
+        val maxMove:Int,val sourceMoves:List<Int>,val sourcePp:List<Int>,val sourcePpUps:List<Int>,
         val destinationMoves:List<Int>,val destinationPp:List<Int>,val destinationPpUps:List<Int>,
         val removed:List<Gen5ToGen2RemovedMove>
     )
 
-    private fun gen5ToGen2MovePlan(raw:ByteArray,p:PokemonEntry):Gen5ToGen2MovePlan{
+    private fun gen5MovePlan(raw:ByteArray,p:PokemonEntry,maxMove:Int):Gen5ToGen2MovePlan{
+        require(maxMove in 1..251){"The destination move catalogue is invalid."}
         require(raw.size==136&&p.moves.size>=4&&p.movePP.size>=4){"The preserved PK5 move data is incomplete."}
         val moves=(0..3).map{p.moves[it]};val pp=(0..3).map{p.movePP[it]};val ups=gen5Pk5PpUps(raw).toList()
         require(ups.size==4&&ups.all{it in 0..3}){"The source PP-Up values could not be read safely."}
-        require((0..3).all{i->moves[i]!=0||(pp[i]==0&&ups[i]==0)}){"An empty move slot contains PP or PP-Up data that Generation 2 cannot preserve."}
+        require((0..3).all{i->moves[i]!=0||(pp[i]==0&&ups[i]==0)}){"An empty move slot contains PP or PP-Up data that the destination cannot preserve."}
         require((0..3).all{i->moves[i]==0||pp[i] in 0..63}){"A move has invalid current PP."}
-        val removed=(0..3).filter{moves[it] !in 0..251}.map{Gen5ToGen2RemovedMove(it,moves[it],pp[it],ups[it])}
-        val kept=(0..3).filter{moves[it] in 1..251}
+        val removed=(0..3).filter{moves[it] !in 0..maxMove}.map{Gen5ToGen2RemovedMove(it,moves[it],pp[it],ups[it])}
+        val kept=(0..3).filter{moves[it] in 1..maxMove}
         val order=if(removed.isEmpty())(0..3).toList() else kept
         val finalMoves=List(4){i->order.getOrNull(i)?.let{moves[it]}?:0}
         val finalPp=List(4){i->order.getOrNull(i)?.let{pp[it]}?:0}
         val finalUps=List(4){i->order.getOrNull(i)?.let{ups[it]}?:0}
-        return Gen5ToGen2MovePlan(moves,pp,ups,finalMoves,finalPp,finalUps,removed)
+        return Gen5ToGen2MovePlan(maxMove,moves,pp,ups,finalMoves,finalPp,finalUps,removed)
     }
+
+    private fun gen5ToGen2MovePlan(raw:ByteArray,p:PokemonEntry)=gen5MovePlan(raw,p,251)
 
     private fun gen5ToGen2Blocker(p:PokemonEntry,allowReviewedMoveRemoval:Boolean=false):String?=when{
         !p.checksumValid->"The source PK5 checksum is invalid."
@@ -11705,10 +11757,12 @@ class MainActivity : Activity() {
         else->null
     }
 
-    private fun buildGen5ToGen2Record(raw:ByteArray,p:PokemonEntry,confirmedMovePlan:Gen5ToGen2MovePlan?=null):Triple<ByteArray,ByteArray,ByteArray>{
+    private fun buildGen5ToGen2Record(
+        raw:ByteArray,p:PokemonEntry,confirmedMovePlan:Gen5ToGen2MovePlan?=null,maxMove:Int=251
+    ):Triple<ByteArray,ByteArray,ByteArray>{
         require(raw.size==136&&parsePk5(raw,false)?.let{it.checksumValid&&it.pid==p.pid&&it.species==p.species&&it.tid==p.tid&&it.sid==p.sid}==true){"The preserved Gen 5 Bank record changed or failed checksum validation."}
-        val movePlan=gen5ToGen2MovePlan(raw,p)
-        require(confirmedMovePlan==null||confirmedMovePlan==movePlan){"The reviewed Generation 2 move-removal plan changed."}
+        val movePlan=gen5MovePlan(raw,p,maxMove)
+        require(confirmedMovePlan==null||confirmedMovePlan==movePlan){"The reviewed move-removal plan changed."}
         val moveRemovalAccepted=movePlan.removed.isNotEmpty()&&confirmedMovePlan==movePlan
         gen5ToGen2Blocker(p,moveRemovalAccepted)?.let{error(it)}
         require(movePlan.removed.isEmpty()||moveRemovalAccepted){"Review and explicitly accept every unsupported move removal."}
