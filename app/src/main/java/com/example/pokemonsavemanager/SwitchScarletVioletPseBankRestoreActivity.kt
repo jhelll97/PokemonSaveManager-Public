@@ -105,6 +105,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                     bankExtension.equals("pk4", true) ||
                     bankExtension.equals("pk5", true) ||
                     bankExtension.equals("pk6", true) ||
+                    bankExtension.equals("pb7", true) ||
                     bankExtension.equals("pk7", true) ||
                     bankExtension.equals("pa8", true) ||
                     bankExtension.equals("pa9", true)) {
