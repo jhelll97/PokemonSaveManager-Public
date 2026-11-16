@@ -45140,6 +45140,8 @@ class MainActivity : Activity() {
             }
             retainGen2ToGen3SafetyBackup(backup!!, fresh)
             require(destinationBound() &&
+                isBackupKept(backup!!) &&
+                backup!!.readBytes().contentEquals(fresh) &&
                 openedFile.readBytes().contentEquals(fresh) &&
                 selected.indices.all { index ->
                     selected[index].bankFile.isFile &&
@@ -45168,13 +45170,17 @@ class MainActivity : Activity() {
                 "The exact Gen 3 Bank batch did not persist in the destination box."
             }
             selected.forEachIndexed { index, item ->
+                require(destinationBound() && openedFile.readBytes().contentEquals(work)) {
+                    "The verified Gen 3 destination changed before Bank cleanup."
+                }
+                require(isBackupKept(backup!!) && backup!!.readBytes().contentEquals(fresh)) {
+                    "The retained Gen 3 recovery backup changed before Bank cleanup."
+                }
                 require(item.bankFile.readBytes().contentEquals(refreshed[index])) {
                     "A selected Bank record changed before removal."
                 }
+                removed.add(item.bankFile to refreshed[index])
                 val deleted = item.bankFile.delete()
-                if (deleted && !item.bankFile.exists()) {
-                    removed.add(item.bankFile to refreshed[index])
-                }
                 require(deleted && !item.bankFile.exists()) {
                     "A verified Gen 3 Bank record could not be removed."
                 }
@@ -45182,6 +45188,12 @@ class MainActivity : Activity() {
             require(removed.size == selected.size &&
                 removed.all { !it.first.exists() }) {
                 "The selected Gen 3 Bank batch was not removed completely."
+            }
+            require(destinationBound() && openedFile.readBytes().contentEquals(work)) {
+                "The verified Gen 3 destination changed after Bank cleanup."
+            }
+            require(isBackupKept(backup!!) && backup!!.readBytes().contentEquals(fresh)) {
+                "The retained Gen 3 recovery backup changed after Bank cleanup."
             }
 
             selectedBankFiles.clear()
@@ -45201,10 +45213,16 @@ class MainActivity : Activity() {
                 }.getOrDefault(false)
                 if (!restored) bankRestored = false
             }
+            bankRestored = bankRestored && selected.all { item ->
+                runCatching {
+                    item.bankFile.isFile && item.bankFile.readBytes().contentEquals(item.bankBytes)
+                }.getOrDefault(false)
+            }
             val saveRestored = if (writeStarted) {
                 runCatching {
                     openedFile.writeBytes(openedDestination)
-                    openedFile.readBytes().contentEquals(openedDestination)
+                    val restored = openedFile.readBytes()
+                    restored.contentEquals(openedDestination) && gen3SaveValid(restored)
                 }.getOrDefault(false)
             } else {
                 true
