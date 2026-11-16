@@ -282,6 +282,11 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                     "The reviewed Sword/Shield Bank hash is missing. Reopen PSE Bank."
                 }
             }
+            entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true) -> {
+                require(!expectedBankSourceHash.isNullOrBlank()) {
+                    "The reviewed BDSP Bank hash is missing. Reopen PSE Bank."
+                }
+            }
         }
         val bytes = entry.readBytes()
         expectedBankSourceHash?.let {
