@@ -566,3 +566,13 @@ BDSP restores now append the generated PB7 and stage its matching native caught 
 This remains a PSE conversion under the explicit Legalise choice and does not claim an official transfer, trade, encounter record, legality certification, or verified provenance.
 
 Next bounded repair: inspect the implemented Legends: Arceus PA8 -> Let's Go PB7 route for the same missing native caught-registration transaction while preserving content-addressed source identity, explicit Legalise disclosure, the next unused native storage record, block CRC updates, retained recovery, persisted reopen and two-sided failure handling.
+
+## Legends: Arceus -> Let's Go caught-registration repair
+
+Inspection confirmed that the Let's Go Bank screen exposes content-addressed Legends: Arceus PA8 entries, verifies the exact selected 360-byte stored or 376-byte party PA8 against its SHA-256 filename, and requires explicit Legalise review before destination selection. The existing converter validates the native PA8, creates deterministic Legends: Z-A PA9 data only in memory, validates the resulting PB7 against the selected Let's Go title, and discloses that the backward route is not an official HOME transfer, trade, encounter record, legality certification, or verified provenance. PA8 was nevertheless absent from the native caught-registration selector.
+
+Legends: Arceus restores now append the generated PB7 and stage its matching native caught registration in the same reviewed copy. The converted gender and shiny state select the native seen and displayed variant, the English caught-language flag is recorded when required, and the storage and Pokédex block CRCs are refreshed. The final review exposes the expanded byte scope and whether registration bytes change. Existing verification reopens the exact PB7 and registration, preserves other Pokémon, size records, party and partner pointers and unrelated bytes, rechecks the unchanged content-addressed PA8 and Let's Go sources, retains a verified recovery backup, and removes a failed destination copy when possible.
+
+This remains a PSE conversion under the explicit Legalise choice and does not claim an official transfer, trade, encounter record, legality certification, or verified provenance.
+
+Next bounded repair: inspect the implemented Scarlet/Violet PK9 -> Let's Go PB7 route for the same missing native caught-registration transaction while preserving content-addressed source identity, explicit Legalise disclosure, the next unused native storage record, block CRC updates, retained recovery, persisted reopen and two-sided failure handling.

@@ -113,7 +113,8 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
                             bankFile().extension.equals("pk6", true) ||
                             bankFile().extension.equals("pk7", true) ||
                             bankFile().extension.equals("pk8", true) ||
-                            bankFile().extension.equals("pb8", true)
+                            bankFile().extension.equals("pb8", true) ||
+                            bankFile().extension.equals("pa8", true)
                     ),
                     bank,
                     verified.version
