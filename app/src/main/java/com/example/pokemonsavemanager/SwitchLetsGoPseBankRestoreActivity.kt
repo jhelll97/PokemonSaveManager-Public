@@ -103,7 +103,10 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
                     ?: error("A validated native Let's Go destination is required.")
                 val bank = prepareBankRecord(verified.version)
                 PreparedLetsGoRestore(
-                    LetsGoPseBankRestoreEditing.stage(source, hash, bank.nativeRecord),
+                    LetsGoPseBankRestoreEditing.stage(
+                        source, hash, bank.nativeRecord,
+                        registerCaughtEnglish = bankFile().extension.equals("pse1", true)
+                    ),
                     bank,
                     verified.version
                 )
@@ -120,6 +123,9 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
                     status.text = "${prepared.version.displayName} source and Bank integrity verified\n" +
                         "${LetsGoSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n" +
                         "Destination: storage slot ${plan.storageIndex + 1}\n" +
+                        (if (plan.caughtRegistrationReviewed)
+                            "Native caught registration: English (${if (plan.addedCaughtRegistration) "added" else "already complete"})\n"
+                        else "") +
                         "Source SHA-256: ${plan.sourceSha256}\n" +
                         "Bank source SHA-256: ${prepared.bank.sourceSha256}\n" +
                         (if (prepared.bank.converted) "Prepared PB7 SHA-256: ${plan.bankSha256}"
@@ -379,6 +385,12 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
         val title = if (conversionEffects.isEmpty())
             "Restore this Bank Pokémon to a new copy?"
         else "Legalise and restore this Pokémon?"
+        val dexReview = if (plan.caughtRegistrationReviewed)
+            "\nNative caught registration: English (${if (plan.addedCaughtRegistration) "will be added" else "already complete"})."
+        else ""
+        val dexScope = if (plan.caughtRegistrationReviewed)
+            ", the matching native seen/caught English registration bytes and block 4 CRC"
+        else ""
         AlertDialog.Builder(this).setTitle(title)
             .setMessage(
                 "${LetsGoSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form} • Level ${p.cachedLevel}\n" +
@@ -386,7 +398,7 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
                     "OT ${p.originalTrainer} • TID ${p.tid} / SID ${p.sid}\nMoves: $moves\n\n" +
                     "Destination: native storage slot ${plan.storageIndex + 1}\n" +
                     "Allowed byte scope: one previously empty 260-byte PB7 record at 0x${plan.recordOffset.toString(16).uppercase()}, " +
-                    "the two-byte storage count, and block 8 and block 9 CRCs. Existing Pokémon, party pointers, partner pointer, and every unrelated byte remain exact. " +
+                    "the two-byte storage count, block 8 and block 9 CRCs$dexScope. Existing Pokémon, party pointers, partner pointer, and every unrelated byte remain exact.$dexReview " +
                     "PSE verifies the unchanged source and Bank entry, retains a verified recovery backup, reopens the persisted copy, and removes a failed copy when possible. " +
                     "The Bank entry remains available. Choose a NEW empty document." + effects
             )
@@ -474,6 +486,9 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
                     onSuccess = {
                         "PSE Bank restore saved and reopened successfully.\n" +
                             "Storage slot ${plan.storageIndex + 1} • SHA-256: ${plan.editedSha256}\n" +
+                            (if (plan.caughtRegistrationReviewed)
+                                "Native caught registration: English (${if (plan.addedCaughtRegistration) "added" else "already complete"})\n"
+                            else "") +
                             "Recovery backup: $backupName\nOriginal source and Bank entry unchanged.\n" +
                             "Bank source SHA-256: ${bankSourceSha256 ?: "unavailable"}"
                     },

@@ -4,8 +4,19 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.security.MessageDigest
 
+data class LetsGoPseBankDexRegistration(
+    val speciesId: Int,
+    val variant: Int,
+    val languageIndex: Int,
+    val touchedOffsets: Set<Int>,
+    val changed: Boolean
+)
+
 /** Restores one checksum-valid native PB7 Bank record into a reviewed new Let's Go save copy. */
 object LetsGoPseBankRestoreEditing {
+    private const val DEX = 0x2A00
+    private const val DEX_BLOCK_LENGTH = 0x20E8
+    private const val DEX_CRC_OFFSET = 0xB863A
     private const val STORAGE_META = 0x5A00
     private const val STORAGE_META_LENGTH = 0x12
     private const val STORAGE_COUNT = 0x5A0E
@@ -41,7 +52,12 @@ object LetsGoPseBankRestoreEditing {
         return pokemon
     }
 
-    fun stage(source: ByteArray, expectedSha256: String, bankRecord: ByteArray): LetsGoPseBankRestoreCopyPlan {
+    fun stage(
+        source: ByteArray,
+        expectedSha256: String,
+        bankRecord: ByteArray,
+        registerCaughtEnglish: Boolean = false
+    ): LetsGoPseBankRestoreCopyPlan {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
@@ -62,11 +78,22 @@ object LetsGoPseBankRestoreEditing {
         writeU16(edited, STORAGE_COUNT, index + 1)
         writeBlockCrc(edited, META_BLOCK, STORAGE_META, STORAGE_META_LENGTH)
         writeBlockCrc(edited, RECORD_BLOCK, STORAGE_RECORDS, STORAGE_RECORDS_LENGTH)
-        verify(original, edited, supplied, index)
-        return LetsGoPseBankRestoreCopyPlan(original, edited, supplied, pokemon, index, recordOffset)
+        val (completed, dexRegistration) = if (registerCaughtEnglish) {
+            stageCaughtEnglishRegistration(edited, pokemon)
+        } else edited to null
+        verify(original, completed, supplied, index, dexRegistration)
+        return LetsGoPseBankRestoreCopyPlan(
+            original, completed, supplied, pokemon, index, recordOffset, dexRegistration
+        )
     }
 
-    internal fun verify(original: ByteArray, edited: ByteArray, bankRecord: ByteArray, index: Int) {
+    internal fun verify(
+        original: ByteArray,
+        edited: ByteArray,
+        bankRecord: ByteArray,
+        index: Int,
+        dexRegistration: LetsGoPseBankDexRegistration? = null
+    ) {
         val beforeValidation = LetsGoSaveValidation.inspect(original)
         val afterValidation = LetsGoSaveValidation.inspect(edited)
         require(beforeValidation is LetsGoValidation.Verified && afterValidation is LetsGoValidation.Verified &&
@@ -99,18 +126,96 @@ object LetsGoPseBankRestoreEditing {
         }
         require(edited.copyOfRange(recordOffset, recordOffset + LetsGoPokemonReadOnly.RECORD_SIZE)
             .contentEquals(bankRecord)) { "The native PSE Bank bytes were not preserved exactly." }
+        if (dexRegistration != null) {
+            val beforeDex = LetsGoPokedexReadOnly.read(original)
+            val afterDex = LetsGoPokedexReadOnly.read(edited)
+            require(beforeDex.version == afterDex.version &&
+                beforeDex.nationalDexFlag == afterDex.nationalDexFlag &&
+                beforeDex.currentViewedSpecies == afterDex.currentViewedSpecies) {
+                "The destination Pokédex changed native identity, unlock state, or viewed species."
+            }
+            val beforeEntry = beforeDex.entry(dexRegistration.speciesId)
+            val afterEntry = afterDex.entry(dexRegistration.speciesId)
+            val registrationChanged = dexRegistration.touchedOffsets.any { offset ->
+                original[offset] != edited[offset]
+            }
+            require(registrationChanged == dexRegistration.changed) {
+                "The reviewed native caught-registration change state no longer matches the copy."
+            }
+            require(afterEntry.caught &&
+                LetsGoPokedexEditing.languages[dexRegistration.languageIndex] in afterEntry.languages &&
+                afterEntry.seenVariants[dexRegistration.variant] &&
+                afterEntry.displayedVariants[dexRegistration.variant]) {
+                "The restored Pokémon did not reopen with its native caught registration."
+            }
+            require(beforeEntry.seenVariants.indices.all { variant ->
+                afterEntry.seenVariants[variant] ==
+                    (beforeEntry.seenVariants[variant] || variant == dexRegistration.variant) &&
+                    afterEntry.displayedVariants[variant] ==
+                    (beforeEntry.displayedVariants[variant] || variant == dexRegistration.variant)
+            }) { "An unrelated destination seen or displayed variant changed." }
+            require(afterEntry.languages.toSet() == beforeEntry.languages.toSet() +
+                LetsGoPokedexEditing.languages[dexRegistration.languageIndex] &&
+                beforeEntry.forms == afterEntry.forms) {
+                "An unrelated destination language or size-form record changed."
+            }
+            require(beforeDex.entries.indices.all { entry ->
+                beforeDex.entries[entry].speciesId == dexRegistration.speciesId ||
+                    beforeDex.entries[entry] == afterDex.entries[entry]
+            }) { "An unrelated native Let's Go Pokédex entry changed." }
+        }
         val metaCrc = descriptorCrcOffset(META_BLOCK)
         val recordCrc = descriptorCrcOffset(RECORD_BLOCK)
         require(original.indices.all { offset ->
             offset in STORAGE_COUNT until STORAGE_COUNT + 2 ||
                 offset in recordOffset until recordOffset + LetsGoPokemonReadOnly.RECORD_SIZE ||
                 offset in metaCrc until metaCrc + 2 || offset in recordCrc until recordCrc + 2 ||
+                dexRegistration?.touchedOffsets?.contains(offset) == true ||
+                (dexRegistration != null && offset in DEX_CRC_OFFSET until DEX_CRC_OFFSET + 2) ||
                 original[offset] == edited[offset]
         }) { "An unrelated Let's Go save byte changed." }
     }
 
+    private fun stageCaughtEnglishRegistration(
+        source: ByteArray,
+        pokemon: LetsGoPokemonRead
+    ): Pair<ByteArray, LetsGoPseBankDexRegistration> {
+        require(pokemon.gender in 0..2) {
+            "The converted PB7 gender cannot be represented in the native Let's Go Pokédex."
+        }
+        val variant = (if (pokemon.gender == 1) 1 else 0) + (if (pokemon.shiny) 2 else 0)
+        val languageIndex = 1
+        val bit = pokemon.species - 1
+        val seenOffset = DEX + 0xF0 + variant * 0x8C + (bit ushr 3)
+        val displayedOffset = DEX + 0xF0 + (variant + 4) * 0x8C + (bit ushr 3)
+        val caughtOffset = DEX + 0x88 + (bit ushr 3)
+        val languageBit = bit * 9 + languageIndex
+        val languageOffset = DEX + 0x550 + (languageBit ushr 3)
+        val touched = linkedSetOf(seenOffset, displayedOffset, caughtOffset, languageOffset)
+        val edited = source.copyOf()
+        setBit(edited, seenOffset, bit and 7)
+        setBit(edited, displayedOffset, bit and 7)
+        setBit(edited, caughtOffset, bit and 7)
+        setBit(edited, languageOffset, languageBit and 7)
+        val changed = !edited.contentEquals(source)
+        if (changed) {
+            writeU16(edited, DEX_CRC_OFFSET, LetsGoSaveValidation.crc16(edited, DEX, DEX_BLOCK_LENGTH))
+        }
+        LetsGoPokedexEditing.verify(
+            source, edited, pokemon.species, variant, LetsGoDexEditMode.CAUGHT,
+            languageIndex, touched
+        )
+        return edited to LetsGoPseBankDexRegistration(
+            pokemon.species, variant, languageIndex, touched, changed
+        )
+    }
+
     fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes)
         .joinToString("") { "%02x".format(it.toInt() and 255) }
+
+    private fun setBit(bytes: ByteArray, offset: Int, bit: Int) {
+        bytes[offset] = (bytes[offset].toInt() or (1 shl bit)).toByte()
+    }
 
     private fun readBounded(input: InputStream, maximum: Int, message: String): ByteArray = input.use {
         val output = ByteArrayOutputStream()
@@ -144,11 +249,17 @@ class LetsGoPseBankRestoreCopyPlan internal constructor(
     bankRecord: ByteArray,
     val pokemon: LetsGoPokemonRead,
     val storageIndex: Int,
-    val recordOffset: Int
+    val recordOffset: Int,
+    dexRegistration: LetsGoPseBankDexRegistration?
 ) {
     private val original = original.copyOf()
     private val edited = edited.copyOf()
     private val bankRecord = bankRecord.copyOf()
+    private val dexRegistration = dexRegistration?.copy(
+        touchedOffsets = LinkedHashSet(dexRegistration.touchedOffsets)
+    )
+    val caughtRegistrationReviewed: Boolean = this.dexRegistration != null
+    val addedCaughtRegistration: Boolean = this.dexRegistration?.changed == true
     val sourceSha256: String = LetsGoPseBankRestoreEditing.sha256(this.original)
     val bankSha256: String = LetsGoPseBankRestoreEditing.sha256(this.bankRecord)
     val editedSha256: String = LetsGoPseBankRestoreEditing.sha256(this.edited)
@@ -181,14 +292,18 @@ class LetsGoPseBankRestoreCopyPlan internal constructor(
         require(readDestination().isEmpty()) { "The destination changed. Nothing was written." }
         var started = false
         try {
-            LetsGoPseBankRestoreEditing.verify(original, edited, bankRecord, storageIndex)
+            LetsGoPseBankRestoreEditing.verify(
+                original, edited, bankRecord, storageIndex, dexRegistration
+            )
             started = true
             writeDestination(edited.copyOf())
             val persisted = readDestination()
             require(persisted.contentEquals(edited)) {
                 "The saved copy differs from the reviewed PSE Bank restore."
             }
-            LetsGoPseBankRestoreEditing.verify(original, persisted, bankRecord, storageIndex)
+            LetsGoPseBankRestoreEditing.verify(
+                original, persisted, bankRecord, storageIndex, dexRegistration
+            )
             requireSource()
             requireBank()
         } catch (failure: Exception) {
