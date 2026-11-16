@@ -686,3 +686,13 @@ Generation 2 restores to Legends: Z-A now require the reviewed Bank SHA to be pr
 This remains a PSE conversion under the explicit Legalise choice and does not claim an official transfer, HOME move, trade, encounter record, legality certification, or verified provenance.
 
 Next bounded repair: inspect the implemented Generation 3 PK3 -> Legends: Z-A PA9 route for the same missing reviewed-source hash requirement while preserving exact selected source identity, explicit Legalise disclosure, the chosen empty native slot, caught registration, retained recovery, persisted reopen and two-sided failure handling.
+
+## Generation 1 and 2 -> Legends: Z-A reviewed-source handoff correction
+
+Post-compile source inspection found that the Generation 1 and Generation 2 Bank review screens computed and repeatedly rechecked the exact selected PSE1 or PSE2 SHA-256, while their newly hardened restore activity required that reviewed hash before reading the Bank source. The review-to-restore intent did not carry the hash, so both otherwise valid routes would stop after explicit Legalise acceptance instead of reaching destination selection.
+
+Both review screens now pass the already reviewed SHA-256 with the selected Bank filename, destination identity, Legalise acceptance and species metadata. The restore activity therefore receives the exact source identity it requires and rechecks the unchanged 63-byte PSE1 or 62-byte PSE2 before conversion. Existing conversion disclosures, one chosen empty native PA9 slot, caught registration, footer refresh, retained recovery, persisted reopen verification and two-sided failure handling remain unchanged.
+
+This correction restores the reviewed PSE conversion handoff only. It does not claim an official transfer, HOME move, trade, encounter record, legality certification or verified provenance.
+
+Next bounded repair: inspect the implemented Generation 3 PK3 -> Legends: Z-A PA9 route for the same missing reviewed-source hash requirement while preserving exact selected source identity, explicit Legalise disclosure, the chosen empty native slot, caught registration, retained recovery, persisted reopen and two-sided failure handling.
