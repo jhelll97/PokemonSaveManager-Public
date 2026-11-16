@@ -596,3 +596,13 @@ Legends: Z-A restores now append the generated PB7 and stage its matching native
 This remains a PSE conversion under the explicit Legalise choice and does not claim an official transfer, trade, encounter record, legality certification, or verified provenance.
 
 Next bounded repair: re-inventory the remaining supported Bank route matrix after completing the Let's Go native caught-registration pass, selecting the next existing converter or destination transaction mismatch before adding another format path while preserving exact source identity, explicit Legalise disclosure and the established one-empty-slot safety boundary.
+
+## Generation 6 -> Scarlet/Violet caught-registration repair
+
+Re-inventory confirmed that the Scarlet/Violet Bank screen accepts checksum-valid Generation 6 PK6 entries, binds and rechecks the exact selected 232-byte PK6 SHA-256, and requires explicit Legalise review before destination selection. The title-specific converter blocks Eggs, held items, unsupported species, forms, abilities, moves, PP, text, origins, Ball values, dates, levels, handlers and EV limits, then discloses every retained, transformed, cleared and omitted PK6 field. It produces a checksum-valid native PK9 for one user-chosen empty PC-box slot and already discloses the required native caught registration. PK6 was nevertheless absent from both the destination Pokédex preflight and the native caught-registration selector between PK5 and PK7.
+
+Generation 6 restores now require the converted species to exist in the loaded Scarlet/Violet Pokédex table and stage its native caught registration with the generated PK9. The same reviewed transaction writes only the chosen empty 344-byte PK9 slot, registers the converted default form, gender, shiny state and English language only when required, refreshes the native SHA-256 footer, and displays the exact Pokédex fields and byte scope in the final review. Existing verification reopens the exact PK9 and registration, rejects unrelated Pokédex, party, ride-Pokémon, PC-box or save-byte changes, rechecks the unchanged PK6 Bank entry and Scarlet/Violet source, retains a verified recovery backup, reopens the persisted destination and removes a failed copy when possible.
+
+This remains a PSE conversion under the explicit Legalise choice and does not claim an official transfer, trade, encounter record, legality certification, or verified provenance.
+
+Next bounded repair: re-inventory the remaining supported Bank route matrix after repairing the Generation 6 Scarlet/Violet registration gap, selecting the next concrete converter, source-identity or destination-transaction mismatch while preserving explicit Legalise disclosure and the established one-empty-slot safety boundary.
