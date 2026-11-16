@@ -287,6 +287,11 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                     "The reviewed BDSP Bank hash is missing. Reopen PSE Bank."
                 }
             }
+            entry.name.startsWith("switch_pla_") && entry.extension.equals("pa8", true) -> {
+                require(!expectedBankSourceHash.isNullOrBlank()) {
+                    "The reviewed Legends: Arceus Bank hash is missing. Reopen PSE Bank."
+                }
+            }
         }
         val bytes = entry.readBytes()
         expectedBankSourceHash?.let {
