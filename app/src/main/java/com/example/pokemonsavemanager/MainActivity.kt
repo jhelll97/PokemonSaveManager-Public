@@ -1277,7 +1277,7 @@ class MainActivity : Activity() {
         val data=runCatching{file.readBytes()}.getOrNull()?:return
         val profile=detectGen2Profile(data)?:run{showDialog("Transfer to Gen 2","Load a valid Gold, Silver or Crystal save first.");return}
         val parsed=try {
-            chosen.map{f->f to (parseGen1BankPayload(f.readBytes())?:error("A selected Gen 1 Bank record is invalid."))}
+            chosen.map{f->val bytes=f.readBytes();Gen1Gen2BatchPrepared(f,bytes,parseGen1BankPayload(bytes)?:error("A selected Gen 1 Bank record is invalid."))}
         } catch(e:Exception) {
             showDialog("Transfer to Gen 2",e.message?:"A selected Gen 1 Bank record could not be read. Nothing was changed.")
             return
@@ -1298,18 +1298,18 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun transferSelectedGen1BankToGen2(chosen:List<Pair<File,Gen1Pokemon>>,targetBox:Int,openedFile:File,openedDestination:ByteArray,openedSource:Uri?,openedLabel:String?,profileKey:String){
+    private data class Gen1Gen2BatchPrepared(val bankFile:File,val bankBytes:ByteArray,val source:Gen1Pokemon)
+    private fun transferSelectedGen1BankToGen2(chosen:List<Gen1Gen2BatchPrepared>,targetBox:Int,openedFile:File,openedDestination:ByteArray,openedSource:Uri?,openedLabel:String?,profileKey:String){
         val file=openedFile
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedSource&&currentSourceLabel==openedLabel
         val fresh=runCatching{file.readBytes()}.getOrElse{showDialog("Gen 1 → Gen 2 multi-transfer failed","The fresh destination save could not be read. Nothing was changed.");return}
         val removed=ArrayList<Pair<File,ByteArray>>()
         var writeStarted=false
-        var recoveryBanks=emptyList<Pair<File,ByteArray>>()
         var safetyBackup:File?=null
         try{
             require(bound()&&fresh.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(fresh).first){"The selected batch destination save or source identity changed. Reopen the Bank selection."}
             require(chosen.isNotEmpty()){"No Gen 1 Bank entries were selected."}
-            require(chosen.map{it.first.absolutePath}.distinct().size==chosen.size){"The selected Gen 1 Bank entries contain a duplicate."}
+            require(chosen.map{it.bankFile.absolutePath}.distinct().size==chosen.size){"The selected Gen 1 Bank entries contain a duplicate."}
             val profile=detectGen2Profile(fresh)?:error("The loaded destination is no longer a valid Gen 2 save.")
             require(profile.key==profileKey){"The selected Gen 2 batch destination profile changed."}
             require(targetBox in 1..14){"Invalid Gen 2 destination box."}
@@ -1318,13 +1318,12 @@ class MainActivity : Activity() {
             require(beforeCount+chosen.size<=20){"Box $targetBox no longer has room for all selected Pokémon."}
             val before=parseGen2Box(fresh,targetBox).sortedBy{it.slot}
             require(before.size==beforeCount){"Box $targetBox contains an invalid Pokémon record."}
-            val refreshed=chosen.map{(bankFile,expected)->
-                val bankBytes=runCatching{bankFile.readBytes()}.getOrElse{error("A selected Gen 1 Bank record could not be read.")}
+            val refreshed=chosen.map{item->
+                val bankBytes=runCatching{item.bankFile.readBytes()}.getOrElse{error("A selected Gen 1 Bank record could not be read.")}
                 val source=parseGen1BankPayload(bankBytes)?:error("A selected Gen 1 Bank record failed validation.")
-                require(sameGen1TransferRecord(source,expected)){"A selected Gen 1 Bank record changed before transfer. Nothing was changed."}
-                Triple(bankFile,bankBytes,source)
+                require(bankBytes.contentEquals(item.bankBytes)&&sameGen1TransferRecord(source,item.source)){"A selected Gen 1 Bank record changed before transfer. Nothing was changed."}
+                Triple(item.bankFile,bankBytes,source)
             }
-            recoveryBanks=refreshed.map{it.first to it.second.copyOf()}
             val ownedBase=if(profile.key=="C")0x2A27 else 0x2A4C
             val seenBase=if(profile.key=="C")0x2A47 else 0x2A6C
             val work=fresh.copyOf();val expected=ArrayList<Triple<Int,Gen1Pokemon,ByteArray>>()
@@ -1378,29 +1377,17 @@ class MainActivity : Activity() {
             for((bankFile,bankBytes,source) in refreshed){
                 val current=runCatching{bankFile.readBytes()}.getOrElse{error("A selected Gen 1 Bank record could not be re-read before cleanup.")}
                 require(current.contentEquals(bankBytes) && parseGen1BankPayload(current)?.let{sameGen1TransferRecord(it,source)}==true){"A selected Gen 1 Bank record changed before cleanup; further Bank removal was stopped."}
-                require(bound()&&file.readBytes().contentEquals(written)){"The batch destination changed before Bank cleanup."}
+                require(bound()&&file.readBytes().contentEquals(written)&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The batch destination, source identity or retained recovery backup changed before Bank cleanup."}
                 removed.add(bankFile to bankBytes)
                 require(bankFile.delete()){"A Bank entry could not be removed after destination verification."}
                 require(!bankFile.exists()){"A batch Bank deletion could not be verified."}
             }
+            require(bound()&&file.readBytes().contentEquals(written)){"The verified Gen 2 destination changed after Bank cleanup."}
         }catch(e:Exception){
-            var bankRestored=!writeStarted
-            if(writeStarted){
-                var complete=true
-                for((bankFile,bankBytes) in recoveryBanks){
-                    val recovered=runCatching{
-                        if(removed.any{it.first.absolutePath==bankFile.absolutePath}){
-                            if(bankFile.exists())require(bankFile.readBytes().contentEquals(bankBytes)){"An existing batch Bank recovery path changed; it was not overwritten."}
-                            else{require(bankFile.createNewFile()){"A batch Bank recovery path could not be reserved."};bankFile.writeBytes(bankBytes)}
-                        }
-                        require(bankFile.readBytes().contentEquals(bankBytes)){"An original batch Bank payload could not be kept or restored exactly."}
-                    }.isSuccess
-                    complete=recovered&&complete
-                }
-                bankRestored=complete&&recoveryBanks.size==chosen.size
-            }
-            val restored=writeStarted&&bankRestored&&runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)&&verifyGen2SaveIntegrity(fresh).first}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the destination save or removed from Bank." else  if(restored)"The exact previous destination and every original Bank record were kept or restored and verified." else  "Automatic batch recovery could not be verified. Stop editing; keep the working save and remaining Bank records, and restore the kept recovery backup only after reviewing Bank recovery."
+            for((bankFile,bankBytes) in removed)runCatching{if(!bankFile.exists())require(bankFile.createNewFile()){ "A batch Bank recovery path could not be reserved." };bankFile.writeBytes(bankBytes)}
+            val banksRestored=chosen.all{item->runCatching{val bytes=item.bankFile.readBytes();bytes.contentEquals(item.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,item.source)}==true}.getOrDefault(false)}
+            val saveRestored=!writeStarted||runCatching{file.writeBytes(fresh);val restored=file.readBytes();restored.contentEquals(fresh)&&verifyGen2SaveIntegrity(restored).first}.getOrDefault(false)
+            val recovery=if(banksRestored&&saveRestored)"The exact previous destination and every original Bank record were kept or restored and verified." else "Automatic batch recovery could not be verified. Stop editing; keep the retained backup and remaining Bank records for review."
             showDialog("Gen 1 → Gen 2 multi-transfer failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""))
             return
         }
