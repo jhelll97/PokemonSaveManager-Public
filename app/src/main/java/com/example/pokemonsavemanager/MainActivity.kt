@@ -11472,7 +11472,8 @@ class MainActivity : Activity() {
             return showDialog("Gen 4 → Gen 5","The selected record is outside the Generation 4 PSE Bank.")
         val bank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Gen 4 → Gen 5","The Bank record could not be read.")
         val source=if(bank.size==136)parsePk4(bank,false)else null
-        if(source==null||source.pid!=shown.pid||source.species!=shown.species||!source.checksumValid)
+        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
+            source.tid!=shown.tid||source.sid!=shown.sid)
             return showDialog("Gen 4 → Gen 5","The selected Bank record changed or failed its PK4 checksum.")
         gen4ToGen5PreflightRejection(source)?.let{
             return showDialog("Gen 4 → Gen 5 blocked","$it\n\nThe Bank record and destination were left unchanged.")
