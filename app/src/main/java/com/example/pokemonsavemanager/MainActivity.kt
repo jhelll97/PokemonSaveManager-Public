@@ -34188,6 +34188,191 @@ class MainActivity : Activity() {
         }
     }
 
+    private data class Gen7BankWithdrawalPrepared(
+        val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry,val destination:ByteArray,
+        val destinationFile:File,val sourceUri:Uri?,val sourceLabel:String?,var submitted:Boolean=false
+    )
+
+    private fun gen7BankWithdrawalIdentityBound(p:Gen7BankWithdrawalPrepared):Boolean=
+        importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel
+
+    private fun gen7BankWithdrawalStillBound(p:Gen7BankWithdrawalPrepared):Boolean=
+        gen7BankWithdrawalIdentityBound(p)&&runCatching{
+            p.destinationFile.readBytes().contentEquals(p.destination)&&p.bankFile.readBytes().contentEquals(p.bankBytes)
+        }.getOrDefault(false)
+
+    private fun prepareGen7BankWithdrawal(bankFile:File,shown:PokemonEntry){
+        val file=importedFile?:return showDialog("Gen 7 Bank withdrawal","Load a valid Sun, Moon, Ultra Sun or Ultra Moon destination save first.")
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        val destination=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog("Gen 7 Bank withdrawal","The destination save could not be read.")
+        if(importedFile?.absolutePath!=file.absolutePath||currentSourceUri!=openedUri||currentSourceLabel!=openedLabel||
+            generationForSize(destination.size)!=7||!validateGen7CoreChecksums(destination).first)
+            return showDialog("Gen 7 Bank withdrawal","The loaded destination is not a checksum-clean native Generation 7 save.")
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()
+            ?:return showDialog("Gen 7 Bank withdrawal","The PSE Bank folder could not be verified.")
+        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+            ?:return showDialog("Gen 7 Bank withdrawal","The selected Bank path could not be verified.")
+        if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk7",true))
+            return showDialog("Gen 7 Bank withdrawal","The selected record is outside the Generation 7 PSE Bank.")
+        val bank=runCatching{selected.readBytes()}.getOrNull()
+            ?:return showDialog("Gen 7 Bank withdrawal","The selected Bank record could not be read.")
+        val source=if(bank.size==PK6_STORED_SIZE)parsePk6(bank,0,PK6_STORED_SIZE,false,807)else null
+        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
+            source.tid!=shown.tid||source.sid!=shown.sid)
+            return showDialog("Gen 7 Bank withdrawal","The selected Bank record changed or failed its native PK7 checksum.")
+        chooseGen7BankWithdrawalDestination(
+            Gen7BankWithdrawalPrepared(selected,bank,source,destination,file,openedUri,openedLabel)
+        )
+    }
+
+    private fun chooseGen7BankWithdrawalDestination(p:Gen7BankWithdrawalPrepared){
+        if(!gen7BankWithdrawalStillBound(p))
+            return showDialog("Gen 7 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
+        val info=boxStorageInfo(p.destination)?:return
+        val empty=(0 until info.second).filter{
+            parsePk6(p.destination,info.first+it*PK6_STORED_SIZE,PK6_STORED_SIZE,false,info.third)==null
+        }
+        if(empty.isEmpty())return showDialog("Gen 7 Bank withdrawal","All native Generation 7 PC slots are occupied.")
+        val first=empty.first()
+        AlertDialog.Builder(this).setTitle("Choose native Gen 7 destination")
+            .setMessage("Choose one empty native PK7 slot. PSE will show the exact no-conversion effect and selected Box / Slot before final confirmation.")
+            .setItems(arrayOf("First Empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
+                if(!gen7BankWithdrawalStillBound(p))showDialog("Gen 7 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
+                else if(which==0)reviewGen7BankWithdrawal(p,first)else showGen7BankWithdrawalBoxPicker(p)
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun showGen7BankWithdrawalBoxPicker(p:Gen7BankWithdrawalPrepared){
+        if(!gen7BankWithdrawalStillBound(p))
+            return showDialog("Gen 7 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
+        val info=boxStorageInfo(p.destination)?:return
+        val boxes=(0 until info.second/30).filter{box->(0 until 30).any{slot->
+            parsePk6(p.destination,info.first+(box*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,info.third)==null
+        }}
+        if(boxes.isEmpty())return showDialog("Gen 7 Bank withdrawal","All native Generation 7 PC boxes are full.")
+        AlertDialog.Builder(this).setTitle("Choose Gen 7 destination box")
+            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+                val box=boxes[which]
+                val slots=(0 until 30).filter{slot->
+                    parsePk6(p.destination,info.first+(box*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,info.third)==null
+                }
+                AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
+                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
+                        reviewGen7BankWithdrawal(p,box*30+slots[slotIndex])
+                    }.setNegativeButton("Cancel",null).show()
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun reviewGen7BankWithdrawal(p:Gen7BankWithdrawalPrepared,target:Int){
+        if(!gen7BankWithdrawalStillBound(p))
+            return showDialog("Gen 7 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
+        val info=boxStorageInfo(p.destination)?:return
+        if(target !in 0 until info.second)return showDialog("Gen 7 Bank withdrawal","The selected destination slot is invalid.")
+        val offset=info.first+target*PK6_STORED_SIZE
+        if(parsePk6(p.destination,offset,PK6_STORED_SIZE,false,info.third)!=null)
+            return showDialog("Gen 7 Bank withdrawal","Box ${target/30+1} • Slot ${target%30+1} is no longer empty.")
+        val review="Selected destination: Box ${target/30+1} • Slot ${target%30+1}.\n\n"+
+            "No Pokémon conversion is performed. The exact 232-byte PK7 Bank record is copied byte-for-byte, so species, encryption constant, PID, TID/SID, nickname, OT and handler data, experience, ability, nature, gender/form, shiny state, moves, PP, PP Ups, relearn moves, IVs, EVs, friendship, affection, Pokérus, Ball, origin, locations, dates, ribbons, Hyper Training and every stored PK7 byte remain unchanged. The source save is not edited.\n\n"+
+            "Only the selected empty PK7 slot, native PC storage checksum and required save signature may change. Existing destination Pokémon and all other save bytes must remain identical. A verified retained recovery backup is required. The Bank record is removed only after the exact slot and native checksums persist and reopen successfully; any failure restores or preserves both destination and Bank record."
+        AlertDialog.Builder(this).setTitle("${p.source.nickname.ifBlank{"Pokémon #${p.source.species}"}} • Gen 7 withdrawal")
+            .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("Withdraw exact PK7"){_,_->
+                if(p.submitted){showDialog("Gen 7 Bank withdrawal","This withdrawal confirmation was already submitted. Reopen PSE Bank.");return@setPositiveButton}
+                p.submitted=true
+                if(!gen7BankWithdrawalStillBound(p)){showDialog("Gen 7 Bank withdrawal","The destination identity, Bank record or selected slot changed after review. Nothing was changed.");return@setPositiveButton}
+                transferGen7BankWithdrawal(p,target)
+            }.show()
+    }
+
+    private fun transferGen7BankWithdrawal(p:Gen7BankWithdrawalPrepared,target:Int){
+        val file=p.destinationFile
+        if(!gen7BankWithdrawalStillBound(p)){showDialog("Gen 7 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
+        val original=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog("Gen 7 Bank withdrawal","The destination save could not be read.")
+        var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
+        try{
+            require(original.contentEquals(p.destination)&&generationForSize(original.size)==7){"The prepared Generation 7 destination changed."}
+            require(validateGen7CoreChecksums(original).first){"The destination core checksums changed."}
+            val info=boxStorageInfo(original)?:error("PSE could not resolve native Generation 7 PC storage.")
+            require(target in 0 until info.second){"The selected Generation 7 slot is invalid."}
+            val offset=info.first+target*PK6_STORED_SIZE
+            require(parsePk6(original,offset,PK6_STORED_SIZE,false,info.third)==null){"The selected Generation 7 slot is no longer empty."}
+            val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The selected Gen 7 Bank record changed after review."}
+            val source=parsePk6(bank,0,PK6_STORED_SIZE,false,807)?:error("The selected Bank record is not a native PK7.")
+            require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&
+                source.tid==p.source.tid&&source.sid==p.source.sid){"The selected PK7 no longer matches the reviewed Pokémon."}
+            val save=original.copyOf();bank.copyInto(save,offset)
+            val stagedRaw=save.copyOfRange(offset,offset+PK6_STORED_SIZE)
+            val staged=parsePk6(stagedRaw,0,PK6_STORED_SIZE,false,807)?:error("The exact PK7 could not be parsed after staging.")
+            require(stagedRaw.contentEquals(bank)&&staged.checksumValid&&staged.pid==source.pid&&staged.species==source.species&&
+                staged.tid==source.tid&&staged.sid==source.sid){"The staged PK7 differs from the exact Bank record."}
+            val allowed=HashSet<Int>();for(i in offset until offset+PK6_STORED_SIZE)allowed.add(i)
+            val checksum=gen7ChecksumOffset(save,14);allowed.add(checksum);allowed.add(checksum+1)
+            val signature=if(save.size==SIZE_G7_USUM)0x6C100 else 0x6BB00
+            for(i in signature until signature+0x80)allowed.add(i)
+            updateGen7BoxChecksum(save)
+            require(save.indices.all{it in allowed||save[it]==original[it]}){"The staged withdrawal changed data outside the selected PK7, native PC checksum and required signature."}
+            require(validateGen7CoreChecksums(save).first){"The staged Generation 7 save failed native checksum verification."}
+            val recovery=File.createTempFile(backupGameName(file)+"_PreGen7BankWithdraw_",".backup",backupsDir());backup=recovery
+            recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)){"The Generation 7 recovery backup did not verify."}
+            retainGen2ToGen7SafetyBackup(recovery,original)
+            val bankCopy=File.createTempFile("PSE_G7Withdraw_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
+            bankCopy.writeBytes(bank);require(bankCopy.readBytes().contentEquals(bank)){"The exact PK7 Bank recovery snapshot did not verify."}
+            require(gen7BankWithdrawalIdentityBound(p)&&isBackupKept(recovery)&&file.readBytes().contentEquals(original)&&
+                p.bankFile.readBytes().contentEquals(bank)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
+                "The destination identity, retained backup or Bank snapshots changed before writing."
+            }
+            writeStarted=true;file.writeBytes(save)
+            val written=file.readBytes();require(written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){
+                "The persisted Generation 7 save differs from the reviewed write scope."
+            }
+            require(validateGen7CoreChecksums(written).first){"The persisted Generation 7 save failed native checksum verification."}
+            val actual=written.copyOfRange(offset,offset+PK6_STORED_SIZE);val reopened=parsePk6(actual,0,PK6_STORED_SIZE,false,807)
+            require(actual.contentEquals(bank)&&reopened!=null&&reopened.checksumValid&&reopened.pid==source.pid&&
+                reopened.species==source.species&&reopened.tid==source.tid&&reopened.sid==source.sid){
+                "The exact 232-byte PK7 did not persist after reopening."
+            }
+            require(gen7BankWithdrawalIdentityBound(p)&&p.bankFile.readBytes().contentEquals(bank)&&file.readBytes().contentEquals(save)&&
+                isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
+                "The destination identity, verified save or retained recovery snapshots changed before cleanup."
+            }
+            bankDeleteAttempted=true
+            require(p.bankFile.delete()&&!p.bankFile.exists()){ "The Gen 7 Bank record could not be removed after destination verification." }
+            require(gen7BankWithdrawalIdentityBound(p)&&!p.bankFile.exists()&&file.readBytes().contentEquals(save)&&
+                isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
+                "The destination identity, verified save or retained recovery snapshots changed after cleanup."
+            }
+            runCatching{bankCopy.delete()}
+        }catch(e:Exception){
+            val bankRestored=runCatching{
+                if(bankDeleteAttempted&&!p.bankFile.exists()){
+                    require(p.bankFile.createNewFile()){ "The Bank recovery path could not be reserved." }
+                    p.bankFile.writeBytes(p.bankBytes)
+                }
+                val restored=p.bankFile.readBytes();val parsed=parsePk6(restored,0,PK6_STORED_SIZE,false,807)
+                restored.contentEquals(p.bankBytes)&&parsed!=null&&parsed.checksumValid&&parsed.pid==p.source.pid&&
+                    parsed.species==p.source.species&&parsed.tid==p.source.tid&&parsed.sid==p.source.sid
+            }.getOrDefault(false)
+            val destinationRestored=runCatching{
+                val current=file.readBytes();if(!current.contentEquals(original))file.writeBytes(original)
+                val restored=file.readBytes()
+                restored.contentEquals(original)&&generationForSize(restored.size)==7&&validateGen7CoreChecksums(restored).first
+            }.getOrDefault(false)
+            if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
+            val recovery=when{
+                bankRestored&&destinationRestored->"The exact Generation 7 destination and PK7 Bank record were restored or kept and verified."
+                bankRestored->"The PK7 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                destinationRestored->"The Generation 7 destination was restored, but PK7 restoration was not verified. Keep the PK7 recovery snapshot for review."
+                else->"Automatic two-sided recovery could not be verified. Keep the retained destination backup and PK7 recovery snapshot for review."
+            }
+            showDialog("Gen 7 Bank withdrawal failed",(e.message?:"Unknown error")+"\n\n"+recovery+
+                (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery: ${it.name}"}?:""));return
+        }
+        Toast.makeText(this,"Withdrew exact Gen 7 PK7 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
+        showBank()
+    }
+
     private fun showGen7BankEntry(bankFile:File,p:PokemonEntry){
         val currentGen=importedFile?.let{generationForSize(it.length().toInt())}?:0
         val message=when(currentGen){
@@ -34209,7 +34394,7 @@ class MainActivity : Activity() {
         if(currentGen==4)b.setPositiveButton("PSE Convert to Gen 4"){_,_->prepareGen7ToGen4Transfer(bankFile,p,null)}
         if(currentGen==5)b.setPositiveButton("PSE Convert to Gen 5"){_,_->prepareGen7ToGen5Transfer(bankFile,p,null)}
         if(currentGen==6)b.setPositiveButton("PSE Convert to Gen 6"){_,_->prepareGen7ToGen6Transfer(bankFile,p)}
-        if(currentGen==7)b.setPositiveButton("Withdraw to Gen 7"){_,_->chooseWithdrawDestination(bankFile,p)}
+        if(currentGen==7)b.setPositiveButton("Withdraw to Gen 7"){_,_->prepareGen7BankWithdrawal(bankFile,p)}
         b.show()
     }
 
