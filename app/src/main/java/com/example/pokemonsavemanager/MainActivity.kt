@@ -976,9 +976,9 @@ class MainActivity : Activity() {
         val checksumState=validateGen7CoreChecksums(saveData)
         if(!checksumState.first){showDialog("Gen 1 → Gen 7 multi-transfer",checksumState.second);return}
         val hasCapacity=(0 until slotCount/30).any{box->
-            (0 until 30).count{slot->parsePk6(saveData,boxOffset+(box*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,maxSpecies)==null}>=chosen.size
+            (0 until 30).count{slot->gen6DestinationSlotIsStructurallyEmpty(saveData,boxOffset,slotCount,maxSpecies,box*30+slot)}>=chosen.size
         }
-        if(!hasCapacity){showDialog("Gen 1 → Gen 7 multi-transfer","No single Gen 7 PC box has room for all ${chosen.size} selected Pokémon. Nothing was changed.");return}
+        if(!hasCapacity){showDialog("Gen 1 → Gen 7 multi-transfer","No single Gen 7 PC box has enough structurally empty slots for all ${chosen.size} selected Pokémon. Nonzero destination records were left unchanged.");return}
         val selected=try{
             chosen.map{bankFile->
                 val bankBytes=bankFile.readBytes()
@@ -1028,14 +1028,14 @@ class MainActivity : Activity() {
         if(!data.contentEquals(preparedDestination)){showDialog("Gen 1 → Gen 7 multi-transfer","The Gen 7 destination changed while the batch was being prepared. Nothing was written; try again.");return}
         val(boxOffset,slotCount,maxSpecies)=boxStorageInfo(data)?:return
         val targets=(0 until slotCount/30).mapNotNull{box->
-            val empty=(0 until 30).filter{slot->parsePk6(data,boxOffset+(box*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,maxSpecies)==null}
+            val empty=(0 until 30).filter{slot->gen6DestinationSlotIsStructurallyEmpty(data,boxOffset,slotCount,maxSpecies,box*30+slot)}
             if(empty.size>=prepared.size)box to empty.size else null
         }
-        if(targets.isEmpty()){showDialog("Gen 1 → Gen 7 multi-transfer","No single Gen 7 PC box has room for the complete prepared batch. Nothing was changed.");return}
-        val labels=targets.map{"Box ${it.first+1} • ${it.second} empty slots"}.toTypedArray()
+        if(targets.isEmpty()){showDialog("Gen 1 → Gen 7 multi-transfer","No single Gen 7 PC box has enough structurally empty slots for the complete prepared batch. Nonzero destination records were left unchanged.");return}
+        val labels=targets.map{"Box ${it.first+1} • ${it.second} structurally empty slots"}.toTypedArray()
         var selectedTarget=0
         AlertDialog.Builder(this).setTitle("Transfer ${prepared.size} Gen 1 Pokémon → Gen 7")
-            .setMessage("Every selected record is legal for the supported transfer path and has a verified PK7 conversion. The complete batch will be staged, registered in the Pokédex, persisted and re-read before any Gen 1 Bank entry is removed.")
+            .setMessage("Every selected record is legal for the supported transfer path and has a verified PK7 conversion. The complete batch will use structurally empty slots; nonzero destination records remain unchanged. It will be staged, registered in the Pokédex, persisted and re-read before any Gen 1 Bank entry is removed.")
             .setSingleChoiceItems(labels,selectedTarget){_,which->selectedTarget=which}
             .setNegativeButton("Cancel",null)
             .setPositiveButton("Transfer"){_,_->transferSelectedGen1BankToGen7(prepared,preparedDestination,targets[selectedTarget].first)}
@@ -1116,13 +1116,13 @@ class MainActivity : Activity() {
                 require(mismatch==null&&converted.tid==source.tid&&ppUpsMatch){"A prepared PK7 differs in ${mismatch?:if(converted.tid!=source.tid)"Trainer ID" else "PP-Up data"}."}
                 Gen1Gen7BatchPrepared(prepared.bankFile,current,source,prepared.pk7,converted)
             }
-            val currentEmpty=(0 until 30).filter{slot->parsePk6(fresh,boxOffset+(box*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,maxSpecies)==null}
-            require(currentEmpty.size>=refreshed.size){"Gen 7 Box ${box+1} no longer has room for the complete batch."}
+            val currentEmpty=(0 until 30).filter{slot->gen6DestinationSlotIsStructurallyEmpty(fresh,boxOffset,slotCount,maxSpecies,box*30+slot)}
+            require(currentEmpty.size>=refreshed.size){"Gen 7 Box ${box+1} no longer has enough structurally empty slots for the complete batch. Nonzero records were left unchanged."}
             val work=fresh.copyOf();val beforeStorage=fresh.copyOfRange(boxOffset,boxOffset+storageLength)
             val expected=ArrayList<Triple<Int,ByteArray,PokemonEntry>>();val changed=HashSet<Int>()
             for(i in refreshed.indices){
                 val prepared=refreshed[i];val target=box*30+currentEmpty[i];val relative=target*PK6_STORED_SIZE;val offset=boxOffset+relative
-                require(parsePk6(work,offset,PK6_STORED_SIZE,false,maxSpecies)==null){"A Gen 7 destination slot is no longer empty."}
+                require(gen6DestinationSlotIsStructurallyEmpty(work,boxOffset,slotCount,maxSpecies,target)){"A Gen 7 destination slot is no longer structurally empty. Nonzero records were left unchanged."}
                 prepared.pk7.copyInto(work,offset)
                 val stagedBytes=work.copyOfRange(offset,offset+PK6_STORED_SIZE)
                 val staged=parsePk6(stagedBytes,0,PK6_STORED_SIZE,false,807)?:error("A staged PK7 could not be parsed.")
@@ -53551,8 +53551,8 @@ class MainActivity : Activity() {
         if(generationForSize(data.size)!=7)return showDialog("Gen 1 → Gen 7","The loaded destination is no longer a Generation 7 save.")
         val checks=validateGen7CoreChecksums(data);if(!checks.first)return showDialog("Gen 1 → Gen 7",checks.second)
         val info=boxStorageInfo(data)?:return showDialog("Gen 1 → Gen 7","PSE could not resolve Gen 7 PC storage.")
-        val firstEmpty=findFirstEmptyBoxSlot(data,info.first,info.second,info.third)
-            ?:return showDialog("Gen 1 → Gen 7","No empty Gen 7 PC box slot was found.")
+        val firstEmpty=(0 until info.second).firstOrNull{gen6DestinationSlotIsStructurallyEmpty(data,info.first,info.second,info.third,it)}
+            ?:return showDialog("Gen 1 → Gen 7","No structurally empty Gen 7 PC box slot was found. Nonzero destination records were left unchanged.")
         val originalSource=parseGen1BankPayload(originalBankBytes)
             ?:return showDialog("Gen 1 → Gen 7","The original Gen 1 Bank record could not be reopened.")
         val legalChanges=ArrayList<String>()
@@ -53580,7 +53580,7 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("PSE Convert ${source.nickname.ifBlank{gen1SpeciesNameFromInternal(source.species)}} to Gen 7")
             .setMessage(preview)
-            .setPositiveButton("First Empty (Box ${firstEmpty/30+1} / Slot ${firstEmpty%30+1})"){_,_->
+            .setPositiveButton("First Structurally Empty (Box ${firstEmpty/30+1} / Slot ${firstEmpty%30+1})"){_,_->
                 if(!snapshotsMatch())showDialog("Gen 1 → Gen 7","The destination or Bank record changed after review. Nothing was changed.")
                 else transferGen1BankToGen7(bankFile,originalBankBytes,preparedBankBytes,source,convertedPk7,converted,firstEmpty,preparedDestination,openedFile,openedUri,openedLabel)
             }
@@ -53611,12 +53611,12 @@ class MainActivity : Activity() {
         val(boxOffset,slotCount,maxSpecies)=boxStorageInfo(data)?:return
         val boxCount=slotCount/30
         val labels=ArrayList<String>()
-        for(box in 0 until boxCount){val empty=countEmptySlotsInBox(data,boxOffset,box,maxSpecies);labels.add("Box ${box+1} • $empty empty slot${if(empty==1)"" else "s"}")}
+        for(box in 0 until boxCount){val empty=(0 until 30).count{slot->gen6DestinationSlotIsStructurallyEmpty(data,boxOffset,slotCount,maxSpecies,box*30+slot)};labels.add("Box ${box+1} • $empty structurally empty slot${if(empty==1)"" else "s"}")}
         AlertDialog.Builder(this).setTitle("Choose Gen 7 Box").setItems(labels.toTypedArray()){_,boxIndex->
             if(!snapshotsMatch())showDialog("Gen 1 → Gen 7","The destination or Bank record changed during box selection. Nothing was changed.")
             else{
-                val empty=countEmptySlotsInBox(data,boxOffset,boxIndex,maxSpecies)
-                if(empty<=0)showDialog("Box ${boxIndex+1}","This box is full. Choose another box.")
+                val empty=(0 until 30).count{slot->gen6DestinationSlotIsStructurallyEmpty(data,boxOffset,slotCount,maxSpecies,boxIndex*30+slot)}
+                if(empty<=0)showDialog("Box ${boxIndex+1}","This box has no structurally empty slot. Nonzero records remain unchanged; choose another box.")
                 else showGen1ToGen7SlotGrid(bankFile,originalBankBytes,preparedBankBytes,source,convertedPk7,converted,boxIndex,preparedDestination,openedFile,openedUri,openedLabel)
             }
         }.setNegativeButton("Back"){_,_->
@@ -53644,12 +53644,12 @@ class MainActivity : Activity() {
         val(boxOffset,slotCount,maxSpecies)=info
         if(generationForSize(data.size)!=7||boxIndex !in 0 until(slotCount/30))return
         val wrapper=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(12),dp(8),dp(12),dp(8))}
-        addMutedLine(wrapper,"Tap an empty Gen 7 slot. Occupied slots are disabled.")
+        addMutedLine(wrapper,"Tap a structurally empty Gen 7 slot. Nonzero records are disabled and remain unchanged.")
         val grid=GridLayout(this).apply{columnCount=6;rowCount=5;alignmentMode=GridLayout.ALIGN_BOUNDS;useDefaultMargins=false}
         val cellWidth=((resources.displayMetrics.widthPixels-dp(90))/6).coerceAtLeast(dp(42));var submitted=false
         for(slot in 0 until 30){
             val global=boxIndex*30+slot
-            val occupied=parsePk6(data,boxOffset+global*PK6_STORED_SIZE,PK6_STORED_SIZE,false,maxSpecies)!=null
+            val occupied=!gen6DestinationSlotIsStructurallyEmpty(data,boxOffset,slotCount,maxSpecies,global)
             val cell=TextView(this).apply{
                 text=if(occupied)"●\n${slot+1}" else "○\n${slot+1}";gravity=Gravity.CENTER;textSize=13f
                 setTextColor(if(occupied)Color.rgb(105,105,105)else TEXT);setBackgroundColor(if(occupied)Color.rgb(35,35,35)else Color.rgb(55,55,55));isEnabled=!occupied
@@ -53716,7 +53716,7 @@ class MainActivity : Activity() {
             val preparedMismatch=gen1ToGen7PkMismatch(prepared,converted)
             val preparedPpUpsMatch=gen6Pk6PpUps(convertedPk7).contentEquals(preparedSource.movePpUps)
             require(preparedMismatch==null&&prepared.tid==preparedSource.tid&&preparedPpUpsMatch){"The reviewed PK7 differs in ${preparedMismatch?:if(prepared.tid!=preparedSource.tid)"Trainer ID" else "PP-Up data"}."}
-            val offset=boxOffset+target*PK6_STORED_SIZE;require(parsePk6(fresh,offset,PK6_STORED_SIZE,false,maxSpecies)==null){"The selected Gen 7 slot is no longer empty."}
+            val offset=boxOffset+target*PK6_STORED_SIZE;require(gen6DestinationSlotIsStructurallyEmpty(fresh,boxOffset,slotCount,maxSpecies,target)){"The selected Gen 7 slot is no longer structurally empty. Nonzero records were left unchanged."}
             val beforeStorage=fresh.copyOfRange(boxOffset,boxOffset+storageLength);val selectedStart=target*PK6_STORED_SIZE;val selectedEnd=selectedStart+PK6_STORED_SIZE
             fun pcIsolated(data:ByteArray):Boolean{if(data.size!=fresh.size)return false;val after=data.copyOfRange(boxOffset,boxOffset+storageLength);return after.indices.all{it in selectedStart until selectedEnd||after[it]==beforeStorage[it]}}
             val work=fresh.copyOf();convertedPk7.copyInto(work,offset)
