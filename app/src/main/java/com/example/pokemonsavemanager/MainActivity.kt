@@ -35815,7 +35815,7 @@ class MainActivity : Activity() {
         if(selected.parentFile!=root||!selected.extension.equals("pk6",true))return showDialog("Gen 6 → Gen 5","The selected record is outside the Generation 6 PSE Bank.")
         val bank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Gen 6 → Gen 5","The Bank record could not be read.")
         val source=if(bank.size==PK6_STORED_SIZE)parsePk6(bank,0,PK6_STORED_SIZE,false,721)else null
-        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species)return showDialog("Gen 6 → Gen 5","The selected Bank record changed or failed its PK6 checksum.")
+        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||source.tid!=shown.tid||source.sid!=shown.sid)return showDialog("Gen 6 → Gen 5","The selected Bank record changed or failed its PK6 checksum.")
         val sourceIsGen6Title=source.originGame in 24..27
         gen6ToGen5PreflightRejection(source,sourceIsGen6Title)?.let{return showDialog("Gen 6 → Gen 5 blocked","$it\n\nThe Bank record and destination were left unchanged.")}
         val sourceOriginTitle=gen5CompatibleOriginTitle(source.originGame)
