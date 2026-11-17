@@ -59039,19 +59039,29 @@ private data class Gen2ToGen5LegalisePlan(
             require(bound()){"The destination identity changed after batch Bank cleanup."}
             require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 5 destination changed after Bank cleanup."};require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 5 recovery backup changed after Bank cleanup."}
         }catch(e:Exception){
-            val bankRestored=if(!writeStarted)true else{
-                var restored=true
-                for((bank,bytes) in removed){
-                    val recovered=runCatching{
-                        if(bank.exists())require(bank.readBytes().contentEquals(bytes)){"An existing Bank recovery path changed; it was not overwritten."}
-                        else{require(bank.createNewFile()){"A Bank recovery path could not be reserved."};bank.writeBytes(bytes);require(bank.readBytes().contentEquals(bytes)){"A recovered Bank record did not verify."}}
-                    }.isSuccess
-                    restored=recovered&&restored
-                }
-                restored&&prepared.all{runCatching{it.bankFile.readBytes().contentEquals(it.bankBytes)}.getOrDefault(false)}
+            var bankRestored=true
+            for(item in prepared){
+                val removalAttempted=removed.any{it.first.absolutePath==item.bankFile.absolutePath}
+                val recovered=runCatching{
+                    if(!item.bankFile.exists()){
+                        require(removalAttempted){"A Bank record disappeared before PSE attempted cleanup; it was not recreated."}
+                        require(item.bankFile.createNewFile()){"A Bank recovery path could not be reserved."};item.bankFile.writeBytes(item.bankBytes)
+                    }
+                    val restored=item.bankFile.readBytes();val parsed=parseGen2BankPayload(restored)
+                    require(restored.contentEquals(item.bankBytes)&&parsed?.let{sameGen2BankRecord(it,item.source)}==true){"A selected Gen 2 Bank record could not be restored or verified exactly."}
+                }.isSuccess
+                if(!recovered)bankRestored=false
             }
-            val destinationRestored=!writeStarted||runCatching{file.writeBytes(fresh);val restored=file.readBytes();require(restored.contentEquals(fresh)){"The restored Gen 5 destination bytes did not verify."};require(validGen2ToGen5Destination(restored)){"The restored Gen 5 destination integrity did not verify."};true}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 5 destination and every selected Gen 2 Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank records until a verified backup and Bank contents have been reviewed."
+            val destinationRestored=runCatching{
+                if(writeStarted)file.writeBytes(fresh)
+                val restored=file.readBytes();require(restored.contentEquals(fresh)){"The restored Gen 5 destination bytes did not verify."};require(validGen2ToGen5Destination(restored)){"The restored Gen 5 destination integrity did not verify."};true
+            }.getOrDefault(false)
+            val recovery=when{
+                bankRestored&&destinationRestored->"The exact Gen 5 destination and every selected Gen 2 Bank record were restored or kept and verified."
+                bankRestored->"Every selected Gen 2 Bank record was restored or kept, but destination recovery was not verified. Use the retained recovery backup before editing again."
+                destinationRestored->"The exact Gen 5 destination was restored or kept, but one or more Bank records were not verified. Keep the remaining Bank records and recovery files for review."
+                else->"Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank records until a verified backup and Bank contents have been reviewed."
+            }
             showDialog("Gen 2 → Gen 5 multi-transfer failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         selectedBankFiles.clear();bankMultiSelectMode=false
