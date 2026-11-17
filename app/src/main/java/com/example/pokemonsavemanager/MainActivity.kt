@@ -36467,7 +36467,7 @@ class MainActivity : Activity() {
         val converted=parsePk6(pk6,0,PK6_STORED_SIZE,false,721)?:return showDialog("Gen 7 → Gen 6","The prepared PK6 could not be re-read.");val markingNote=gen7ToGen6Markings(source.markingValue).second;val prepared=Gen7Gen6Prepared(selected,bank,source,destination,pk6,converted,file,openedUri,openedLabel,markingNote,originGame)
         val originTitle=gen6CompatibleOriginTitle(originGame)?:return showDialog("Gen 7 → Gen 6 blocked","The reviewed origin mapping is no longer destination-valid. Nothing was changed.")
         val originNote=if(needsLegalise)"Origin Legalise: game ID ${source.originGame} → $originTitle (ID $originGame); this is a user-selected provenance change, not verified history." else "Origin preserved: $originTitle (ID $originGame)."
-        val preview="Backward PSE conversion into native PK6 storage. This is not an official game transfer, trade or provenance claim, and PSE does not promise a lossless round trip.\n\nPreserved exactly: destination-representable species/form, encryption constant, PID, OT/TID/SID, nickname, held item, EXP, ability/slot, nature, gender, shiny state, moves/PP/PP Ups/relearn moves, IVs, EVs, friendship and handler data, Pokérus, encounter locations, Ball, met level, pre-Gen-7 origin, language, dates, geography, memories and all other shared metadata.\n\nReviewed format differences:\n• $markingNote.\n• $originNote\n• Red or mixed marking states are blocked because PK6 has only one bit per marking.\n• PK6 Super Training Bag state starts empty because PK7 uses bytes 0x16–0x17 for markings.\n• Nonzero Resort state, Hyper Training, Gen 7-only ribbons, species, forms, moves, items, abilities, Balls and origin data are blocked with the exact reason rather than discarded or relabelled.\n\nThe user chooses one empty native Gen 6 slot. PSE updates that exact PK6, required Pokédex flags and native block checksums. A Keep-pinned destination backup and independent exact Bank snapshot stay byte-bound before writing and through cleanup. If failure happens before PSE writes or deletes a side, PSE verifies that side stayed exact instead of claiming restoration; after a PSE mutation, it restores and reopens that side independently."
+        val preview="Backward PSE conversion into native PK6 storage. This is not an official game transfer, trade or provenance claim, and PSE does not promise a lossless round trip.\n\nPreserved exactly: destination-representable species/form, encryption constant, PID, OT/TID/SID, nickname, held item, EXP, ability/slot, nature, gender, shiny state, moves/PP/PP Ups/relearn moves, IVs, EVs, friendship and handler data, Pokérus, encounter locations, Ball, met level, pre-Gen-7 origin, language, dates, geography, memories and all other shared metadata.\n\nReviewed format differences:\n• $markingNote.\n• $originNote\n• Red or mixed marking states are blocked because PK6 has only one bit per marking.\n• PK6 Super Training Bag state starts empty because PK7 uses bytes 0x16–0x17 for markings.\n• Nonzero Resort state, Hyper Training, Gen 7-only ribbons, species, forms, moves, items, abilities, Balls and origin data are blocked with the exact reason rather than discarded or relabelled.\n\nThe user chooses one structurally empty native Gen 6 slot; nonzero destination records remain unchanged. PSE updates that exact PK6, required Pokédex flags and native block checksums. A Keep-pinned destination backup and independent exact Bank snapshot stay byte-bound before writing and through cleanup. If failure happens before PSE writes or deletes a side, PSE verifies that side stayed exact instead of claiming restoration; after a PSE mutation, it restores and reopens that side independently."
         AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 7 → Gen 6").setMessage(preview).setNegativeButton("Cancel",null).setPositiveButton("Choose Gen 6 destination"){_,_->chooseGen7ToGen6Destination(prepared)}.show()
     }
 
@@ -36475,20 +36475,47 @@ class MainActivity : Activity() {
         (!requireOpen||!p.submitted)&&importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&runCatching{p.destinationFile.readBytes().contentEquals(p.destination)&&p.bankFile.readBytes().contentEquals(p.bankBytes)}.getOrDefault(false)
 
     private fun chooseGen7ToGen6Destination(p:Gen7Gen6Prepared){
-        if(!gen7ToGen6SnapshotsMatch(p))return showDialog("Gen 7 → Gen 6","The destination or Bank record changed. Reopen PSE Bank.");val info=boxStorageInfo(p.destination)?:return;val empty=(0 until info.second).filter{parsePk6(p.destination,info.first+it*PK6_STORED_SIZE,PK6_STORED_SIZE,false,721)==null};if(empty.isEmpty())return showDialog("Gen 7 → Gen 6","All native Generation 6 PC slots are occupied.")
-        val first=empty.first();AlertDialog.Builder(this).setTitle("Choose native Gen 6 destination").setMessage("The reviewed PK6 will be written to one empty slot. PSE will update only that slot, required Pokédex flags and native block checksums.").setItems(arrayOf("First Empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->if(!gen7ToGen6SnapshotsMatch(p))showDialog("Gen 7 → Gen 6","The destination or Bank record changed. Reopen PSE Bank.")else if(which==0)transferGen7BankToGen6(p,first)else showGen7ToGen6BoxPicker(p)}.setNegativeButton("Cancel",null).show()
+        if(!gen7ToGen6SnapshotsMatch(p))return showDialog("Gen 7 → Gen 6","The destination or Bank record changed. Reopen PSE Bank.")
+        val info=boxStorageInfo(p.destination)?:return
+        val empty=(0 until info.second).filter{
+            gen6DestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,it)
+        }
+        if(empty.isEmpty())return showDialog("Gen 7 → Gen 6","No structurally empty native Generation 6 PC slot is available. Existing or nonzero slot data was left unchanged.")
+        val first=empty.first()
+        AlertDialog.Builder(this).setTitle("Choose native Gen 6 destination")
+            .setMessage("The reviewed PK6 will be written to one structurally empty slot. PSE will update only that slot, required Pokédex flags and native block checksums. Nonzero destination records remain unchanged.")
+            .setItems(arrayOf("First Structurally Empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
+                if(!gen7ToGen6SnapshotsMatch(p))showDialog("Gen 7 → Gen 6","The destination or Bank record changed. Reopen PSE Bank.")
+                else if(which==0)transferGen7BankToGen6(p,first)
+                else showGen7ToGen6BoxPicker(p)
+            }.setNegativeButton("Cancel",null).show()
     }
 
     private fun showGen7ToGen6BoxPicker(p:Gen7Gen6Prepared){
-        if(!gen7ToGen6SnapshotsMatch(p))return showDialog("Gen 7 → Gen 6","The destination or Bank record changed. Reopen PSE Bank.");val info=boxStorageInfo(p.destination)?:return;val boxes=(0 until info.second/30).filter{box->(0 until 30).any{slot->parsePk6(p.destination,info.first+(box*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,721)==null}}
-        AlertDialog.Builder(this).setTitle("Choose Gen 6 destination box").setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->val box=boxes[which];val slots=(0 until 30).filter{slot->parsePk6(p.destination,info.first+(box*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,721)==null};AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot").setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->transferGen7BankToGen6(p,box*30+slots[slotIndex])}.setNegativeButton("Cancel",null).show()}.setNegativeButton("Cancel",null).show()
+        if(!gen7ToGen6SnapshotsMatch(p))return showDialog("Gen 7 → Gen 6","The destination or Bank record changed. Reopen PSE Bank.")
+        val info=boxStorageInfo(p.destination)?:return
+        val boxes=(0 until info.second/30).filter{box->(0 until 30).any{slot->
+            gen6DestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*30+slot)
+        }}
+        if(boxes.isEmpty())return showDialog("Gen 7 → Gen 6","No Generation 6 PC box has a structurally empty slot. Existing or nonzero slot data was left unchanged.")
+        AlertDialog.Builder(this).setTitle("Choose Gen 6 destination box")
+            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+                val box=boxes[which]
+                val slots=(0 until 30).filter{slot->
+                    gen6DestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*30+slot)
+                }
+                AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
+                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
+                        transferGen7BankToGen6(p,box*30+slots[slotIndex])
+                    }.setNegativeButton("Cancel",null).show()
+            }.setNegativeButton("Cancel",null).show()
     }
 
     private fun transferGen7BankToGen6(p:Gen7Gen6Prepared,target:Int){
         if(!gen7ToGen6SnapshotsMatch(p)||p.submitted)return showDialog("Gen 7 → Gen 6","The destination or Bank record changed, or this conversion was already submitted. Reopen PSE Bank.")
         val file=p.destinationFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return showDialog("Gen 7 → Gen 6","The destination save could not be read. Nothing was changed.");p.submitted=true;var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
         try{
-            require(fresh.contentEquals(p.destination)&&generationForSize(fresh.size)==6){"The prepared Gen 6 destination changed."};require(gen6BoxChecksumValid(fresh)&&gen6BlockChecksumValid(fresh,20)){"The destination storage or Pokédex checksum changed."};val info=boxStorageInfo(fresh)?:error("PSE could not resolve native Gen 6 PC storage.");require(target in 0 until info.second){"The selected Gen 6 slot is invalid."};val off=info.first+target*PK6_STORED_SIZE;require(parsePk6(fresh,off,PK6_STORED_SIZE,false,721)==null){"The selected Gen 6 slot is no longer empty."}
+            require(fresh.contentEquals(p.destination)&&generationForSize(fresh.size)==6){"The prepared Gen 6 destination changed."};require(gen6BoxChecksumValid(fresh)&&gen6BlockChecksumValid(fresh,20)){"The destination storage or Pokédex checksum changed."};val info=boxStorageInfo(fresh)?:error("PSE could not resolve native Gen 6 PC storage.");require(target in 0 until info.second){"The selected Gen 6 slot is invalid."};val off=info.first+target*PK6_STORED_SIZE;require(gen6DestinationSlotIsStructurallyEmpty(fresh,info.first,info.second,info.third,target)){"The selected Gen 6 slot is no longer structurally empty. Nonzero destination records were left unchanged."}
             val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The Gen 7 Bank record changed."};val source=parsePk6(bank,0,PK6_STORED_SIZE,false,807)?:error("The PK7 Bank record is invalid.");require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&source.tid==p.source.tid&&source.sid==p.source.sid){"The selected source no longer matches the reviewed Pokémon."};val pk6=buildGen7ToGen6Pk6(bank,source,p.originGame);require(pk6.contentEquals(p.pk6)){"The reviewed PK6 conversion changed before writing."}
             val work=fresh.copyOf();pk6.copyInto(work,off);val staged=parsePk6(work,off,PK6_STORED_SIZE,false,721)?:error("The staged PK6 could not be parsed.");require(sameGen6ToGen7Pk7(staged,p.converted)&&staged.markingValue==p.converted.markingValue&&gen6Pk6PpUps(pk6).contentEquals(gen6Pk6PpUps(bank))){"The staged PK6 differs from the reviewed conversion."}
             val allowed=HashSet<Int>();for(i in off until off+PK6_STORED_SIZE)allowed.add(i);val bit=staged.species-1;val bd=bit ushr 3;val shift=staged.gender.coerceIn(0,1) or ((if(staged.shiny)1 else 0) shl 1);allowed.add(0x15000+0x08+bd);allowed.add(0x15000+0x08+0x60*(1+shift)+bd);for(i in 5..8)allowed.add(0x15000+0x08+0x60*i+bd);val boxBlock=if(work.size==SIZE_G6_XY)53 else 56;for(id in intArrayOf(20,boxBlock)){val c=gen6ChecksumOffset(work,id);allowed.add(c);allowed.add(c+1)}
