@@ -11256,7 +11256,9 @@ class MainActivity : Activity() {
         if(selected.parentFile!=root||!selected.extension.equals("pk4",true))return showDialog("Gen 4 → Gen 3","The selected record is outside the Generation 4 PSE Bank.")
         val bank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Gen 4 → Gen 3","The Bank record could not be read.")
         val source=if(bank.size==136)parsePk4(bank,false)else null
-        if(source==null||source.pid!=shown.pid||source.species!=shown.species)return showDialog("Gen 4 → Gen 3","The selected Bank record changed. Nothing was changed.")
+        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
+            source.tid!=shown.tid||source.sid!=shown.sid)
+            return showDialog("Gen 4 → Gen 3","The selected Bank record changed or failed its PK4 checksum. Nothing was changed.")
         val sourceOriginTitle=gen3CompatibleOriginTitle(source.originGame)
         val needsOriginLegalise=sourceOriginTitle==null||source.metLocation!=55
         if(needsOriginLegalise&&legalisedOriginGame==null){
