@@ -52745,6 +52745,13 @@ class MainActivity : Activity() {
         ){"The converted PK6 failed identity or converted-field verification."}
         return encrypted
     }
+    private fun gen6DestinationSlotIsStructurallyEmpty(data:ByteArray,boxOffset:Int,slotCount:Int,maxSpecies:Int,global:Int):Boolean{
+        if(global !in 0 until slotCount)return false
+        val off=boxOffset+global*PK6_STORED_SIZE
+        if(off<0||off+PK6_STORED_SIZE>data.size)return false
+        val raw=data.copyOfRange(off,off+PK6_STORED_SIZE)
+        return raw.all{it==0.toByte()}&&parsePk6(raw,0,PK6_STORED_SIZE,false,maxSpecies)==null
+    }
     private fun chooseGen1BankToGen6Destination(bankFile:File,p:Gen1Pokemon){
         val file=importedFile?:return
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
@@ -52778,8 +52785,8 @@ class MainActivity : Activity() {
                 ?:return@loadGen1ToGen5MetaAsync showDialog("Gen 1 → Gen 6","The prepared native PK6 could not be reopened.")
             val info=boxStorageInfo(data)
                 ?:return@loadGen1ToGen5MetaAsync showDialog("Gen 1 → Gen 6","PSE could not resolve Gen 6 PC storage.")
-            val first=findFirstEmptyBoxSlot(data,info.first,info.second,info.third)
-                ?:return@loadGen1ToGen5MetaAsync showDialog("Gen 1 → Gen 6","No empty Gen 6 PC slot is available.")
+            val first=(0 until info.second).firstOrNull{gen6DestinationSlotIsStructurallyEmpty(data,info.first,info.second,info.third,it)}
+                ?:return@loadGen1ToGen5MetaAsync showDialog("Gen 1 → Gen 6","No structurally empty Gen 6 PC slot is available. Nonzero destination records were left unchanged.")
             val decrypted=decryptPk6IfNeeded(pk6)
             val ec=readU32LE(decrypted,0)
             val handler=gen6Pk6HandlerName(pk6)
@@ -52791,6 +52798,7 @@ class MainActivity : Activity() {
                 append("EVs: each Stat Exp value is divided by 257; Special is copied to both special stats, each value is capped at 252, then the highest values are trimmed only if needed to fit the total cap of 510. Final HP/Atk/Def/Spe/SpA/SpD: ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")
                 append("Ability: destination-valid ability #${converted.ability}. Required native values: base friendship ${converted.friendship}, language #${converted.language}, no held item, Poké Ball, met level ${converted.metLevel}, met location #${converted.metLocation}, origin game #${converted.originGame}, and conversion date ${converted.metYear + 2000}-${converted.metMonth}-${converted.metDay}.\n")
                 append("Destination trainer “${handler}” becomes current handler; original OT/TID stay preserved. OT gender defaults to male because Gen 1 does not encode it. Egg data, geographic data, relearn moves, ribbons, markings, Pokérus and fields without a native PK6 representation remain empty or are omitted.\n\n")
+                append("The destination slot is structurally empty; nonzero destination records remain unchanged.\n\n")
                 append("Nintendo provided no direct Gen 1 → Gen 6 route. This is a PSE native PK6 conversion, not an official migration or provenance claim. The source save stays unchanged. The exact Gen 1 Bank record remains until a retained recovery backup, the selected PK6, Pokédex, PC checksum, Pokédex checksum and reopened destination all verify.")
             }
             AlertDialog.Builder(this)
@@ -52821,7 +52829,7 @@ class MainActivity : Activity() {
             val info=boxStorageInfo(original)?:error("PSE could not resolve Gen 6 PC storage.")
             require(target in 0 until info.second){"Invalid Gen 6 PC slot."}
             val off=info.first+target*PK6_STORED_SIZE
-            require(parsePk6(original,off,PK6_STORED_SIZE,false,info.third)==null){"The destination slot is no longer empty."}
+            require(gen6DestinationSlotIsStructurallyEmpty(original,info.first,info.second,info.third,target)){"The destination slot is no longer structurally empty. Nonzero records were left unchanged."}
             val bank=bankFile.readBytes()
             val source=parseGen1BankPayload(bank)?:error("The selected Bank record is invalid.")
             require(bank.contentEquals(openedBank)&&sameGen1TransferRecord(source,expected)){"The Bank record changed before transfer."}
@@ -52902,13 +52910,13 @@ class MainActivity : Activity() {
     private fun prepareSelectedGen1BankToGen6(chosen:List<File>){
         val file=importedFile?:return;if(chosen.isEmpty())return showDialog("Gen 1 → Gen 6 multi-transfer","Select one or more Gen 1 Bank Pokémon first.");if(chosen.map{it.absolutePath}.distinct().size!=chosen.size)return showDialog("Gen 1 → Gen 6 multi-transfer","The selection contains the same Bank entry more than once. Nothing was changed.")
         val destination=runCatching{file.readBytes()}.getOrNull()?:return;if(generationForSize(destination.size)!=6)return showDialog("Gen 1 → Gen 6 multi-transfer","Load a valid Generation 6 save first.");require(destination.size==SIZE_G6_XY||destination.size==SIZE_G6_ORAS);if(!gen6BoxChecksumValid(destination)||!gen6BlockChecksumValid(destination,20))return showDialog("Gen 1 → Gen 6 multi-transfer","The destination failed PC-storage or Pokédex checksum validation.");val info=boxStorageInfo(destination)?:return;val trainer=analyzeSave(file).trainer?:return showDialog("Gen 1 → Gen 6 multi-transfer","PSE could not read the destination trainer.")
-        val hasCapacity=(0 until info.second/30).any{box->(0 until 30).count{slot->parsePk6(destination,info.first+(box*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,info.third)==null}>=chosen.size};if(!hasCapacity)return showDialog("Gen 1 → Gen 6 multi-transfer","No single Gen 6 PC box has room for all ${chosen.size} selected Pokémon. Nothing was changed.")
+        val hasCapacity=(0 until info.second/30).any{box->(0 until 30).count{slot->gen6DestinationSlotIsStructurallyEmpty(destination,info.first,info.second,info.third,box*30+slot)}>=chosen.size};if(!hasCapacity)return showDialog("Gen 1 → Gen 6 multi-transfer","No single Gen 6 PC box has enough structurally empty slots for all ${chosen.size} selected Pokémon. Nonzero destination records were left unchanged.")
         val selected=try{chosen.map{bank->val bytes=bank.readBytes();val source=parseGen1BankPayload(bytes)?:error("A selected Gen 1 Bank record is invalid.");Triple(bank,bytes,source)}}catch(e:Exception){return showDialog("Gen 1 → Gen 6 multi-transfer",e.message?:"A selected Bank record could not be read.")};val prepared=ArrayList<Gen1Gen6BatchPrepared>()
         fun stop(message:String){showDialog("Gen 1 → Gen 6 multi-transfer",message)};fun next(index:Int){if(index>=selected.size){chooseSelectedGen1BankToGen6Destination(prepared,destination);return};val(bank,bytes,source)=selected[index];val dex=gen1DexFromInternalIndex(source.species)?:return stop("A selected species could not be mapped.");loadGen1ToGen5MetaAsync(dex){meta->if(meta==null)return@loadGen1ToGen5MetaAsync stop("PSE could not resolve Generation 6 conversion data. Every Bank record was kept.");val pk6=try{buildGen1ToGen6Pk6(bytes,source,destination,trainer,meta)}catch(e:Exception){return@loadGen1ToGen5MetaAsync stop(e.message?:"A selected Pokémon could not be converted.")};val converted=parsePk6(pk6,0,PK6_STORED_SIZE,false,721)?:return@loadGen1ToGen5MetaAsync stop("A prepared PK6 could not be verified.");prepared.add(Gen1Gen6BatchPrepared(bank,bytes,source,meta,pk6,converted));next(index+1)}};next(0)
     }
     private fun chooseSelectedGen1BankToGen6Destination(prepared:List<Gen1Gen6BatchPrepared>,preparedDestination:ByteArray){
-        val file=importedFile?:return;val data=runCatching{file.readBytes()}.getOrNull()?:return;if(!data.contentEquals(preparedDestination))return showDialog("Gen 1 → Gen 6 multi-transfer","The destination changed while conversions were prepared. Nothing was written.");val info=boxStorageInfo(data)?:return;val targets=(0 until info.second/30).mapNotNull{box->val empty=(0 until 30).count{slot->parsePk6(data,info.first+(box*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,info.third)==null};if(empty>=prepared.size)box to empty else null};if(targets.isEmpty())return showDialog("Gen 1 → Gen 6 multi-transfer","No single Gen 6 PC box has room for the complete batch.");var selected=0
-        AlertDialog.Builder(this).setTitle("Convert ${prepared.size} Gen 1 Pokémon → Gen 6").setMessage("Every native PK6 direct re-home will be staged, registered, checksummed, persisted and re-read before any Gen 1 Bank entry is removed.").setSingleChoiceItems(targets.map{"Box ${it.first+1} • ${it.second} empty slots"}.toTypedArray(),selected){_,which->selected=which}.setNegativeButton("Cancel",null).setPositiveButton("Convert"){_,_->transferSelectedGen1BankToGen6(prepared,preparedDestination,targets[selected].first)}.show()
+        val file=importedFile?:return;val data=runCatching{file.readBytes()}.getOrNull()?:return;if(!data.contentEquals(preparedDestination))return showDialog("Gen 1 → Gen 6 multi-transfer","The destination changed while conversions were prepared. Nothing was written.");val info=boxStorageInfo(data)?:return;val targets=(0 until info.second/30).mapNotNull{box->val empty=(0 until 30).count{slot->gen6DestinationSlotIsStructurallyEmpty(data,info.first,info.second,info.third,box*30+slot)};if(empty>=prepared.size)box to empty else null};if(targets.isEmpty())return showDialog("Gen 1 → Gen 6 multi-transfer","No single Gen 6 PC box has enough structurally empty slots for the complete batch. Nonzero destination records were left unchanged.");var selected=0
+        AlertDialog.Builder(this).setTitle("Convert ${prepared.size} Gen 1 Pokémon → Gen 6").setMessage("Every native PK6 conversion uses a structurally empty slot, then is staged, registered, checksummed, persisted and re-read before any Gen 1 Bank entry is removed. Nonzero destination records remain unchanged.").setSingleChoiceItems(targets.map{"Box ${it.first+1} • ${it.second} structurally empty slots"}.toTypedArray(),selected){_,which->selected=which}.setNegativeButton("Cancel",null).setPositiveButton("Convert"){_,_->transferSelectedGen1BankToGen6(prepared,preparedDestination,targets[selected].first)}.show()
     }
     private fun transferSelectedGen1BankToGen6(prepared:List<Gen1Gen6BatchPrepared>,preparedDestination:ByteArray,box:Int){
         val file=importedFile?:return
@@ -52936,12 +52944,12 @@ class MainActivity : Activity() {
                 require(pk6.contentEquals(item.pk6)&&samePk6(q,item.converted)&&gen6Pk6PpUps(pk6).contentEquals(source.movePpUps)){"A prepared conversion or PP-Up value changed before confirmation."}
                 Gen1Gen6BatchPrepared(item.bankFile,bytes,source,item.meta,pk6,q)
             }
-            val empty=(0 until 30).filter{slot->parsePk6(fresh,info.first+(box*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,info.third)==null}
-            require(empty.size>=refreshed.size){"Gen 6 Box ${box+1} no longer has room for the complete batch."}
+            val empty=(0 until 30).filter{slot->gen6DestinationSlotIsStructurallyEmpty(fresh,info.first,info.second,info.third,box*30+slot)}
+            require(empty.size>=refreshed.size){"Gen 6 Box ${box+1} no longer has enough structurally empty slots for the complete batch. Nonzero records were left unchanged."}
             val work=fresh.copyOf();val allowed=HashSet<Int>();val expected=ArrayList<Triple<Int,ByteArray,PokemonEntry>>()
             for(i in refreshed.indices){
                 val item=refreshed[i];val target=box*30+empty[i];val off=info.first+target*PK6_STORED_SIZE
-                require(parsePk6(work,off,PK6_STORED_SIZE,false,info.third)==null){"A destination slot is no longer empty."}
+                require(gen6DestinationSlotIsStructurallyEmpty(work,info.first,info.second,info.third,target)){"A destination slot is no longer structurally empty. Nonzero records were left unchanged."}
                 item.pk6.copyInto(work,off);for(x in off until off+PK6_STORED_SIZE)allowed.add(x)
                 val stagedBytes=work.copyOfRange(off,off+PK6_STORED_SIZE)
                 val staged=parsePk6(stagedBytes,0,PK6_STORED_SIZE,false,721)?:error("A staged PK6 could not be parsed.")
