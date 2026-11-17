@@ -10524,6 +10524,14 @@ class MainActivity : Activity() {
         return out
     }
 
+    private fun gen4DestinationSlotIsStructurallyEmpty(data:ByteArray,p:Gen4Profile,global:Int):Boolean{
+        if(global !in 0 until 540)return false
+        val off=gen4BoxSlotOffset(data,p,global)
+        if(off<0||off+136>data.size)return false
+        val raw=data.copyOfRange(off,off+136)
+        return raw.all{it==0.toByte()}&&parsePk4(raw,false)==null
+    }
+
     private fun chooseGen4DuplicateDestination(location:String,pokemon:PokemonEntry){
         val source=boxedLocationToGlobalIndex(location) ?: return showDialog("Duplicate Pokémon","Gen 4 Duplicate is currently enabled for boxed Pokémon only.")
         val file=importedFile?:return
@@ -35575,12 +35583,12 @@ class MainActivity : Activity() {
     private fun chooseGen6ToGen4Destination(p:Gen6Gen4Prepared){
         if(!gen6ToGen4StillBound(p))return showDialog("Gen 6 → Gen 4","The prepared snapshots changed. Reopen PSE Bank.")
         val profile=detectGen4Profile(p.destination)?:return
-        val empty=gen4EmptyBoxSlots(p.destination,profile)
-        if(empty.isEmpty())return showDialog("Gen 6 → Gen 4","No empty native Gen 4 PC slot is available.")
+        val empty=(0 until 540).filter{gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,it)}
+        if(empty.isEmpty())return showDialog("Gen 6 → Gen 4","No structurally empty native Gen 4 PC slot is available. Existing or nonzero slot data was left unchanged.")
         val first=empty.first()
         AlertDialog.Builder(this).setTitle("Choose native Gen 4 destination")
-            .setMessage("The reviewed PSE conversion will write one native PK4 and update the Pokédex and active block CRCs.")
-            .setItems(arrayOf("First Empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
+            .setMessage("The reviewed PSE conversion will write one native PK4 only into a structurally empty slot and update the Pokédex and active block CRCs. Every nonzero destination record remains unchanged; this does not claim official migration or verified provenance.")
+            .setItems(arrayOf("First structurally empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
                 if(!gen6ToGen4StillBound(p))showDialog("Gen 6 → Gen 4","The prepared snapshots changed. Reopen PSE Bank.")
                 else if(which==0)transferGen6BankToGen4(p,first)else showGen6ToGen4BoxPicker(p)
             }.setNegativeButton("Cancel",null).show()
@@ -35589,17 +35597,11 @@ class MainActivity : Activity() {
     private fun showGen6ToGen4BoxPicker(p:Gen6Gen4Prepared){
         if(!gen6ToGen4StillBound(p))return showDialog("Gen 6 → Gen 4","The prepared snapshots changed. Reopen PSE Bank.")
         val profile=detectGen4Profile(p.destination)?:return
-        val boxes=(0 until 18).filter{b->(0 until 30).any{s->
-            val o=gen4BoxSlotOffset(p.destination,profile,b*30+s)
-            parsePk4(p.destination.copyOfRange(o,o+136),false)==null
-        }}
+        val boxes=(0 until 18).filter{b->(0 until 30).any{s->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,b*30+s)}}
         AlertDialog.Builder(this).setTitle("Choose Gen 4 destination box")
             .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,w->
-                val b=boxes[w];val slots=(0 until 30).filter{s->
-                    val o=gen4BoxSlotOffset(p.destination,profile,b*30+s)
-                    parsePk4(p.destination.copyOfRange(o,o+136),false)==null
-                }
-                AlertDialog.Builder(this).setTitle("Box ${b+1} • choose slot")
+                val b=boxes[w];val slots=(0 until 30).filter{s->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,b*30+s)}
+                AlertDialog.Builder(this).setTitle("Box ${b+1} • choose structurally empty slot")
                     .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,sw->transferGen6BankToGen4(p,b*30+slots[sw])}
                     .setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
@@ -35624,7 +35626,7 @@ class MainActivity : Activity() {
             val converted4=parsePk4(pk4,false)?:error("The refreshed PK4 could not be parsed.")
             require(pk4.contentEquals(p.pk4)&&sameGen5ToGen4Pk4(converted4,p.converted4)&&gen4Pk4PpUps(pk4).contentEquals(gen6Pk6PpUps(bank))){"The prepared native PK4 changed before staging."}
             val off=gen4BoxSlotOffset(fresh,profile,target)
-            require(parsePk4(fresh.copyOfRange(off,off+136),false)==null){"The destination slot is no longer empty."}
+            require(gen4DestinationSlotIsStructurallyEmpty(fresh,profile,target)){"The destination slot is no longer structurally empty. Existing slot data was not overwritten."}
             val work=fresh.copyOf();val allowed=HashSet<Int>();pk4.copyInto(work,off)
             for(i in off until off+136)allowed.add(i)
             val staged=parsePk4(work.copyOfRange(off,off+136),false)?:error("The staged PK4 could not be parsed.")
