@@ -13742,23 +13742,23 @@ class MainActivity : Activity() {
     private fun chooseGen6ToGen3Destination(p:Gen6Gen3Prepared){
         if(!gen6ToGen3StillBound(p))return showDialog("Gen 6 → Gen 3","The prepared snapshots changed. Reopen PSE Bank.")
         val pc=gen3PcBuffer(p.destination)?:return showDialog("Gen 6 → Gen 3","PSE could not reconstruct Gen 3 PC storage.")
-        val empty=(0 until 420).filter{parsePk3(pc,4+it*80,false)==null}
-        if(empty.isEmpty())return showDialog("Gen 6 → Gen 3","No empty Gen 3 PC slot is available.")
+        val empty=(0 until 420).filter{gen3DestinationSlotIsStructurallyEmpty(pc,it)}
+        if(empty.isEmpty())return showDialog("Gen 6 → Gen 3","No structurally empty native Gen 3 PC slot is available. Existing or nonzero slot data was left unchanged.")
         val first=empty.first()
         AlertDialog.Builder(this).setTitle("Choose native Gen 3 destination")
-            .setMessage("The reviewed PSE conversion will be written to one empty native PK3 slot.")
+            .setMessage("The reviewed PSE conversion will be written to one structurally empty native PK3 slot. Every nonzero destination record remains unchanged; this does not claim official migration or verified provenance.")
             .setNegativeButton("Cancel",null)
-            .setPositiveButton("First Empty (Box ${first/30+1} / Slot ${first%30+1})"){_,_->transferGen6BankToGen3(p,first)}
+            .setPositiveButton("First structurally empty (Box ${first/30+1} / Slot ${first%30+1})"){_,_->transferGen6BankToGen3(p,first)}
             .setNeutralButton("Choose Box / Slot"){_,_->showGen6ToGen3BoxPicker(p,pc)}.show()
     }
 
     private fun showGen6ToGen3BoxPicker(p:Gen6Gen3Prepared,pc:ByteArray){
         if(!gen6ToGen3StillBound(p))return showDialog("Gen 6 → Gen 3","The prepared snapshots changed. Reopen PSE Bank.")
-        val boxes=(0 until 14).filter{b->(0 until 30).any{s->parsePk3(pc,4+(b*30+s)*80,false)==null}}
+        val boxes=(0 until 14).filter{b->(0 until 30).any{s->gen3DestinationSlotIsStructurallyEmpty(pc,b*30+s)}}
         AlertDialog.Builder(this).setTitle("Choose Gen 3 destination box")
             .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,w->
-                val b=boxes[w];val empties=(0 until 30).filter{s->parsePk3(pc,4+(b*30+s)*80,false)==null}
-                AlertDialog.Builder(this).setTitle("Box ${b+1} • choose slot")
+                val b=boxes[w];val empties=(0 until 30).filter{s->gen3DestinationSlotIsStructurallyEmpty(pc,b*30+s)}
+                AlertDialog.Builder(this).setTitle("Box ${b+1} • choose structurally empty slot")
                     .setItems(empties.map{"Slot ${it+1}"}.toTypedArray()){_,sw->transferGen6BankToGen3(p,b*30+empties[sw])}
                     .setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
@@ -13784,7 +13784,7 @@ class MainActivity : Activity() {
             val converted3=parsePk3(pk3,0,false)?:error("The refreshed PK3 could not be parsed.")
             require(pk3.contentEquals(p.pk3)&&sameGen4ToGen3Pk3(converted3,p.converted3)){"The prepared native PK3 changed before writing."}
             val save=fresh.copyOf();val pc=gen3PcBuffer(save)?:error("Could not reconstruct Gen 3 PC storage.")
-            val beforePc=pc.copyOf();val off=4+target*80;require(parsePk3(pc,off,false)==null){"The destination slot is no longer empty."}
+            val beforePc=pc.copyOf();val off=4+target*80;require(gen3DestinationSlotIsStructurallyEmpty(pc,target)){"The destination slot is no longer structurally empty. Existing slot data was not overwritten."}
             pk3.copyInto(pc,off);val staged=parsePk3(pc,off,false)?:error("The staged PK3 could not be parsed.")
             require(sameGen4ToGen3Pk3(staged,converted3)){"The staged PK3 changed."}
             require(pc.indices.all{it in off until off+80||pc[it]==beforePc[it]}){"Unrelated Gen 3 PC data changed."}
