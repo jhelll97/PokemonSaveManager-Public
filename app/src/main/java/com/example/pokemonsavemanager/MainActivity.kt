@@ -451,6 +451,17 @@ class MainActivity : Activity() {
 
     private data class Gen6BankBatchItem(val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry)
 
+    private fun gen6BankDestinationSlotIsStructurallyEmpty(
+        data:ByteArray,boxOffset:Int,slotCount:Int,maxSpecies:Int,global:Int
+    ):Boolean{
+        if(global !in 0 until slotCount)return false
+        val offset=boxOffset+global*PK6_STORED_SIZE
+        if(offset<0||offset+PK6_STORED_SIZE>data.size)return false
+        val raw=data.copyOfRange(offset,offset+PK6_STORED_SIZE)
+        return raw.all{it==0.toByte()}&&
+            parsePk6(raw,0,PK6_STORED_SIZE,false,maxSpecies)==null
+    }
+
     private fun chooseSelectedGen6BankDestination(chosen:List<File>){
         val file=importedFile?:return showDialog("Gen 6 Bank multi-withdrawal","Load a valid X, Y, Omega Ruby or Alpha Sapphire destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
@@ -468,13 +479,13 @@ class MainActivity : Activity() {
             Gen6BankBatchItem(bankFile,bytes,source)
         }}catch(e:Exception){return showDialog("Gen 6 Bank multi-withdrawal",(e.message?:"A selected Gen 6 Bank record could not be read.")+" Nothing was changed.")}
         val targets=(0 until info.second/30).mapNotNull{box->
-            val slots=(0 until 30).filter{slot->parsePk6(destination,info.first+(box*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,info.third)==null}
+            val slots=(0 until 30).filter{slot->gen6BankDestinationSlotIsStructurallyEmpty(destination,info.first,info.second,info.third,box*30+slot)}
             if(slots.size>=selected.size)box to slots.take(selected.size) else null
         }
-        if(targets.isEmpty())return showDialog("Gen 6 Bank multi-withdrawal","No Generation 6 PC box has ${selected.size} empty slots for the complete selection. Free capacity, reduce the selection, or load another valid save. Nothing was changed.")
+        if(targets.isEmpty())return showDialog("Gen 6 Bank multi-withdrawal","No Generation 6 PC box has ${selected.size} structurally empty slots for the complete selection. Existing or nonzero slot data was left unchanged; free capacity, reduce the selection, or load another valid save.")
         var consumed=false
         AlertDialog.Builder(this).setTitle("Move ${selected.size} Gen 6 Pokémon to which box?")
-            .setMessage("This is a PSE Bank withdrawal, not an official Pokémon Bank transaction or provenance claim. No Pokémon conversion is performed. PSE will copy each exact native 232-byte PK6 into the listed empty slots in selection order, update only the native PC checksum, retain verified recovery data, reopen every destination record, then remove Bank records last.")
+            .setMessage("This is a PSE Bank withdrawal, not an official trade, Pokémon Bank transaction or provenance claim. No conversion or Legalise change is performed. PSE will copy each exact native 232-byte PK6 into the listed structurally empty slots in selection order, update only the native PC checksum, retain verified recovery data, reopen every destination record, then remove Bank records last.")
             .setItems(targets.map{(box,slots)->"Box ${box+1} • Slots ${slots.joinToString(", "){(it+1).toString()}}"}.toTypedArray()){_,which->
                 if(consumed||which !in targets.indices){consumed=true;return@setItems};consumed=true
                 val(box,slots)=targets[which]
@@ -502,7 +513,7 @@ class MainActivity : Activity() {
             for(i in refreshed.indices){
                 val global=targetBox*30+targetSlots[i];require(global in 0 until info.second){"A selected Generation 6 destination slot is invalid."}
                 val offset=info.first+global*PK6_STORED_SIZE;offsets.add(offset)
-                require(parsePk6(work,offset,PK6_STORED_SIZE,false,info.third)==null){"Box ${targetBox+1} • Slot ${targetSlots[i]+1} is no longer empty."}
+                require(gen6BankDestinationSlotIsStructurallyEmpty(work,info.first,info.second,info.third,global)){"Box ${targetBox+1} • Slot ${targetSlots[i]+1} is no longer structurally empty. Existing slot data was not overwritten."}
                 refreshed[i].bankBytes.copyInto(work,offset);for(p in offset until offset+PK6_STORED_SIZE)allowed.add(p)
                 val raw=work.copyOfRange(offset,offset+PK6_STORED_SIZE);val staged=parsePk6(raw,0,PK6_STORED_SIZE,false,721)
                 require(raw.contentEquals(refreshed[i].bankBytes)&&staged!=null&&staged.checksumValid){"An exact selected PK6 did not stage in its destination slot."}
@@ -12815,13 +12826,13 @@ class MainActivity : Activity() {
             return showDialog("Gen 6 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
         val info=boxStorageInfo(p.destination)?:return
         val empty=(0 until info.second).filter{
-            parsePk6(p.destination,info.first+it*PK6_STORED_SIZE,PK6_STORED_SIZE,false,info.third)==null
+            gen6BankDestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,it)
         }
-        if(empty.isEmpty())return showDialog("Gen 6 Bank withdrawal","All native Generation 6 PC slots are occupied.")
+        if(empty.isEmpty())return showDialog("Gen 6 Bank withdrawal","No structurally empty native Generation 6 PC slot is available. Existing or nonzero slot data was left unchanged.")
         val first=empty.first()
         AlertDialog.Builder(this).setTitle("Choose native Gen 6 destination")
-            .setMessage("Choose one empty native PK6 slot. PSE will show the exact no-conversion effect and selected Box / Slot before final confirmation.")
-            .setItems(arrayOf("First Empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
+            .setMessage("Choose one structurally empty native PK6 slot. PSE will show the exact no-conversion effect and selected Box / Slot before final confirmation; nonzero slot data is preserved.")
+            .setItems(arrayOf("First structurally empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
                 if(!gen6BankWithdrawalStillBound(p))showDialog("Gen 6 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
                 else if(which==0)reviewGen6BankWithdrawal(p,first)else showGen6BankWithdrawalBoxPicker(p)
             }.setNegativeButton("Cancel",null).show()
@@ -12832,14 +12843,14 @@ class MainActivity : Activity() {
             return showDialog("Gen 6 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
         val info=boxStorageInfo(p.destination)?:return
         val boxes=(0 until info.second/30).filter{box->(0 until 30).any{slot->
-            parsePk6(p.destination,info.first+(box*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,info.third)==null
+            gen6BankDestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*30+slot)
         }}
-        if(boxes.isEmpty())return showDialog("Gen 6 Bank withdrawal","All native Generation 6 PC boxes are full.")
+        if(boxes.isEmpty())return showDialog("Gen 6 Bank withdrawal","No native Generation 6 PC box contains a structurally empty slot. Existing or nonzero slot data was left unchanged.")
         AlertDialog.Builder(this).setTitle("Choose Gen 6 destination box")
             .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
                 val box=boxes[which]
                 val slots=(0 until 30).filter{slot->
-                    parsePk6(p.destination,info.first+(box*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,info.third)==null
+                    gen6BankDestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*30+slot)
                 }
                 AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
                     .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
@@ -12853,12 +12864,11 @@ class MainActivity : Activity() {
             return showDialog("Gen 6 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
         val info=boxStorageInfo(p.destination)?:return
         if(target !in 0 until info.second)return showDialog("Gen 6 Bank withdrawal","The selected destination slot is invalid.")
-        val offset=info.first+target*PK6_STORED_SIZE
-        if(parsePk6(p.destination,offset,PK6_STORED_SIZE,false,info.third)!=null)
-            return showDialog("Gen 6 Bank withdrawal","Box ${target/30+1} • Slot ${target%30+1} is no longer empty.")
+        if(!gen6BankDestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,target))
+            return showDialog("Gen 6 Bank withdrawal","Box ${target/30+1} • Slot ${target%30+1} is no longer structurally empty. Existing slot data was left unchanged.")
         val review="Selected destination: Box ${target/30+1} • Slot ${target%30+1}.\n\n"+
-            "No Pokémon conversion is performed. The exact 232-byte PK6 Bank record is copied byte-for-byte, so species, encryption constant, PID, TID/SID, nickname, OT and handler data, experience, ability, nature, gender/form, shiny state, moves, PP, PP Ups, relearn moves, IVs, EVs, friendship, affection, Pokérus, Ball, origin, locations, dates, ribbons and every stored PK6 byte remain unchanged. The source save is not edited.\n\n"+
-            "Only the selected empty PK6 slot and the native PC storage checksum may change. Existing destination Pokémon and all other save bytes must remain identical. A verified retained recovery backup is required. The Bank record is removed only after the exact slot and native checksums persist and reopen successfully; any failure restores or preserves both destination and Bank record."
+            "This is a PSE Bank withdrawal, not an official trade, Pokémon Bank transaction or provenance claim. No conversion or Legalise change is performed. The exact 232-byte PK6 Bank record is copied byte-for-byte, so species, encryption constant, PID, TID/SID, nickname, OT and handler data, experience, ability, nature, gender/form, shiny state, moves, PP, PP Ups, relearn moves, IVs, EVs, friendship, affection, Pokérus, Ball, origin, locations, dates, ribbons and every stored PK6 byte remain unchanged. The source save is not edited.\n\n"+
+            "Only the selected structurally empty PK6 slot and the native PC storage checksum may change. Existing destination Pokémon, nonzero slot data and all other save bytes must remain identical. A verified retained recovery backup is required. The Bank record is removed only after the exact slot and native checksums persist and reopen successfully; any failure restores or preserves both destination and Bank record."
         AlertDialog.Builder(this).setTitle("${p.source.nickname.ifBlank{"Pokémon #${p.source.species}"}} • Gen 6 withdrawal")
             .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("Withdraw exact PK6"){_,_->
                 if(p.submitted){showDialog("Gen 6 Bank withdrawal","This withdrawal confirmation was already submitted. Reopen PSE Bank.");return@setPositiveButton}
@@ -12880,7 +12890,7 @@ class MainActivity : Activity() {
             val info=boxStorageInfo(original)?:error("PSE could not resolve native Generation 6 PC storage.")
             require(target in 0 until info.second){"The selected Generation 6 slot is invalid."}
             val offset=info.first+target*PK6_STORED_SIZE
-            require(parsePk6(original,offset,PK6_STORED_SIZE,false,info.third)==null){"The selected Generation 6 slot is no longer empty."}
+            require(gen6BankDestinationSlotIsStructurallyEmpty(original,info.first,info.second,info.third,target)){"The selected Generation 6 slot is no longer structurally empty. Existing slot data was not overwritten."}
             val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The selected Gen 6 Bank record changed after review."}
             val source=parsePk6(bank,0,PK6_STORED_SIZE,false,721)?:error("The selected Bank record is not a native PK6.")
             require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&
