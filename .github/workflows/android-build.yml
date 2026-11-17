@@ -69,7 +69,7 @@ jobs:
             if [ "$status" -eq 0 ]; then
               exit 0
             fi
-            if ! grep -Eq "Received status code (429|504)|Could not resolve all artifacts for configuration 'classpath'" "$log"; then
+            if ! grep -Eqi "Received status code (429|504)|Could not resolve all artifacts for configuration 'classpath'|could not resolve plugin artifact|Plugin \[id: .*\] was not found in any of the following sources" "$log"; then
               exit "$status"
             fi
             if [ "$attempt" -eq 3 ]; then
