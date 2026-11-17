@@ -47232,15 +47232,17 @@ class MainActivity : Activity() {
                     require(p.bankFile.createNewFile()){"The Bank recovery path could not be reserved."}
                     p.bankFile.writeBytes(p.bankBytes)
                 }
-                require(p.bankFile.readBytes().contentEquals(p.bankBytes)){"The Gen 3 Bank record could not be restored exactly."}
+                val restored=p.bankFile.readBytes();val parsed=if(restored.size==80)parsePk3(restored,0,false)else null
+                require(restored.contentEquals(p.bankBytes)&&parsed!=null&&parsed.checksumValid&&
+                    parsed.pid==p.source.pid&&parsed.species==p.source.species&&parsed.tid==p.source.tid&&parsed.sid==p.source.sid){"The Gen 3 Bank record could not be restored exactly."}
             }.isSuccess
-            val saveRestored=!writeStarted||runCatching{
-                file.writeBytes(fresh);val restored=file.readBytes()
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(fresh)
+                val restored=file.readBytes()
                 restored.contentEquals(fresh)&&validGen2ToGen4Destination(restored)
             }.getOrDefault(false)
             if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
-                !writeStarted->"Nothing was written and the Bank record was not removed."
                 bankRestored&&saveRestored->"The exact Gen 4 destination and Gen 3 Bank record were restored or kept and verified."
                 bankRestored->"The Bank record was restored, but destination restoration was not verified. Use the retained recovery backup before editing again."
                 saveRestored->"The exact Gen 4 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
