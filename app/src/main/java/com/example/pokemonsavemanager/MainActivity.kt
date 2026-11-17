@@ -52430,6 +52430,11 @@ class MainActivity : Activity() {
         val raw=data.copyOfRange(off,off+136)
         return raw.all{it==0.toByte()}&&parsePk5(raw,false)==null
     }
+    private data class Gen1Gen5SinglePrepared(
+        val bankFile:File,val bankBytes:ByteArray,val source:Gen1Pokemon,val destination:ByteArray,
+        val meta:Gen1ToGen5Meta,val pk5:ByteArray,val converted:PokemonEntry,
+        val destinationFile:File,val sourceUri:Uri?,val sourceLabel:String?
+    )
     private fun chooseGen1BankToGen5Destination(bankFile:File,p:Gen1Pokemon){
         val file=importedFile?:return
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
@@ -52459,30 +52464,67 @@ class MainActivity : Activity() {
             }
             val converted=parsePk5(pk5,false)
                 ?:return@loadGen1ToGen5MetaAsync showDialog("Gen 1 → Gen 5","The prepared native PK5 could not be reopened.")
-            val targets=(0 until 24*30).filter{gen5DestinationSlotIsStructurallyEmpty(data,it)}
-            if(targets.isEmpty())return@loadGen1ToGen5MetaAsync showDialog("Gen 1 → Gen 5","No structurally empty Gen 5 PC slot is available. Nonzero records were left unchanged.")
-            val first=targets.first()
-            val sourceShiny=source.dvs[2]==10&&source.dvs[3]==10&&source.dvs[4]==10&&source.dvs[1] in setOf(2,3,6,7,10,11,14,15)
-            val preview=buildString{
-                append("PSE Bank conversion preview\n\n")
-                append("Preserved: species, nickname, OT, TID, EXP, level, moves, current PP, PP Ups and shiny state (${sourceShiny}).\n")
-                append("PID: generated as ${"%08X".format(converted.pid)} for verified ability slot ${converted.abilityNumber} and shiny state; nature becomes #${converted.nature} (EXP mod 25), gender becomes #${converted.gender} from the Gen 1 record and species ratio, and SID becomes 0.\n")
-                append("IVs: each Gen 1 DV is doubled; Special is copied to both Special Attack and Special Defense. Final HP/Atk/Def/Spe/SpA/SpD: ${converted.ivs.joinToString("/")}.\n")
-                append("EVs: each Stat Exp value is divided by 257; Special is copied to both special stats, then the highest values are trimmed only if needed to fit the Gen 5 total cap of 510. Final HP/Atk/Def/Spe/SpA/SpD: ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")
-                append("Ability: destination-valid ability #${converted.ability}. Required native defaults: base friendship ${converted.friendship}, English language, no held item, Poké Ball, met level ${source.level}, destination-compatible origin #${converted.originGame}, and empty met/egg dates and locations. The Gen 1 catch-rate byte and fields without a native PK5 representation are omitted.\n\n")
-                append("The selected destination is structurally empty; nonzero destination records remain unchanged.\n\n")
-                append("Nintendo provided no direct Gen 1 → Gen 5 route. This is a PSE native PK5 conversion, not an official migration or provenance claim. The source save stays unchanged. The exact Gen 1 Bank record remains until a retained recovery backup, the selected PK5, Pokédex, box/checksum-table validation and reopened destination all verify.")
-            }
-            AlertDialog.Builder(this)
-                .setTitle("PSE Convert ${source.nickname.ifBlank{gen1SpeciesNameFromInternal(source.species)}} to Gen 5")
-                .setMessage(preview)
-                .setPositiveButton("First Structurally Empty (Box ${first/30+1} / Slot ${first%30+1})"){_,_->
-                    if(!snapshotsMatch())showDialog("Gen 1 → Gen 5","The destination or Bank record changed after review. Nothing was changed.")
-                    else transferGen1BankToGen5(bankFile,source,opened,meta,pk5,converted,first,file,openedUri,openedLabel)
-                }
-                .setNegativeButton("Cancel",null)
-                .show()
+            chooseGen1ToGen5Destination(Gen1Gen5SinglePrepared(bankFile,opened,source,data,meta,pk5,converted,file,openedUri,openedLabel))
         }
+    }
+
+    private fun gen1ToGen5StillBound(p:Gen1Gen5SinglePrepared):Boolean=
+        importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&
+            currentSourceLabel==p.sourceLabel&&runCatching{
+                p.destinationFile.readBytes().contentEquals(p.destination)&&p.bankFile.readBytes().contentEquals(p.bankBytes)
+            }.getOrDefault(false)
+
+    private fun chooseGen1ToGen5Destination(p:Gen1Gen5SinglePrepared){
+        if(!gen1ToGen5StillBound(p))return showDialog("Gen 1 → Gen 5","The destination identity or prepared snapshots changed. Reopen PSE Bank. Nothing was changed.")
+        val profile=detectGen5Profile(p.destination)?:return showDialog("Gen 1 → Gen 5","The prepared destination is no longer a valid Gen 5 save.")
+        if(!gen5ChecksumTableValid(p.destination,profile)||(0 until 24).any{!gen5BoxChecksumValid(p.destination,it,profile)})return showDialog("Gen 1 → Gen 5","The prepared destination no longer passes storage validation.")
+        val empty=(0 until 720).filter{gen5DestinationSlotIsStructurallyEmpty(p.destination,it)}
+        if(empty.isEmpty())return showDialog("Gen 1 → Gen 5","No structurally empty Gen 5 PC slot is available. Nonzero records were left unchanged.")
+        val first=empty.first()
+        AlertDialog.Builder(this).setTitle("Choose native Gen 5 destination")
+            .setMessage("Choose the exact native PK5 destination. PSE lists only completely zero-filled, unparsable slots; every nonzero destination record remains unchanged.")
+            .setItems(arrayOf("First Structurally Empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
+                if(!gen1ToGen5StillBound(p))showDialog("Gen 1 → Gen 5","The destination identity or prepared snapshots changed. Reopen PSE Bank. Nothing was changed.")
+                else if(which==0)reviewGen1ToGen5Destination(p,first)else showGen1ToGen5BoxPicker(p)
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun showGen1ToGen5BoxPicker(p:Gen1Gen5SinglePrepared){
+        if(!gen1ToGen5StillBound(p))return showDialog("Gen 1 → Gen 5","The destination identity or prepared snapshots changed. Reopen PSE Bank. Nothing was changed.")
+        val boxes=(0 until 24).filter{box->(0 until 30).any{slot->gen5DestinationSlotIsStructurallyEmpty(p.destination,box*30+slot)}}
+        AlertDialog.Builder(this).setTitle("Choose Gen 5 box")
+            .setMessage("Only boxes with structurally empty slots are listed. Nonzero records remain unchanged.")
+            .setItems(boxes.map{box->val count=(0 until 30).count{slot->gen5DestinationSlotIsStructurallyEmpty(p.destination,box*30+slot)};"Box ${box+1} • $count structurally empty"}.toTypedArray()){_,which->
+                if(!gen1ToGen5StillBound(p))return@setItems showDialog("Gen 1 → Gen 5","The destination identity or prepared snapshots changed. Reopen PSE Bank. Nothing was changed.")
+                val box=boxes[which];val slots=(0 until 30).filter{slot->gen5DestinationSlotIsStructurallyEmpty(p.destination,box*30+slot)}
+                AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
+                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
+                        if(gen1ToGen5StillBound(p))reviewGen1ToGen5Destination(p,box*30+slots[slotIndex])
+                        else showDialog("Gen 1 → Gen 5","The destination identity or prepared snapshots changed. Reopen PSE Bank. Nothing was changed.")
+                    }.setNegativeButton("Back"){_,_->showGen1ToGen5BoxPicker(p)}.setNeutralButton("Cancel",null).show()
+            }.setNegativeButton("Back"){_,_->chooseGen1ToGen5Destination(p)}.setNeutralButton("Cancel",null).show()
+    }
+
+    private fun reviewGen1ToGen5Destination(p:Gen1Gen5SinglePrepared,target:Int){
+        if(!gen1ToGen5StillBound(p))return showDialog("Gen 1 → Gen 5","The destination identity or prepared snapshots changed. Reopen PSE Bank. Nothing was changed.")
+        if(target !in 0 until 720||!gen5DestinationSlotIsStructurallyEmpty(p.destination,target))return showDialog("Gen 1 → Gen 5","The chosen destination is no longer structurally empty. Nonzero records were left unchanged.")
+        val source=p.source;val converted=p.converted;val sourceShiny=source.dvs[2]==10&&source.dvs[3]==10&&source.dvs[4]==10&&source.dvs[1] in setOf(2,3,6,7,10,11,14,15);var transferConsumed=false
+        val preview=buildString{
+            append("PSE Bank conversion preview\n\n")
+            append("Chosen destination: Box ${target/30+1}, Slot ${target%30+1}. The slot is structurally empty; nonzero destination records remain unchanged.\n")
+            append("Preserved: species, nickname, OT, TID, EXP, level, moves, current PP, PP Ups and shiny state (${sourceShiny}).\n")
+            append("PID: generated as ${"%08X".format(converted.pid)} for verified ability slot ${converted.abilityNumber} and shiny state; nature becomes #${converted.nature} (EXP mod 25), gender becomes #${converted.gender} from the Gen 1 record and species ratio, and SID becomes 0.\n")
+            append("IVs: each Gen 1 DV is doubled; Special is copied to both Special Attack and Special Defense. Final HP/Atk/Def/Spe/SpA/SpD: ${converted.ivs.joinToString("/")}.\n")
+            append("EVs: each Stat Exp value is divided by 257; Special is copied to both special stats, then the highest values are trimmed only if needed to fit the Gen 5 total cap of 510. Final HP/Atk/Def/Spe/SpA/SpD: ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")
+            append("Ability: destination-valid ability #${converted.ability}. Required native defaults: base friendship ${converted.friendship}, English language, no held item, Poké Ball, met level ${source.level}, destination-compatible origin #${converted.originGame}, and empty met/egg dates and locations. The Gen 1 catch-rate byte and fields without a native PK5 representation are omitted.\n\n")
+            append("Nintendo provided no direct Gen 1 → Gen 5 route. This is a PSE native PK5 conversion, not an official migration or verified provenance claim. The source save stays unchanged. The exact Gen 1 Bank record remains until a retained recovery backup, the selected PK5, Pokédex, box/checksum-table validation and reopened destination all verify.")
+        }
+        AlertDialog.Builder(this).setTitle("PSE Convert ${source.nickname.ifBlank{gen1SpeciesNameFromInternal(source.species)}} to Gen 5")
+            .setMessage(preview).setNegativeButton("Cancel",null).setPositiveButton("Transfer to Box ${target/30+1} / Slot ${target%30+1}"){_,_->
+                if(transferConsumed){showDialog("Gen 1 → Gen 5","This transfer was already submitted. Reopen PSE Bank.");return@setPositiveButton};transferConsumed=true
+                if(!gen1ToGen5StillBound(p)){showDialog("Gen 1 → Gen 5","The destination identity or prepared snapshots changed. Nothing was changed.");return@setPositiveButton}
+                transferGen1BankToGen5(p.bankFile,p.source,p.bankBytes,p.meta,p.pk5,p.converted,target,p.destinationFile,p.sourceUri,p.sourceLabel)
+            }.show()
     }
     private fun transferGen1BankToGen5(bankFile:File,expected:Gen1Pokemon,openedBank:ByteArray,meta:Gen1ToGen5Meta,preparedPk5:ByteArray,prepared:PokemonEntry,target:Int,openedFile:File,openedUri:Uri?,openedLabel:String?){
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
