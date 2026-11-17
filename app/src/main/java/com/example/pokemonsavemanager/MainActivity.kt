@@ -1559,7 +1559,7 @@ class MainActivity : Activity() {
         if(generationForSize(data.size)!=3||!gen3SaveValid(data)){showDialog("Gen 1 → Gen 3","Load a valid Generation 3 save first.");return}
         val parsed=try{chosen.map{f->val raw=f.readBytes();val p=parseGen1BankPayload(raw)?:error("A selected Gen 1 Bank record is invalid.");val pk3=buildGen1ToGen3Pk3(raw,p,data);val q=parsePk3(pk3,0,false)?:error("A selected Gen 1 Pokémon could not be converted to PK3.");Gen1Gen3BatchPrepared(f,raw,p,pk3,q)}}catch(e:Exception){showDialog("Gen 1 → Gen 3",e.message?:"Conversion failed");return}
         val pc=gen3PcBuffer(data)?:run{showDialog("Gen 1 → Gen 3","Could not reconstruct Gen 3 PC storage.");return}
-        val targets=(0 until 14).mapNotNull{b->val empty=(0 until 30).filter{slot->gen1ToGen3DestinationSlotIsStructurallyEmpty(pc,b*30+slot)};if(empty.size>=chosen.size)b to empty.take(chosen.size) else null}
+        val targets=(0 until 14).mapNotNull{b->val empty=(0 until 30).filter{slot->gen3DestinationSlotIsStructurallyEmpty(pc,b*30+slot)};if(empty.size>=chosen.size)b to empty.take(chosen.size) else null}
         if(targets.isEmpty()){showDialog("Gen 1 → Gen 3","No single Gen 3 PC box has ${chosen.size} structurally empty slots for the complete selection. Existing or nonzero slot data was left unchanged; free capacity, reduce the selection, or load another valid save.");return}
         val labels=targets.map{(box,slots)->"Box ${box+1} • Slots ${slots.joinToString(", "){(it+1).toString()}}"}.toTypedArray()
         var selectedTarget=0
@@ -1572,7 +1572,7 @@ class MainActivity : Activity() {
     }
 
     private data class Gen1Gen3BatchPrepared(val bankFile:File,val bankBytes:ByteArray,val source:Gen1Pokemon,val pk3:ByteArray,val converted:PokemonEntry)
-    private fun gen1ToGen3DestinationSlotIsStructurallyEmpty(pc:ByteArray,global:Int):Boolean{
+    private fun gen3DestinationSlotIsStructurallyEmpty(pc:ByteArray,global:Int):Boolean{
         if(global !in 0 until 420)return false
         val off=4+global*80
         if(off+80>pc.size)return false
@@ -1602,11 +1602,11 @@ class MainActivity : Activity() {
                 Gen1Gen3BatchPrepared(item.bankFile,bankBytes,source,freshPk3,freshConverted)
             }
             val save=fresh.copyOf();val pc=gen3PcBuffer(save)?:error("Could not reconstruct Gen 3 PC storage");val beforePc=pc.copyOf()
-            require(targetSlots.all{slot->gen1ToGen3DestinationSlotIsStructurallyEmpty(pc,box*30+slot)}){"A reviewed Gen 3 destination slot is no longer structurally empty. Existing slot data was not overwritten."}
+            require(targetSlots.all{slot->gen3DestinationSlotIsStructurallyEmpty(pc,box*30+slot)}){"A reviewed Gen 3 destination slot is no longer structurally empty. Existing slot data was not overwritten."}
             val expected=ArrayList<Triple<Int,ByteArray,PokemonEntry>>()
             for(i in refreshed.indices){
                 val item=refreshed[i];val freshPk3=item.pk3;val freshConverted=item.converted;val target=box*30+targetSlots[i];val off=4+target*80
-                require(gen1ToGen3DestinationSlotIsStructurallyEmpty(pc,target)){"Box ${box+1} • Slot ${targetSlots[i]+1} is no longer structurally empty. Existing slot data was not overwritten."}
+                require(gen3DestinationSlotIsStructurallyEmpty(pc,target)){"Box ${box+1} • Slot ${targetSlots[i]+1} is no longer structurally empty. Existing slot data was not overwritten."}
                 freshPk3.copyInto(pc,off);val stagedBytes=pc.copyOfRange(off,off+80);val staged=parsePk3(stagedBytes,0,false)?:error("A converted PK3 could not be parsed after placement.")
                 require(stagedBytes.contentEquals(freshPk3)&&samePk3(staged,freshConverted)&&gen3MovePpUps(stagedBytes).contentEquals(item.source.movePpUps)){"A staged PK3 did not preserve every supported converted field and PP-Up value."}
                 expected.add(Triple(target,freshPk3,staged))
@@ -52949,7 +52949,7 @@ class MainActivity : Activity() {
             ?:return showDialog("Gen 1 → Gen 3","The prepared native PK3 could not be reopened.")
         val pc=gen3PcBuffer(data)
             ?:return showDialog("Gen 1 → Gen 3","PSE could not reconstruct native Gen 3 PC storage.")
-        val empties=(0 until 420).filter{gen1ToGen3DestinationSlotIsStructurallyEmpty(pc,it)}
+        val empties=(0 until 420).filter{gen3DestinationSlotIsStructurallyEmpty(pc,it)}
         if(empties.isEmpty())return showDialog("Gen 1 → Gen 3","No structurally empty native Gen 3 PC slot is available. Existing or nonzero slot data was left unchanged.")
         val first=empties.first()
         val sourceShiny=source.dvs[2]==10&&source.dvs[3]==10&&source.dvs[4]==10&&source.dvs[1] in setOf(2,3,6,7,10,11,14,15)
@@ -52974,7 +52974,7 @@ class MainActivity : Activity() {
             .setNegativeButton("Cancel",null)
             .show()
     }
-    private fun showGen1ToGen3BoxPicker(bankFile:File,p:Gen1Pokemon,pk3:ByteArray,converted:PokemonEntry,pc:ByteArray){val boxes=(0 until 14).filter{b->(0 until 30).any{s->gen1ToGen3DestinationSlotIsStructurallyEmpty(pc,b*30+s)}};AlertDialog.Builder(this).setTitle("Choose Gen 3 destination box").setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,w->val b=boxes[w];val empties=(0 until 30).filter{s->gen1ToGen3DestinationSlotIsStructurallyEmpty(pc,b*30+s)};AlertDialog.Builder(this).setTitle("Box ${b+1} • choose structurally empty slot").setItems(empties.map{"Slot ${it+1}"}.toTypedArray()){_,sw->transferGen1BankToGen3(bankFile,p,pk3,converted,b*30+empties[sw])}.setNegativeButton("Cancel",null).show()}.setNegativeButton("Cancel",null).show()}
+    private fun showGen1ToGen3BoxPicker(bankFile:File,p:Gen1Pokemon,pk3:ByteArray,converted:PokemonEntry,pc:ByteArray){val boxes=(0 until 14).filter{b->(0 until 30).any{s->gen3DestinationSlotIsStructurallyEmpty(pc,b*30+s)}};AlertDialog.Builder(this).setTitle("Choose Gen 3 destination box").setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,w->val b=boxes[w];val empties=(0 until 30).filter{s->gen3DestinationSlotIsStructurallyEmpty(pc,b*30+s)};AlertDialog.Builder(this).setTitle("Box ${b+1} • choose structurally empty slot").setItems(empties.map{"Slot ${it+1}"}.toTypedArray()){_,sw->transferGen1BankToGen3(bankFile,p,pk3,converted,b*30+empties[sw])}.setNegativeButton("Cancel",null).show()}.setNegativeButton("Cancel",null).show()}
     private fun writeGen1ToGen3PcAndDexFrozen(save:ByteArray,pc:ByteArray,dex:Int){
         // Freeze one coherent Gen 3 save-slot map for the whole transaction. Re-selecting
         // sections between PC and Pokédex writes can mix the two redundant save slots.
@@ -53038,7 +53038,7 @@ class MainActivity : Activity() {
             val save=fresh.copyOf();val pc=gen3PcBuffer(save)?:error("Could not reconstruct Gen 3 PC storage")
             val beforePc=pc.copyOf();val off=4+target*80
             require(off>=4&&off+freshPk3.size<=pc.size){"The selected Gen 3 destination slot is out of range."}
-            require(gen1ToGen3DestinationSlotIsStructurallyEmpty(pc,target)){"The destination slot is no longer structurally empty. Existing slot data was not overwritten."}
+            require(gen3DestinationSlotIsStructurallyEmpty(pc,target)){"The destination slot is no longer structurally empty. Existing slot data was not overwritten."}
             freshPk3.copyInto(pc,off)
             val staged=parsePk3(pc,off,false)?:error("Converted PK3 could not be parsed after placement")
             require(samePk3(staged,freshConverted)){"The staged PK3 did not preserve every supported converted field."}
@@ -57858,12 +57858,12 @@ class MainActivity : Activity() {
         if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return}
         var choiceConsumed=false
         if(importedFile?.absolutePath!=openedFile.absolutePath)return showDialog("Gen 2 → Gen 3","The active save changed before destination selection. Reopen PSE Bank. Nothing was changed.")
-        val pc=gen3PcBuffer(destination)?:return showDialog("Gen 2 → Gen 3","PSE could not read Gen 3 PC storage.");val empties=(0 until 420).filter{parsePk3(pc,4+it*80,false)==null};if(empties.isEmpty())return showDialog("Gen 2 → Gen 3","No empty Gen 3 PC slot is available. Nothing was changed.");val first=empties.first()
+        val pc=gen3PcBuffer(destination)?:return showDialog("Gen 2 → Gen 3","PSE could not read Gen 3 PC storage.");val empties=(0 until 420).filter{gen3DestinationSlotIsStructurallyEmpty(pc,it)};if(empties.isEmpty())return showDialog("Gen 2 → Gen 3","No structurally empty native Gen 3 PC slot is available. Existing or nonzero slot data was left unchanged.");val first=empties.first()
         val sourcePpUps=gen2BankToGen3PpUps(bankBytes)
         val preview=buildString{
             append("PSE Bank conversion preview\n\n")
             append(gen2ToGen3LegaliseChanges(plan)).append("\n\n")
-            append("First empty destination: Box ${first/30+1}, Slot ${first%30+1}; Choose Box / Slot can select another empty slot.\n")
+            append("First structurally empty destination: Box ${first/30+1}, Slot ${first%30+1}; Choose Box / Slot can select another structurally empty slot. Every nonzero destination record remains unchanged.\n")
             append("Preserved: species, nickname, original OT/TID, EXP, level, moves, current PP (${converted.movePP.joinToString("/")}), PP Ups (${sourcePpUps.joinToString("/")}), happiness ${converted.friendship}, Pokérus strain ${converted.pokerusStrain}/days ${converted.pokerusDays}, and shiny state (${converted.shiny}).\n")
             append("PID: ${"%08X".format(converted.pid)}; SID becomes 0; nature #${converted.nature} is EXP mod 25; gender becomes #${plan.gender}; ability slot becomes ${converted.abilityNumber}.\n")
             append("IVs: deterministic Gen 3 mapping ${converted.ivs.joinToString("/")}. EVs: Gen 2 Stat Exp ÷ 257, with the single Special budget split across SpA/SpD and total capped at 510; final ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")
@@ -57873,7 +57873,7 @@ class MainActivity : Activity() {
             append("Egg and unsupported native fields remain empty. This is a reviewed PSE native PK3 conversion and does not claim official migration provenance.\n\n")
             append("The source save stays unchanged. The exact Bank record remains until a Keep-pinned destination backup, native PK3, current PP and PP Ups, Pokédex mirrors, affected Gen 3 checksums and reopened destination all verify. The retained destination backup and independent Bank recovery snapshot stay byte-exact through Bank cleanup; failure restores the destination and Bank record independently.")
         }
-        AlertDialog.Builder(this).setTitle("PSE Convert "+(source.nickname.ifBlank{GEN2_NATIONAL_NAMES.getOrElse(source.species-1){"Pokémon"}})+" to Gen 3").setMessage(preview).setPositiveButton("First Empty (Box ${first/30+1} / Slot ${first%30+1})"){_,_->if(choiceConsumed){showDialog("Gen 2 → Gen 3","This destination choice was already submitted. Reopen PSE Bank.");return@setPositiveButton};choiceConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton};transferGen2BankToGen3(bankFile,source,bankBytes,destination,meta,plan,pk3,converted,first,openedFile,openedUri,openedLabel)}.setNeutralButton("Choose Box / Slot"){_,_->if(choiceConsumed){showDialog("Gen 2 → Gen 3","This destination choice was already submitted. Reopen PSE Bank.");return@setNeutralButton};choiceConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return@setNeutralButton};showGen2ToGen3BoxPicker(bankFile,source,bankBytes,destination,meta,plan,pk3,converted,pc,openedFile,openedUri,openedLabel)}.setNegativeButton("Cancel",null).show()
+        AlertDialog.Builder(this).setTitle("PSE Convert "+(source.nickname.ifBlank{GEN2_NATIONAL_NAMES.getOrElse(source.species-1){"Pokémon"}})+" to Gen 3").setMessage(preview).setPositiveButton("First structurally empty (Box ${first/30+1} / Slot ${first%30+1})"){_,_->if(choiceConsumed){showDialog("Gen 2 → Gen 3","This destination choice was already submitted. Reopen PSE Bank.");return@setPositiveButton};choiceConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton};transferGen2BankToGen3(bankFile,source,bankBytes,destination,meta,plan,pk3,converted,first,openedFile,openedUri,openedLabel)}.setNeutralButton("Choose Box / Slot"){_,_->if(choiceConsumed){showDialog("Gen 2 → Gen 3","This destination choice was already submitted. Reopen PSE Bank.");return@setNeutralButton};choiceConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return@setNeutralButton};showGen2ToGen3BoxPicker(bankFile,source,bankBytes,destination,meta,plan,pk3,converted,pc,openedFile,openedUri,openedLabel)}.setNegativeButton("Cancel",null).show()
     }
 
     private fun showGen2ToGen3BoxPicker(bankFile:File,source:Gen2Pokemon,bankBytes:ByteArray,destination:ByteArray,meta:Gen1ToGen7TransferMeta,plan:Gen2ToGen3LegalisePlan,pk3:ByteArray,converted:PokemonEntry,pc:ByteArray,openedFile:File,openedUri:Uri?,openedLabel:String?){
@@ -57882,7 +57882,7 @@ class MainActivity : Activity() {
         if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return}
         var boxConsumed=false;var transferConsumed=false
         if(importedFile?.absolutePath!=openedFile.absolutePath)return showDialog("Gen 2 → Gen 3","The active save changed before box selection. Reopen PSE Bank. Nothing was changed.")
-        val boxes=(0 until 14).filter{b->(0 until 30).any{s->parsePk3(pc,4+(b*30+s)*80,false)==null}};AlertDialog.Builder(this).setTitle("Choose Gen 3 destination box").setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,w->if(boxConsumed){showDialog("Gen 2 → Gen 3","This box choice was already submitted. Reopen PSE Bank.");return@setItems};boxConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return@setItems};val b=boxes[w];val empties=(0 until 30).filter{s->parsePk3(pc,4+(b*30+s)*80,false)==null};AlertDialog.Builder(this).setTitle("Box ${b+1} • choose slot").setItems(empties.map{"Slot ${it+1}"}.toTypedArray()){_,sw->if(transferConsumed){showDialog("Gen 2 → Gen 3","This transfer was already submitted. Reopen PSE Bank.");return@setItems};transferConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return@setItems};transferGen2BankToGen3(bankFile,source,bankBytes,destination,meta,plan,pk3,converted,b*30+empties[sw],openedFile,openedUri,openedLabel)}.setNegativeButton("Cancel",null).show()}.setNegativeButton("Cancel",null).show()
+        val boxes=(0 until 14).filter{b->(0 until 30).any{s->gen3DestinationSlotIsStructurallyEmpty(pc,b*30+s)}};AlertDialog.Builder(this).setTitle("Choose Gen 3 destination box").setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,w->if(boxConsumed){showDialog("Gen 2 → Gen 3","This box choice was already submitted. Reopen PSE Bank.");return@setItems};boxConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return@setItems};val b=boxes[w];val empties=(0 until 30).filter{s->gen3DestinationSlotIsStructurallyEmpty(pc,b*30+s)};AlertDialog.Builder(this).setTitle("Box ${b+1} • choose structurally empty slot").setItems(empties.map{"Slot ${it+1}"}.toTypedArray()){_,sw->if(transferConsumed){showDialog("Gen 2 → Gen 3","This transfer was already submitted. Reopen PSE Bank.");return@setItems};transferConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return@setItems};transferGen2BankToGen3(bankFile,source,bankBytes,destination,meta,plan,pk3,converted,b*30+empties[sw],openedFile,openedUri,openedLabel)}.setNegativeButton("Cancel",null).show()}.setNegativeButton("Cancel",null).show()
     }
 
     private fun transferGen2BankToGen3(bankFile:File,expected:Gen2Pokemon,expectedBank:ByteArray,preparedDestination:ByteArray,meta:Gen1ToGen7TransferMeta,plan:Gen2ToGen3LegalisePlan,preparedPk3:ByteArray,prepared:PokemonEntry,target:Int,openedFile:File,openedUri:Uri?,openedLabel:String?){
@@ -57897,7 +57897,7 @@ class MainActivity : Activity() {
             val bank=bankFile.readBytes();require(bank.contentEquals(expectedBank)){"The selected Gen 2 Bank bytes changed after confirmation."};val source=parseGen2BankPayload(bank)?:error("The selected Gen 2 Bank record is invalid.");require(sameGen2BankRecord(source,expected)){"The selected Gen 2 Pokémon changed after confirmation."};require(plan==gen2ToGen3LegalisePlan(source,meta)){"The prepared Gen 3 Legalise plan no longer matches the selected Pokémon."};gen2ToGen3Rejection(source,plan,meta)?.let{error(it)}
             val expectedPpUps=gen2BankToGen3PpUps(bank);require(expectedPpUps.all{it in 0..3}&&(0..3).all{i->source.moves[i]!=0||(source.movePP[i]==0&&expectedPpUps[i]==0)}){"The Gen 2 PP-Up state cannot be preserved safely."}
             val pk3=buildGen2ToGen3Pk3(bank,source,fresh,meta,plan);val converted=parsePk3(pk3,0,false)?:error("The refreshed PK3 could not be parsed.");require(pk3.contentEquals(preparedPk3)&&sameGen2ToGen3Pk3(converted,prepared)&&gen3MovePpUps(pk3).contentEquals(expectedPpUps)){"The reviewed PK3 or PP-Up conversion changed before the write."}
-            val save=fresh.copyOf();val pc=gen3PcBuffer(save)?:error("Could not reconstruct Gen 3 PC storage.");val beforePc=pc.copyOf();val off=4+target*80;require(parsePk3(pc,off,false)==null){"The destination slot is no longer empty."};pk3.copyInto(pc,off);val stagedBytes=pc.copyOfRange(off,off+80);val staged=parsePk3(stagedBytes,0,false)?:error("The staged PK3 could not be parsed.");require(sameGen2ToGen3Pk3(staged,converted)&&gen3MovePpUps(stagedBytes).contentEquals(expectedPpUps)){"The staged PK3 changed or lost PP-Up data."};require(pc.indices.all{it in off until off+pk3.size||pc[it]==beforePc[it]}){"Unrelated Gen 3 PC data changed during staging."}
+            val save=fresh.copyOf();val pc=gen3PcBuffer(save)?:error("Could not reconstruct Gen 3 PC storage.");val beforePc=pc.copyOf();val off=4+target*80;require(gen3DestinationSlotIsStructurallyEmpty(pc,target)){"The destination slot is no longer structurally empty. Existing slot data was not overwritten."};pk3.copyInto(pc,off);val stagedBytes=pc.copyOfRange(off,off+80);val staged=parsePk3(stagedBytes,0,false)?:error("The staged PK3 could not be parsed.");require(sameGen2ToGen3Pk3(staged,converted)&&gen3MovePpUps(stagedBytes).contentEquals(expectedPpUps)){"The staged PK3 changed or lost PP-Up data."};require(pc.indices.all{it in off until off+pk3.size||pc[it]==beforePc[it]}){"Unrelated Gen 3 PC data changed during staging."}
             writeGen1ToGen3PcAndDexFrozen(save,pc,converted.species);require(gen3SaveValid(save)&&gen2ToGen3DexRegistered(save,converted.species)){"The staged Gen 3 checksums or Pokédex mirrors failed verification."};
             require(bankFile.readBytes().contentEquals(expectedBank)){"The selected Gen 2 Bank record changed during staging."}
             require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(fresh)){"The active Gen 3 destination changed during staging. Nothing was written."}
@@ -57983,8 +57983,8 @@ class MainActivity : Activity() {
         if(binding!=null&&(!destination.contentEquals(binding.destination)||binding.bankImages.size!=selected.size||!binding.bankImages.zip(selected).all{(image,item)->image.first==item.first.absolutePath&&image.second.contentEquals(item.second)}))return showDialog("Gen 2 → Gen 3 multi-transfer","The original destination or ordered Bank selection changed after Legalise confirmation. Nothing was changed.")
         fun snapshotsMatch()=bound()&&runCatching{file.readBytes().contentEquals(destination)&&selected.all{it.first.readBytes().contentEquals(it.second)}}.getOrDefault(false)
         val pc=gen3PcBuffer(destination)?:return showDialog("Gen 2 → Gen 3 multi-transfer","PSE could not reconstruct Gen 3 PC storage. Nothing was changed.")
-        val targets=(0 until 14).mapNotNull{box->val empty=(0 until 30).filter{slot->parsePk3(pc,4+(box*30+slot)*80,false)==null};if(empty.size>=selected.size)box to empty else null}
-        if(targets.isEmpty())return showDialog("Gen 2 → Gen 3 multi-transfer","No single Gen 3 PC box has room for all ${selected.size} selected Pokémon. Nothing was changed.")
+        val targets=(0 until 14).mapNotNull{box->val empty=(0 until 30).filter{slot->gen3DestinationSlotIsStructurallyEmpty(pc,box*30+slot)};if(empty.size>=selected.size)box to empty.take(selected.size) else null}
+        if(targets.isEmpty())return showDialog("Gen 2 → Gen 3 multi-transfer","No single Gen 3 PC box has ${selected.size} structurally empty slots for the complete selection. Existing or nonzero slot data was left unchanged; free capacity, reduce the selection, or load another valid save.")
         val prepared=ArrayList<Gen2Gen3BatchPrepared>();val requiredPlans=linkedMapOf<String,Gen2ToGen3LegalisePlan>()
         fun stop(message:String){showDialog("Gen 2 → Gen 3 multi-transfer",message+" Every selected Bank record and the destination were left unchanged.")}
         var expectedIndex=0;var pickerOffered=false;var transferConsumed=false
@@ -58008,11 +58008,11 @@ class MainActivity : Activity() {
                 }
                 if(confirmedPlans!=requiredPlans)return stop("The prepared Gen 3 Legalise plan no longer matches this selection.")
                 AlertDialog.Builder(this).setTitle("Make ${prepared.size} Pokémon legal for Gen 3")
-                    .setMessage("Legalise is confirmed for the complete selection. PSE will place every converted native PK3 in selection order, register all Pokédex mirrors, verify the exact reopened destination, then remove the original Gen 2 Bank records last. Stale state is rejected. A verified kept Gen 3 recovery backup is required before writing. Recovery is reported only after verification; review the retained backup, working save and remaining Bank records if recovery cannot be verified.")
-                    .setItems(targets.map{(box,empty)->"Box ${box+1} • ${empty.size} empty slots"}.toTypedArray()){_,which->
+                    .setMessage("Legalise is confirmed for the complete selection. Choose the exact ordered structurally empty native PK3 slots. PSE preserves every nonzero destination record, places every converted PK3 in selection order, registers all Pokédex mirrors, verifies the exact reopened destination, then removes the original Gen 2 Bank records last. Stale state is rejected. A verified kept Gen 3 recovery backup is required before writing. This remains a PSE conversion with no official migration or verified provenance claim.")
+                    .setItems(targets.map{(box,slots)->"Box ${box+1} • Slots ${slots.joinToString(", "){(it+1).toString()}}"}.toTypedArray()){_,which->
                         if(transferConsumed){showDialog("Gen 2 → Gen 3 multi-transfer","This batch transfer was already submitted. Reopen PSE Bank.");return@setItems};transferConsumed=true
                         if(!snapshotsMatch()){stop("The destination identity or prepared snapshots changed before selection.");return@setItems}
-                        transferSelectedGen2BankToGen3(prepared,destination,targets[which].first,file,openedUri,openedLabel)
+                        val(box,slots)=targets[which];transferSelectedGen2BankToGen3(prepared,destination,box,slots,file,openedUri,openedLabel)
                     }
                     .setNegativeButton("Cancel",null).show();return
             }
@@ -58034,7 +58034,7 @@ class MainActivity : Activity() {
         next(0)
     }
 
-    private fun transferSelectedGen2BankToGen3(prepared:List<Gen2Gen3BatchPrepared>,preparedDestination:ByteArray,targetBox:Int,openedFile:File,openedUri:Uri?,openedLabel:String?){
+    private fun transferSelectedGen2BankToGen3(prepared:List<Gen2Gen3BatchPrepared>,preparedDestination:ByteArray,targetBox:Int,targetSlots:List<Int>,openedFile:File,openedUri:Uri?,openedLabel:String?){
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         if(!bound()){showDialog("Gen 2 → Gen 3 multi-transfer","The destination identity changed. Reopen PSE Bank. Nothing was changed.");return}
         if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog("Gen 2 → Gen 3 multi-transfer","The active save changed after destination selection. Reopen the Bank selection. Nothing was changed.");return}
@@ -58042,11 +58042,11 @@ class MainActivity : Activity() {
         var safetyBackup:File?=null
         try{
             require(bound()){"The destination identity changed before batch validation."}
-            require(prepared.isNotEmpty()){"The prepared selection is empty."};require(prepared.map{it.bankFile.absolutePath}.distinct().size==prepared.size){"The prepared selection contains a duplicate Bank entry."};require(fresh.contentEquals(preparedDestination)&&generationForSize(fresh.size)==3&&gen3SaveValid(fresh)){"The Gen 3 destination changed or is no longer valid."};require(targetBox in 0..13){"The selected Gen 3 destination box is invalid."}
+            require(prepared.isNotEmpty()){"The prepared selection is empty."};require(prepared.map{it.bankFile.absolutePath}.distinct().size==prepared.size){"The prepared selection contains a duplicate Bank entry."};require(fresh.contentEquals(preparedDestination)&&generationForSize(fresh.size)==3&&gen3SaveValid(fresh)){"The Gen 3 destination changed or is no longer valid."};require(targetBox in 0..13){"The selected Gen 3 destination box is invalid."};require(targetSlots.size==prepared.size&&targetSlots.distinct().size==targetSlots.size&&targetSlots.all{it in 0 until 30}){"The reviewed Gen 3 destination slots are invalid."}
             val refreshed=prepared.map{item->val bank=item.bankFile.readBytes();require(bank.contentEquals(item.bankBytes)){"A selected Gen 2 Bank record changed after preparation."};val source=parseGen2BankPayload(bank)?:error("A selected Gen 2 Bank record is invalid.");require(sameGen2BankRecord(source,item.source)){"A selected Gen 2 Pokémon changed after preparation."};require(item.plan==gen2ToGen3LegalisePlan(source,item.meta)){"A prepared Gen 3 Legalise plan no longer matches a selected Pokémon."};gen2ToGen3Rejection(source,item.plan,item.meta)?.let{error(it)};val pk3=buildGen2ToGen3Pk3(bank,source,fresh,item.meta,item.plan);val converted=parsePk3(pk3,0,false)?:error("A refreshed PK3 could not be parsed.");require(pk3.contentEquals(item.pk3)&&sameGen2ToGen3Pk3(converted,item.converted)){"A prepared PK3 conversion changed before staging."};item}
-            val save=fresh.copyOf();val pc=gen3PcBuffer(save)?:error("Could not reconstruct Gen 3 PC storage.");val beforePc=pc.copyOf();val empty=(0 until 30).filter{slot->parsePk3(pc,4+(targetBox*30+slot)*80,false)==null};require(empty.size>=refreshed.size){"Gen 3 Box ${targetBox+1} no longer has room for the complete selection."}
+            val save=fresh.copyOf();val pc=gen3PcBuffer(save)?:error("Could not reconstruct Gen 3 PC storage.");val beforePc=pc.copyOf();require(targetSlots.all{slot->gen3DestinationSlotIsStructurallyEmpty(pc,targetBox*30+slot)}){"A reviewed Gen 3 destination slot is no longer structurally empty. Existing slot data was not overwritten."}
             val expected=ArrayList<Triple<Int,ByteArray,PokemonEntry>>()
-            for(i in refreshed.indices){val item=refreshed[i];val target=targetBox*30+empty[i];val off=4+target*80;require(parsePk3(pc,off,false)==null){"A destination slot is no longer empty."};item.pk3.copyInto(pc,off);val staged=parsePk3(pc,off,false)?:error("A staged PK3 could not be parsed.");require(sameGen2ToGen3Pk3(staged,item.converted)){"A staged PK3 changed."};expected.add(Triple(target,item.pk3,staged))}
+            for(i in refreshed.indices){val item=refreshed[i];val target=targetBox*30+targetSlots[i];val off=4+target*80;require(gen3DestinationSlotIsStructurallyEmpty(pc,target)){"Box ${targetBox+1} • Slot ${targetSlots[i]+1} is no longer structurally empty. Existing slot data was not overwritten."};item.pk3.copyInto(pc,off);val staged=parsePk3(pc,off,false)?:error("A staged PK3 could not be parsed.");require(sameGen2ToGen3Pk3(staged,item.converted)){"A staged PK3 changed."};expected.add(Triple(target,item.pk3,staged))}
             val changed=expected.flatMap{(target,bytes,_)->val off=4+target*80;(off until off+bytes.size).toList()}.toHashSet();require(pc.indices.all{it in changed||pc[it]==beforePc[it]}){"Unrelated Gen 3 PC data changed during batch staging."}
             val dexes=expected.map{it.third.species};writeSelectedGen1ToGen3PcAndDexFrozen(save,pc,dexes);require(gen3SaveValid(save)&&dexes.distinct().all{gen2ToGen3DexRegistered(save,it)}){"The staged Gen 3 checksums or Pokédex mirrors failed verification."}
             require(refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"A selected Gen 2 Bank record changed during staging."}
