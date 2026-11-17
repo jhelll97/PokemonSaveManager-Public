@@ -52397,6 +52397,13 @@ class MainActivity : Activity() {
         val(len,local,mirror)=gen5PokedexBlock(p);val crc=gen4Crc16Ccitt(save,base,base+len);writeU16LE(save,local,crc);writeU16LE(save,mirror,crc);val tableCrc=gen4Crc16Ccitt(save,p.checksumTable,p.checksumTable+p.checksumTableLength);writeU16LE(save,p.checksumBlockChecksumOffset,tableCrc)
     }
     private fun gen1ToGen5DexRegistered(save:ByteArray,p:Gen5Profile,mon:PokemonEntry):Boolean{val bit=mon.species-1;val mask=1 shl(bit and 7);val byte=bit/8;val region=(if(mon.shiny)2 else 0) or (mon.gender and 1);val base=p.pokedexOffset;return (save[base+0x08+byte].toInt() and mask)!=0&&(save[base+0x5C+region*0x54+byte].toInt() and mask)!=0&&(0..3).any{(save[base+0x1AC+it*0x54+byte].toInt() and mask)!=0}}
+    private fun gen5DestinationSlotIsStructurallyEmpty(data:ByteArray,global:Int):Boolean{
+        if(global !in 0 until 720)return false
+        val off=0x00400+(global/30)*0x1000+(global%30)*136
+        if(off<0||off+136>data.size)return false
+        val raw=data.copyOfRange(off,off+136)
+        return raw.all{it==0.toByte()}&&parsePk5(raw,false)==null
+    }
     private fun chooseGen1BankToGen5Destination(bankFile:File,p:Gen1Pokemon){
         val file=importedFile?:return
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
@@ -52426,8 +52433,8 @@ class MainActivity : Activity() {
             }
             val converted=parsePk5(pk5,false)
                 ?:return@loadGen1ToGen5MetaAsync showDialog("Gen 1 → Gen 5","The prepared native PK5 could not be reopened.")
-            val targets=(0 until 24*30).filter{val o=0x00400+(it/30)*0x1000+(it%30)*136;parsePk5(data.copyOfRange(o,o+136),false)==null}
-            if(targets.isEmpty())return@loadGen1ToGen5MetaAsync showDialog("Gen 1 → Gen 5","No empty Gen 5 PC slot is available.")
+            val targets=(0 until 24*30).filter{gen5DestinationSlotIsStructurallyEmpty(data,it)}
+            if(targets.isEmpty())return@loadGen1ToGen5MetaAsync showDialog("Gen 1 → Gen 5","No structurally empty Gen 5 PC slot is available. Nonzero records were left unchanged.")
             val first=targets.first()
             val sourceShiny=source.dvs[2]==10&&source.dvs[3]==10&&source.dvs[4]==10&&source.dvs[1] in setOf(2,3,6,7,10,11,14,15)
             val preview=buildString{
@@ -52437,12 +52444,13 @@ class MainActivity : Activity() {
                 append("IVs: each Gen 1 DV is doubled; Special is copied to both Special Attack and Special Defense. Final HP/Atk/Def/Spe/SpA/SpD: ${converted.ivs.joinToString("/")}.\n")
                 append("EVs: each Stat Exp value is divided by 257; Special is copied to both special stats, then the highest values are trimmed only if needed to fit the Gen 5 total cap of 510. Final HP/Atk/Def/Spe/SpA/SpD: ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")
                 append("Ability: destination-valid ability #${converted.ability}. Required native defaults: base friendship ${converted.friendship}, English language, no held item, Poké Ball, met level ${source.level}, destination-compatible origin #${converted.originGame}, and empty met/egg dates and locations. The Gen 1 catch-rate byte and fields without a native PK5 representation are omitted.\n\n")
+                append("The selected destination is structurally empty; nonzero destination records remain unchanged.\n\n")
                 append("Nintendo provided no direct Gen 1 → Gen 5 route. This is a PSE native PK5 conversion, not an official migration or provenance claim. The source save stays unchanged. The exact Gen 1 Bank record remains until a retained recovery backup, the selected PK5, Pokédex, box/checksum-table validation and reopened destination all verify.")
             }
             AlertDialog.Builder(this)
                 .setTitle("PSE Convert ${source.nickname.ifBlank{gen1SpeciesNameFromInternal(source.species)}} to Gen 5")
                 .setMessage(preview)
-                .setPositiveButton("First Empty (Box ${first/30+1} / Slot ${first%30+1})"){_,_->
+                .setPositiveButton("First Structurally Empty (Box ${first/30+1} / Slot ${first%30+1})"){_,_->
                     if(!snapshotsMatch())showDialog("Gen 1 → Gen 5","The destination or Bank record changed after review. Nothing was changed.")
                     else transferGen1BankToGen5(bankFile,source,opened,meta,pk5,converted,first,file,openedUri,openedLabel)
                 }
@@ -52468,7 +52476,7 @@ class MainActivity : Activity() {
             val source=parseGen1BankPayload(bank)?:error("The selected Bank record is invalid.")
             require(bank.contentEquals(openedBank)&&sameGen1TransferRecord(source,expected)){"The Bank record changed before transfer."}
             val box=target/30;val off=0x00400+box*0x1000+(target%30)*136
-            require(parsePk5(original.copyOfRange(off,off+136),false)==null){"The destination slot is no longer empty."}
+            require(gen5DestinationSlotIsStructurallyEmpty(original,target)){"The destination slot is no longer structurally empty. Nonzero records were left unchanged."}
             val freshPk5=buildGen1ToGen5Pk5(bank,source,original,meta)
             require(freshPk5.contentEquals(preparedPk5)&&gen5Pk5PpUps(freshPk5).contentEquals(source.movePpUps)){"The prepared conversion changed before confirmation."}
             val save=original.copyOf();freshPk5.copyInto(save,off)
@@ -52525,12 +52533,12 @@ class MainActivity : Activity() {
     private fun prepareSelectedGen1BankToGen5(chosen:List<File>){
         val file=importedFile?:return;if(chosen.isEmpty())return showDialog("Gen 1 → Gen 5 multi-transfer","Select one or more Gen 1 Bank Pokémon first.");if(chosen.map{it.absolutePath}.distinct().size!=chosen.size)return showDialog("Gen 1 → Gen 5 multi-transfer","The selection contains the same Bank entry more than once. Nothing was changed.")
         val destination=runCatching{file.readBytes()}.getOrNull()?:return;val profile=detectGen5Profile(destination)?:return showDialog("Gen 1 → Gen 5 multi-transfer","Load a valid Generation 5 save first.");if(!gen5ChecksumTableValid(destination,profile)||(0 until 24).any{!gen5BoxChecksumValid(destination,it,profile)})return showDialog("Gen 1 → Gen 5 multi-transfer","The destination failed storage/checksum-table validation.")
-        val hasCapacity=(0 until 24).any{box->(0 until 30).count{slot->val o=0x00400+box*0x1000+slot*136;parsePk5(destination.copyOfRange(o,o+136),false)==null}>=chosen.size};if(!hasCapacity)return showDialog("Gen 1 → Gen 5 multi-transfer","No single Gen 5 PC box has room for all ${chosen.size} selected Pokémon. Nothing was changed.")
+        val hasCapacity=(0 until 24).any{box->(0 until 30).count{slot->gen5DestinationSlotIsStructurallyEmpty(destination,box*30+slot)}>=chosen.size};if(!hasCapacity)return showDialog("Gen 1 → Gen 5 multi-transfer","No single Gen 5 PC box has enough structurally empty slots for all ${chosen.size} selected Pokémon. Nonzero records were left unchanged.")
         val selected=try{chosen.map{bank->val bytes=bank.readBytes();val source=parseGen1BankPayload(bytes)?:error("A selected Gen 1 Bank record is invalid.");Triple(bank,bytes,source)}}catch(e:Exception){return showDialog("Gen 1 → Gen 5 multi-transfer",e.message?:"A selected Bank record could not be read.")};val prepared=ArrayList<Gen1Gen5BatchPrepared>()
         fun stop(message:String){showDialog("Gen 1 → Gen 5 multi-transfer",message)};fun next(index:Int){if(index>=selected.size){chooseSelectedGen1BankToGen5Destination(prepared,destination);return};val(bank,bytes,source)=selected[index];val dex=gen1DexFromInternalIndex(source.species)?:return stop("A selected species could not be mapped.");loadGen1ToGen5MetaAsync(dex){meta->if(meta==null)return@loadGen1ToGen5MetaAsync stop("PSE could not resolve Generation 5 conversion data. Every Bank record was kept.");val pk5=try{buildGen1ToGen5Pk5(bytes,source,destination,meta)}catch(e:Exception){return@loadGen1ToGen5MetaAsync stop(e.message?:"A selected Pokémon could not be converted.")};val converted=parsePk5(pk5,false)?:return@loadGen1ToGen5MetaAsync stop("A prepared PK5 could not be verified.");prepared.add(Gen1Gen5BatchPrepared(bank,bytes,source,meta,pk5,converted));next(index+1)}};next(0)
     }
     private fun chooseSelectedGen1BankToGen5Destination(prepared:List<Gen1Gen5BatchPrepared>,preparedDestination:ByteArray){
-        val file=importedFile?:return;val data=runCatching{file.readBytes()}.getOrNull()?:return;if(!data.contentEquals(preparedDestination))return showDialog("Gen 1 → Gen 5 multi-transfer","The destination changed while conversions were prepared. Nothing was written.");val targets=(0 until 24).mapNotNull{box->val empty=(0 until 30).count{slot->val o=0x00400+box*0x1000+slot*136;parsePk5(data.copyOfRange(o,o+136),false)==null};if(empty>=prepared.size)box to empty else null};if(targets.isEmpty())return showDialog("Gen 1 → Gen 5 multi-transfer","No single Gen 5 PC box has room for the complete batch.");var selected=0;AlertDialog.Builder(this).setTitle("Convert ${prepared.size} Gen 1 Pokémon → Gen 5").setMessage("Every PK5 conversion will be staged, registered, checksummed, persisted and re-read before any Gen 1 Bank entry is removed.").setSingleChoiceItems(targets.map{"Box ${it.first+1} • ${it.second} empty slots"}.toTypedArray(),selected){_,which->selected=which}.setNegativeButton("Cancel",null).setPositiveButton("Convert"){_,_->transferSelectedGen1BankToGen5(prepared,preparedDestination,targets[selected].first)}.show()
+        val file=importedFile?:return;val data=runCatching{file.readBytes()}.getOrNull()?:return;if(!data.contentEquals(preparedDestination))return showDialog("Gen 1 → Gen 5 multi-transfer","The destination changed while conversions were prepared. Nothing was written.");val targets=(0 until 24).mapNotNull{box->val empty=(0 until 30).count{slot->gen5DestinationSlotIsStructurallyEmpty(data,box*30+slot)};if(empty>=prepared.size)box to empty else null};if(targets.isEmpty())return showDialog("Gen 1 → Gen 5 multi-transfer","No single Gen 5 PC box has enough structurally empty slots for the complete batch. Nonzero records were left unchanged.");var selected=0;AlertDialog.Builder(this).setTitle("Convert ${prepared.size} Gen 1 Pokémon → Gen 5").setMessage("Every PK5 conversion will use a structurally empty slot, then be staged, registered, checksummed, persisted and re-read before any Gen 1 Bank entry is removed. Nonzero destination records remain unchanged.").setSingleChoiceItems(targets.map{"Box ${it.first+1} • ${it.second} structurally empty slots"}.toTypedArray(),selected){_,which->selected=which}.setNegativeButton("Cancel",null).setPositiveButton("Convert"){_,_->transferSelectedGen1BankToGen5(prepared,preparedDestination,targets[selected].first)}.show()
     }
     private fun transferSelectedGen1BankToGen5(prepared:List<Gen1Gen5BatchPrepared>,preparedDestination:ByteArray,box:Int){
         val file=importedFile?:return
@@ -52556,12 +52564,12 @@ class MainActivity : Activity() {
                 require(pk5.contentEquals(item.pk5)&&samePk5(q,item.converted)&&gen5Pk5PpUps(pk5).contentEquals(source.movePpUps)){"A prepared conversion or PP-Up value changed before confirmation."}
                 Gen1Gen5BatchPrepared(item.bankFile,bytes,source,item.meta,pk5,q)
             }
-            val empty=(0 until 30).filter{slot->val o=0x00400+box*0x1000+slot*136;parsePk5(fresh.copyOfRange(o,o+136),false)==null}
-            require(empty.size>=refreshed.size){"Gen 5 Box ${box+1} no longer has room for the complete batch."}
+            val empty=(0 until 30).filter{slot->gen5DestinationSlotIsStructurallyEmpty(fresh,box*30+slot)}
+            require(empty.size>=refreshed.size){"Gen 5 Box ${box+1} no longer has enough structurally empty slots for the complete batch. Nonzero records were left unchanged."}
             val work=fresh.copyOf();val allowed=HashSet<Int>();val expected=ArrayList<Triple<Int,ByteArray,PokemonEntry>>()
             for(i in refreshed.indices){
                 val item=refreshed[i];val slot=empty[i];val target=box*30+slot;val off=0x00400+box*0x1000+slot*136
-                require(parsePk5(work.copyOfRange(off,off+136),false)==null){"A destination slot is no longer empty."}
+                require(gen5DestinationSlotIsStructurallyEmpty(work,target)){"A destination slot is no longer structurally empty. Nonzero records were left unchanged."}
                 item.pk5.copyInto(work,off);for(x in off until off+136)allowed.add(x)
                 val stagedBytes=work.copyOfRange(off,off+136);val staged=parsePk5(stagedBytes,false)?:error("A staged PK5 could not be parsed.")
                 require(stagedBytes.contentEquals(item.pk5)&&samePk5(staged,item.converted)&&gen5Pk5PpUps(stagedBytes).contentEquals(item.source.movePpUps)){"A staged PK5 did not preserve every supported converted field and PP-Up value."}
