@@ -47275,8 +47275,9 @@ class MainActivity : Activity() {
         val bank=runCatching{selected.readBytes()}.getOrNull()
             ?:return showDialog("Gen 3 → Gen 7","PSE could not read the preserved Gen 3 Bank entry.")
         val source=if(bank.size==80)parsePk3(bank,0,false)else null
-        if(source==null||source.pid!=shown.pid||source.species!=shown.species||source.tid!=shown.tid||source.sid!=shown.sid)
-            return showDialog("Gen 3 → Gen 7","The selected Bank record changed or is not a valid PK3.")
+        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
+            source.tid!=shown.tid||source.sid!=shown.sid)
+            return showDialog("Gen 3 → Gen 7","The selected Bank record changed or failed its PK3 checksum.")
         gen3ToGen7PreflightRejection(source)?.let{
             return showDialog("Gen 3 → Gen 7 blocked","$it\n\nThe Bank record and destination were left unchanged.")
         }
