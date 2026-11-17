@@ -58835,8 +58835,17 @@ private data class Gen2ToGen5LegalisePlan(
                 val restored=bankFile.readBytes()
                 require(restored.contentEquals(expectedBank)&&parseGen2BankPayload(restored)?.let{sameGen2BankRecord(it,expected)}==true){"The original Gen 2 Bank record could not be verified; no existing record was overwritten."}
             }.isSuccess
-            val destinationRestored=!writeStarted||runCatching{file.writeBytes(original);file.readBytes().contentEquals(original)&&validGen2ToGen5Destination(original)}.getOrDefault(false)
-            val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 5 destination and Gen 2 Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
+            val destinationRestored=runCatching{
+                if(writeStarted)file.writeBytes(original)
+                val restored=file.readBytes()
+                restored.contentEquals(original)&&validGen2ToGen5Destination(restored)
+            }.getOrDefault(false)
+            val recovery=when{
+                bankRestored&&destinationRestored->"The exact Gen 5 destination and Gen 2 Bank record were restored or kept and verified."
+                bankRestored->"The Gen 2 Bank record was restored or kept, but destination recovery was not verified. Use the retained recovery backup before editing again."
+                destinationRestored->"The exact Gen 5 destination was restored or kept, but Bank recovery was not verified. Keep the remaining Bank record and recovery files for review."
+                else->"Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
+            }
             showDialog("Gen 2 → Gen 5 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"Transferred Gen 2 → Gen 5 to Box "+(target/30+1)+" • Slot "+(target%30+1)+" and verified",Toast.LENGTH_LONG).show();showBank()
