@@ -12627,7 +12627,9 @@ class MainActivity : Activity() {
         if(selected.parentFile!=root||!selected.extension.equals("pk5",true))return showDialog("Gen 5 → Gen 6","The selected record is outside the Generation 5 PSE Bank.")
         val bank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Gen 5 → Gen 6","The Bank record could not be read.")
         val source=if(bank.size==136)parsePk5(bank,false)else null
-        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species)return showDialog("Gen 5 → Gen 6","The selected Bank record changed or failed its PK5 checksum.")
+        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
+            source.tid!=shown.tid||source.sid!=shown.sid)
+            return showDialog("Gen 5 → Gen 6","The selected Bank record changed or failed its PK5 checksum.")
         gen5ToGen6PreflightRejection(source)?.let{return showDialog("Gen 5 → Gen 6 blocked","$it\n\nThe Bank record and destination were left unchanged.")}
         val originTitle=gen5CompatibleOriginTitle(source.originGame)
             ?:return showDialog("Gen 5 → Gen 6 blocked","The source origin is not a documented native Generation 1–5 title. Nothing was changed.")
@@ -12724,7 +12726,8 @@ class MainActivity : Activity() {
                 }
                 5->{
                     val source=parsePk5(bank,false)?:error("The PK5 Bank record is invalid.")
-                    require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species){
+                    require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&
+                        source.tid==p.source.tid&&source.sid==p.source.sid){
                         "The selected PK5 no longer matches the reviewed Pokémon."
                     }
                     sourcePpUps=gen5Pk5PpUps(bank)
