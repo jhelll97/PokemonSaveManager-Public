@@ -46829,8 +46829,8 @@ class MainActivity : Activity() {
             ?:return showDialog("Gen 3 → Gen 4","The selected Bank record could not be read.")
         val source=(if(bank.size==80)parsePk3(bank,0,false)else null)
             ?:return showDialog("Gen 3 → Gen 4","The selected Bank record is not a valid PK3.")
-        if(source.pid!=shown.pid||source.species!=shown.species||source.tid!=shown.tid||source.sid!=shown.sid)
-            return showDialog("Gen 3 → Gen 4","The selected Bank record changed. Nothing was changed.")
+        if(!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||source.tid!=shown.tid||source.sid!=shown.sid)
+            return showDialog("Gen 3 → Gen 4","The selected Bank record changed or failed its PK3 checksum. Nothing was changed.")
         val needsPidLegalise=((source.pid.toInt() and 1)+1)!=source.abilityNumber
         if(needsPidLegalise)gen3ToGen4PidLegaliseRejection(source)?.let{
             return showDialog("Gen 3 → Gen 4 blocked","$it\n\nThe Bank record and destination were left unchanged.")
