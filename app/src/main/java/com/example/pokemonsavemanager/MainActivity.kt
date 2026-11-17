@@ -36256,15 +36256,12 @@ class MainActivity : Activity() {
 
     private fun chooseGen7ToGen5Destination(p:Gen7Gen5Prepared){
         if(!gen7ToGen5StillBound(p))return showDialog("Gen 7 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")
-        val empty=(0 until 720).filter{
-            val o=0x00400+(it/30)*0x1000+(it%30)*136
-            parsePk5(p.destination.copyOfRange(o,o+136),false)==null
-        }
-        if(empty.isEmpty())return showDialog("Gen 7 → Gen 5","All 720 native Generation 5 PC slots are occupied.")
+        val empty=(0 until 720).filter{gen5DestinationSlotIsStructurallyEmpty(p.destination,it)}
+        if(empty.isEmpty())return showDialog("Gen 7 → Gen 5","No structurally empty native Generation 5 PC slot is available. Nonzero records were left unchanged.")
         val first=empty.first()
         AlertDialog.Builder(this).setTitle("Choose native Gen 5 destination")
-            .setMessage("The reviewed PK5 will be written to one empty slot with scoped Pokédex and checksum updates.")
-            .setItems(arrayOf("First Empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
+            .setMessage("The reviewed PK5 will be written only to a structurally empty slot with scoped Pokédex and checksum updates. Nonzero destination records remain unchanged.")
+            .setItems(arrayOf("First Structurally Empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
                 if(!gen7ToGen5StillBound(p))showDialog("Gen 7 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")
                 else if(which==0)transferGen7BankToGen5(p,first)else showGen7ToGen5BoxPicker(p)
             }.setNegativeButton("Cancel",null).show()
@@ -36272,16 +36269,11 @@ class MainActivity : Activity() {
 
     private fun showGen7ToGen5BoxPicker(p:Gen7Gen5Prepared){
         if(!gen7ToGen5StillBound(p))return showDialog("Gen 7 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")
-        val boxes=(0 until 24).filter{box->(0 until 30).any{slot->
-            val o=0x00400+box*0x1000+slot*136
-            parsePk5(p.destination.copyOfRange(o,o+136),false)==null
-        }}
+        val boxes=(0 until 24).filter{box->(0 until 30).any{slot->gen5DestinationSlotIsStructurallyEmpty(p.destination,box*30+slot)}}
         AlertDialog.Builder(this).setTitle("Choose Gen 5 destination box")
+            .setMessage("Only boxes with structurally empty slots are listed. Nonzero destination records remain unchanged.")
             .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
-                val box=boxes[which];val slots=(0 until 30).filter{slot->
-                    val o=0x00400+box*0x1000+slot*136
-                    parsePk5(p.destination.copyOfRange(o,o+136),false)==null
-                }
+                val box=boxes[which];val slots=(0 until 30).filter{slot->gen5DestinationSlotIsStructurallyEmpty(p.destination,box*30+slot)}
                 AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
                     .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->transferGen7BankToGen5(p,box*30+slots[slotIndex])}
                     .setNegativeButton("Cancel",null).show()
@@ -36306,7 +36298,7 @@ class MainActivity : Activity() {
             val converted5=parsePk5(pk5,false)?:error("The refreshed PK5 could not be parsed.")
             require(pk5.contentEquals(p.pk5)&&sameGen6ToGen5Pk5(converted5,p.converted5)&&gen5Pk5PpUps(pk5).contentEquals(gen6Pk6PpUps(bank))){"The reviewed PK5 conversion changed before writing."}
             val box=target/30;val slot=target%30;val offset=0x00400+box*0x1000+slot*136
-            require(parsePk5(original.copyOfRange(offset,offset+136),false)==null){"The selected Generation 5 slot is no longer empty."}
+            require(gen5DestinationSlotIsStructurallyEmpty(original,target)){"The selected Generation 5 slot is no longer structurally empty. Nonzero records were left unchanged."}
             val save=original.copyOf();pk5.copyInto(save,offset)
             val staged=parsePk5(save.copyOfRange(offset,offset+136),false)?:error("The staged PK5 could not be parsed.")
             require(sameGen6ToGen5Pk5(staged,converted5)&&gen5Pk5PpUps(pk5).contentEquals(gen6Pk6PpUps(bank))){"The staged PK5 differs from the reviewed conversion."}
