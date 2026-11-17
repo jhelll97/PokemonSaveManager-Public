@@ -53493,8 +53493,8 @@ class MainActivity : Activity() {
                 val restored=bankFile.readBytes();val parsed=parseGen1BankPayload(restored)
                 restored.contentEquals(expected)&&parsed!=null&&sameGen1TransferRecord(parsed,p)
             }.getOrDefault(false)
-            val destinationRestored=!writeStarted||runCatching{
-                file.writeBytes(fresh);val restored=file.readBytes()
+            val destinationRestored=runCatching{
+                if(writeStarted)file.writeBytes(fresh);val restored=file.readBytes()
                 restored.contentEquals(fresh)&&verifyGen2SaveIntegrity(restored).first
             }.getOrDefault(false)
             if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
