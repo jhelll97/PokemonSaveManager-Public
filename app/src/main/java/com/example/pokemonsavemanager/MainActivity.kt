@@ -52124,6 +52124,11 @@ class MainActivity : Activity() {
         updateGen4BlockChecksum(save,active*0x40000,p.generalSize,p)
     }
     private fun gen1ToGen4DexRegistered(save:ByteArray,p:Gen4Profile,dex:Int):Boolean{val active=gen4ActiveBlock(save,0,p.generalSize);val base=active*0x40000+gen4PokedexBase(p);val bit=dex-1;val mask=1 shl(bit and 7);val byte=bit/8;return intArrayOf(base+0x04+byte,base+0x44+byte).all{it in save.indices&&(save[it].toInt() and mask)!=0}}
+    private data class Gen1Gen4SinglePrepared(
+        val bankFile:File,val bankBytes:ByteArray,val source:Gen1Pokemon,val destination:ByteArray,
+        val pk4:ByteArray,val converted:PokemonEntry,val destinationFile:File,
+        val sourceUri:Uri?,val sourceLabel:String?
+    )
     private fun chooseGen1BankToGen4Destination(bankFile:File,p:Gen1Pokemon){
         val file=importedFile?:return
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
@@ -52154,29 +52159,68 @@ class MainActivity : Activity() {
             }
             val converted=parsePk4(pk4,false)
                 ?:return@loadGen1ToGen4MetaAsync showDialog("Gen 1 → Gen 4","The prepared native PK4 could not be reopened.")
-            val empties=(0 until 540).filter{gen4DestinationSlotIsStructurallyEmpty(data,profile,it)}
-            if(empties.isEmpty())return@loadGen1ToGen4MetaAsync showDialog("Gen 1 → Gen 4","No structurally empty Gen 4 PC slot is available. Nonzero records were left unchanged.")
-            val first=empties.first()
-            val sourceShiny=source.dvs[2]==10&&source.dvs[3]==10&&source.dvs[4]==10&&source.dvs[1] in setOf(2,3,6,7,10,11,14,15)
-            val preview=buildString{
-                append("PSE Bank conversion preview\n\n")
-                append("Preserved: species, nickname, OT, TID, EXP, level, moves, current PP, PP Ups and shiny state (${sourceShiny}).\n")
-                append("PID: generated as ${"%08X".format(converted.pid)} to carry nature #${converted.nature} (EXP mod 25) and the reviewed shiny state; SID becomes 0.\n")
-                append("IVs: each Gen 1 DV is doubled; Special is copied to both Special Attack and Special Defense. Final HP/Atk/Def/Spe/SpA/SpD: ${converted.ivs.joinToString("/")}.\n")
-                append("EVs: each Stat Exp value is divided by 257; Special is copied to both special stats, then the highest values are trimmed only if needed to fit the Gen 4 total cap of 510. Final HP/Atk/Def/Spe/SpA/SpD: ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")
-                append("Ability: destination-valid ability #${converted.ability}. Required native defaults: base friendship ${converted.friendship}, English language, no held item, Poké Ball, met level ${source.level}, destination-compatible origin #${converted.originGame}, and empty met/egg dates and locations. The Gen 1 catch-rate byte and fields without a native PK4 representation are omitted.\n\n")
-                append("Nintendo provided no direct Gen 1 → Gen 4 route. This is a PSE native PK4 conversion, not an official migration or provenance claim. The source save stays unchanged. The exact Gen 1 Bank record remains until a retained recovery backup, the selected PK4, Pokédex, checksums and reopened destination all verify.")
-            }
-            AlertDialog.Builder(this)
-                .setTitle("PSE Convert ${source.nickname.ifBlank{gen1SpeciesNameFromInternal(source.species)}} to Gen 4")
-                .setMessage(preview)
-                .setPositiveButton("First Empty (Box ${first/30+1} / Slot ${first%30+1})"){_,_->
-                    if(!snapshotsMatch())showDialog("Gen 1 → Gen 4","The destination or Bank record changed after review. Nothing was changed.")
-                    else transferGen1BankToGen4(bankFile,source,raw,pk4,converted,first,file,openedUri,openedLabel)
-                }
-                .setNegativeButton("Cancel",null)
-                .show()
+            chooseGen1ToGen4Destination(Gen1Gen4SinglePrepared(bankFile,raw,source,data,pk4,converted,file,openedUri,openedLabel))
         }
+    }
+
+    private fun gen1ToGen4StillBound(p:Gen1Gen4SinglePrepared):Boolean=
+        importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&
+            currentSourceLabel==p.sourceLabel&&runCatching{
+                p.destinationFile.readBytes().contentEquals(p.destination)&&p.bankFile.readBytes().contentEquals(p.bankBytes)
+            }.getOrDefault(false)
+
+    private fun chooseGen1ToGen4Destination(p:Gen1Gen4SinglePrepared){
+        if(!gen1ToGen4StillBound(p))return showDialog("Gen 1 → Gen 4","The destination identity or prepared snapshots changed. Reopen PSE Bank. Nothing was changed.")
+        val profile=detectGen4Profile(p.destination)?:return showDialog("Gen 1 → Gen 4","The prepared destination is no longer a valid Gen 4 save.")
+        val empty=(0 until 540).filter{gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,it)}
+        if(empty.isEmpty())return showDialog("Gen 1 → Gen 4","No structurally empty Gen 4 PC slot is available. Nonzero records were left unchanged.")
+        val first=empty.first()
+        AlertDialog.Builder(this).setTitle("Choose native Gen 4 destination")
+            .setMessage("Choose the exact native PK4 destination. PSE lists only completely zero-filled, unparsable slots; every nonzero destination record remains unchanged.")
+            .setItems(arrayOf("First Structurally Empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
+                if(!gen1ToGen4StillBound(p))showDialog("Gen 1 → Gen 4","The destination identity or prepared snapshots changed. Reopen PSE Bank. Nothing was changed.")
+                else if(which==0)reviewGen1ToGen4Destination(p,first)else showGen1ToGen4BoxPicker(p)
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun showGen1ToGen4BoxPicker(p:Gen1Gen4SinglePrepared){
+        if(!gen1ToGen4StillBound(p))return showDialog("Gen 1 → Gen 4","The destination identity or prepared snapshots changed. Reopen PSE Bank. Nothing was changed.")
+        val profile=detectGen4Profile(p.destination)?:return showDialog("Gen 1 → Gen 4","The prepared destination is no longer a valid Gen 4 save.")
+        val boxes=(0 until 18).filter{box->(0 until 30).any{slot->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,box*30+slot)}}
+        AlertDialog.Builder(this).setTitle("Choose Gen 4 box")
+            .setMessage("Only boxes with structurally empty slots are listed. Nonzero records remain unchanged.")
+            .setItems(boxes.map{box->val count=(0 until 30).count{slot->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,box*30+slot)};"Box ${box+1} • $count structurally empty"}.toTypedArray()){_,which->
+                if(!gen1ToGen4StillBound(p))return@setItems showDialog("Gen 1 → Gen 4","The destination identity or prepared snapshots changed. Reopen PSE Bank. Nothing was changed.")
+                val box=boxes[which];val slots=(0 until 30).filter{slot->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,box*30+slot)}
+                AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
+                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
+                        if(gen1ToGen4StillBound(p))reviewGen1ToGen4Destination(p,box*30+slots[slotIndex])
+                        else showDialog("Gen 1 → Gen 4","The destination identity or prepared snapshots changed. Reopen PSE Bank. Nothing was changed.")
+                    }.setNegativeButton("Back"){_,_->showGen1ToGen4BoxPicker(p)}.setNeutralButton("Cancel",null).show()
+            }.setNegativeButton("Back"){_,_->chooseGen1ToGen4Destination(p)}.setNeutralButton("Cancel",null).show()
+    }
+
+    private fun reviewGen1ToGen4Destination(p:Gen1Gen4SinglePrepared,target:Int){
+        if(!gen1ToGen4StillBound(p))return showDialog("Gen 1 → Gen 4","The destination identity or prepared snapshots changed. Reopen PSE Bank. Nothing was changed.")
+        val profile=detectGen4Profile(p.destination)?:return showDialog("Gen 1 → Gen 4","The prepared destination is no longer a valid Gen 4 save.")
+        if(target !in 0 until 540||!gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,target))return showDialog("Gen 1 → Gen 4","The chosen destination is no longer structurally empty. Nonzero records were left unchanged.")
+        val source=p.source;val converted=p.converted;val sourceShiny=source.dvs[2]==10&&source.dvs[3]==10&&source.dvs[4]==10&&source.dvs[1] in setOf(2,3,6,7,10,11,14,15);var transferConsumed=false
+        val preview=buildString{
+            append("PSE Bank conversion preview\n\n")
+            append("Chosen destination: Box ${target/30+1}, Slot ${target%30+1}. The slot is structurally empty; nonzero destination records remain unchanged.\n")
+            append("Preserved: species, nickname, OT, TID, EXP, level, moves, current PP, PP Ups and shiny state (${sourceShiny}).\n")
+            append("PID: generated as ${"%08X".format(converted.pid)} to carry nature #${converted.nature} (EXP mod 25) and the reviewed shiny state; SID becomes 0.\n")
+            append("IVs: each Gen 1 DV is doubled; Special is copied to both Special Attack and Special Defense. Final HP/Atk/Def/Spe/SpA/SpD: ${converted.ivs.joinToString("/")}.\n")
+            append("EVs: each Stat Exp value is divided by 257; Special is copied to both special stats, then the highest values are trimmed only if needed to fit the Gen 4 total cap of 510. Final HP/Atk/Def/Spe/SpA/SpD: ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")
+            append("Ability: destination-valid ability #${converted.ability}. Required native defaults: base friendship ${converted.friendship}, English language, no held item, Poké Ball, met level ${source.level}, destination-compatible origin #${converted.originGame}, and empty met/egg dates and locations. The Gen 1 catch-rate byte and fields without a native PK4 representation are omitted.\n\n")
+            append("Nintendo provided no direct Gen 1 → Gen 4 route. This is a PSE native PK4 conversion, not an official migration or verified provenance claim. The source save stays unchanged. The exact Gen 1 Bank record remains until a retained recovery backup, the selected PK4, Pokédex, checksums and reopened destination all verify.")
+        }
+        AlertDialog.Builder(this).setTitle("PSE Convert ${source.nickname.ifBlank{gen1SpeciesNameFromInternal(source.species)}} to Gen 4")
+            .setMessage(preview).setNegativeButton("Cancel",null).setPositiveButton("Transfer to Box ${target/30+1} / Slot ${target%30+1}"){_,_->
+                if(transferConsumed){showDialog("Gen 1 → Gen 4","This transfer was already submitted. Reopen PSE Bank.");return@setPositiveButton};transferConsumed=true
+                if(!gen1ToGen4StillBound(p)){showDialog("Gen 1 → Gen 4","The destination identity or prepared snapshots changed. Nothing was changed.");return@setPositiveButton}
+                transferGen1BankToGen4(p.bankFile,p.source,p.bankBytes,p.pk4,p.converted,target,p.destinationFile,p.sourceUri,p.sourceLabel)
+            }.show()
     }
     private fun transferGen1BankToGen4(bankFile:File,expected:Gen1Pokemon,openedBank:ByteArray,preparedPk4:ByteArray,prepared:PokemonEntry,target:Int,openedFile:File,openedUri:Uri?,openedLabel:String?){
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
