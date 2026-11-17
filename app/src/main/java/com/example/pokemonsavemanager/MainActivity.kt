@@ -46437,7 +46437,7 @@ class MainActivity : Activity() {
     }
 
     private fun buildGen3ToGen2Record(raw:ByteArray,p:PokemonEntry):Triple<ByteArray,ByteArray,ByteArray>{
-        require(raw.size==80&&parsePk3(raw,0,false)?.let{it.checksumValid&&it.pid==p.pid&&it.species==p.species}==true){"The preserved Gen 3 Bank record changed or failed checksum validation."}
+        require(raw.size==80&&parsePk3(raw,0,false)?.let{it.checksumValid&&it.pid==p.pid&&it.species==p.species&&it.tid==p.tid&&it.sid==p.sid}==true){"The preserved Gen 3 Bank record changed or failed checksum validation."}
         gen3ToGen2Blocker(p)?.let{error(it)}
         val growth=canonicalGen2Growth(p.species)?:error("The Generation 2 growth group is unavailable for this species.")
         val level=gen2LevelForExperience(growth,p.experience).coerceIn(1,100)
@@ -46470,7 +46470,7 @@ class MainActivity : Activity() {
         if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk3",true))return showDialog("Gen 3 → Gen 2","The selected record is outside the Gen 3 PSE Bank.")
         val bank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Gen 3 → Gen 2","The selected Bank record could not be read.")
         val source=if(bank.size==80)parsePk3(bank,0,false)else null
-        if(source==null||source.pid!=shown.pid||source.species!=shown.species||source.tid!=shown.tid||source.sid!=shown.sid)return showDialog("Gen 3 → Gen 2","The selected Bank record changed or failed validation.")
+        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||source.tid!=shown.tid||source.sid!=shown.sid)return showDialog("Gen 3 → Gen 2","The selected Bank record changed or failed validation.")
         gen3ToGen2Blocker(source)?.let{return showDialog("Gen 3 → Gen 2 blocked","$it\n\nThe Bank record and destination were left unchanged.")}
         val conversion=try{buildGen3ToGen2Record(bank,source)}catch(e:Exception){return showDialog("Gen 3 → Gen 2 blocked",(e.message?:"No safe mapping is available.")+"\n\nThe Bank record and destination were left unchanged.")}
         val (mon,ot,nick)=conversion
@@ -46500,7 +46500,7 @@ class MainActivity : Activity() {
             val fresh=file.readBytes();require(bound()&&fresh.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(fresh).first){"The destination save or source identity changed. Reopen PSE Bank."}
             val profile=detectGen2Profile(fresh)?:error("The destination is no longer a valid Gen 2 save.");require(profile.key==profileKey&&targetBox in 1..14){"The selected Gen 2 profile or PC Box changed."}
             val base=gen2BoxOffset(targetBox);val count=fresh[base].toInt()and 0xFF;require(count in 0..19){"The selected Gen 2 Box is full or structurally invalid."}
-            val before=gen2LocationPayloads(fresh,"Box $targetBox",profile);val currentBank=bankFile.readBytes();require(currentBank.contentEquals(bankBytes)){"The selected Gen 3 Bank record changed."};val current=parsePk3(currentBank,0,false)?:error("The Gen 3 Bank record is invalid.");require(current.pid==source.pid&&current.species==source.species&&current.tid==source.tid&&current.sid==source.sid){"The selected Gen 3 Pokémon changed."}
+            val before=gen2LocationPayloads(fresh,"Box $targetBox",profile);val currentBank=bankFile.readBytes();require(currentBank.contentEquals(bankBytes)){"The selected Gen 3 Bank record changed."};val current=parsePk3(currentBank,0,false)?:error("The Gen 3 Bank record is invalid.");require(current.checksumValid&&current.pid==source.pid&&current.species==source.species&&current.tid==source.tid&&current.sid==source.sid){"The selected Gen 3 Pokémon changed."}
             val refreshed=buildGen3ToGen2Record(currentBank,current);require(refreshed.first.contentEquals(mon)&&refreshed.second.contentEquals(ot)&&refreshed.third.contentEquals(nick)){"The prepared conversion changed."}
             val work=fresh.copyOf();val slot=appendGen2BoxPokemon(work,targetBox,mon,ot,nick);markGen2PokedexOwnedSeen(work,profile,source.species);updateGen2PrimaryChecksum(work,profile)
             val stagedProfile=detectGen2Profile(work)?:error("The staged Gen 2 save failed structural validation.");require(stagedProfile.key==profile.key&&verifyGen2SaveIntegrity(work).first&&gen2BoxRawCore(work,targetBox,slot).contentEquals(mon)&&gen2PokedexOwnedSeen(work,stagedProfile,source.species)){"The staged Gen 2 record, Pokédex or checksum did not verify."}
