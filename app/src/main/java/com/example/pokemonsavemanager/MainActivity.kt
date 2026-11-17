@@ -37070,10 +37070,13 @@ class MainActivity : Activity() {
         val v=gen4Validation(data,profile); if(!v.generalChecksum || !v.storageChecksum || v.badPk4!=0)return showDialog("Withdraw blocked","The loaded Gen 4 save did not pass validation.")
         val raw=runCatching{bankFile.readBytes()}.getOrDefault(ByteArray(0)); val source=if(raw.size==136)parsePk4(raw,false)else null
         if(!raw.contentEquals(openedBank)||source==null||!source.checksumValid||source.pid!=p.pid||source.species!=p.species||source.tid!=p.tid||source.sid!=p.sid)return showDialog("Withdraw","The selected Gen 4 Bank record changed. Reopen PSE Bank. Nothing was changed.")
-        val empties=gen4EmptyBoxSlots(data,profile); if(empties.isEmpty())return showDialog("Withdraw","No empty Gen 4 PC slot is available.")
+        val empties=(0 until 540).filter{global->val off=gen4BoxSlotOffset(data,profile,global);val slot=data.copyOfRange(off,off+136);parsePk4(slot,false)==null&&slot.all{it==0.toByte()}}
+        if(empties.isEmpty())return showDialog("Withdraw","No structurally empty Gen 4 PC slot is available. Existing or nonzero slot data was left unchanged.")
         val first=empties.first()
         var consumed=false
-        AlertDialog.Builder(this).setTitle("Withdraw ${p.nickname.ifBlank{"Pokémon"}} to…").setItems(arrayOf("First empty slot • Box ${first/30+1} • Slot ${first%30+1}","Choose a box / slot")){_,which->
+        AlertDialog.Builder(this).setTitle("Withdraw ${p.nickname.ifBlank{"Pokémon"}} to…")
+            .setMessage("This is a PSE Bank withdrawal, not an official trade, Pokémon Bank transaction or provenance claim. No conversion or Legalise change is performed. Choose one structurally empty native PK4 slot; the exact Bank record remains until the destination and retained recovery data verify.")
+            .setItems(arrayOf("First structurally empty slot • Box ${first/30+1} • Slot ${first%30+1}","Choose a box / slot")){_,which->
             if(consumed){return@setItems};consumed=true
             if(which==0)withdrawGen4BankToSlot(bankFile,p,first,file,data,openedUri,openedLabel,openedBank)
             else showGen4BankBoxPicker(bankFile,p,file,data,profile,openedUri,openedLabel,openedBank)
@@ -37098,13 +37101,13 @@ class MainActivity : Activity() {
             Gen4BankBatchItem(bankFile,bytes,source)
         }}catch(e:Exception){return showDialog("Gen 4 Bank multi-withdrawal",(e.message?:"A selected Gen 4 Bank record could not be read.")+" Nothing was changed.")}
         val targets=(0 until 18).mapNotNull{box->
-            val slots=(0 until 30).filter{slot->val off=gen4BoxSlotOffset(destination,profile,box*30+slot);parsePk4(destination.copyOfRange(off,off+136),false)==null}
+            val slots=(0 until 30).filter{slot->val off=gen4BoxSlotOffset(destination,profile,box*30+slot);val raw=destination.copyOfRange(off,off+136);parsePk4(raw,false)==null&&raw.all{it==0.toByte()}}
             if(slots.size>=selected.size)box to slots.take(selected.size) else null
         }
-        if(targets.isEmpty())return showDialog("Gen 4 Bank multi-withdrawal","No Gen 4 PC box has ${selected.size} empty slots for the complete selection. Free capacity, reduce the selection, or load another valid save. Nothing was changed.")
+        if(targets.isEmpty())return showDialog("Gen 4 Bank multi-withdrawal","No Gen 4 PC box has ${selected.size} structurally empty slots for the complete selection. Existing or nonzero slot data was left unchanged; free capacity, reduce the selection, or load another valid save.")
         var consumed=false
         AlertDialog.Builder(this).setTitle("Move ${selected.size} Gen 4 Pokémon to which box?")
-            .setMessage("PSE will copy the exact native PK4 records into the listed empty slots in selection order, update only the active storage checksum, retain verified recovery data, reopen the destination, then remove Bank records last.")
+            .setMessage("This is a PSE Bank withdrawal, not an official trade, Pokémon Bank transaction or provenance claim. No conversion or Legalise change is performed. PSE will copy the exact native PK4 records into the listed structurally empty slots in selection order, update only the active storage checksum, retain verified recovery data, reopen the destination, then remove Bank records last.")
             .setItems(targets.map{(box,slots)->"Box ${box+1} • Slots ${slots.joinToString(", "){(it+1).toString()}}"}.toTypedArray()){_,which->
                 if(consumed||which !in targets.indices){consumed=true;return@setItems};consumed=true
                 val(box,slots)=targets[which]
@@ -37131,7 +37134,7 @@ class MainActivity : Activity() {
             val work=original.copyOf();val offsets=ArrayList<Int>();val allowed=HashSet<Int>()
             for(i in refreshed.indices){
                 val global=targetBox*30+targetSlots[i];val off=gen4BoxSlotOffset(work,profile,global);offsets.add(off)
-                require(parsePk4(work.copyOfRange(off,off+136),false)==null){"Box ${targetBox+1} • Slot ${targetSlots[i]+1} is no longer empty."}
+                val empty=work.copyOfRange(off,off+136);require(parsePk4(empty,false)==null&&empty.all{it==0.toByte()}){"Box ${targetBox+1} • Slot ${targetSlots[i]+1} is no longer structurally empty. Existing slot data was not overwritten."}
                 refreshed[i].bankBytes.copyInto(work,off);for(p in off until off+136)allowed.add(p)
                 val staged=parsePk4(work.copyOfRange(off,off+136),false)
                 require(staged!=null&&staged.checksumValid&&work.copyOfRange(off,off+136).contentEquals(refreshed[i].bankBytes)){"An exact selected PK4 did not stage in its destination slot."}
@@ -37180,11 +37183,11 @@ class MainActivity : Activity() {
     }
 
     private fun showGen4BankBoxPicker(bankFile:File,p:PokemonEntry,file:File,data:ByteArray,profile:Gen4Profile,openedUri:Uri?,openedLabel:String?,openedBank:ByteArray){
-        val boxes=(0 until 18).filter{b->(0 until 30).any{s->val g=b*30+s;val o=gen4BoxSlotOffset(data,profile,g);val r=data.copyOfRange(o,o+136);r.all{it==0.toByte()}||parsePk4(r,false)==null}}
+        val boxes=(0 until 18).filter{b->(0 until 30).any{s->val g=b*30+s;val o=gen4BoxSlotOffset(data,profile,g);val r=data.copyOfRange(o,o+136);parsePk4(r,false)==null&&r.all{it==0.toByte()}}}
         var boxConsumed=false
         AlertDialog.Builder(this).setTitle("Choose Gen 4 destination box").setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,w->
             if(boxConsumed||w !in boxes.indices){boxConsumed=true;return@setItems};boxConsumed=true
-            val b=boxes[w];val empties=(0 until 30).filter{s->val g=b*30+s;val o=gen4BoxSlotOffset(data,profile,g);val r=data.copyOfRange(o,o+136);r.all{it==0.toByte()}||parsePk4(r,false)==null}
+            val b=boxes[w];val empties=(0 until 30).filter{s->val g=b*30+s;val o=gen4BoxSlotOffset(data,profile,g);val r=data.copyOfRange(o,o+136);parsePk4(r,false)==null&&r.all{it==0.toByte()}}
             var slotConsumed=false
             AlertDialog.Builder(this).setTitle("Box ${b+1} • choose slot").setItems(empties.map{"Slot ${it+1}"}.toTypedArray()){_,sw->
                 if(slotConsumed||sw !in empties.indices){slotConsumed=true;return@setItems};slotConsumed=true
@@ -37203,7 +37206,7 @@ class MainActivity : Activity() {
             val before=gen4Validation(original,profile); if(!before.generalChecksum || !before.storageChecksum || before.badPk4!=0)throw IllegalStateException("Gen 4 destination did not pass validation")
             val raw=bankFile.readBytes(); val source=if(raw.size==136)parsePk4(raw,false)else null; require(raw.contentEquals(openedBank)&&source!=null&&source.checksumValid&&source.pid==p.pid&&source.species==p.species&&source.tid==p.tid&&source.sid==p.sid){"The Bank PK4 record changed or is invalid"}
             val save=original.copyOf(); val off=gen4BoxSlotOffset(save,profile,target); val old=save.copyOfRange(off,off+136)
-            if(!(old.all{it==0.toByte()} || parsePk4(old,false)==null))throw IllegalStateException("Destination slot is no longer empty")
+            if(parsePk4(old,false)!=null||old.any{it!=0.toByte()})throw IllegalStateException("Destination slot is no longer structurally empty. Existing slot data was not overwritten")
             raw.copyInto(save,off); val staged=parsePk4(save.copyOfRange(off,off+136),false) ?: throw IllegalStateException("PK4 could not be parsed after placement")
             if(!staged.checksumValid || staged.pid!=source.pid || staged.species!=source.species)throw IllegalStateException("Placed PK4 failed verification")
             val activeStorage=gen4ActiveBlock(save,profile.storageStart,profile.storageSize);updateGen4BlockChecksum(save,activeStorage*0x40000+profile.storageStart,profile.storageSize,profile)
