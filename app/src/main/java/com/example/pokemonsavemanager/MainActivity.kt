@@ -47089,11 +47089,12 @@ class MainActivity : Activity() {
     private fun chooseGen3ToGen4Destination(p:Gen3Gen4Prepared){
         if(!preparedGen3ToGen4StillBound(p))return showDialog("Gen 3 → Gen 4","The destination identity or prepared snapshots changed. Reopen PSE Bank.")
         val profile=detectGen4Profile(p.destination)?:return
-        val empty=gen4EmptyBoxSlots(p.destination,profile)
-        if(empty.isEmpty())return showDialog("Gen 3 → Gen 4","No empty Gen 4 PC slot is available.")
+        val empty=(0 until 540).filter{gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,it)}
+        if(empty.isEmpty())return showDialog("Gen 3 → Gen 4","No structurally empty Gen 4 PC slot is available. Nonzero records were left unchanged.")
         val first=empty.first()
         AlertDialog.Builder(this).setTitle("Choose native Gen 4 destination")
-            .setItems(arrayOf("First empty • Box ${first/30+1} • Slot ${first%30+1}","Choose a box / slot")){_,which->
+            .setMessage("PSE will write only to a completely zero-filled, unparsable PK4 slot. Nonzero destination records remain unchanged.")
+            .setItems(arrayOf("First structurally empty • Box ${first/30+1} • Slot ${first%30+1}","Choose a box / slot")){_,which->
                 if(which==0)transferGen3BankToGen4(p,first) else showGen3ToGen4BoxPicker(p)
             }.setNegativeButton("Cancel",null).show()
     }
@@ -47102,13 +47103,13 @@ class MainActivity : Activity() {
         if(!preparedGen3ToGen4StillBound(p))return showDialog("Gen 3 → Gen 4","The destination identity or prepared snapshots changed. Reopen PSE Bank.")
         val profile=detectGen4Profile(p.destination)?:return
         val boxes=(0 until 18).filter{box->(0 until 30).any{slot->
-            val off=gen4BoxSlotOffset(p.destination,profile,box*30+slot)
-            parsePk4(p.destination.copyOfRange(off,off+136),false)==null
+            gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,box*30+slot)
         }}
         AlertDialog.Builder(this).setTitle("Choose Gen 4 box")
-            .setItems(boxes.map{box->val count=(0 until 30).count{slot->val off=gen4BoxSlotOffset(p.destination,profile,box*30+slot);parsePk4(p.destination.copyOfRange(off,off+136),false)==null};"Box ${box+1} • $count empty"}.toTypedArray()){_,which->
+            .setMessage("Only structurally empty slots are listed. Nonzero destination records remain unchanged.")
+            .setItems(boxes.map{box->val count=(0 until 30).count{slot->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,box*30+slot)};"Box ${box+1} • $count structurally empty"}.toTypedArray()){_,which->
                 val box=boxes[which]
-                val slots=(0 until 30).filter{slot->val off=gen4BoxSlotOffset(p.destination,profile,box*30+slot);parsePk4(p.destination.copyOfRange(off,off+136),false)==null}
+                val slots=(0 until 30).filter{slot->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,box*30+slot)}
                 AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
                     .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->transferGen3BankToGen4(p,box*30+slots[slotIndex])}
                     .setNegativeButton("Back"){_,_->showGen3ToGen4BoxPicker(p)}.setNeutralButton("Cancel",null).show()
@@ -47143,7 +47144,7 @@ class MainActivity : Activity() {
                 "The prepared PK4 conversion changed before staging."
             }
             val off=gen4BoxSlotOffset(fresh,profile,target)
-            require(parsePk4(fresh.copyOfRange(off,off+136),false)==null){"The destination slot is no longer empty."}
+            require(gen4DestinationSlotIsStructurallyEmpty(fresh,profile,target)){"The destination slot is no longer structurally empty. Nonzero records were left unchanged."}
             val work=fresh.copyOf();val allowed=HashSet<Int>()
             refreshedPk4.copyInto(work,off);for(i in off until off+136)allowed.add(i)
             val staged=parsePk4(work.copyOfRange(off,off+136),false)?:error("The staged PK4 could not be parsed.")
