@@ -11878,16 +11878,23 @@ class MainActivity : Activity() {
                     require(p.bankFile.createNewFile()){"The Bank recovery path could not be reserved."}
                     p.bankFile.writeBytes(p.bankBytes)
                 }
-                require(p.bankFile.readBytes().contentEquals(p.bankBytes)){"The original PK5 Bank record could not be verified; no existing record was overwritten."}
+                val restored=p.bankFile.readBytes();val parsed=parsePk5(restored,false)
+                require(restored.contentEquals(p.bankBytes)&&parsed?.let{
+                    it.checksumValid&&it.pid==p.source.pid&&it.species==p.source.species&&
+                        it.tid==p.source.tid&&it.sid==p.source.sid
+                }==true){"The original PK5 Bank record could not be verified exactly; no existing record was overwritten."}
             }.isSuccess
-            val destinationRestored=!writeStarted||runCatching{
-                file.writeBytes(original);val restored=file.readBytes();val profile=detectGen5Profile(restored)
+            val destinationRestored=runCatching{
+                if(writeStarted)file.writeBytes(original);val restored=file.readBytes();val profile=detectGen5Profile(restored)
                     ?:error("The restored Generation 5 layout is invalid.")
                 restored.contentEquals(original)&&gen5ChecksumTableValid(restored,profile)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,profile)}
             }.getOrDefault(false)
-            val recovery=if(bankRestored&&destinationRestored)
-                "The exact Generation 5 destination and PK5 Bank record were restored or kept and verified."
-            else "Automatic recovery could not be fully verified. Stop editing and keep the retained destination backup and Bank recovery snapshot for review."
+            val recovery=when{
+                bankRestored&&destinationRestored->"The exact Generation 5 destination and PK5 Bank record were restored or kept and verified."
+                bankRestored->"The exact PK5 Bank record was restored or kept, but destination recovery was not verified. Use the retained destination backup before editing again."
+                destinationRestored->"The exact Generation 5 destination was restored or kept, but PK5 Bank recovery was not verified. Keep the Bank recovery snapshot for review."
+                else->"Automatic recovery could not be fully verified. Stop editing and keep the retained destination backup and Bank recovery snapshot for review."
+            }
             showDialog("Gen 5 Bank withdrawal failed",(e.message?:"Unknown error")+"\n\n"+recovery+
                 (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
                 (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery: ${it.name}"}?:""))
