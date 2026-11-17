@@ -45535,6 +45535,19 @@ class MainActivity : Activity() {
         val pokemon: PokemonEntry
     )
 
+    private fun gen3BankDestinationSlotIsStructurallyEmpty(
+        pc: ByteArray,
+        global: Int
+    ): Boolean {
+        if (global !in 0 until Gen3SaveState.BOX_COUNT * Gen3SaveState.BOX_CAPACITY) {
+            return false
+        }
+        val offset = 4 + global * 80
+        if (offset + 80 > pc.size) return false
+        val raw = pc.copyOfRange(offset, offset + 80)
+        return raw.all { it == 0.toByte() } && parsePk3(raw, 0, false) == null
+    }
+
 
     private fun gen3BankPartyBuilds(items: List<Gen3BankBatchItem>): List<Gen3StoredPartyBuild> =
         items.map { item ->
@@ -45845,13 +45858,21 @@ class MainActivity : Activity() {
             return
         }
         val boxNames = gen3PcBoxNames(pc)
-        val targets = (0 until Gen3SaveState.BOX_COUNT).filter { box ->
-            Gen3BoxEditing.emptyBoxSlots(pc, box).size >= selected.size
+        val targets = (0 until Gen3SaveState.BOX_COUNT).mapNotNull { box ->
+            val slots = (0 until Gen3SaveState.BOX_CAPACITY).filter { slot ->
+                gen3BankDestinationSlotIsStructurallyEmpty(
+                    pc,
+                    box * Gen3SaveState.BOX_CAPACITY + slot
+                )
+            }
+            if (slots.size >= selected.size) box to slots.take(selected.size) else null
         }
         if (targets.isEmpty()) {
             showDialog(
                 "Move selected",
-                "No Gen 3 PC box has ${selected.size} empty slots for the complete batch."
+                "No Gen 3 PC box has ${selected.size} structurally empty slots for the " +
+                    "complete batch. Existing or nonzero slot data was left unchanged; " +
+                    "free capacity, reduce the selection, or load another valid save."
             )
             return
         }
@@ -45859,13 +45880,16 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Withdraw ${selected.size} Pokémon to which box?")
             .setMessage(
-                "PSE will revalidate every PK3 and the destination save, place the " +
-                    "batch into exact empty slots, create a recovery backup, verify " +
-                    "the persisted save, then remove the Bank records last."
+                "This is a PSE Bank withdrawal, not an official trade, Pokémon Bank " +
+                    "transaction or provenance claim. No conversion or Legalise change " +
+                    "is performed. PSE will copy each exact native PK3 into the listed " +
+                    "structurally empty slots in selection order, update only the native " +
+                    "PC checksums, retain verified recovery data, reopen every destination " +
+                    "record, then remove Bank records last."
             )
-            .setItems(targets.map { box ->
-                val empty = Gen3BoxEditing.emptyBoxSlots(pc, box).size
-                "${boxNames[box]} • Box ${box + 1} • $empty empty"
+            .setItems(targets.map { (box, slots) ->
+                "${boxNames[box]} • Box ${box + 1} • Slots " +
+                    slots.joinToString(", ") { (it + 1).toString() }
             }.toTypedArray()) { _, which ->
                 if (consumed || which !in targets.indices) {
                     consumed = true
@@ -45877,14 +45901,16 @@ class MainActivity : Activity() {
                     return@setItems
                 }
                 consumed = true
+                val (box, slots) = targets[which]
                 moveSelectedGen3BankPokemon(
                     selected,
                     openedDestination,
-                    targets[which],
+                    box,
+                    slots,
                     openedFile,
                     openedSourceUri,
                     openedSourceLabel,
-                    boxNames[targets[which]]
+                    boxNames[box]
                 )
             }
             .setNegativeButton("Cancel") { _, _ -> consumed = true }
@@ -45896,6 +45922,7 @@ class MainActivity : Activity() {
         selected: List<Gen3BankBatchItem>,
         openedDestination: ByteArray,
         targetBox: Int,
+        targetSlots: List<Int>,
         openedFile: File,
         openedSourceUri: Uri?,
         openedSourceLabel: String?,
@@ -45924,6 +45951,11 @@ class MainActivity : Activity() {
             require(targetBox in 0 until Gen3SaveState.BOX_COUNT) {
                 "The selected Gen 3 destination box is invalid."
             }
+            require(targetSlots.size == selected.size &&
+                targetSlots.distinct().size == targetSlots.size &&
+                targetSlots.all { it in 0 until Gen3SaveState.BOX_CAPACITY }) {
+                "The prepared Gen 3 destination slots are invalid."
+            }
             val freshPc = gen3PcBuffer(fresh)
                 ?: error("PSE could not reconstruct the fresh Gen 3 PC storage.")
             require(gen3PcBoxNames(freshPc)[targetBox] == targetBoxName) {
@@ -45950,31 +45982,31 @@ class MainActivity : Activity() {
                 }
                 bytes
             }
-            val inserted = Gen3BoxEditing.insertBoxRecords(
-                freshPc,
-                targetBox,
-                refreshed
-            )
-            require(inserted.targetSlots.size == refreshed.size &&
-                inserted.targetSlots == inserted.targetSlots.sorted() &&
-                inserted.targetSlots.size == inserted.targetSlots.toSet().size) {
-                "The staged Gen 3 destination mapping is invalid."
-            }
-            val boxRange = Gen3BoxEditing.boxStorageRange(targetBox)
-            val targetRanges = inserted.targetSlots.map { slot ->
-                val start = boxRange.first + slot * 80
+            val stagedPc = freshPc.copyOf()
+            val targetRanges = targetSlots.map { slot ->
+                val start = 4 + (targetBox * Gen3SaveState.BOX_CAPACITY + slot) * 80
                 start until (start + 80)
             }
+            targetRanges.forEachIndexed { index, range ->
+                val global = targetBox * Gen3SaveState.BOX_CAPACITY + targetSlots[index]
+                require(gen3BankDestinationSlotIsStructurallyEmpty(freshPc, global)) {
+                    "Box ${targetBox + 1} • Slot ${targetSlots[index] + 1} is no longer " +
+                        "structurally empty. Existing slot data was not overwritten."
+                }
+                refreshed[index].copyInto(stagedPc, range.first)
+            }
             require(targetRanges.indices.all { index ->
-                inserted.pc.copyOfRange(
+                val staged = stagedPc.copyOfRange(
                     targetRanges[index].first,
                     targetRanges[index].last + 1
-                ).contentEquals(refreshed[index])
+                )
+                val parsed = parsePk3(staged, 0, false)
+                staged.contentEquals(refreshed[index]) && parsed != null && parsed.checksumValid
             }) {
                 "A staged Gen 3 destination slot did not match its Bank PK3."
             }
-            require(inserted.pc.indices.all { index ->
-                targetRanges.any { index in it } || inserted.pc[index] == freshPc[index]
+            require(stagedPc.indices.all { index ->
+                targetRanges.any { index in it } || stagedPc[index] == freshPc[index]
             }) {
                 "The staged withdrawal changed unrelated PC data."
             }
@@ -45982,9 +46014,9 @@ class MainActivity : Activity() {
             val sectionMap = gen3ActiveSectionMap(fresh)
                 ?: error("PSE could not map the active Gen 3 PC sections.")
             val work = fresh.copyOf()
-            writeGen3PcBuffer(work, inserted.pc)
+            writeGen3PcBuffer(work, stagedPc)
             require(gen3SaveValid(work) &&
-                gen3PcBuffer(work)?.contentEquals(inserted.pc) == true) {
+                gen3PcBuffer(work)?.contentEquals(stagedPc) == true) {
                 "The staged Gen 3 PC storage failed checksum or byte verification."
             }
             val allowed = HashSet<Int>()
@@ -46039,7 +46071,7 @@ class MainActivity : Activity() {
             }
             val persistedPc = gen3PcBuffer(persisted)
                 ?: error("The persisted Gen 3 PC storage could not be reopened.")
-            require(persistedPc.contentEquals(inserted.pc) &&
+            require(persistedPc.contentEquals(stagedPc) &&
                 gen3PcBoxNames(persistedPc)[targetBox] == targetBoxName &&
                 targetRanges.indices.all { index ->
                     persistedPc.copyOfRange(
@@ -47424,20 +47456,21 @@ class MainActivity : Activity() {
         val source=if(raw.size==80) parsePk3(raw,0,false) else null
         if(source==null || !source.checksumValid){showDialog("Withdraw","This Bank entry is not a valid PK3 record.");return}
         val pc=gen3PcBuffer(data) ?: run {showDialog("Withdraw","Could not reconstruct Gen 3 PC storage.");return}
-        val empties=(0 until 420).filter{parsePk3(pc,4+it*80,false)==null}
-        if(empties.isEmpty()){showDialog("Withdraw","No empty Gen 3 PC slot is available.");return}
+        val empties=(0 until 420).filter{gen3BankDestinationSlotIsStructurallyEmpty(pc,it)}
+        if(empties.isEmpty()){showDialog("Withdraw","No structurally empty Gen 3 PC slot is available. Existing or nonzero slot data was left unchanged.");return}
         val first=empties.first()
-        val labels=arrayOf("First empty slot • Box ${first/30+1} • Slot ${first%30+1}","Choose a box / slot")
+        val labels=arrayOf("First structurally empty slot • Box ${first/30+1} • Slot ${first%30+1}","Choose a box / slot")
         AlertDialog.Builder(this).setTitle("Withdraw ${p.nickname.ifBlank{"Pokémon"}} to…")
+            .setMessage("This is a PSE Bank withdrawal, not an official trade, Pokémon Bank transaction or provenance claim. No conversion or Legalise change is performed. Choose one structurally empty native PK3 slot; the exact Bank record remains until the destination and retained recovery data verify.")
             .setItems(labels){_,which->if(which==0) withdrawGen3BankToSlot(bankFile,p,first) else showGen3BankBoxPicker(bankFile,p,pc)}
             .setNegativeButton("Cancel",null).show()
     }
 
     private fun showGen3BankBoxPicker(bankFile:File,p:PokemonEntry,pc:ByteArray){
-        val boxes=(0 until 14).filter{b->(0 until 30).any{s->parsePk3(pc,4+(b*30+s)*80,false)==null}}
+        val boxes=(0 until 14).filter{b->(0 until 30).any{s->gen3BankDestinationSlotIsStructurallyEmpty(pc,b*30+s)}}
         AlertDialog.Builder(this).setTitle("Choose Gen 3 destination box")
             .setItems(boxes.map{b->"Box ${b+1}"}.toTypedArray()){_,w->
-                val b=boxes[w]; val empties=(0 until 30).filter{s->parsePk3(pc,4+(b*30+s)*80,false)==null}
+                val b=boxes[w]; val empties=(0 until 30).filter{s->gen3BankDestinationSlotIsStructurallyEmpty(pc,b*30+s)}
                 AlertDialog.Builder(this).setTitle("Box ${b+1} • choose slot")
                     .setItems(empties.map{s->"Slot ${s+1}"}.toTypedArray()){_,sw->withdrawGen3BankToSlot(bankFile,p,b*30+empties[sw])}
                     .setNegativeButton("Cancel",null).show()
@@ -47462,7 +47495,7 @@ class MainActivity : Activity() {
             require(selected.readBytes().contentEquals(raw)){"The selected Gen 3 Bank record changed after destination selection."}
             val save=original.copyOf();val pc=gen3PcBuffer(save)?:error("Could not reconstruct Gen 3 PC storage.");val beforePc=pc.copyOf()
             val off=4+target*80
-            require(parsePk3(pc,off,false)==null){"Destination slot is no longer empty."}
+            require(gen3BankDestinationSlotIsStructurallyEmpty(pc,target)){"Destination slot is no longer structurally empty. Existing slot data was not overwritten."}
             raw.copyInto(pc,off)
             val staged=parsePk3(pc,off,false)?:error("PK3 could not be parsed after placement.")
             require(staged.checksumValid&&staged.pid==source.pid&&staged.species==source.species&&staged.tid==source.tid&&staged.sid==source.sid){"Placed PK3 failed verification."}
