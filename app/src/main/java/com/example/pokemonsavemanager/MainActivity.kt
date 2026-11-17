@@ -11514,15 +11514,12 @@ class MainActivity : Activity() {
         val title=genToGen5Title(p)
         if(!gen4ToGen5StillBound(p))return showDialog(title,"The destination or Bank record changed. Reopen PSE Bank.")
         val profile=detectGen5Profile(p.destination)?:return
-        val empty=(0 until 24*30).filter{index->
-            val off=0x00400+(index/30)*0x1000+(index%30)*136
-            parsePk5(p.destination.copyOfRange(off,off+136),false)==null
-        }
-        if(empty.isEmpty())return showDialog(title,"All 720 native Gen 5 PC slots are occupied.")
+        val empty=(0 until 24*30).filter{index->gen5DestinationSlotIsStructurallyEmpty(p.destination,index)}
+        if(empty.isEmpty())return showDialog(title,"No structurally empty native Gen 5 PC slot is available. Nonzero records were left unchanged.")
         val first=empty.first()
         AlertDialog.Builder(this).setTitle("Choose native Gen 5 destination")
-            .setMessage("The reviewed PSE conversion will be written to one empty PK5 slot. The destination box checksum and Pokédex will be updated.")
-            .setItems(arrayOf("First Empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
+            .setMessage("The reviewed PSE conversion will be written only to a structurally empty PK5 slot. The destination box checksum and Pokédex will be updated, and nonzero records remain unchanged.")
+            .setItems(arrayOf("First Structurally Empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
                 if(!gen4ToGen5StillBound(p))showDialog(title,"The destination or Bank record changed. Reopen PSE Bank.")
                 else if(which==0)transferGen4BankToGen5(p,first)else showGen4ToGen5BoxPicker(p)
             }.setNegativeButton("Cancel",null).show()
@@ -11531,20 +11528,13 @@ class MainActivity : Activity() {
     private fun showGen4ToGen5BoxPicker(p:Gen4Gen5Prepared){
         val title=genToGen5Title(p)
         if(!gen4ToGen5StillBound(p))return showDialog(title,"The destination or Bank record changed. Reopen PSE Bank.")
-        val emptyBoxes=(0 until 24).filter{box->
-            (0 until 30).any{slot->
-                val off=0x00400+box*0x1000+slot*136
-                parsePk5(p.destination.copyOfRange(off,off+136),false)==null
-            }
-        }
-        if(emptyBoxes.isEmpty())return showDialog(title,"All native Gen 5 PC boxes are full.")
+        val emptyBoxes=(0 until 24).filter{box->(0 until 30).any{slot->gen5DestinationSlotIsStructurallyEmpty(p.destination,box*30+slot)}}
+        if(emptyBoxes.isEmpty())return showDialog(title,"No native Gen 5 PC box contains a structurally empty slot. Nonzero records were left unchanged.")
         AlertDialog.Builder(this).setTitle("Choose Gen 5 destination box")
+            .setMessage("Only boxes with structurally empty slots are listed. Nonzero destination records remain unchanged.")
             .setItems(emptyBoxes.map{"Box ${it+1}"} .toTypedArray()){_,which->
                 val box=emptyBoxes[which]
-                val slots=(0 until 30).filter{slot->
-                    val off=0x00400+box*0x1000+slot*136
-                    parsePk5(p.destination.copyOfRange(off,off+136),false)==null
-                }
+                val slots=(0 until 30).filter{slot->gen5DestinationSlotIsStructurallyEmpty(p.destination,box*30+slot)}
                 AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
                     .setItems(slots.map{"Slot ${it+1}"} .toTypedArray()){_,slotIndex->
                         transferGen4BankToGen5(p,box*30+slots[slotIndex])
@@ -11584,7 +11574,7 @@ class MainActivity : Activity() {
             }
             require(pk5.contentEquals(p.pk5)){"The prepared conversion changed before writing."}
             val box=target/30;val slot=target%30;val offset=0x00400+box*0x1000+slot*136
-            require(parsePk5(original.copyOfRange(offset,offset+136),false)==null){"The selected Gen 5 slot is no longer empty."}
+            require(gen5DestinationSlotIsStructurallyEmpty(original,target)){"The selected Gen 5 slot is no longer structurally empty. Nonzero records were left unchanged."}
             val save=original.copyOf();pk5.copyInto(save,offset)
             val staged=parsePk5(save.copyOfRange(offset,offset+136),false)?:error("The staged PK5 could not be parsed.")
             require(sameGen4ToGen5Pk5(staged,p.converted)){"The staged PK5 differs from the reviewed conversion."}
