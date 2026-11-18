@@ -11825,7 +11825,7 @@ class MainActivity : Activity() {
         val current=runCatching{file.readBytes()}.getOrNull()
             ?:return showDialog("Gen 5 PSE Bank","The exact selected save could not be reopened. Nothing was changed.")
         if(!current.contentEquals(original))return showDialog("Gen 5 PSE Bank","The selected save changed after deposit review. Reopen this Pokémon. Nothing was changed.")
-        var bankFile:File?=null;var bankRecord:ByteArray?=null;var backup:File?=null;var writeStarted=false;var bankReserved=false
+        var bankFile:File?=null;var bankRecord:ByteArray?=null;var backup:File?=null;var writeStarted=false;var bankReserved=false;var stagedSource:ByteArray?=null
         try{
             require(bound()&&global in 0 until 720){"The source identity or PC slot changed."}
             val profile=detectGen5Profile(original)?:error("A valid Black, White, Black 2 or White 2 save is required.")
@@ -11858,6 +11858,7 @@ class MainActivity : Activity() {
                 recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){
                 "The source, Bank record or retained recovery backup changed before writing."
             }
+            stagedSource=work.copyOf()
             writeStarted=true;file.writeBytes(work)
             val written=file.readBytes();require(written.contentEquals(work)){"The persisted save differs from the reviewed write."}
             val wp=detectGen5Profile(written)?:error("The persisted Gen 5 save could not be reopened.")
@@ -11874,7 +11875,12 @@ class MainActivity : Activity() {
             val count=bankDir().listFiles()?.count{it.isFile&&it.extension.equals("pk5",true)}?:1;bankViewBox=(count-1).coerceAtLeast(0)/30;showBank()
         }catch(e:Exception){
             val saveRestored=runCatching{
-                if(writeStarted)file.writeBytes(original)
+                val found=file.readBytes()
+                if(writeStarted&&!found.contentEquals(original)){
+                    val staged=stagedSource
+                    require(staged!=null&&found.contentEquals(staged)){"The Gen 5 source no longer matches this transaction's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(original)
+                }
                 val restored=file.readBytes();val restoredProfile=detectGen5Profile(restored)
                 restored.contentEquals(original)&&restoredProfile!=null&&gen5ChecksumTableValid(restored,restoredProfile)&&
                     (0 until 24).all{gen5BoxChecksumValid(restored,it,restoredProfile)}
