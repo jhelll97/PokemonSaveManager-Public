@@ -61310,7 +61310,9 @@ private data class Gen2ToGen5LegalisePlan(
             requireGen1BankCapacity(bankCountBefore,1)
             val payload=buildGen1BankPayload(old,source,location,party);bankBytes=payload.copyOf()
             val recovery=File.createTempFile(backupGameName(f)+"_PreGen1BankDeposit_",".backup",backupsDir());backup=recovery
-            recovery.writeBytes(old);require(recovery.readBytes().contentEquals(old)&&isBackupKept(recovery)){"The Gen 1 recovery backup did not verify."}
+            recovery.writeBytes(old)
+            retainGen2ToGen1SafetyBackup(recovery,old)
+            require(recovery.readBytes().contentEquals(old)&&isBackupKept(recovery)){"The retained Gen 1 recovery backup did not verify."}
             require(gen1BankEntryCountForDeposit()==bankCountBefore){"PSE Bank changed while the Gen 1 deposit was being staged. Nothing was changed."}
             val stagedFile=File.createTempFile("pse1_${gen1DexFromInternalIndex(source.species)?:source.species}_",".pse1",bankDir())
             bf=stagedFile;bankReserved=true;stagedFile.writeBytes(payload)
