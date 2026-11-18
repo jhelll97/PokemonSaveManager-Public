@@ -45525,7 +45525,9 @@ class MainActivity : Activity() {
             if(!current.checksumValid) throw IllegalStateException("The source PK3 checksum is invalid")
             val raw=pc.copyOfRange(off,off+80);bankBytes=raw.copyOf()
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen3BankDeposit_",".backup",backupsDir());backup=recovery
-            recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The Gen 3 recovery backup did not verify."}
+            recovery.writeBytes(original)
+            retainGen2ToGen3SafetyBackup(recovery,original)
+            require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The retained Gen 3 recovery backup did not verify."}
             val created=File(bankDir(),"${System.currentTimeMillis()}_${p.species}.pk3")
             require(!created.exists()){"The destination Bank path is already occupied."}
             bankFile=created;bankReserved=true;created.writeBytes(raw)
