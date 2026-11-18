@@ -35509,8 +35509,9 @@ class MainActivity : Activity() {
                         it.tid==p.source.tid&&it.sid==p.source.sid
                 }==true
             }.getOrDefault(false)
-            val saveRestored=!writeStarted||runCatching{
-                file.writeBytes(fresh);val restored=file.readBytes()
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(fresh)
+                val restored=file.readBytes()
                 val rp=detectGen4Profile(restored)?:error("The restored Generation 4 layout is invalid.")
                 val rv=gen4Validation(restored,rp)
                 restored.contentEquals(fresh)&&rv.generalChecksum&&rv.storageChecksum&&rv.badPk4==0
