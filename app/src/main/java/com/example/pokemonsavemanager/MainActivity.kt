@@ -66665,8 +66665,10 @@ private data class Gen2ToGen5LegalisePlan(
             require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The retained Gen $generation recovery backup did not verify."}
             val ext = if (generation == 7) "pk7" else "pk6"
             val created=File(bankDir(),"${System.currentTimeMillis()}_${parsed.species}.$ext")
-            require(!created.exists()){"The destination Bank path is already occupied."}
-            bankFile=created;bankReserved=true;created.writeBytes(raw)
+            bankFile=created
+            require(created.createNewFile()){"The destination Bank path is occupied or could not be reserved atomically."}
+            bankReserved=true
+            created.writeBytes(raw)
             val stagedBytes=created.readBytes();val staged=parsePk6(stagedBytes,0,PK6_STORED_SIZE,false,maxSpecies)
             require(stagedBytes.contentEquals(raw)&&staged!=null&&staged.checksumValid&&
                 staged.pid==parsed.pid&&staged.species==parsed.species&&staged.tid==parsed.tid&&staged.sid==parsed.sid){
@@ -66711,8 +66713,9 @@ private data class Gen2ToGen5LegalisePlan(
             val stagedBank=bankFile
             val bankCleared=if(!bankReserved)true else if(stagedBank==null)false else runCatching{
                 if(stagedBank.exists()){
-                    require(stagedBank.readBytes().contentEquals(bankBytes)){"The staged Bank record changed; it was not removed."}
-                    require(stagedBank.delete()){"The staged Bank record could not be removed."}
+                    val found=stagedBank.readBytes()
+                    require(found.isEmpty()||found.contentEquals(bankBytes)){"The staged Bank reservation changed; it was not removed."}
+                    require(stagedBank.delete()){"The staged Bank reservation could not be removed."}
                 }
                 require(!stagedBank.exists()){"The staged Bank record still exists."}
             }.isSuccess
