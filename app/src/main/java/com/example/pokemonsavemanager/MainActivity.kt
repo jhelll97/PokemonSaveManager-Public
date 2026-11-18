@@ -10677,7 +10677,8 @@ class MainActivity : Activity() {
     private fun depositGen4ToBank(global:Int,expected:PokemonEntry){
         val file=importedFile?:return
         val original=try{file.readBytes()}catch(e:Exception){showDialog("PSE Bank",e.message?:"Could not read save");return}
-        var bankFile:File?=null;var backup:File?=null
+        var bankFile:File?=null;var backup:File?=null;var bankBytes:ByteArray?=null
+        var bankReserved=false;var sourceWriteStarted=false
         try{
             require(global in 0 until 540){"Invalid Gen 4 PC slot"}
             val save=original.copyOf(); val profile=detectGen4Profile(save) ?: throw IllegalStateException("Could not detect Gen 4 save layout")
@@ -10686,7 +10687,10 @@ class MainActivity : Activity() {
             val off=gen4BoxSlotOffset(save,profile,global); val raw=save.copyOfRange(off,off+136)
             val source=parsePk4(raw,false) ?: throw IllegalStateException("Pokémon is no longer present")
             if(!source.checksumValid || source.pid!=expected.pid || source.species!=expected.species) throw IllegalStateException("Source PK4 changed or failed checksum validation")
-            val created=File(bankDir(),"${System.currentTimeMillis()}_${source.species}.pk4"); bankFile=created; created.writeBytes(raw)
+            bankBytes=raw.copyOf()
+            val created=File(bankDir(),"${System.currentTimeMillis()}_${source.species}.pk4")
+            require(!created.exists()){"The destination Bank path is already occupied."}
+            bankFile=created;bankReserved=true;created.writeBytes(raw)
             val bankRaw=created.readBytes(); val bankMon=if(bankRaw.size==136)parsePk4(bankRaw,false)else null
             if(!bankRaw.contentEquals(raw) || bankMon==null || !bankMon.checksumValid || bankMon.pid!=source.pid || bankMon.species!=source.species) throw IllegalStateException("Gen 4 Bank entry verification failed")
             ByteArray(136).copyInto(save,off)
@@ -10695,16 +10699,39 @@ class MainActivity : Activity() {
             val after=gen4Validation(save,profile)
             if(!after.generalChecksum || !after.storageChecksum || after.badPk4!=0) throw IllegalStateException("Gen 4 checksum verification failed")
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen4BankDeposit_",".backup",backupsDir());backup=recovery
-            recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)){"The Gen 4 recovery backup did not verify."}
-            file.writeBytes(save)
+            recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The Gen 4 recovery backup did not verify."}
+            sourceWriteStarted=true;file.writeBytes(save)
             val verify=file.readBytes(); val vp=detectGen4Profile(verify) ?: throw IllegalStateException("Written save layout could not be re-read")
             val vv=gen4Validation(verify,vp); if(!vv.generalChecksum || !vv.storageChecksum || vv.badPk4!=0) throw IllegalStateException("Written Gen 4 save failed verification")
             val vo=gen4BoxSlotOffset(verify,vp,global); val vr=verify.copyOfRange(vo,vo+136)
             if(!vr.all{it==0.toByte()} || parsePk4(vr,false)!=null) throw IllegalStateException("Source slot was not empty after re-read")
             if(!created.readBytes().contentEquals(raw)) throw IllegalStateException("Bank copy changed during the transaction")
+            require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The retained Gen 4 recovery backup changed after persistence."}
             Toast.makeText(this,"Moved to Gen 4 PSE Bank and verified",Toast.LENGTH_LONG).show(); bankViewGeneration=4
             val count=bankDir().listFiles()?.count{it.isFile&&it.extension.equals("pk4",true)}?:1; bankViewBox=(count-1).coerceAtLeast(0)/30; showBank()
-        }catch(e:Exception){runCatching{file.writeBytes(original)};runCatching{bankFile?.delete()};showDialog("Gen 4 Bank move failed","${e.message?:"Unknown error"}. The original working copy was restored and no new Bank entry was kept."+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:""))}
+        }catch(e:Exception){
+            val sourceRestored=runCatching{
+                if(sourceWriteStarted)file.writeBytes(original)
+                val restored=file.readBytes();val profile=detectGen4Profile(restored)?:error("The restored Gen 4 layout is invalid.")
+                val validation=gen4Validation(restored,profile)
+                restored.contentEquals(original)&&validation.generalChecksum&&validation.storageChecksum&&validation.badPk4==0
+            }.getOrDefault(false)
+            val stagedBank=bankFile;val expectedBank=bankBytes
+            val bankCleared=if(!bankReserved)true else if(stagedBank==null||expectedBank==null)false else runCatching{
+                if(stagedBank.exists()){
+                    require(stagedBank.readBytes().contentEquals(expectedBank)){"The staged Bank record changed; it was not removed."}
+                    require(stagedBank.delete()){"The staged Bank record could not be removed."}
+                }
+                require(!stagedBank.exists()){"The staged Bank record still exists."}
+            }.isSuccess
+            val recovery=when{
+                sourceRestored&&bankCleared->"The exact Gen 4 source was restored or kept and no staged Bank record remained."
+                sourceRestored->"The exact Gen 4 source was restored or kept, but staged Bank cleanup was not verified. Keep the remaining exact PK4 for review."
+                bankCleared->"The staged Bank record was cleared or absent, but source recovery was not verified. Use the retained Gen 4 backup before editing again."
+                else->"Automatic recovery could not be verified. Keep the retained Gen 4 backup and any remaining staged PK4 for review."
+            }
+            showDialog("Gen 4 Bank move failed",(e.message?:"Unknown error")+".\n\n"+recovery+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:""))
+        }
     }
 
     private fun showGen4BankEntry(bankFile:File,p:PokemonEntry){
