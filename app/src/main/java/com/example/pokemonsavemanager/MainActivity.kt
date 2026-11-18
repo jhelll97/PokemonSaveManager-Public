@@ -45601,7 +45601,7 @@ class MainActivity : Activity() {
         if(!currentSource.contentEquals(original))
             return showDialog("PSE Bank","The selected Gen 3 save changed after deposit review. Reopen this Pokémon. Nothing was changed.")
         var bankFile:File?=null;var backup:File?=null;var bankBytes:ByteArray?=null
-        var bankReserved=false;var sourceWriteStarted=false
+        var bankReserved=false;var sourceWriteStarted=false;var stagedSource:ByteArray?=null
         try{
             require(bound()&&global in 0 until 420){"The Gen 3 source identity or PC slot changed."}
             require(gen3SaveValid(original)){"The Gen 3 source save failed native integrity validation."}
@@ -45633,6 +45633,7 @@ class MainActivity : Activity() {
                 recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){
                 "The Gen 3 source, Bank record or retained recovery backup changed before writing."
             }
+            stagedSource=save.copyOf()
             sourceWriteStarted=true;file.writeBytes(save)
             val verify=file.readBytes()
             require(bound()&&verify.contentEquals(save)&&generationForSize(verify.size)==3&&gen3SaveValid(verify)){
@@ -45653,7 +45654,12 @@ class MainActivity : Activity() {
             showBank()
         }catch(e:Exception){
             val sourceRestored=runCatching{
-                if(sourceWriteStarted)file.writeBytes(original)
+                val found=file.readBytes()
+                if(sourceWriteStarted&&!found.contentEquals(original)){
+                    val staged=stagedSource
+                    require(staged!=null&&found.contentEquals(staged)){"The Gen 3 source no longer matches this transaction's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(original)
+                }
                 val restored=file.readBytes()
                 restored.contentEquals(original)&&generationForSize(restored.size)==3&&gen3SaveValid(restored)
             }.getOrDefault(false)
