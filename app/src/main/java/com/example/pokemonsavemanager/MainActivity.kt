@@ -53282,13 +53282,17 @@ class MainActivity : Activity() {
                 }
                 bankFile.readBytes().contentEquals(originalBank)
             }.getOrDefault(false)
-            val saveRestored=!writeStarted||(bankRestored&&runCatching{
-                file.writeBytes(fresh)
-                file.readBytes().contentEquals(fresh)&&gen3SaveValid(fresh)
-            }.getOrDefault(false))
-            val recovery=if(bankRestored&&saveRestored)
-                "The exact Gen 3 destination and Gen 1 Bank record were restored or kept and verified."
-            else "Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(fresh)
+                val restored=file.readBytes()
+                restored.contentEquals(fresh)&&generationForSize(restored.size)==3&&gen3SaveValid(restored)
+            }.getOrDefault(false)
+            val recovery=when{
+                bankRestored&&saveRestored->"The exact Gen 3 destination and Gen 1 Bank record were restored or kept and verified."
+                bankRestored->"The Gen 1 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                saveRestored->"The exact Gen 3 destination was restored, but Bank restoration was not verified. Keep the exact Gen 1 Bank payload for recovery."
+                else->"Automatic recovery could not be verified. Keep the retained destination backup and exact Gen 1 Bank payload for review."
+            }
             showDialog("Gen 1 → Gen 3 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""))
             return
         }
