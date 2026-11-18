@@ -11661,8 +11661,9 @@ class MainActivity : Activity() {
                     else->false
                 }
             }.getOrDefault(false)
-            val saveRestored=!writeStarted||runCatching{
-                file.writeBytes(original);val restored=file.readBytes();val restoredProfile=detectGen5Profile(restored)
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(original)
+                val restored=file.readBytes();val restoredProfile=detectGen5Profile(restored)
                 restored.contentEquals(original)&&restoredProfile!=null&&gen5ChecksumTableValid(restored,restoredProfile)&&
                     (0 until 24).all{gen5BoxChecksumValid(restored,it,restoredProfile)}
             }.getOrDefault(false)
