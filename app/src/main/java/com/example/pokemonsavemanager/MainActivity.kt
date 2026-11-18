@@ -13662,8 +13662,9 @@ class MainActivity : Activity() {
                         it.tid==source.tid&&it.sid==source.sid
                 }==true
             }.getOrDefault(false)
-            val saveRestored=!writeStarted||runCatching{
-                file.writeBytes(openedDestination);val restored=file.readBytes()
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(openedDestination)
+                val restored=file.readBytes()
                 restored.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(restored).first&&
                     detectGen2Profile(restored)?.key==profileKey
             }.getOrDefault(false)
