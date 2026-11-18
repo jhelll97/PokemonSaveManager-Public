@@ -66297,10 +66297,18 @@ private data class Gen2ToGen5LegalisePlan(
         val box = match.groupValues[1].toInt() - 1
         val slot = match.groupValues[2].toInt() - 1
         val file = importedFile ?: return
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val original = try { file.readBytes() } catch (e: Exception) {
             Toast.makeText(this, "Could not read save: ${e.message}", Toast.LENGTH_LONG).show(); return
         }
         val generation = generationForSize(original.size)
+        if(generation !in 6..7)return
+        fun nativeValid(data:ByteArray)=when(generation){
+            6->generationForSize(data.size)==6&&gen6BoxChecksumValid(data)&&gen6BlockChecksumValid(data,20)
+            7->generationForSize(data.size)==7&&validateGen7CoreChecksums(data).first
+            else->false
+        }
         val (boxOffset, slotCount, maxSpecies) = boxStorageInfo(original) ?: return
         val global = box * 30 + slot
         if (global !in 0 until slotCount) return
@@ -66308,32 +66316,73 @@ private data class Gen2ToGen5LegalisePlan(
         if (offset + PK6_STORED_SIZE > original.size) return
         val raw = original.copyOfRange(offset, offset + PK6_STORED_SIZE)
         val parsed = parsePk6(raw, 0, PK6_STORED_SIZE, false, maxSpecies)
-        if (parsed == null || !parsed.checksumValid) {
-            showDialog("PSE Bank", "This Pokémon did not pass its stored-Pokémon checksum, so it was not moved.")
+        if (parsed == null || !parsed.checksumValid || parsed.pid!=p.pid || parsed.species!=p.species || parsed.tid!=p.tid || parsed.sid!=p.sid) {
+            showDialog("PSE Bank", "This selected Gen $generation Pokémon changed or failed its stored-Pokémon checksum, so it was not moved.")
             return
         }
-        var bankFile: File? = null
+        var bankFile:File?=null;var backup:File?=null;val bankBytes=raw.copyOf()
+        var bankReserved=false;var sourceWriteStarted=false
         try {
+            require(bound()&&nativeValid(original)){"The loaded Gen $generation source identity or native checksums changed."}
+            require(file.readBytes().contentEquals(original)){"The loaded Gen $generation source changed before staging."}
+            val recovery=File.createTempFile(backupGameName(file)+"_PreGen${generation}BankDeposit_",".backup",backupsDir());backup=recovery
+            recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The Gen $generation recovery backup did not verify."}
             val ext = if (generation == 7) "pk7" else "pk6"
-            bankFile = File(bankDir(), "${System.currentTimeMillis()}_${p.species}.$ext")
-            bankFile.writeBytes(raw)
-            if (!bankFile.readBytes().contentEquals(raw)) error("Bank entry verification failed.")
-            val work = original.copyOf()
-            java.util.Arrays.fill(work, offset, offset + PK6_STORED_SIZE, 0.toByte())
+            val created=File(bankDir(),"${System.currentTimeMillis()}_${parsed.species}.$ext")
+            require(!created.exists()){"The destination Bank path is already occupied."}
+            bankFile=created;bankReserved=true;created.writeBytes(raw)
+            val stagedBytes=created.readBytes();val staged=parsePk6(stagedBytes,0,PK6_STORED_SIZE,false,maxSpecies)
+            require(stagedBytes.contentEquals(raw)&&staged!=null&&staged.checksumValid&&
+                staged.pid==parsed.pid&&staged.species==parsed.species&&staged.tid==parsed.tid&&staged.sid==parsed.sid){
+                "The exact Gen $generation Bank entry did not verify."
+            }
+            val work=original.copyOf()
+            java.util.Arrays.fill(work,offset,offset+PK6_STORED_SIZE,0.toByte())
             refreshBoxChecksum(work)
-            file.writeBytes(work)
-            val verify = file.readBytes()
-            val slotCleared = verify.copyOfRange(offset, offset + PK6_STORED_SIZE).all { it == 0.toByte() }
-            if (!slotCleared || !bankFile.readBytes().contentEquals(raw)) error("Post-write verification failed.")
-            Toast.makeText(this, "Moved to PSE Bank and verified", Toast.LENGTH_LONG).show()
+            require(work.copyOfRange(offset,offset+PK6_STORED_SIZE).all{it==0.toByte()}&&nativeValid(work)){
+                "The staged Gen $generation source removal or native checksum did not verify."
+            }
+            require(bound()&&file.readBytes().contentEquals(original)&&created.readBytes().contentEquals(raw)&&
+                recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){
+                "The source, Bank record or retained recovery backup changed before writing."
+            }
+            sourceWriteStarted=true;file.writeBytes(work)
+            val written=file.readBytes()
+            val slotCleared=written.copyOfRange(offset,offset+PK6_STORED_SIZE).all{it==0.toByte()}
+            val persistedBank=created.readBytes();val reopenedBank=parsePk6(persistedBank,0,PK6_STORED_SIZE,false,maxSpecies)
+            require(bound()&&written.contentEquals(work)&&slotCleared&&nativeValid(written)){
+                "The persisted Gen $generation source removal or native checksum did not verify."
+            }
+            require(persistedBank.contentEquals(raw)&&reopenedBank!=null&&reopenedBank.checksumValid&&
+                reopenedBank.pid==parsed.pid&&reopenedBank.species==parsed.species&&reopenedBank.tid==parsed.tid&&reopenedBank.sid==parsed.sid){
+                "The exact Gen $generation Bank entry changed after persistence."
+            }
+            require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The retained Gen $generation recovery backup changed after persistence."}
+            Toast.makeText(this, "Moved to Gen $generation PSE Bank and verified", Toast.LENGTH_LONG).show()
             showBank()
         } catch (e: Exception) {
-            try { file.writeBytes(original) } catch (_: Exception) { }
-            try { bankFile?.delete() } catch (_: Exception) { }
-            showDialog("Bank move failed", (e.message ?: "Unknown error") + " The original working copy was restored.")
+            val sourceRestored=runCatching{
+                if(sourceWriteStarted)file.writeBytes(original)
+                val restored=file.readBytes()
+                restored.contentEquals(original)&&nativeValid(restored)
+            }.getOrDefault(false)
+            val stagedBank=bankFile
+            val bankCleared=if(!bankReserved)true else if(stagedBank==null)false else runCatching{
+                if(stagedBank.exists()){
+                    require(stagedBank.readBytes().contentEquals(bankBytes)){"The staged Bank record changed; it was not removed."}
+                    require(stagedBank.delete()){"The staged Bank record could not be removed."}
+                }
+                require(!stagedBank.exists()){"The staged Bank record still exists."}
+            }.isSuccess
+            val recovery=when{
+                sourceRestored&&bankCleared->"The exact Gen $generation source was restored or kept and no staged Bank record remained."
+                sourceRestored->"The exact Gen $generation source was restored or kept, but staged Bank cleanup was not verified. Keep the remaining exact PK$generation for review."
+                bankCleared->"The staged Bank record was cleared or absent, but source recovery was not verified. Use the retained Gen $generation backup before editing again."
+                else->"Automatic recovery could not be verified. Keep the retained Gen $generation backup and any remaining staged PK$generation for review."
+            }
+            showDialog("Gen $generation Bank move failed",(e.message?:"Unknown error")+".\n\n"+recovery+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:""))
         }
     }
-
     private fun withdrawFromBank(bankFile: File, p: PokemonEntry, target: Int) {
         val file=importedFile ?: return
         val original=try { file.readBytes() } catch (_:Exception) { ByteArray(0) }
