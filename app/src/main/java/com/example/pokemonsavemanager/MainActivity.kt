@@ -66458,7 +66458,12 @@ private data class Gen2ToGen5LegalisePlan(
             showDialog("Withdraw", "The current save does not have supported PC box storage.")
             return
         }
-        val firstEmpty = findFirstEmptyBoxSlot(data, boxOffset, slotCount, maxSpecies)
+        val structurallyEmpty:(Int)->Boolean={global->when(currentGen){
+            6->gen6BankDestinationSlotIsStructurallyEmpty(data,boxOffset,slotCount,maxSpecies,global)
+            7->gen7BankDestinationSlotIsStructurallyEmpty(data,boxOffset,slotCount,maxSpecies,global)
+            else->false
+        }}
+        val firstEmpty = (0 until slotCount).firstOrNull { structurallyEmpty(it) }
         if (firstEmpty == null) {
             showDialog("Withdraw", "No empty PC box slot was found.")
             return
@@ -66467,7 +66472,7 @@ private data class Gen2ToGen5LegalisePlan(
         val labels = ArrayList<String>()
         labels.add("First empty slot (Box ${firstEmpty / 30 + 1} • Slot ${firstEmpty % 30 + 1})")
         for (box in 0 until slotCount / 30) {
-            val emptyCount = countEmptySlotsInBox(data, boxOffset, box, maxSpecies)
+            val emptyCount = (0 until 30).count { slot -> structurallyEmpty(box * 30 + slot) }
             labels.add("Box ${box + 1} • $emptyCount empty slot${if (emptyCount == 1) "" else "s"}")
         }
 
@@ -66489,6 +66494,11 @@ private data class Gen2ToGen5LegalisePlan(
         if (!canBankTransfer(bankGen, currentGen, p.species)) { showDialog("Withdraw blocked", bankTransferBlockReason(bankGen, currentGen, p.species)); return }
         val (boxOffset, slotCount, maxSpecies) = boxStorageInfo(data) ?: return
         if (boxIndex !in 0 until (slotCount / 30)) return
+        val structurallyEmpty:(Int)->Boolean={global->when(currentGen){
+            6->gen6BankDestinationSlotIsStructurallyEmpty(data,boxOffset,slotCount,maxSpecies,global)
+            7->gen7BankDestinationSlotIsStructurallyEmpty(data,boxOffset,slotCount,maxSpecies,global)
+            else->false
+        }}
 
         val wrapper = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -66511,8 +66521,7 @@ private data class Gen2ToGen5LegalisePlan(
         var emptyCount = 0
         for (slot in 0 until 30) {
             val global = boxIndex * 30 + slot
-            val offset = boxOffset + global * PK6_STORED_SIZE
-            val occupied = parsePk6(data, offset, PK6_STORED_SIZE, party = false, maxSpecies = maxSpecies) != null
+            val occupied = !structurallyEmpty(global)
             if (!occupied) emptyCount++
             val cell = TextView(this).apply {
                 text = if (occupied) "●\n${slot + 1}" else "○\n${slot + 1}"
@@ -66676,8 +66685,13 @@ private data class Gen2ToGen5LegalisePlan(
         val (boxOffset, slotCount, maxSpecies)=boxStorageInfo(original) ?: return
         if(target !in 0 until slotCount) return
         val offset=boxOffset+target*PK6_STORED_SIZE
-        if (parsePk6(original, offset, PK6_STORED_SIZE, party = false, maxSpecies = maxSpecies) != null) {
-            showDialog("Withdraw", "That destination slot is no longer empty. Nothing was overwritten.")
+        val structurallyEmpty=when(currentGen){
+            6->gen6BankDestinationSlotIsStructurallyEmpty(original,boxOffset,slotCount,maxSpecies,target)
+            7->gen7BankDestinationSlotIsStructurallyEmpty(original,boxOffset,slotCount,maxSpecies,target)
+            else->false
+        }
+        if (!structurallyEmpty) {
+            showDialog("Withdraw", "That destination slot is no longer structurally empty. Existing or nonzero slot data was not overwritten.")
             return
         }
         val raw=try { bankFile.readBytes() } catch (_:Exception) { ByteArray(0) }
