@@ -66655,7 +66655,7 @@ private data class Gen2ToGen5LegalisePlan(
             return
         }
         var bankFile:File?=null;var backup:File?=null;val bankBytes=raw.copyOf()
-        var bankReserved=false;var sourceWriteStarted=false
+        var bankReserved=false;var sourceWriteStarted=false;var stagedSource:ByteArray?=null
         try {
             require(bound()&&nativeValid(original)){"The loaded Gen $generation source identity or native checksums changed."}
             require(file.readBytes().contentEquals(original)){"The loaded Gen $generation source changed before staging."}
@@ -66682,6 +66682,7 @@ private data class Gen2ToGen5LegalisePlan(
                 recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){
                 "The source, Bank record or retained recovery backup changed before writing."
             }
+            stagedSource=work.copyOf()
             sourceWriteStarted=true;file.writeBytes(work)
             val written=file.readBytes()
             val slotCleared=written.copyOfRange(offset,offset+PK6_STORED_SIZE).all{it==0.toByte()}
@@ -66698,7 +66699,12 @@ private data class Gen2ToGen5LegalisePlan(
             showBank()
         } catch (e: Exception) {
             val sourceRestored=runCatching{
-                if(sourceWriteStarted)file.writeBytes(original)
+                val found=file.readBytes()
+                if(sourceWriteStarted&&!found.contentEquals(original)){
+                    val staged=stagedSource
+                    require(staged!=null&&found.contentEquals(staged)){"The source no longer matches this transaction's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(original)
+                }
                 val restored=file.readBytes()
                 restored.contentEquals(original)&&nativeValid(restored)
             }.getOrDefault(false)
