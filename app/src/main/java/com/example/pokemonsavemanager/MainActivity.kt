@@ -11894,11 +11894,16 @@ class MainActivity : Activity() {
                 }
                 require(!created.exists()){"The staged Bank entry still exists."}
             }.isSuccess
+            val retainedBackup=backup?.let{saved->runCatching{
+                saved.readBytes().contentEquals(original)&&isBackupKept(saved)
+            }.getOrDefault(false)}?:false
             val recovery=when{
                 saveRestored&&bankRemoved->"The exact original Gen 5 save was restored or kept and no new Bank entry remained."
-                saveRestored->"The exact original Gen 5 save was restored or kept, but the new Bank entry could not be safely removed. Keep that entry and the retained backup for review."
-                bankRemoved->"No new Bank entry remained, but source recovery was not verified. Restore the retained Gen 5 backup before editing again."
-                else->"Automatic recovery could not be fully confirmed. Stop editing and keep the retained backup and any remaining Bank entry for review."
+                saveRestored->"The exact original Gen 5 save was restored or kept, but the new Bank entry could not be safely removed. Keep that entry for review."
+                bankRemoved&&retainedBackup->"No new Bank entry remained. Source recovery was not verified, but the exact retained Gen 5 backup verified."
+                bankRemoved->"No new Bank entry remained, but source recovery and the retained Gen 5 backup were not verified. The current source was left untouched."
+                retainedBackup->"Source recovery and Bank cleanup were not verified. The exact retained Gen 5 backup verified; keep it and any remaining Bank entry for review."
+                else->"Automatic recovery and the retained Gen 5 backup could not be verified. Keep the current source and any remaining Bank entry for review."
             }
             showDialog("Gen 5 Bank move failed",(e.message?:"Unknown error")+"\n\n"+recovery+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:""))
         }
