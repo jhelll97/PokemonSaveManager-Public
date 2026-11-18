@@ -47542,9 +47542,10 @@ class MainActivity : Activity() {
                     parsed.pid==p.source.pid&&parsed.species==p.source.species&&
                     parsed.tid==p.source.tid&&parsed.sid==p.source.sid
             }.getOrDefault(false)
-            val saveRestored=!writeStarted||runCatching{
-                file.writeBytes(original);val restored=file.readBytes()
-                restored.contentEquals(original)&&validateGen7CoreChecksums(restored).first
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(original)
+                val restored=file.readBytes()
+                restored.contentEquals(original)&&generationForSize(restored.size)==7&&validateGen7CoreChecksums(restored).first
             }.getOrDefault(false)
             if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
