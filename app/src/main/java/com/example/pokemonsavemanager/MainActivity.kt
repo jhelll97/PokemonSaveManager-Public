@@ -46054,12 +46054,11 @@ class MainActivity : Activity() {
                 runCatching { item.bankFile.isFile && item.bankFile.readBytes().contentEquals(item.bankBytes) }
                     .getOrDefault(false)
             }
-            val saveRestored = if (writeStarted) {
-                runCatching {
-                    destination.writeBytes(opened)
-                    destination.readBytes().contentEquals(opened)
-                }.getOrDefault(false)
-            } else true
+            val saveRestored = runCatching {
+                if (writeStarted) destination.writeBytes(opened)
+                val restored = destination.readBytes()
+                restored.contentEquals(opened) && gen3SaveValid(restored)
+            }.getOrDefault(false)
             if (bankRestored && saveRestored) recoveryFiles.forEach { runCatching { it.delete() } }
             val recovery = when {
                 bankRestored && saveRestored -> "The original save and Bank records were preserved or restored."
