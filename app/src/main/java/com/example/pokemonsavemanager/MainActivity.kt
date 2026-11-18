@@ -12843,8 +12843,9 @@ class MainActivity : Activity() {
                     else->false
                 }
             }.getOrDefault(false)
-            val saveRestored=!writeStarted||runCatching{
-                file.writeBytes(original);val restored=file.readBytes()
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(original)
+                val restored=file.readBytes()
                 restored.contentEquals(original)&&gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)
             }.getOrDefault(false)
             if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
