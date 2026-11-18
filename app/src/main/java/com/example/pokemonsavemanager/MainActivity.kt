@@ -1655,8 +1655,17 @@ class MainActivity : Activity() {
         }catch(e:Exception){
             for((bankFile,bankBytes) in removed)runCatching{if(!bankFile.exists())require(bankFile.createNewFile()){"A Bank recovery path could not be reserved."};bankFile.writeBytes(bankBytes)}
             val banksRestored=chosen.all{item->runCatching{val bytes=item.bankFile.readBytes();bytes.contentEquals(item.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,item.source)}==true}.getOrDefault(false)}
-            val saveRestored=!writeStarted||runCatching{file.writeBytes(fresh);val restored=file.readBytes();restored.contentEquals(fresh)&&generationForSize(restored.size)==3&&gen3SaveValid(restored)}.getOrDefault(false)
-            val recovery=if(banksRestored&&saveRestored)"The exact Gen 3 destination and every selected Gen 1 Bank record were restored or kept and verified." else "Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(fresh)
+                val restored=file.readBytes()
+                restored.contentEquals(fresh)&&generationForSize(restored.size)==3&&gen3SaveValid(restored)
+            }.getOrDefault(false)
+            val recovery=when{
+                banksRestored&&saveRestored->"The exact Gen 3 destination and every selected Gen 1 Bank record were restored or kept and verified."
+                banksRestored->"Every selected Gen 1 Bank record was restored or kept, but destination recovery was not verified. Use the retained Gen 3 backup before editing again."
+                saveRestored->"The exact Gen 3 destination was restored or kept, but one or more Gen 1 Bank records were not verified. Keep the remaining Bank records and recovery data for review."
+                else->"Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
+            }
             showDialog("Gen 1 → Gen 3 multi-conversion failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""))
             return
         }
