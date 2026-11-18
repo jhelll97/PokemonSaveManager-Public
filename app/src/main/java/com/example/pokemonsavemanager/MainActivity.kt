@@ -609,6 +609,7 @@ class MainActivity : Activity() {
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         var writeStarted=false;var safetyBackup:File?=null
         val recoveryCopies=ArrayList<Pair<Gen7BankBatchItem,File>>()
+        val cleanupAttempted=HashSet<String>()
         try{
             require(selected.isNotEmpty()&&selected.map{it.bankFile.absolutePath}.distinct().size==selected.size){"The prepared Gen 7 Bank selection is empty or contains a duplicate."}
             require(targetBox>=0&&targetSlots.size==selected.size&&targetSlots.distinct().size==targetSlots.size&&targetSlots.all{it in 0 until 30}){"The prepared Generation 7 destination slots are invalid."}
@@ -650,6 +651,7 @@ class MainActivity : Activity() {
             for(item in refreshed){
                 require(bound()&&file.readBytes().contentEquals(work)&&recoveryValid()){ "The verified Generation 7 destination or retained recovery data changed before Bank cleanup." }
                 val current=item.bankFile.readBytes();require(current.contentEquals(item.bankBytes)&&parsePk6(current,0,PK6_STORED_SIZE,false,807)?.checksumValid==true){"A selected Gen 7 Bank record changed before cleanup."}
+                cleanupAttempted.add(item.bankFile.absolutePath)
                 require(item.bankFile.delete()&&!item.bankFile.exists()){ "A selected Gen 7 Bank record could not be removed after destination verification." }
             }
             require(bound()&&file.readBytes().contentEquals(work)&&recoveryValid()){ "The verified Generation 7 destination or retained recovery data changed after Bank cleanup." }
@@ -658,7 +660,7 @@ class MainActivity : Activity() {
             Toast.makeText(this,"Withdrew ${refreshed.size} exact Gen 7 PK7 records to Box ${targetBox+1} • Slots ${targetSlots.joinToString(", "){(it+1).toString()}} and verified",Toast.LENGTH_LONG).show();showBank()
         }catch(e:Exception){
             val bankRestored=selected.map{item->runCatching{
-                if(!item.bankFile.exists()){require(item.bankFile.createNewFile()){ "A Bank recovery path could not be reserved." };item.bankFile.writeBytes(item.bankBytes)}
+                if(!item.bankFile.exists()){require(cleanupAttempted.contains(item.bankFile.absolutePath)){"A Gen 7 Bank record disappeared before PSE attempted cleanup; its path was not overwritten."};require(item.bankFile.createNewFile()){ "A Bank recovery path could not be reserved." };item.bankFile.writeBytes(item.bankBytes)}
                 val restored=item.bankFile.readBytes();val parsed=if(restored.size==PK6_STORED_SIZE)parsePk6(restored,0,PK6_STORED_SIZE,false,807)else null
                 require(restored.contentEquals(item.bankBytes)&&parsed!=null&&parsed.checksumValid&&parsed.pid==item.source.pid&&parsed.species==item.source.species&&parsed.tid==item.source.tid&&parsed.sid==item.source.sid){"An exact Gen 7 Bank record could not be restored or verified."};true
             }.getOrDefault(false)}.all{it}
