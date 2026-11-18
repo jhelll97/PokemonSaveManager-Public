@@ -66596,7 +66596,9 @@ private data class Gen2ToGen5LegalisePlan(
             require(bound()&&nativeValid(original)){"The loaded Gen $generation source identity or native checksums changed."}
             require(file.readBytes().contentEquals(original)){"The loaded Gen $generation source changed before staging."}
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen${generation}BankDeposit_",".backup",backupsDir());backup=recovery
-            recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The Gen $generation recovery backup did not verify."}
+            recovery.writeBytes(original)
+            if(generation==6)retainGenToGen6SafetyBackup(recovery,original)else retainGen1ToGen7SafetyBackup(recovery,original)
+            require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The retained Gen $generation recovery backup did not verify."}
             val ext = if (generation == 7) "pk7" else "pk6"
             val created=File(bankDir(),"${System.currentTimeMillis()}_${parsed.species}.$ext")
             require(!created.exists()){"The destination Bank path is already occupied."}
