@@ -45441,11 +45441,13 @@ class MainActivity : Activity() {
 
     private fun depositGen3ToBank(global:Int,p:PokemonEntry){
         val file=importedFile?:return
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val original=try{file.readBytes()}catch(e:Exception){showDialog("PSE Bank",e.message?:"Could not read save");return}
         var bankFile:File?=null;var backup:File?=null;var bankBytes:ByteArray?=null
         var bankReserved=false;var sourceWriteStarted=false
         try{
-            require(global in 0 until 420){"Invalid Gen 3 PC slot"}
+            require(bound()&&global in 0 until 420){"The Gen 3 source identity or PC slot changed."}
             require(gen3SaveValid(original)){"The Gen 3 source save failed native integrity validation."}
             val save=original.copyOf()
             val pc=gen3PcBuffer(save) ?: throw IllegalStateException("Could not reconstruct Gen 3 PC storage")
@@ -45469,13 +45471,24 @@ class MainActivity : Activity() {
             ByteArray(80).copyInto(pc,off)
             writeGen3PcBuffer(save,pc)
             if(!gen3SaveValid(save)) throw IllegalStateException("Gen 3 section checksum verification failed")
+            require(bound()&&file.readBytes().contentEquals(original)&&created.readBytes().contentEquals(raw)&&
+                recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){
+                "The Gen 3 source, Bank record or retained recovery backup changed before writing."
+            }
             sourceWriteStarted=true;file.writeBytes(save)
             val verify=file.readBytes()
-            if(!gen3SaveValid(verify)) throw IllegalStateException("Written save failed verification")
+            require(bound()&&verify.contentEquals(save)&&generationForSize(verify.size)==3&&gen3SaveValid(verify)){
+                "The persisted Gen 3 source identity, bytes or native integrity changed."
+            }
             val verifyPc=gen3PcBuffer(verify) ?: throw IllegalStateException("Could not re-read Gen 3 PC storage")
             if(!verifyPc.copyOfRange(off,off+80).all{it==0.toByte()} || parsePk3(verifyPc,off,false)!=null)
                 throw IllegalStateException("Source slot was not empty after re-read")
-            if(!created.readBytes().contentEquals(raw)) throw IllegalStateException("Bank copy changed during the transaction")
+            val finalBank=created.readBytes();val finalParsed=if(finalBank.size==80)parsePk3(finalBank,0,false)else null
+            require(finalBank.contentEquals(raw)&&finalParsed!=null&&finalParsed.checksumValid&&
+                finalParsed.pid==current.pid&&finalParsed.species==current.species&&
+                finalParsed.tid==current.tid&&finalParsed.sid==current.sid){
+                "The exact Gen 3 Bank copy changed after persistence."
+            }
             require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The retained Gen 3 recovery backup changed after persistence."}
             Toast.makeText(this,"Moved to Gen 3 PSE Bank and verified",Toast.LENGTH_LONG).show()
             bankViewGeneration=3; bankViewBox=((bankDir().listFiles()?.count{it.isFile&&it.extension.equals("pk3",true)}?:1)-1)/30
