@@ -10833,11 +10833,16 @@ class MainActivity : Activity() {
                 }
                 require(!stagedBank.exists()){"The staged Bank record still exists."}
             }.isSuccess
+            val retainedBackup=backup?.let{saved->runCatching{
+                saved.readBytes().contentEquals(original)&&isBackupKept(saved)
+            }.getOrDefault(false)}?:false
             val recovery=when{
                 sourceRestored&&bankCleared->"The exact Gen 4 source was restored or kept and no staged Bank record remained."
                 sourceRestored->"The exact Gen 4 source was restored or kept, but staged Bank cleanup was not verified. Keep the remaining exact PK4 for review."
-                bankCleared->"The staged Bank record was cleared or absent, but source recovery was not verified. Use the retained Gen 4 backup before editing again."
-                else->"Automatic recovery could not be verified. Keep the retained Gen 4 backup and any remaining staged PK4 for review."
+                bankCleared&&retainedBackup->"No staged Bank record remained. Source recovery was not verified, but the exact retained Gen 4 backup verified."
+                bankCleared->"No staged Bank record remained, but source recovery and the retained Gen 4 backup were not verified. The current source was left untouched."
+                retainedBackup->"Source recovery and Bank cleanup were not verified. The exact retained Gen 4 backup verified; keep it and any remaining staged PK4 for review."
+                else->"Automatic recovery and the retained Gen 4 backup could not be verified. Keep the current source and any remaining staged PK4 for review."
             }
             showDialog("Gen 4 Bank move failed",(e.message?:"Unknown error")+".\n\n"+recovery+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:""))
         }
