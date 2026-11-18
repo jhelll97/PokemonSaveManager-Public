@@ -36825,9 +36825,10 @@ class MainActivity : Activity() {
                 }
                 p.bankFile.readBytes().contentEquals(p.bankBytes)
             }.getOrDefault(false)
-            val saveRestored=!writeStarted||runCatching{
-                file.writeBytes(fresh);val restored=file.readBytes()
-                restored.contentEquals(fresh)&&gen3SaveValid(restored)
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(fresh)
+                val restored=file.readBytes()
+                restored.contentEquals(fresh)&&generationForSize(restored.size)==3&&gen3SaveValid(restored)
             }.getOrDefault(false)
             if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
