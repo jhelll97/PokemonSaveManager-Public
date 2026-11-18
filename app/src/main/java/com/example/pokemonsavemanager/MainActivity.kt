@@ -1811,14 +1811,21 @@ class MainActivity : Activity() {
 
     private fun moveSelectedGen1BoxPokemonToBank(boxNumber:Int,chosen:List<Gen1Pokemon>){
         val file=importedFile?:return
+        val openedUri=currentSourceUri
+        val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val fresh=runCatching{file.readBytes()}.getOrNull()?:return
         val selectionIntegrity=verifyGen1SaveIntegrity(fresh)
         if(!selectionIntegrity.first){showDialog("Move selected",selectionIntegrity.second+" Nothing was changed.");return}
         val selected=chosen.sortedBy{it.slot}
         if(selected.isEmpty()){showDialog("Move selected","Select one or more Pokémon in this box first.");return}
         if(selected.map{it.slot}.distinct().size!=selected.size){showDialog("Move selected","The selection contains a duplicate slot. Nothing was changed.");return}
+        val created=ArrayList<Pair<File,ByteArray>>()
+        var sourceWriteStarted=false
+        var safetyBackup:File?=null
         try{
-            require(fresh.size==SIZE_G1&&hasValidGen1MainChecksum(fresh)){"The fresh Gen 1 save is invalid."}
+            require(bound()){"The loaded Gen 1 source identity changed."}
+            require(fresh.size==SIZE_G1&&hasValidGen1MainChecksum(fresh)&&verifyGen1SaveIntegrity(fresh).first){"The fresh Gen 1 save is invalid."}
             require(gen1BoxIsWritable(fresh,boxNumber)){"Box $boxNumber is not writable."}
             val sourceBefore=parseGen1Box(fresh,boxNumber).pokemon.sortedBy{it.slot}
             val ordered=selected.map{p->sourceBefore.firstOrNull{it.slot==p.slot}.also{require(it!=null&&sameGen1TransferRecord(it,p)){"A selected Pokémon changed before the Bank deposit."}}!!}
@@ -1827,29 +1834,85 @@ class MainActivity : Activity() {
             val bankCountBefore=gen1BankEntryCountForDeposit()
             requireGen1BankCapacity(bankCountBefore,ordered.size)
             val payloads=ordered.map{p->p to buildGen1BankPayload(fresh,p,"Box $boxNumber • Slot ${p.slot+1}",false)}
-            val created=ArrayList<Pair<File,ByteArray>>()
-            try{
-                for((p,payload) in payloads){
-                    require(gen1BankEntryCountForDeposit()==bankCountBefore+created.size){"PSE Bank changed while the Gen 1 deposit was being staged. Nothing was changed."}
-                    val out=File.createTempFile("pse1_${gen1DexFromInternalIndex(p.species)?:p.species}_",".pse1",bankDir());created.add(out to payload)
-                    out.writeBytes(payload)
-                    val stored=out.readBytes();require(stored.contentEquals(payload)){"A new Bank record changed while it was being written."}
-                    val parsed=parseGen1BankPayload(stored)?:error("A new Bank record did not verify.")
-                    require(sameGen1TransferRecord(parsed,p)){"A new Bank record did not preserve every supported Pokémon field."}
-                }
-                require(gen1BankEntryCountForDeposit()==bankCountBefore+created.size){"PSE Bank changed before the Gen 1 deposit could commit. Nothing was changed."}
-                val work=fresh.copyOf();for((p,_) in payloads.sortedByDescending{it.first.slot})removeGen1BoxSlot(work,boxNumber,p.slot)
-                val pre=verifyGen1WriteState(work,boxNumber);require(pre.first){pre.second}
-                val staged=parseGen1Box(work,boxNumber).pokemon.sortedBy{it.slot};require(staged.size==expectedRemaining.size&&staged.zip(expectedRemaining).all{(a,b)->sameGen1TransferRecord(a,b)}){"A remaining boxed Pokémon changed during Bank deposit staging."}
-                file.writeBytes(work)
-                val written=file.readBytes();require(written.contentEquals(work)){"The source save changed while the Gen 1 Bank deposit was being written."};val post=verifyGen1WriteState(written,boxNumber);require(post.first){post.second}
-                val remaining=parseGen1Box(written,boxNumber).pokemon.sortedBy{it.slot};require(remaining.size==expectedRemaining.size&&remaining.zip(expectedRemaining).all{(a,b)->sameGen1TransferRecord(a,b)}){"A remaining boxed Pokémon changed after Bank deposit persistence."}
-                for((out,payload) in created)require(out.exists()&&out.readBytes().contentEquals(payload)&&parseGen1BankPayload(out.readBytes())!=null){"A staged Bank record changed before commit completion."}
-                gen1BoxMultiSelectMode=false;selectedGen1BoxSlots.clear();Toast.makeText(this,"${ordered.size} Gen 1 Pokémon moved to PSE Bank and verified",Toast.LENGTH_LONG).show();showGen1PokemonViewer("boxes",boxNumber)
-            }catch(e:Exception){for((out,_) in created)runCatching{out.delete()};runCatching{file.writeBytes(fresh)};throw e}
-        }catch(e:Exception){runCatching{file.writeBytes(fresh)};showDialog("Move selected failed",(e.message?:"Unknown error")+"\n\nThe fresh pre-transfer save was restored and no partial transfer was kept.")}
-    }
 
+            val backup=File.createTempFile(backupGameName(file)+"_PreGen1BankBoxBatch_",".backup",backupsDir())
+            safetyBackup=backup
+            backup.writeBytes(fresh)
+            require(backup.readBytes().contentEquals(fresh)&&verifyGen1SaveIntegrity(backup.readBytes()).first){"The exact Gen 1 box batch recovery backup did not verify."}
+            val kept=keptBackupNames().apply{add(backup.name)}
+            val prefs=getSharedPreferences("pse_backup_state",MODE_PRIVATE)
+            require(prefs.edit().putStringSet("kept",kept).commit()){"The Gen 1 box batch recovery backup Keep pin could not be saved. Nothing was written."}
+            require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 1 box batch backup could not be rechecked."}
+
+            for((p,payload) in payloads){
+                require(bound()&&file.readBytes().contentEquals(fresh)){"The loaded Gen 1 source changed while the Bank batch was staged."}
+                require(gen1BankEntryCountForDeposit()==bankCountBefore+created.size){"PSE Bank changed while the Gen 1 deposit was being staged. Nothing was changed."}
+                val out=File.createTempFile("pse1_${gen1DexFromInternalIndex(p.species)?:p.species}_",".pse1",bankDir())
+                created.add(out to payload.copyOf())
+                out.writeBytes(payload)
+                val stored=out.readBytes()
+                require(stored.contentEquals(payload)){"A new Bank record changed while it was being written."}
+                val parsed=parseGen1BankPayload(stored)?:error("A new Bank record did not verify.")
+                require(sameGen1TransferRecord(parsed,p)){"A new Bank record did not preserve every supported Pokémon field."}
+            }
+            require(gen1BankEntryCountForDeposit()==bankCountBefore+created.size){"PSE Bank changed before the Gen 1 deposit could commit. Nothing was changed."}
+            val work=fresh.copyOf()
+            for((p,_) in payloads.sortedByDescending{it.first.slot})removeGen1BoxSlot(work,boxNumber,p.slot)
+            val pre=verifyGen1WriteState(work,boxNumber)
+            require(pre.first){pre.second}
+            val staged=parseGen1Box(work,boxNumber).pokemon.sortedBy{it.slot}
+            require(staged.size==expectedRemaining.size&&staged.zip(expectedRemaining).all{(a,b)->sameGen1TransferRecord(a,b)}){"A remaining boxed Pokémon changed during Bank deposit staging."}
+            require(bound()&&file.readBytes().contentEquals(fresh)&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&
+                created.size==payloads.size&&created.indices.all{index->created[index].second.contentEquals(payloads[index].second)&&created[index].first.readBytes().contentEquals(payloads[index].second)}){
+                "The Gen 1 source, staged Bank records or retained recovery backup changed before writing."
+            }
+
+            sourceWriteStarted=true
+            file.writeBytes(work)
+            val written=file.readBytes()
+            require(bound()&&written.contentEquals(work)){"The loaded source identity or Gen 1 save bytes changed while the Bank deposit was being written."}
+            val post=verifyGen1WriteState(written,boxNumber)
+            require(post.first){post.second}
+            val remaining=parseGen1Box(written,boxNumber).pokemon.sortedBy{it.slot}
+            require(remaining.size==expectedRemaining.size&&remaining.zip(expectedRemaining).all{(a,b)->sameGen1TransferRecord(a,b)}){"A remaining boxed Pokémon changed after Bank deposit persistence."}
+            for((index,item) in created.withIndex()){
+                val(out,payload)=item
+                val stored=out.readBytes()
+                val parsed=parseGen1BankPayload(stored)
+                require(stored.contentEquals(payload)&&payload.contentEquals(payloads[index].second)&&parsed!=null&&sameGen1TransferRecord(parsed,ordered[index])){"A staged Bank record changed before commit completion."}
+            }
+            require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 1 box batch backup changed after persistence."}
+
+            gen1BoxMultiSelectMode=false
+            selectedGen1BoxSlots.clear()
+            Toast.makeText(this,"${ordered.size} Gen 1 Pokémon moved to PSE Bank and verified",Toast.LENGTH_LONG).show()
+            showGen1PokemonViewer("boxes",boxNumber)
+        }catch(error:Exception){
+            val sourceRestored=runCatching{
+                if(sourceWriteStarted)file.writeBytes(fresh)
+                val restored=file.readBytes()
+                restored.contentEquals(fresh)&&restored.size==SIZE_G1&&hasValidGen1MainChecksum(restored)&&verifyGen1SaveIntegrity(restored).first
+            }.getOrDefault(false)
+            var bankClean=true
+            for((out,payload) in created){
+                val removed=runCatching{
+                    if(out.exists()){
+                        require(out.readBytes().contentEquals(payload)){"A staged Gen 1 Bank record changed; it was retained for review."}
+                        require(out.delete()){"An exact staged Gen 1 Bank record could not be removed."}
+                    }
+                    require(!out.exists()){"An exact staged Gen 1 Bank record still exists."}
+                }.isSuccess
+                if(!removed)bankClean=false
+            }
+            val recovery=when{
+                sourceRestored&&bankClean->"The exact fresh Gen 1 source was restored or kept, and every exact staged Bank file was removed."
+                sourceRestored->"The exact fresh Gen 1 source was restored or kept, but one or more staged Bank files remain for review."
+                bankClean->"Every exact staged Bank file was removed, but source recovery was not verified. Use the retained Gen 1 box batch backup before editing again."
+                else->"Automatic recovery could not be verified. Keep the retained Gen 1 box batch backup and any remaining Bank files for review."
+            }
+            showDialog("Move selected failed",(error.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""))
+        }
+    }
     private fun gen1ItemName(id:Int):String {
         // Gen 1 machine item IDs: HM01-HM05 = 0xC4-0xC8 (196-200),
         // TM01-TM50 = 0xC9-0xFA (201-250).
