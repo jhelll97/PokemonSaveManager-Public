@@ -56869,13 +56869,23 @@ class MainActivity : Activity() {
             val committed=bankFile!!.readBytes();require(committed.contentEquals(payload)&&parseGen2BankPayload(committed)?.let{sameGen2BankRecord(it,selected)}==true){"The committed Gen 2 Bank record did not remain exact."}
             require(bound()&&file.readBytes().contentEquals(work)){"The verified Gen 2 source changed before deposit completion."}
         }catch(e:Exception){
-            val sourceRestored=!sourceWriteStarted||(runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false))
+            val sourceRestored=runCatching{
+                if(sourceWriteStarted)file.writeBytes(fresh)
+                val restored=file.readBytes()
+                restored.contentEquals(fresh)&&verifyGen2SaveIntegrity(restored).first&&
+                    detectGen2Profile(restored)?.key==detectGen2Profile(fresh)?.key
+            }.getOrDefault(false)
             val stagedBank=bankFile
-            val bankCleared=if(!bankReserved)true else if(!sourceRestored||stagedBank==null)false else runCatching{
+            val bankCleared=if(!bankReserved)true else if(stagedBank==null)false else runCatching{
                 if(stagedBank.exists()){require(stagedBank.readBytes().contentEquals(expectedPayload)){"The reserved Bank record changed; it was not removed."};require(stagedBank.delete()){"The reserved Bank record could not be removed."}}
                 require(!stagedBank.exists()){"The reserved Bank record still exists."}
             }.isSuccess
-            val recovery=if(!sourceWriteStarted&&bankCleared)"Nothing was written to the save and no staged Bank record was kept." else  if(sourceRestored&&bankCleared)"The exact fresh Gen 2 save was restored and no staged Bank record was kept." else  "Automatic recovery could not be verified. Stop editing this save and keep any remaining Bank record until a verified backup and Bank contents have been reviewed."
+            val recovery=when{
+                sourceRestored&&bankCleared->"The exact fresh Gen 2 save was restored or kept and no staged Bank record remained."
+                sourceRestored->"The exact Gen 2 source was restored or kept, but staged Bank cleanup was not verified. Keep the remaining exact Bank record for review."
+                bankCleared->"The staged Bank record was cleared or absent, but source recovery was not verified. Use the retained Gen 2 backup before editing again."
+                else->"Automatic recovery could not be verified. Keep the retained Gen 2 backup and any remaining Bank record for review."
+            }
             showDialog("PSE Bank move failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         Toast.makeText(this,"Moved to PSE Bank and verified",Toast.LENGTH_LONG).show();showBank()
