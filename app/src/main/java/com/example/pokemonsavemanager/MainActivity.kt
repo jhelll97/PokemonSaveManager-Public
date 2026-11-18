@@ -856,7 +856,7 @@ class MainActivity : Activity() {
             val box=targets[which].first
             val fresh=runCatching{file.readBytes()}.getOrNull()?:return@setItems
             var writeStarted=false;var activeWriteAttempted=false;var safetyBackup:File?=null
-            val bankRecovery=ArrayList<File>()
+            val bankRecovery=ArrayList<File>();val cleanupAttempted=HashSet<String>()
             try {
                 require(bound()&&fresh.contentEquals(initial)){"The Gen 1 destination or its source identity changed after the box list opened."}
                 val freshIntegrity=verifyGen1SaveIntegrity(fresh);require(freshIntegrity.first){freshIntegrity.second}
@@ -917,7 +917,7 @@ class MainActivity : Activity() {
                     require(bound()&&file.readBytes().contentEquals(work)&&activeMatches(work)){"The verified Gen 1 destination changed before Bank cleanup."}
                     require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&bankRecovery[index].readBytes().contentEquals(bankBytes)){"A retained Gen 1 recovery copy changed before Bank cleanup."}
                     val cleanup=bankFile.readBytes();require(cleanup.contentEquals(bankBytes) && parseGen1BankPayload(cleanup)?.let{sameGen1TransferRecord(it,parsed)}==true){"A selected Bank record changed before cleanup. The destination save was restored."}
-                    require(bankFile.delete()&&!bankFile.exists()){ "A Bank record could not be removed after the save verified." }
+                    cleanupAttempted.add(bankFile.absolutePath);require(bankFile.delete()&&!bankFile.exists()){ "A Bank record could not be removed after the save verified." }
                 }
                 require(bound()&&file.readBytes().contentEquals(work)&&activeMatches(work)){"The verified Gen 1 destination changed after Bank cleanup."}
                 require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&refreshed.indices.all{bankRecovery[it].readBytes().contentEquals(refreshed[it].second)}){"A retained Gen 1 recovery copy changed after Bank cleanup."}
@@ -930,7 +930,7 @@ class MainActivity : Activity() {
                 for((bankFile,bankBytes,source) in selected){
                     val recovered=runCatching{
                         if(bankFile.exists())require(bankFile.readBytes().contentEquals(bankBytes)){"An existing Bank recovery path changed; it was not overwritten."}
-                        else{require(bankFile.createNewFile()){ "A Bank recovery path could not be reserved." };bankFile.writeBytes(bankBytes)}
+                        else{require(cleanupAttempted.contains(bankFile.absolutePath)){"A Gen 1 Bank record disappeared before PSE attempted cleanup; its path was not overwritten."};require(bankFile.createNewFile()){ "A Bank recovery path could not be reserved." };bankFile.writeBytes(bankBytes)}
                         val restored=bankFile.readBytes();require(restored.contentEquals(bankBytes)&&parseGen1BankPayload(restored)?.let{sameGen1TransferRecord(it,source)}==true){"A restored Gen 1 Bank record did not verify."};true
                     }.getOrDefault(false)
                     bankRestored=recovered&&bankRestored
