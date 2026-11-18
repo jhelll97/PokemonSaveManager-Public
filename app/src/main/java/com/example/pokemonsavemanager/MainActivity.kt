@@ -10767,7 +10767,7 @@ class MainActivity : Activity() {
             ?:return showDialog("PSE Bank","The exact selected Gen 4 save could not be reopened. Nothing was changed.")
         if(!current.contentEquals(original))return showDialog("PSE Bank","The selected Gen 4 save changed after deposit review. Reopen this Pokémon. Nothing was changed.")
         var bankFile:File?=null;var backup:File?=null;var bankBytes:ByteArray?=null
-        var bankReserved=false;var sourceWriteStarted=false
+        var bankReserved=false;var sourceWriteStarted=false;var stagedSource:ByteArray?=null
         try{
             require(bound()&&global in 0 until 540){"The Gen 4 source identity or PC slot changed."}
             val save=original.copyOf(); val profile=detectGen4Profile(save) ?: throw IllegalStateException("Could not detect Gen 4 save layout")
@@ -10798,6 +10798,7 @@ class MainActivity : Activity() {
                 recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){
                 "The Gen 4 source, Bank record or retained recovery backup changed before writing."
             }
+            stagedSource=save.copyOf()
             sourceWriteStarted=true;file.writeBytes(save)
             val verify=file.readBytes(); val vp=detectGen4Profile(verify) ?: throw IllegalStateException("Written save layout could not be re-read")
             require(bound()&&verify.contentEquals(save)&&vp==profile){"The persisted Gen 4 source identity, bytes or game profile changed."}
@@ -10814,7 +10815,12 @@ class MainActivity : Activity() {
             val count=bankDir().listFiles()?.count{it.isFile&&it.extension.equals("pk4",true)}?:1; bankViewBox=(count-1).coerceAtLeast(0)/30; showBank()
         }catch(e:Exception){
             val sourceRestored=runCatching{
-                if(sourceWriteStarted)file.writeBytes(original)
+                val found=file.readBytes()
+                if(sourceWriteStarted&&!found.contentEquals(original)){
+                    val staged=stagedSource
+                    require(staged!=null&&found.contentEquals(staged)){"The Gen 4 source no longer matches this transaction's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(original)
+                }
                 val restored=file.readBytes();val profile=detectGen4Profile(restored)?:error("The restored Gen 4 layout is invalid.")
                 val validation=gen4Validation(restored,profile)
                 restored.contentEquals(original)&&validation.generalChecksum&&validation.storageChecksum&&validation.badPk4==0
