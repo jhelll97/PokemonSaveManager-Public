@@ -45558,31 +45558,48 @@ class MainActivity : Activity() {
     }
 
 
-    private fun confirmGen3DepositToBank(location:String,p:PokemonEntry){
+    private fun confirmGen3DepositToBank(
+        location:String,p:PokemonEntry,openedFile:File,openedUri:Uri?,openedLabel:String?,openedSource:ByteArray
+    ){
         val global=boxedLocationToGlobalIndex(location) ?: run {
             showDialog("PSE Bank","Gen 3 Bank deposit is currently enabled for boxed Pokémon only.")
             return
         }
-        val file=importedFile?:return
-        val data=runCatching{file.readBytes()}.getOrNull() ?: return
-        val pc=gen3PcBuffer(data) ?: run { showDialog("PSE Bank","Could not reconstruct Gen 3 PC storage."); return }
+        fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        if(!bound())return showDialog("PSE Bank","The loaded Gen 3 source identity changed after this Pokémon was opened. Reopen it. Nothing was changed.")
+        val currentSource=runCatching{openedFile.readBytes()}.getOrNull()
+            ?:return showDialog("PSE Bank","The exact selected Gen 3 save could not be reopened. Nothing was changed.")
+        if(!currentSource.contentEquals(openedSource))
+            return showDialog("PSE Bank","The selected Gen 3 save changed after this Pokémon was opened. Reopen it. Nothing was changed.")
+        if(generationForSize(openedSource.size)!=3||!gen3SaveValid(openedSource))
+            return showDialog("PSE Bank","The reviewed source is not a complete checksum-clean Ruby, Sapphire, Emerald, FireRed or LeafGreen save.")
+        val pc=gen3PcBuffer(openedSource)
+            ?:return showDialog("PSE Bank","Could not reconstruct the reviewed Gen 3 PC storage. Nothing was changed.")
         val current=parsePk3(pc,4+global*80,false)
-        if(current==null || current.pid!=p.pid || current.species!=p.species || !current.checksumValid){
-            showDialog("PSE Bank","The Pokémon in this slot changed or failed its PK3 checksum. Re-open it and try again.")
+        if(current==null||!current.checksumValid||!sameReviewedPokemonEntry(current,p)){
+            showDialog("PSE Bank","The selected PK3 changed after review. Reopen this Pokémon. Nothing was changed.")
             return
         }
         val name=p.nickname.ifBlank{canonicalGen3SpeciesName(p.species)?:"Species #${p.species}"}
         AlertDialog.Builder(this).setTitle("Move $name to PSE Bank?")
-            .setMessage("PSE will preserve the exact 80-byte PK3 record in the Gen 3 Bank, verify the Bank copy, then clear $location from the working save and rebuild all affected Gen 3 PC-section checksums. If anything fails, both sides roll back.")
+            .setMessage("PSE will preserve the exact reviewed 80-byte PK3 record in the Gen 3 Bank, verify the Bank copy, then clear $location from the working save and rebuild all affected Gen 3 PC-section checksums. If anything fails, both sides roll back.")
             .setNegativeButton("Cancel",null)
-            .setPositiveButton("Move to Bank"){_,_->depositGen3ToBank(global,p)}.show()
+            .setPositiveButton("Move to Bank"){_,_->
+                depositGen3ToBank(global,p,openedFile,openedUri,openedLabel,openedSource)
+            }.show()
     }
 
-    private fun depositGen3ToBank(global:Int,p:PokemonEntry){
-        val file=importedFile?:return
-        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+    private fun depositGen3ToBank(
+        global:Int,p:PokemonEntry,openedFile:File,openedUri:Uri?,openedLabel:String?,openedSource:ByteArray
+    ){
+        val file=openedFile
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
-        val original=try{file.readBytes()}catch(e:Exception){showDialog("PSE Bank",e.message?:"Could not read save");return}
+        if(!bound())return showDialog("PSE Bank","The loaded Gen 3 source identity changed before deposit. Reopen this Pokémon. Nothing was changed.")
+        val original=openedSource.copyOf()
+        val currentSource=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog("PSE Bank","The exact selected Gen 3 save could not be reopened. Nothing was changed.")
+        if(!currentSource.contentEquals(original))
+            return showDialog("PSE Bank","The selected Gen 3 save changed after deposit review. Reopen this Pokémon. Nothing was changed.")
         var bankFile:File?=null;var backup:File?=null;var bankBytes:ByteArray?=null
         var bankReserved=false;var sourceWriteStarted=false
         try{
@@ -51598,7 +51615,11 @@ class MainActivity : Activity() {
                     chooseGen3PartyMoveDestination(location, p)
                 }
             }
-            addButton(root, "🏦  Move to PSE Bank") { confirmGen3DepositToBank(location, p) }
+            addButton(root, "🏦  Move to PSE Bank") {
+                if(contestFile!=null&&contestOpened!=null)
+                    confirmGen3DepositToBank(location,p,contestFile,contestSourceUri,contestSourceLabel,contestOpened)
+                else showDialog("PSE Bank","The selected Gen 3 save could not be read. Reopen this Pokémon. Nothing was changed.")
+            }
             if (detailGlobal != null) {
                 addButton(root, "🗑️  Delete Pokémon") { confirmGen3Delete(location, p) }
                 addMutedLine(root, "Delete clears only this Gen 3 PC slot in PSE's working copy. PSE rebuilds the affected PC sections and verifies the complete active save before keeping the change.")
