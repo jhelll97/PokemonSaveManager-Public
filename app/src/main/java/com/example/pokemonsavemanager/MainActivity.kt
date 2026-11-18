@@ -61172,10 +61172,13 @@ private data class Gen2ToGen5LegalisePlan(
     }
     private fun depositGen1ToBank(p:Gen1Pokemon,location:String,party:Boolean) {
         val f=importedFile?:return
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==f.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val old=runCatching{f.readBytes()}.getOrNull()?:return
         var bf:File?=null;var backup:File?=null;var bankBytes:ByteArray?=null
         var bankReserved=false;var sourceWriteStarted=false
         try {
+            require(bound()){"The loaded Gen 1 source identity changed."}
             val integrity=verifyGen1SaveIntegrity(old);require(integrity.first){integrity.second}
             require(old.size==SIZE_G1 && hasValidGen1MainChecksum(old)){"The fresh Gen 1 save is invalid."}
             val affected=if(party)null else requireNotNull(gen1BoxNumberFromLocation(location))
@@ -61201,11 +61204,15 @@ private data class Gen2ToGen5LegalisePlan(
             val pre=verifyGen1WriteState(d,affected);require(pre.first){pre.second}
             val stagedRemaining=if(party)parseGen1Party(d).sortedBy{it.slot} else parseGen1Box(d,requireNotNull(affected)).pokemon.sortedBy{it.slot}
             require(stagedRemaining.size==expectedRemaining.size && stagedRemaining.zip(expectedRemaining).all{(a,b)->sameGen1TransferRecord(a,b,party)}){"A remaining Pokémon changed during Bank deposit staging."}
+            require(bound()&&f.readBytes().contentEquals(old)&&stagedFile.readBytes().contentEquals(payload)&&
+                recovery.readBytes().contentEquals(old)&&isBackupKept(recovery)){
+                "The Gen 1 source, Bank record or retained recovery backup changed before writing."
+            }
             sourceWriteStarted=true;f.writeBytes(d)
-            val written=f.readBytes();require(written.contentEquals(d)){"The source save changed while the Gen 1 Bank deposit was being written."};val post=verifyGen1WriteState(written,affected);require(post.first){post.second}
+            val written=f.readBytes();require(bound()&&written.contentEquals(d)){"The loaded source identity or Gen 1 save bytes changed while the Bank deposit was being written."};val post=verifyGen1WriteState(written,affected);require(post.first){post.second}
             val remaining=if(party)parseGen1Party(written).sortedBy{it.slot} else parseGen1Box(written,requireNotNull(affected)).pokemon.sortedBy{it.slot}
             require(remaining.size==expectedRemaining.size && remaining.zip(expectedRemaining).all{(a,b)->sameGen1TransferRecord(a,b,party)}){"A remaining Pokémon changed after Bank deposit persistence."}
-            val committed=bf?:error("The staged Bank record was lost.");val committedBytes=committed.readBytes();require(committed.exists() && committedBytes.contentEquals(payload) && parseGen1BankPayload(committedBytes)?.let{sameGen1TransferRecord(it,source)}==true){"The staged Bank record changed before commit completion."}
+            val committed=bf?:error("The staged Bank record was lost.");val committedBytes=committed.readBytes();require(bound()&&committed.exists() && committedBytes.contentEquals(payload) && parseGen1BankPayload(committedBytes)?.let{sameGen1TransferRecord(it,source)}==true){"The loaded source identity or staged Bank record changed before commit completion."}
             require(recovery.readBytes().contentEquals(old)&&isBackupKept(recovery)){"The retained Gen 1 recovery backup changed after persistence."}
             Toast.makeText(this,"Moved to PSE Bank and verified",Toast.LENGTH_LONG).show();showBank()
         } catch(e:Exception) {
