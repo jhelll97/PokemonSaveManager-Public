@@ -52692,14 +52692,17 @@ class MainActivity : Activity() {
                 }
                 bankFile.readBytes().contentEquals(openedBank)
             }.getOrDefault(false)
-            val saveRestored=!writeStarted||(bankRestored&&runCatching{
-                file.writeBytes(original)
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(original)
                 val restored=file.readBytes();val profile=detectGen5Profile(restored)
                 restored.contentEquals(original)&&profile!=null&&gen5ChecksumTableValid(restored,profile)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,profile)}
-            }.getOrDefault(false))
-            val recovery=if(bankRestored&&saveRestored)
-                "The exact Gen 5 destination and Gen 1 Bank record were restored or kept and verified."
-            else "Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
+            }.getOrDefault(false)
+            val recovery=when{
+                bankRestored&&saveRestored->"The exact Gen 5 destination and Gen 1 Bank record were restored or kept and verified."
+                bankRestored->"The Gen 1 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                saveRestored->"The exact Gen 5 destination was restored, but Bank restoration was not verified. Keep the exact Gen 1 Bank payload for recovery."
+                else->"Automatic recovery could not be verified. Keep the retained destination backup and exact Gen 1 Bank payload for review."
+            }
             showDialog("Gen 1 → Gen 5 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""))
             return
         }
