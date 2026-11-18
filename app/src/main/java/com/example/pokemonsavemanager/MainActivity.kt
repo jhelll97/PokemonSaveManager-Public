@@ -51529,7 +51529,17 @@ class MainActivity : Activity() {
             }
             addButton(root, "✏️  Edit Pokémon") { showPokemonEditor(location, p) }
             addButton(root, "📑  Duplicate Pokémon") { chooseDuplicateDestination(location, p) }
-            addButton(root, "🏦  Move to PSE Bank") { confirmDepositToBank(location, p) }
+            val directBankFile = importedFile
+            val directBankUri = currentSourceUri
+            val directBankLabel = currentSourceLabel
+            val directBankOpened = directBankFile?.let { runCatching { it.readBytes() }.getOrNull() }
+            addButton(root, "🏦  Move to PSE Bank") {
+                if (directBankFile != null && directBankOpened != null) {
+                    confirmDepositToBank(location, p, directBankFile, directBankUri, directBankLabel, directBankOpened)
+                } else {
+                    showDialog("PSE Bank", "The selected save could not be read. Reopen this Pokémon. Nothing was changed.")
+                }
+            }
             if (detailGlobal != null) {
                 addButton(root, "🗑️  Delete Pokémon") { confirmDeletePokemon(location, detailGlobal, p) }
                 addMutedLine(root, "Delete clears this PC slot only in PSE's working copy. The emulator save is unchanged until Save & Replace Current Save.")
@@ -66582,25 +66592,50 @@ private data class Gen2ToGen5LegalisePlan(
         return count
     }
 
-    private fun confirmDepositToBank(location: String, p: PokemonEntry) {
+    private fun sameReviewedPokemonEntry(a: PokemonEntry, b: PokemonEntry): Boolean =
+        a.copy(evs=b.evs,moves=b.moves,movePP=b.movePP,ivs=b.ivs,relearnMoves=b.relearnMoves)==b&&
+            a.evs.contentEquals(b.evs)&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&
+            a.ivs.contentEquals(b.ivs)&&a.relearnMoves.contentEquals(b.relearnMoves)
+
+    private fun confirmDepositToBank(location: String,p:PokemonEntry,openedFile:File,openedUri:Uri?,openedLabel:String?,openedSource:ByteArray) {
+        fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        if(!bound()){showDialog("PSE Bank","The loaded source identity changed after this Pokémon was opened. Reopen it. Nothing was changed.");return}
+        val current=try{openedFile.readBytes()}catch(e:Exception){showDialog("PSE Bank","The exact selected save could not be reopened. Nothing was changed.");return}
+        if(!current.contentEquals(openedSource)){showDialog("PSE Bank","The selected save changed after this Pokémon was opened. Reopen it. Nothing was changed.");return}
+        val match=Regex("Box (\\d+) • Slot (\\d+)").matchEntire(location)?:return
+        val generation=generationForSize(openedSource.size)
+        val(boxOffset,slotCount,maxSpecies)=boxStorageInfo(openedSource)?:return
+        val global=(match.groupValues[1].toInt()-1)*30+(match.groupValues[2].toInt()-1)
+        if(generation !in 6..7||global !in 0 until slotCount)return
+        val offset=boxOffset+global*PK6_STORED_SIZE
+        val reviewed=if(offset+PK6_STORED_SIZE<=openedSource.size)parsePk6(openedSource,offset,PK6_STORED_SIZE,false,maxSpecies)else null
+        val nativeValid=when(generation){
+            6->gen6BoxChecksumValid(openedSource)&&gen6BlockChecksumValid(openedSource,20)
+            7->validateGen7CoreChecksums(openedSource).first
+            else->false
+        }
+        if(reviewed==null||!reviewed.checksumValid||!nativeValid||!sameReviewedPokemonEntry(reviewed,p)){
+            showDialog("PSE Bank","The selected Gen $generation Pokémon or native save changed after review. Reopen it. Nothing was changed.")
+            return
+        }
         android.app.AlertDialog.Builder(this)
             .setTitle("Move to PSE Bank?")
             .setMessage("${p.nickname.ifBlank { "Species #${p.species}" }} will be removed from $location and stored in PSE Bank in the working copy. Save & Replace creates the safety backup later.")
             .setNegativeButton("Cancel", null)
-            .setPositiveButton("Move") { _, _ -> depositToBank(location, p) }
+            .setPositiveButton("Move") { _, _ -> depositToBank(location,p,openedFile,openedUri,openedLabel,openedSource) }
             .show()
     }
 
-    private fun depositToBank(location: String, p: PokemonEntry) {
+    private fun depositToBank(location:String,p:PokemonEntry,openedFile:File,openedUri:Uri?,openedLabel:String?,openedSource:ByteArray) {
         val match = Regex("Box (\\d+) • Slot (\\d+)").matchEntire(location) ?: return
         val box = match.groupValues[1].toInt() - 1
         val slot = match.groupValues[2].toInt() - 1
-        val file = importedFile ?: return
-        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        val file=openedFile
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
-        val original = try { file.readBytes() } catch (e: Exception) {
-            Toast.makeText(this, "Could not read save: ${e.message}", Toast.LENGTH_LONG).show(); return
-        }
+        if(!bound()){showDialog("PSE Bank","The loaded source identity changed before deposit. Reopen this Pokémon. Nothing was changed.");return}
+        val original=openedSource.copyOf()
+        val current=try{file.readBytes()}catch(e:Exception){showDialog("PSE Bank","The exact selected save could not be reopened. Nothing was changed.");return}
+        if(!current.contentEquals(original)){showDialog("PSE Bank","The selected save changed after deposit review. Reopen this Pokémon. Nothing was changed.");return}
         val generation = generationForSize(original.size)
         if(generation !in 6..7)return
         fun nativeValid(data:ByteArray)=when(generation){
@@ -66615,7 +66650,7 @@ private data class Gen2ToGen5LegalisePlan(
         if (offset + PK6_STORED_SIZE > original.size) return
         val raw = original.copyOfRange(offset, offset + PK6_STORED_SIZE)
         val parsed = parsePk6(raw, 0, PK6_STORED_SIZE, false, maxSpecies)
-        if (parsed == null || !parsed.checksumValid || parsed.pid!=p.pid || parsed.species!=p.species || parsed.tid!=p.tid || parsed.sid!=p.sid) {
+        if (parsed == null || !parsed.checksumValid || !sameReviewedPokemonEntry(parsed,p)) {
             showDialog("PSE Bank", "This selected Gen $generation Pokémon changed or failed its stored-Pokémon checksum, so it was not moved.")
             return
         }
