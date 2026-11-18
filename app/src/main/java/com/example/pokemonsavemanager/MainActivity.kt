@@ -65299,49 +65299,161 @@ private data class Gen2ToGen5LegalisePlan(
 
     private fun bulkDepositToBank(returnBox: Int) {
         val file = importedFile ?: return
+        val openedUri=currentSourceUri
+        val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val original = try { file.readBytes() } catch (_: Exception) { return }
         val generation = generationForSize(original.size)
-        val (boxOffset, _, maxSpecies) = boxStorageInfo(original) ?: return
-        val records = selectedRawRecords(original)
-        if (records == null || records.isEmpty()) {
-            showDialog("PSE Bank", "One or more selected Pokémon changed. Nothing was moved.")
+        if(generation !in 6..7)return
+        fun nativeValid(data:ByteArray)=when(generation){
+            6->data.size==original.size&&generationForSize(data.size)==6&&gen6BoxChecksumValid(data)&&gen6BlockChecksumValid(data,20)
+            7->data.size==original.size&&generationForSize(data.size)==7&&validateGen7CoreChecksums(data).first
+            else->false
+        }
+        val info=boxStorageInfo(original)?:return
+        val(boxOffset,slotCount,maxSpecies)=info
+        val selected=selectedRawRecords(original)
+        if(selected==null||selected.isEmpty()){
+            showDialog("PSE Bank","One or more selected Pokémon changed. Nothing was moved.")
             return
         }
-        val created = ArrayList<File>()
-        val work = original.copyOf()
-        try {
-            val stamp = System.currentTimeMillis()
-            val ext = if (generation == 7) "pk7" else "pk6"
-            for ((index, pair) in records.withIndex()) {
-                val (global, raw) = pair
-                val parsed = parsePk6(raw, 0, PK6_STORED_SIZE, false, maxSpecies) ?: error("A selected Pokémon could not be validated.")
-                if (!parsed.checksumValid) error("A selected Pokémon failed its stored-Pokémon checksum.")
-                val bankFile = File(bankDir(), "${stamp}_${index}_${parsed.species}.$ext")
-                bankFile.writeBytes(raw)
-                if (!bankFile.readBytes().contentEquals(raw)) error("A PSE Bank entry could not be verified.")
-                created.add(bankFile)
-                java.util.Arrays.fill(work, boxOffset + global * PK6_STORED_SIZE, boxOffset + (global + 1) * PK6_STORED_SIZE, 0.toByte())
+        val prepared=try{
+            require(bound()&&nativeValid(original)){"The loaded Gen $generation source identity or native checksums changed."}
+            require(selected.map{it.first}.distinct().size==selected.size){"The selected Gen $generation slots contain a duplicate."}
+            selected.map{(global,raw)->
+                require(global in 0 until slotCount&&raw.size==PK6_STORED_SIZE){"A selected Gen $generation PC slot is invalid."}
+                val parsed=parsePk6(raw,0,PK6_STORED_SIZE,false,maxSpecies)?:error("A selected Gen $generation Pokémon could not be validated.")
+                require(parsed.checksumValid){"A selected Gen $generation Pokémon failed its stored-Pokémon checksum."}
+                Triple(global,raw.copyOf(),parsed)
+            }
+        }catch(error:Exception){
+            showDialog("PSE Bank",(error.message?:"The selected Pokémon could not be verified.")+" Nothing was moved.")
+            return
+        }
+        val created=ArrayList<Pair<File,ByteArray>>()
+        var sourceWriteStarted=false
+        var safetyBackup:File?=null
+        try{
+            require(bound()&&file.readBytes().contentEquals(original)&&nativeValid(original)){"The loaded Gen $generation source changed before staging."}
+            val work=original.copyOf()
+            val selectedRanges=ArrayList<IntRange>()
+            for((global,_,_) in prepared){
+                val start=boxOffset+global*PK6_STORED_SIZE
+                val range=start until(start+PK6_STORED_SIZE)
+                selectedRanges.add(range)
+                java.util.Arrays.fill(work,range.first,range.last+1,0.toByte())
             }
             refreshBoxChecksum(work)
-            file.writeBytes(work)
-            val verify = file.readBytes()
-            val saveOk = records.all { (global, _) ->
-                val off = boxOffset + global * PK6_STORED_SIZE
-                verify.copyOfRange(off, off + PK6_STORED_SIZE).all { it == 0.toByte() }
+            require(boxStorageInfo(work)==info&&nativeValid(work)&&selectedRanges.all{range->range.all{work[it]==0.toByte()}}){
+                "The staged Gen $generation source removals or native checksums did not verify."
             }
-            val bankOk = created.size == records.size && created.indices.all { created[it].readBytes().contentEquals(records[it].second) }
-            if (!saveOk || !bankOk) error("Post-write verification did not pass.")
+            val allowed=HashSet<Int>()
+            selectedRanges.forEach{range->range.forEach{allowed.add(it)}}
+            if(generation==6){
+                val blockId=if(original.size==SIZE_G6_XY)53 else 56
+                val checksum=original.size-0x200+0x14+(blockId*8)+6
+                allowed.add(checksum);allowed.add(checksum+1)
+            }else{
+                val checksum=gen7ChecksumOffset(original,14)
+                allowed.add(checksum);allowed.add(checksum+1)
+                val signature=if(original.size==SIZE_G7_USUM)0x6C100 else 0x6BB00
+                for(index in signature until signature+0x80)allowed.add(index)
+            }
+            require(work.indices.all{it in allowed||work[it]==original[it]}){
+                "The Gen $generation batch deposit changed bytes outside selected PC slots and native integrity data."
+            }
+
+            val backup=File.createTempFile(backupGameName(file)+"_PreGen${generation}BankBatch_",".backup",backupsDir())
+            safetyBackup=backup
+            backup.writeBytes(original)
+            if(generation==6)retainGenToGen6SafetyBackup(backup,original)else retainGen1ToGen7SafetyBackup(backup,original)
+            require(isBackupKept(backup)&&backup.readBytes().contentEquals(original)){"The retained Gen $generation batch backup did not verify."}
+
+            val stamp=System.currentTimeMillis()
+            val ext=if(generation==7)"pk7" else "pk6"
+            fun nextBankTarget(index:Int,species:Int):File{
+                var suffix=0
+                while(true){
+                    val extra=if(suffix==0)"" else "_$suffix"
+                    val candidate=File(bankDir(),"${stamp}_${index}_${species}$extra.$ext")
+                    if(!candidate.exists())return candidate
+                    suffix++
+                }
+            }
+            for((index,item) in prepared.withIndex()){
+                val(_,raw,parsed)=item
+                require(bound()&&file.readBytes().contentEquals(original)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)){
+                    "The Gen $generation source or retained backup changed while Bank files were staged."
+                }
+                val bankFile=nextBankTarget(index,parsed.species)
+                require(!bankFile.exists()){"A reserved Gen $generation Bank path became occupied."}
+                created.add(bankFile to raw.copyOf())
+                bankFile.writeBytes(raw)
+                val stagedBytes=bankFile.readBytes()
+                val staged=parsePk6(stagedBytes,0,PK6_STORED_SIZE,false,maxSpecies)
+                require(stagedBytes.contentEquals(raw)&&staged!=null&&staged.checksumValid&&
+                    staged.pid==parsed.pid&&staged.species==parsed.species&&staged.tid==parsed.tid&&staged.sid==parsed.sid){
+                    "A staged Gen $generation Bank record failed exact identity verification."
+                }
+            }
+            require(created.size==prepared.size&&created.indices.all{index->
+                created[index].second.contentEquals(prepared[index].second)&&created[index].first.readBytes().contentEquals(prepared[index].second)
+            }){"The complete staged Gen $generation Bank batch did not verify."}
+            require(bound()&&file.readBytes().contentEquals(original)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)){
+                "The Gen $generation source identity or retained backup changed before writing."
+            }
+
+            sourceWriteStarted=true
+            file.writeBytes(work)
+            val written=file.readBytes()
+            require(bound()&&written.contentEquals(work)&&boxStorageInfo(written)==info&&nativeValid(written)){
+                "The persisted Gen $generation source or native integrity data did not verify."
+            }
+            require(selectedRanges.all{range->range.all{written[it]==0.toByte()}}&&written.indices.all{it in allowed||written[it]==original[it]}){
+                "The persisted Gen $generation batch removal changed unrelated save data."
+            }
+            for((index,item) in prepared.withIndex()){
+                val(_,raw,parsed)=item
+                val(bankFile,expected)=created[index]
+                val bankBytes=bankFile.readBytes()
+                val reopened=parsePk6(bankBytes,0,PK6_STORED_SIZE,false,maxSpecies)
+                require(expected.contentEquals(raw)&&bankBytes.contentEquals(raw)&&reopened!=null&&reopened.checksumValid&&
+                    reopened.pid==parsed.pid&&reopened.species==parsed.species&&reopened.tid==parsed.tid&&reopened.sid==parsed.sid){
+                    "A persisted Gen $generation Bank record changed from its exact selected Pokémon."
+                }
+            }
+            require(isBackupKept(backup)&&backup.readBytes().contentEquals(original)){"The retained Gen $generation batch backup changed after persistence."}
+
             resetPokemonSelection()
-            Toast.makeText(this, "${records.size} Pokémon moved to PSE Bank and verified", Toast.LENGTH_LONG).show()
+            Toast.makeText(this,"${prepared.size} Gen $generation Pokémon moved to PSE Bank and verified",Toast.LENGTH_LONG).show()
             showBank()
-        } catch (e: Exception) {
-            try { file.writeBytes(original) } catch (_: Exception) { }
-            created.forEach { try { it.delete() } catch (_: Exception) { } }
-            showDialog("Bank move failed", (e.message ?: "Unknown error") + " The original working copy was restored.")
-            if (pokemonMultiSelectMode) showPokemonViewer("boxes", returnBox)
+        }catch(error:Exception){
+            val sourceRestored=runCatching{
+                if(sourceWriteStarted)file.writeBytes(original)
+                val restored=file.readBytes()
+                restored.contentEquals(original)&&nativeValid(restored)
+            }.getOrDefault(false)
+            var bankClean=true
+            for((bankFile,expected) in created){
+                val removed=runCatching{
+                    if(bankFile.exists()){
+                        require(bankFile.readBytes().contentEquals(expected)){"A staged Gen $generation Bank record changed; it was retained for review."}
+                        require(bankFile.delete()){"An exact staged Gen $generation Bank record could not be removed."}
+                    }
+                    require(!bankFile.exists()){"An exact staged Gen $generation Bank record still exists."}
+                }.isSuccess
+                if(!removed)bankClean=false
+            }
+            val recovery=when{
+                sourceRestored&&bankClean->"The exact Gen $generation source was restored or kept, and every exact staged Bank file was removed."
+                sourceRestored->"The exact Gen $generation source was restored or kept, but one or more staged Bank files remain for review."
+                bankClean->"Every exact staged Bank file was removed, but source recovery was not verified. Use the retained Gen $generation batch backup before editing again."
+                else->"Automatic recovery could not be verified. Keep the retained Gen $generation batch backup and any remaining Bank files for review."
+            }
+            showDialog("Gen $generation batch Bank move failed",(error.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""))
+            if(pokemonMultiSelectMode)showPokemonViewer("boxes",returnBox)
         }
     }
-
     private fun updatePk6Checksum(pk: ByteArray) {
         var sum = 0
         var pos = 0x08
