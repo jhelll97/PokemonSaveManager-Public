@@ -66680,71 +66680,131 @@ private data class Gen2ToGen5LegalisePlan(
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         if(!bound()){showDialog("Withdraw","The loaded destination identity changed after slot selection. Reopen PSE Bank. Nothing was changed.");return}
         val file=openedFile
-        val original=try { file.readBytes() } catch (_:Exception) { ByteArray(0) }
-        val currentGen = generationForSize(original.size)
-        val bankGen = if (bankFile.extension.equals("pk7", true)) 7 else 6
-        var writeStarted=false
-        if (!canBankTransfer(bankGen, currentGen, p.species)) {
-            showDialog("Withdraw blocked", bankTransferBlockReason(bankGen, currentGen, p.species))
+        val original=try{file.readBytes()}catch(e:Exception){showDialog("Withdraw","The exact destination could not be read. Nothing was changed.");return}
+        val currentGen=generationForSize(original.size)
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()?:run{showDialog("Withdraw","The PSE Bank folder could not be verified. Nothing was changed.");return}
+        val exactBankFile=runCatching{bankFile.canonicalFile}.getOrNull()?:run{showDialog("Withdraw","The selected Bank path could not be verified. Nothing was changed.");return}
+        val bankGen=when{
+            exactBankFile.extension.equals("pk7",true)->7
+            exactBankFile.extension.equals("pk6",true)->6
+            else->0
+        }
+        if(exactBankFile.parentFile!=root||!exactBankFile.isFile||bankGen==0){
+            showDialog("Withdraw","The selected record is outside the supported Generation 6 or Generation 7 PSE Bank. Nothing was changed.")
             return
         }
-        val (boxOffset, slotCount, maxSpecies)=boxStorageInfo(original) ?: return
-        fun recoverDestination():Boolean=runCatching{
-            if(writeStarted)file.writeBytes(original)
-            val restored=file.readBytes()
-            restored.contentEquals(original)&&when(currentGen){
-                6->gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)
-                7->validateGen7CoreChecksums(restored).first
-                else->false
-            }
-        }.getOrDefault(false)
-        if(target !in 0 until slotCount) return
+        if(!canBankTransfer(bankGen,currentGen,p.species)){
+            showDialog("Withdraw blocked",bankTransferBlockReason(bankGen,currentGen,p.species))
+            return
+        }
+        val(boxOffset,slotCount,maxSpecies)=boxStorageInfo(original)?:return
+        if(target !in 0 until slotCount)return
         val offset=boxOffset+target*PK6_STORED_SIZE
         val structurallyEmpty=when(currentGen){
             6->gen6BankDestinationSlotIsStructurallyEmpty(original,boxOffset,slotCount,maxSpecies,target)
             7->gen7BankDestinationSlotIsStructurallyEmpty(original,boxOffset,slotCount,maxSpecies,target)
             else->false
         }
-        if (!structurallyEmpty) {
-            showDialog("Withdraw", "That destination slot is no longer structurally empty. Existing or nonzero slot data was not overwritten.")
+        if(!structurallyEmpty){
+            showDialog("Withdraw","That destination slot is no longer structurally empty. Existing or nonzero slot data was not overwritten.")
             return
         }
-        val raw=try { bankFile.readBytes() } catch (_:Exception) { ByteArray(0) }
-        val sourceMaxSpecies = if (bankGen == 7) 807 else 721
-        val bankPokemon = if (raw.size == PK6_STORED_SIZE) parsePk6(raw, 0, PK6_STORED_SIZE, false, sourceMaxSpecies) else null
-        if(bankPokemon == null || !bankPokemon.checksumValid){ showDialog("Withdraw", "This Bank entry is not a valid PK$bankGen stored record."); return }
-        val targetRaw = try { convertBankPokemonForGeneration(raw, bankGen, currentGen) } catch (e: Exception) {
-            showDialog("Transfer conversion failed", e.message ?: "PSE could not convert this Bank Pokémon for the destination generation.")
+        val raw=try{exactBankFile.readBytes()}catch(e:Exception){showDialog("Withdraw","The exact Bank record could not be read. Nothing was changed.");return}
+        val sourceMaxSpecies=if(bankGen==7)807 else 721
+        val bankPokemon=if(raw.size==PK6_STORED_SIZE)parsePk6(raw,0,PK6_STORED_SIZE,false,sourceMaxSpecies)else null
+        if(bankPokemon==null||!bankPokemon.checksumValid||bankPokemon.pid!=p.pid||bankPokemon.species!=p.species||bankPokemon.tid!=p.tid||bankPokemon.sid!=p.sid){
+            showDialog("Withdraw","This selected Bank entry changed or is not a checksum-valid PK$bankGen stored record. Nothing was changed.")
             return
         }
-        try {
-            require(bound()&&file.readBytes().contentEquals(original)){"The destination identity or bytes changed before withdrawal."}
-            val work = original.copyOf()
+        val targetRaw=try{convertBankPokemonForGeneration(raw,bankGen,currentGen)}catch(e:Exception){
+            showDialog("Transfer conversion failed",e.message?:"PSE could not convert this Bank Pokémon for the destination generation.")
+            return
+        }
+        fun nativeValid(data:ByteArray)=when(currentGen){
+            6->generationForSize(data.size)==6&&gen6BoxChecksumValid(data)&&gen6BlockChecksumValid(data,20)
+            7->generationForSize(data.size)==7&&validateGen7CoreChecksums(data).first
+            else->false
+        }
+        var writeStarted=false
+        var cleanupAttempted=false
+        var safetyBackup:File?=null
+        var bankRecovery:File?=null
+        try{
+            require(bound()&&nativeValid(original)&&file.readBytes().contentEquals(original)){"The destination identity, bytes or native checksums changed before withdrawal."}
+            require(exactBankFile.readBytes().contentEquals(raw)){"The selected PK$bankGen Bank record changed before recovery staging."}
+            val backup=File.createTempFile(backupGameName(file)+"_PreDirectBankWithdrawal_",".backup",backupsDir());safetyBackup=backup
+            backup.writeBytes(original)
+            if(currentGen==6)retainGenToGen6SafetyBackup(backup,original)else retainGen1ToGen7SafetyBackup(backup,original)
+            require(backup.readBytes().contentEquals(original)&&isBackupKept(backup)){"The retained Generation $currentGen destination backup did not verify."}
+            val recovery=File.createTempFile("PSE_Direct_PK${bankGen}_BankRecovery_",".tmp",bankDir());bankRecovery=recovery
+            recovery.writeBytes(raw)
+            require(recovery.readBytes().contentEquals(raw)){"The exact PK$bankGen Bank recovery snapshot did not verify."}
+            fun recoveryValid()=backup.readBytes().contentEquals(original)&&isBackupKept(backup)&&recovery.readBytes().contentEquals(raw)
+            val work=original.copyOf()
             targetRaw.copyInto(work,offset)
             refreshBoxChecksum(work)
+            val staged=work.copyOfRange(offset,offset+PK6_STORED_SIZE)
+            val stagedPokemon=parsePk6(staged,0,PK6_STORED_SIZE,false,maxSpecies)
+            require(staged.contentEquals(targetRaw)&&stagedPokemon!=null&&stagedPokemon.checksumValid&&nativeValid(work)){
+                "The reviewed PK$currentGen destination record or native checksums did not stage exactly."
+            }
+            require(bound()&&file.readBytes().contentEquals(original)&&exactBankFile.readBytes().contentEquals(raw)&&recoveryValid()){
+                "The destination, Bank record or retained recovery data changed before writing."
+            }
             writeStarted=true
             file.writeBytes(work)
-            val verifyData = file.readBytes()
-            val actual = verifyData.copyOfRange(offset, offset + PK6_STORED_SIZE)
-            val verifyPokemon = parsePk6(actual, 0, PK6_STORED_SIZE, false, maxSpecies)
-            if (!actual.contentEquals(targetRaw) || verifyPokemon == null || !verifyPokemon.checksumValid) {
-                val restored=recoverDestination()
-                showDialog("Withdraw verification failed", if(restored)"PSE restored and verified the exact original working copy because the withdrawn Pokémon did not verify." else "The withdrawn Pokémon did not verify, and automatic destination recovery could not be verified. Keep the current files and restore a verified backup before continuing.")
-                return
+            val verifyData=file.readBytes()
+            val actual=verifyData.copyOfRange(offset,offset+PK6_STORED_SIZE)
+            val verifyPokemon=parsePk6(actual,0,PK6_STORED_SIZE,false,maxSpecies)
+            require(bound()&&verifyData.contentEquals(work)&&actual.contentEquals(targetRaw)&&verifyPokemon!=null&&verifyPokemon.checksumValid&&nativeValid(verifyData)){
+                "The persisted PK$currentGen destination record or native checksums did not verify."
             }
-            require(bound()&&file.readBytes().contentEquals(verifyData)){"The verified destination identity or bytes changed before Bank cleanup."}
-            if (!bankFile.delete()) {
-                val restored=recoverDestination()
-                showDialog("Withdraw stopped", if(restored)"PSE could not remove the verified Bank entry, so the exact original save was restored and verified to avoid creating an unintended duplicate." else "PSE could not remove the verified Bank entry, and automatic destination recovery could not be verified. Keep the Bank record and current files, then restore a verified backup before continuing.")
-                return
+            require(exactBankFile.readBytes().contentEquals(raw)&&recoveryValid()){
+                "The verified destination, Bank record or retained recovery data changed before Bank cleanup."
             }
-            val box=target/30+1; val slot=target%30+1
-            val transferNote = if (bankGen != currentGen) " (Gen $bankGen → Gen $currentGen)" else ""
+            cleanupAttempted=true
+            require(exactBankFile.delete()&&!exactBankFile.exists()){"The verified Bank entry could not be removed."}
+            require(bound()&&file.readBytes().contentEquals(verifyData)&&nativeValid(verifyData)&&recoveryValid()&&!exactBankFile.exists()){
+                "The verified destination or retained recovery data changed after Bank cleanup."
+            }
+            runCatching{recovery.delete()}
+            val box=target/30+1
+            val slot=target%30+1
+            val transferNote=if(bankGen!=currentGen)" (Gen $bankGen → Gen $currentGen)"else""
             Toast.makeText(this,"${p.nickname.ifBlank{"Pokémon"}} moved to Box $box • Slot $slot$transferNote and verified",Toast.LENGTH_LONG).show()
             showPokemonViewer("boxes",box-1)
-        } catch(e:Exception){
-            val restored=recoverDestination()
-            showDialog("Withdraw failed", (e.message ?: "Unknown error") + if(restored)" The exact original working copy was restored and verified." else " Automatic destination recovery could not be verified. Keep the current files and restore a verified backup before continuing.")
+        }catch(e:Exception){
+            val bankRestored=runCatching{
+                val recovery=bankRecovery
+                if(!exactBankFile.exists()){
+                    require(cleanupAttempted){"The Bank record disappeared before PSE attempted cleanup; its path was not overwritten."}
+                    require(recovery!=null&&recovery.readBytes().contentEquals(raw)){"The exact PK$bankGen Bank recovery snapshot is unavailable."}
+                    require(exactBankFile.createNewFile()){"The Bank recovery path could not be reserved."}
+                    exactBankFile.writeBytes(recovery.readBytes())
+                }
+                val restored=exactBankFile.readBytes()
+                val parsed=if(restored.size==PK6_STORED_SIZE)parsePk6(restored,0,PK6_STORED_SIZE,false,sourceMaxSpecies)else null
+                require(restored.contentEquals(raw)&&parsed!=null&&parsed.checksumValid&&parsed.pid==bankPokemon.pid&&parsed.species==bankPokemon.species&&parsed.tid==bankPokemon.tid&&parsed.sid==bankPokemon.sid){
+                    "The exact PK$bankGen Bank record could not be restored or verified."
+                }
+                true
+            }.getOrDefault(false)
+            val destinationRestored=runCatching{
+                if(writeStarted)file.writeBytes(original)
+                val restored=file.readBytes()
+                require(restored.contentEquals(original)&&nativeValid(restored)){"The exact Generation $currentGen destination could not be restored or verified."}
+                true
+            }.getOrDefault(false)
+            if(bankRestored&&destinationRestored)bankRecovery?.let{runCatching{it.delete()}}
+            val recoveryMessage=when{
+                bankRestored&&destinationRestored->"The exact destination and PK$bankGen Bank record were restored or kept and verified."
+                bankRestored->"The exact PK$bankGen Bank record was restored or kept, but destination recovery was not verified. Use the retained destination backup before editing again."
+                destinationRestored->"The exact destination was restored, but Bank recovery was not verified. Keep the PK$bankGen recovery snapshot for review."
+                else->"Automatic recovery could not be fully verified. Keep the retained destination backup and PK$bankGen recovery snapshot for review."
+            }
+            showDialog("Withdraw failed",(e.message?:"Unknown error")+"\n\n"+recoveryMessage+
+                (safetyBackup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
+                (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery snapshot: ${it.name}"}?:""))
         }
     }
 
