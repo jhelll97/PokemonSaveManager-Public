@@ -57228,11 +57228,16 @@ class MainActivity : Activity() {
                 if(stagedBank.exists()){require(stagedBank.readBytes().contentEquals(expectedPayload)){"The reserved Bank record changed; it was not removed."};require(stagedBank.delete()){"The reserved Bank record could not be removed."}}
                 require(!stagedBank.exists()){"The reserved Bank record still exists."}
             }.isSuccess
+            val retainedBackup=safetyBackup?.let{saved->runCatching{
+                saved.readBytes().contentEquals(fresh)&&isBackupKept(saved)
+            }.getOrDefault(false)}?:false
             val recovery=when{
                 sourceRestored&&bankCleared->"The exact fresh Gen 2 save was restored or kept and no staged Bank record remained."
                 sourceRestored->"The exact Gen 2 source was restored or kept, but staged Bank cleanup was not verified. Keep the remaining exact Bank record for review."
-                bankCleared->"The staged Bank record was cleared or absent, but source recovery was not verified. Use the retained Gen 2 backup before editing again."
-                else->"Automatic recovery could not be verified. Keep the retained Gen 2 backup and any remaining Bank record for review."
+                bankCleared&&retainedBackup->"No staged Bank record remained. Source recovery was not verified, but the exact retained Gen 2 backup verified."
+                bankCleared->"No staged Bank record remained, but source recovery and the retained Gen 2 backup were not verified. The current source was left untouched."
+                retainedBackup->"Source recovery and Bank cleanup were not verified. The exact retained Gen 2 backup verified; keep it and any remaining Bank record for review."
+                else->"Automatic recovery and the retained Gen 2 backup could not be verified. Keep the current source and any remaining Bank record for review."
             }
             showDialog("PSE Bank move failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
