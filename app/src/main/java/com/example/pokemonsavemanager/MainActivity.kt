@@ -45480,6 +45480,13 @@ class MainActivity : Activity() {
         }
     }
 
+    private data class Gen3ToGen7TransferMeta(
+        val speciesName:String,
+        val baseFriendship:Int,
+        val genderRate:Int,
+        val abilityId:Int
+    )
+
     private fun loadGen3ToGen7TransferMetaAsync(
         p:PokemonEntry,targetGeneration:Int=7,done:(Gen3ToGen7TransferMeta?)->Unit
     ){
