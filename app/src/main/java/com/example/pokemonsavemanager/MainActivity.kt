@@ -56505,20 +56505,28 @@ class MainActivity : Activity() {
             require(bound()&&writtenProfile.key==profile.key&&verifyGen2SaveIntegrity(written).first){"The persisted Gen 2 batch source or identity did not verify."}
             for(i in created.indices){val committed=created[i].readBytes();require(committed.contentEquals(expectedPayloads[i])&&parseGen2BankPayload(committed)?.let{sameGen2BankRecord(it,ordered[i])}==true){"A committed Gen 2 Bank record changed after source persistence."}}
             require(bound()&&file.readBytes().contentEquals(work)){"The verified Gen 2 source changed before batch deposit completion."}
+            require(backup.readBytes().contentEquals(fresh)&&isBackupKept(backup)){"The retained Gen 2 party batch backup changed after persistence."}
         }catch(e:Exception){
-            val sourceRestored=!sourceWriteStarted||(runCatching{file.writeBytes(fresh)}.isSuccess&&runCatching{file.readBytes().contentEquals(fresh)}.getOrDefault(false))
-            val bankCleared=if(!sourceRestored)false else{
-                var cleared=true
-                for((index,bankFile)in created.withIndex()){
-                    val removed=runCatching{
-                        if(bankFile.exists()){require(bankFile.readBytes().contentEquals(expectedPayloads[index])){"A reserved Bank record changed; it was not removed."};require(bankFile.delete()){"A reserved Bank record could not be removed."}}
-                        require(!bankFile.exists()){"A reserved Bank record still exists."}
-                    }.isSuccess
-                    if(!removed)cleared=false
-                }
-                cleared
+            val sourceRestored=runCatching{
+                if(sourceWriteStarted)file.writeBytes(fresh)
+                val restored=file.readBytes()
+                restored.contentEquals(fresh)&&verifyGen2SaveIntegrity(restored).first&&
+                    detectGen2Profile(restored)?.key==detectGen2Profile(fresh)?.key
+            }.getOrDefault(false)
+            var bankCleared=true
+            for((index,bankFile)in created.withIndex()){
+                val removed=runCatching{
+                    if(bankFile.exists()){require(bankFile.readBytes().contentEquals(expectedPayloads[index])){"A reserved Bank record changed; it was not removed."};require(bankFile.delete()){"A reserved Bank record could not be removed."}}
+                    require(!bankFile.exists()){"A reserved Bank record still exists."}
+                }.isSuccess
+                if(!removed)bankCleared=false
             }
-            val recovery=if(!sourceWriteStarted&&bankCleared)"Nothing was written to the save and no staged Bank record was kept." else  if(sourceRestored&&bankCleared)"The exact fresh Gen 2 source was restored and every staged Bank file was removed." else  "Automatic recovery could not be verified. Stop editing this save and keep any remaining Bank records until a verified backup and Bank contents have been reviewed."
+            val recovery=when{
+                sourceRestored&&bankCleared->"The exact fresh Gen 2 source was restored or kept and every staged Bank file was removed."
+                sourceRestored->"The exact fresh Gen 2 source was restored or kept, but one or more exact staged Bank files remain for review."
+                bankCleared->"Every staged Bank file was removed, but source recovery was not verified. Use the retained Gen 2 party backup before editing again."
+                else->"Automatic recovery could not be verified. Keep the retained Gen 2 party backup and any remaining exact Bank records for review."
+            }
             showDialog("Move selected to PSE Bank failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         gen2PartyMultiSelectMode=false;selectedGen2PartySlots.clear();Toast.makeText(this,"${chosen.size} Gen 2 party Pokémon moved to PSE Bank and verified",Toast.LENGTH_LONG).show();showBank()
