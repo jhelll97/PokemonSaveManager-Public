@@ -10755,7 +10755,9 @@ class MainActivity : Activity() {
                 source.tid!=expected.tid || source.sid!=expected.sid) throw IllegalStateException("Source PK4 changed or failed checksum validation")
             bankBytes=raw.copyOf()
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen4BankDeposit_",".backup",backupsDir());backup=recovery
-            recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The Gen 4 recovery backup did not verify."}
+            recovery.writeBytes(original)
+            retainGen2ToGen4SafetyBackup(recovery,original)
+            require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The retained Gen 4 recovery backup did not verify."}
             val created=File(bankDir(),"${System.currentTimeMillis()}_${source.species}.pk4")
             require(!created.exists()){"The destination Bank path is already occupied."}
             bankFile=created;bankReserved=true;created.writeBytes(raw)
