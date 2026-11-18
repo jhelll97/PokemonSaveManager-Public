@@ -35268,8 +35268,9 @@ class MainActivity : Activity() {
                         it.tid==p.source.tid&&it.sid==p.source.sid
                 }==true
             }.getOrDefault(false)
-            val saveRestored=!writeStarted||runCatching{
-                file.writeBytes(fresh);val restored=file.readBytes()
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(fresh)
+                val restored=file.readBytes()
                 restored.contentEquals(fresh)&&gen3SaveValid(restored)
             }.getOrDefault(false)
             if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
