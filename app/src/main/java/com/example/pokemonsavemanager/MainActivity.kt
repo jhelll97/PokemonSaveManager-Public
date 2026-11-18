@@ -36417,8 +36417,9 @@ class MainActivity : Activity() {
                         it.tid==p.source.tid&&it.sid==p.source.sid
                 }==true
             }.getOrDefault(false)
-            val saveRestored=!writeStarted||runCatching{
-                file.writeBytes(original);val restored=file.readBytes()
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(original)
+                val restored=file.readBytes()
                 val rp=detectGen5Profile(restored)?:error("The restored Generation 5 layout is invalid.")
                 restored.contentEquals(original)&&gen5ChecksumTableValid(restored,rp)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,rp)}
             }.getOrDefault(false)
