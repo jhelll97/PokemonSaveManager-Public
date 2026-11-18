@@ -57183,7 +57183,7 @@ class MainActivity : Activity() {
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedSource&&currentSourceLabel==openedLabel
         if(mon.isEgg){showDialog("Move Gen 2 Egg to PSE Bank","The current PSE2 Bank record cannot preserve Gen 2 egg state. Nothing was changed.");return}
         if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog("Move to PSE Bank","The active save changed after confirmation. Reopen the selection before banking. Nothing was changed.");return}
-        val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;var bankFile:File?=null;var bankReserved=false;var sourceWriteStarted=false
+        val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;var bankFile:File?=null;var bankReserved=false;var sourceWriteStarted=false;var stagedSource:ByteArray?=null
         var safetyBackup:File?=null
         try{
             require(bound()&&verifyGen2SaveIntegrity(fresh).first){"The captured Gen 2 source identity or full integrity changed."}
@@ -57205,6 +57205,7 @@ class MainActivity : Activity() {
             require(gen2BankSnapshot()==(bankBefore+bankFile!!.canonicalPath).sorted()&&bankFile!!.readBytes().contentEquals(payload)){"The staged Gen 2 Bank record or inventory changed before source writing."}
             require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(fresh)){"The active Gen 2 save changed during Bank staging. Nothing was written to the save."}
             require(bound()&&backup.readBytes().contentEquals(fresh)&&isBackupKept(backup)){"The source identity or retained backup changed before depositing."}
+            stagedSource=work.copyOf()
             sourceWriteStarted=true
             file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)){"The Gen 2 save changed while the Bank deposit was written."};val writtenProfile=detectGen2Profile(written)?:error("The persisted Gen 2 save failed checksum verification.");require(gen2ChecksumValid(written,writtenProfile)){"The persisted Gen 2 checksum is invalid."};require(sameGen2PayloadList(gen2LocationPayloads(written,location,writtenProfile),expected)){"A remaining Gen 2 Pokémon changed after persistence."}
             require(bound()&&writtenProfile.key==profile.key&&verifyGen2SaveIntegrity(written).first){"The persisted Gen 2 source or identity did not verify."}
@@ -57212,7 +57213,12 @@ class MainActivity : Activity() {
             require(bound()&&file.readBytes().contentEquals(work)){"The verified Gen 2 source changed before deposit completion."}
         }catch(e:Exception){
             val sourceRestored=runCatching{
-                if(sourceWriteStarted)file.writeBytes(fresh)
+                val found=file.readBytes()
+                if(sourceWriteStarted&&!found.contentEquals(fresh)){
+                    val staged=stagedSource
+                    require(staged!=null&&found.contentEquals(staged)){"The Gen 2 source no longer matches this transaction's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(fresh)
+                }
                 val restored=file.readBytes()
                 restored.contentEquals(fresh)&&verifyGen2SaveIntegrity(restored).first&&
                     detectGen2Profile(restored)?.key==detectGen2Profile(fresh)?.key
