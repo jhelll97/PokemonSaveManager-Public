@@ -66716,11 +66716,16 @@ private data class Gen2ToGen5LegalisePlan(
                 }
                 require(!stagedBank.exists()){"The staged Bank record still exists."}
             }.isSuccess
+            val retainedBackup=backup?.let{saved->runCatching{
+                saved.readBytes().contentEquals(original)&&isBackupKept(saved)
+            }.getOrDefault(false)}?:false
             val recovery=when{
                 sourceRestored&&bankCleared->"The exact Gen $generation source was restored or kept and no staged Bank record remained."
                 sourceRestored->"The exact Gen $generation source was restored or kept, but staged Bank cleanup was not verified. Keep the remaining exact PK$generation for review."
-                bankCleared->"The staged Bank record was cleared or absent, but source recovery was not verified. Use the retained Gen $generation backup before editing again."
-                else->"Automatic recovery could not be verified. Keep the retained Gen $generation backup and any remaining staged PK$generation for review."
+                bankCleared&&retainedBackup->"The staged Bank record was cleared or absent. Source recovery was not verified, but the exact retained Gen $generation backup verified."
+                bankCleared->"The staged Bank record was cleared or absent, but source recovery and the retained Gen $generation backup were not verified. The current source was left untouched."
+                retainedBackup->"Source recovery and staged Bank cleanup were not verified. The exact retained Gen $generation backup verified; keep it and any remaining staged PK$generation for review."
+                else->"Automatic recovery and the retained Gen $generation backup could not be verified. Keep the current source and any remaining staged PK$generation for review."
             }
             showDialog("Gen $generation Bank move failed",(e.message?:"Unknown error")+".\n\n"+recovery+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:""))
         }
