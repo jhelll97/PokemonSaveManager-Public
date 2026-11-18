@@ -34876,7 +34876,7 @@ class MainActivity : Activity() {
                     parsed.species==p.source.species&&parsed.tid==p.source.tid&&parsed.sid==p.source.sid
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                val current=file.readBytes();if(!current.contentEquals(original))file.writeBytes(original)
+                if(writeStarted)file.writeBytes(original)
                 val restored=file.readBytes()
                 restored.contentEquals(original)&&generationForSize(restored.size)==7&&validateGen7CoreChecksums(restored).first
             }.getOrDefault(false)
