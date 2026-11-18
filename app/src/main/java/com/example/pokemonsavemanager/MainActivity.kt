@@ -53869,8 +53869,17 @@ class MainActivity : Activity() {
                 if(bankDeleteAttempted){if(!bankFile.exists())require(bankFile.createNewFile()){"The Bank recovery path could not be reserved."};bankFile.writeBytes(originalBankBytes)}
                 bankFile.readBytes().contentEquals(originalBankBytes)&&parseGen1BankPayload(bankFile.readBytes())?.let{sameGen1TransferRecord(it,parseGen1BankPayload(originalBankBytes)!!)}==true
             }.getOrDefault(false)
-            val saveRestored=!writeStarted||runCatching{file.writeBytes(fresh);val restored=file.readBytes();restored.contentEquals(fresh)&&validateGen7CoreChecksums(restored).first}.getOrDefault(false)
-            val recovery=if(bankRestored&&saveRestored)"The exact Gen 7 destination and Gen 1 Bank record were restored or kept and verified." else "Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(fresh)
+                val restored=file.readBytes()
+                restored.contentEquals(fresh)&&generationForSize(restored.size)==7&&validateGen7CoreChecksums(restored).first
+            }.getOrDefault(false)
+            val recovery=when{
+                bankRestored&&saveRestored->"The exact Gen 7 destination and Gen 1 Bank record were restored or kept and verified."
+                bankRestored->"The Gen 1 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                saveRestored->"The exact Gen 7 destination was restored, but Bank restoration was not verified. Keep the exact Gen 1 Bank payload for recovery."
+                else->"Automatic recovery could not be verified. Keep the retained destination backup and exact Gen 1 Bank payload for review."
+            }
             showDialog("Gen 1 → Gen 7 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         val box=target/30+1;val slot=target%30+1
