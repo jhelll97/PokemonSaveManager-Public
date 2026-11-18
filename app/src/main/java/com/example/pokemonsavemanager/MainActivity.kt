@@ -50082,6 +50082,7 @@ class MainActivity : Activity() {
     ) {
         val temporaryBankFiles = ArrayList<File>()
         val finalBankFiles = ArrayList<File>()
+        val expectedBankPayloads = ArrayList<ByteArray>()
         var writeStarted = false
         try {
             require(selectedSlots.isNotEmpty() &&
@@ -50112,6 +50113,7 @@ class MainActivity : Activity() {
                 boxIndex,
                 sortedSlots
             )
+            expectedBankPayloads.addAll(records.map { it.copyOf() })
             val parsed = records.mapIndexed { index, raw ->
                 val pokemon = parsePk3(raw, 0, false)
                 require(pokemon != null && pokemon.checksumValid) {
@@ -50178,6 +50180,9 @@ class MainActivity : Activity() {
                 "The recovery backup did not verify."
             }
             retainGen2ToGen3SafetyBackup(backup, fresh)
+            require(backup.readBytes().contentEquals(fresh) && isBackupKept(backup)) {
+                "The retained Gen 3 batch backup did not remain available."
+            }
             require(importedFile?.absolutePath == file.absolutePath &&
                 currentSourceUri == openedSourceUri &&
                 currentSourceLabel == openedSourceLabel &&
@@ -50204,8 +50209,10 @@ class MainActivity : Activity() {
                     verifyPokemon != null &&
                     verifyPokemon.checksumValid &&
                     verifyPokemon.pid == parsed[index].pid &&
-                    verifyPokemon.species == parsed[index].species) {
-                    "A staged Gen 3 Bank entry failed verification."
+                    verifyPokemon.species == parsed[index].species &&
+                    verifyPokemon.tid == parsed[index].tid &&
+                    verifyPokemon.sid == parsed[index].sid) {
+                    "A staged Gen 3 Bank entry failed complete identity verification."
                 }
             }
             require(file.readBytes().contentEquals(fresh) &&
@@ -50259,8 +50266,10 @@ class MainActivity : Activity() {
                     verifyPokemon != null &&
                     verifyPokemon.checksumValid &&
                     verifyPokemon.pid == parsed[index].pid &&
-                    verifyPokemon.species == parsed[index].species) {
-                    "A finalized Gen 3 Bank entry failed verification."
+                    verifyPokemon.species == parsed[index].species &&
+                    verifyPokemon.tid == parsed[index].tid &&
+                    verifyPokemon.sid == parsed[index].sid) {
+                    "A finalized Gen 3 Bank entry failed complete identity verification."
                 }
             }
             require(finalBankFiles.size == records.size &&
@@ -50268,6 +50277,9 @@ class MainActivity : Activity() {
                     finalBankFiles[index].readBytes().contentEquals(records[index])
                 }) {
                 "The finalized Gen 3 Bank batch did not verify exactly."
+            }
+            require(backup.readBytes().contentEquals(fresh) && isBackupKept(backup)) {
+                "The retained Gen 3 batch backup changed after persistence."
             }
 
             resetGen3BoxSelection()
@@ -50283,32 +50295,55 @@ class MainActivity : Activity() {
             bankViewBox = ((bankCount - 1).coerceAtLeast(0)) / 30
             showBank()
         } catch (error: Exception) {
-            val saveRestored = if (writeStarted) {
-                runCatching {
-                    file.writeBytes(opened)
-                    file.readBytes().contentEquals(opened)
-                }.getOrDefault(false)
-            } else {
-                true
-            }
+            val saveRestored = runCatching {
+                if (writeStarted) file.writeBytes(opened)
+                val restored = file.readBytes()
+                restored.contentEquals(opened) &&
+                    restored.size == opened.size &&
+                    gen3SaveValid(restored)
+            }.getOrDefault(false)
             var bankClean = true
-            (temporaryBankFiles + finalBankFiles).distinctBy { it.absolutePath }
-                .forEach { candidate ->
-                    if (candidate.exists() && !runCatching {
-                            candidate.delete() && !candidate.exists()
-                        }.getOrDefault(false)) {
-                        bankClean = false
-                    }
+            val cleanupCandidates = ArrayList<Pair<File, ByteArray>>()
+            temporaryBankFiles.forEachIndexed { index, candidate ->
+                if (index in expectedBankPayloads.indices) {
+                    cleanupCandidates.add(candidate to expectedBankPayloads[index])
+                } else if (candidate.exists()) {
+                    bankClean = false
+                }
+            }
+            finalBankFiles.forEachIndexed { index, candidate ->
+                if (index in expectedBankPayloads.indices) {
+                    cleanupCandidates.add(candidate to expectedBankPayloads[index])
+                } else if (candidate.exists()) {
+                    bankClean = false
+                }
+            }
+            cleanupCandidates.distinctBy { it.first.absolutePath }
+                .forEach { (candidate, expected) ->
+                    val removed = runCatching {
+                        if (candidate.exists()) {
+                            require(candidate.readBytes().contentEquals(expected)) {
+                                "A staged Gen 3 Bank record changed; it was retained for review."
+                            }
+                            require(candidate.delete()) {
+                                "An exact staged Gen 3 Bank record could not be removed."
+                            }
+                        }
+                        require(!candidate.exists()) {
+                            "An exact staged Gen 3 Bank record still exists."
+                        }
+                    }.isSuccess
+                    if (!removed) bankClean = false
                 }
             val recovery = when {
                 saveRestored && bankClean ->
-                    "The original save was preserved or restored, and no new Bank entry was kept."
+                    "The exact fresh Gen 3 source was restored or kept, and every exact staged Bank file was removed."
                 saveRestored ->
-                    "The original save was restored, but one or more staged Bank files could not be removed automatically."
+                    "The exact fresh Gen 3 source was restored or kept, but one or more staged Bank files remain for review."
                 bankClean ->
-                    "New Bank files were removed, but the original save could not be restored automatically. Use the retained recovery backup."
+                    "Every exact staged Bank file was removed, but source recovery was not verified. Use the retained Gen 3 batch backup before editing again."
                 else ->
-                    "Automatic rollback was incomplete. Use the retained recovery backup and review PSE Bank before editing again."
+                    "Automatic recovery could not be verified. Keep the retained Gen 3 batch backup and any remaining Bank files for review."
             }
             showDialog(
                 "Gen 3 batch Bank move failed",
