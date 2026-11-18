@@ -10783,8 +10783,10 @@ class MainActivity : Activity() {
             retainGen2ToGen4SafetyBackup(recovery,original)
             require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The retained Gen 4 recovery backup did not verify."}
             val created=File(bankDir(),"${System.currentTimeMillis()}_${source.species}.pk4")
-            require(!created.exists()){"The destination Bank path is already occupied."}
-            bankFile=created;bankReserved=true;created.writeBytes(raw)
+            bankFile=created
+            require(created.createNewFile()){"The destination Bank path is occupied or could not be reserved atomically."}
+            bankReserved=true
+            created.writeBytes(raw)
             val bankRaw=created.readBytes(); val bankMon=if(bankRaw.size==136)parsePk4(bankRaw,false)else null
             if(!bankRaw.contentEquals(raw) || bankMon==null || !bankMon.checksumValid ||
                 bankMon.pid!=source.pid || bankMon.species!=source.species || bankMon.tid!=source.tid || bankMon.sid!=source.sid)
@@ -10828,8 +10830,9 @@ class MainActivity : Activity() {
             val stagedBank=bankFile;val expectedBank=bankBytes
             val bankCleared=if(!bankReserved)true else if(stagedBank==null||expectedBank==null)false else runCatching{
                 if(stagedBank.exists()){
-                    require(stagedBank.readBytes().contentEquals(expectedBank)){"The staged Bank record changed; it was not removed."}
-                    require(stagedBank.delete()){"The staged Bank record could not be removed."}
+                    val found=stagedBank.readBytes()
+                    require(found.isEmpty()||found.contentEquals(expectedBank)){"The staged Bank reservation changed; it was not removed."}
+                    require(stagedBank.delete()){"The staged Bank reservation could not be removed."}
                 }
                 require(!stagedBank.exists()){"The staged Bank record still exists."}
             }.isSuccess
