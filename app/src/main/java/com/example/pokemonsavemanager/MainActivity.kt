@@ -10734,18 +10734,38 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun confirmGen4DepositToBank(location:String,pokemon:PokemonEntry){
+    private fun confirmGen4DepositToBank(location:String,pokemon:PokemonEntry,openedFile:File,openedUri:Uri?,openedLabel:String?,openedSource:ByteArray){
         val global=boxedLocationToGlobalIndex(location) ?: return showDialog("PSE Bank","Gen 4 Bank deposit is currently enabled for boxed Pokémon only.")
+        if(global !in 0 until 18*30)return showDialog("PSE Bank","That is not a native Gen 4 PC slot.")
+        fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        if(!bound())return showDialog("PSE Bank","The loaded Gen 4 source identity changed after this Pokémon was opened. Reopen it. Nothing was changed.")
+        val current=runCatching{openedFile.readBytes()}.getOrNull()
+            ?:return showDialog("PSE Bank","The exact selected Gen 4 save could not be reopened. Nothing was changed.")
+        if(!current.contentEquals(openedSource))return showDialog("PSE Bank","The selected Gen 4 save changed after this Pokémon was opened. Reopen it. Nothing was changed.")
+        val profile=detectGen4Profile(openedSource)
+            ?:return showDialog("PSE Bank","The reviewed source is not a supported Diamond, Pearl, Platinum, HeartGold or SoulSilver save.")
+        val validation=gen4Validation(openedSource,profile)
+        if(!validation.generalChecksum||!validation.storageChecksum||validation.badPk4!=0)
+            return showDialog("PSE Bank","The reviewed Gen 4 save failed its native checksum or PK4 validation. Nothing was changed.")
+        val offset=gen4BoxSlotOffset(openedSource,profile,global)
+        val reviewed=parsePk4(openedSource.copyOfRange(offset,offset+136),false)
+        if(reviewed==null||!reviewed.checksumValid||!sameReviewedPokemonEntry(reviewed,pokemon))
+            return showDialog("PSE Bank","The selected PK4 changed after review. Reopen this Pokémon. Nothing was changed.")
         AlertDialog.Builder(this).setTitle("Move ${pokemon.nickname.ifBlank{"Species #${pokemon.species}"}} to PSE Bank?")
             .setMessage("PSE will preserve the exact 136-byte PK4 record in the Gen 4 Bank, verify the Bank copy, then clear $location from the working save and rebuild the active Gen 4 storage-block CRC. If anything fails, both sides roll back.")
-            .setNegativeButton("Cancel",null).setPositiveButton("Move to Bank"){_,_->depositGen4ToBank(global,pokemon)}.show()
+            .setNegativeButton("Cancel",null).setPositiveButton("Move to Bank"){_,_->
+                depositGen4ToBank(global,pokemon,openedFile,openedUri,openedLabel,openedSource)
+            }.show()
     }
 
-    private fun depositGen4ToBank(global:Int,expected:PokemonEntry){
-        val file=importedFile?:return
-        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+    private fun depositGen4ToBank(global:Int,expected:PokemonEntry,openedFile:File,openedUri:Uri?,openedLabel:String?,openedSource:ByteArray){
+        val file=openedFile
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
-        val original=try{file.readBytes()}catch(e:Exception){showDialog("PSE Bank",e.message?:"Could not read save");return}
+        if(!bound())return showDialog("PSE Bank","The loaded Gen 4 source identity changed before deposit. Reopen this Pokémon. Nothing was changed.")
+        val original=openedSource.copyOf()
+        val current=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog("PSE Bank","The exact selected Gen 4 save could not be reopened. Nothing was changed.")
+        if(!current.contentEquals(original))return showDialog("PSE Bank","The selected Gen 4 save changed after deposit review. Reopen this Pokémon. Nothing was changed.")
         var bankFile:File?=null;var backup:File?=null;var bankBytes:ByteArray?=null
         var bankReserved=false;var sourceWriteStarted=false
         try{
@@ -10755,8 +10775,8 @@ class MainActivity : Activity() {
             if(!before.generalChecksum || !before.storageChecksum || before.badPk4!=0) throw IllegalStateException("Gen 4 save did not pass pre-deposit validation")
             val off=gen4BoxSlotOffset(save,profile,global); val raw=save.copyOfRange(off,off+136)
             val source=parsePk4(raw,false) ?: throw IllegalStateException("Pokémon is no longer present")
-            if(!source.checksumValid || source.pid!=expected.pid || source.species!=expected.species ||
-                source.tid!=expected.tid || source.sid!=expected.sid) throw IllegalStateException("Source PK4 changed or failed checksum validation")
+            if(!source.checksumValid||!sameReviewedPokemonEntry(source,expected))
+                throw IllegalStateException("Source PK4 changed or failed checksum validation")
             bankBytes=raw.copyOf()
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen4BankDeposit_",".backup",backupsDir());backup=recovery
             recovery.writeBytes(original)
@@ -51419,7 +51439,17 @@ class MainActivity : Activity() {
             addButton(root, "✓  Deep Legality Check") { checkGen4PokemonLegality(location, p) }
             if (detailGlobal != null && detailGlobal < 18*30) addButton(root, "✏️  Edit Pokémon") { showGen4PokemonEditor(location, p) } else addButton(root, "✏️  Edit Pokémon") { gen4LockedAction("Edit Pokémon") }
             if (detailGlobal != null && detailGlobal < 18*30) addButton(root, "📑  Duplicate Pokémon") { chooseGen4DuplicateDestination(location, p) } else addButton(root, "📑  Duplicate Pokémon") { gen4LockedAction("Duplicate Pokémon") }
-            if (detailGlobal != null && detailGlobal < 18*30) addButton(root, "🏦  Move to PSE Bank") { confirmGen4DepositToBank(location, p) } else addButton(root, "🏦  Move to PSE Bank") { gen4LockedAction("PSE Bank") }
+            if (detailGlobal != null && detailGlobal < 18*30) {
+                val gen4BankFile=importedFile
+                val gen4BankUri=currentSourceUri
+                val gen4BankLabel=currentSourceLabel
+                val gen4BankOpened=gen4BankFile?.let{runCatching{it.readBytes()}.getOrNull()}
+                addButton(root, "🏦  Move to PSE Bank") {
+                    if(gen4BankFile!=null&&gen4BankOpened!=null)
+                        confirmGen4DepositToBank(location,p,gen4BankFile,gen4BankUri,gen4BankLabel,gen4BankOpened)
+                    else showDialog("PSE Bank","The selected Gen 4 save could not be read. Reopen this Pokémon. Nothing was changed.")
+                }
+            } else addButton(root, "🏦  Move to PSE Bank") { gen4LockedAction("PSE Bank") }
             if (detailGlobal != null && detailGlobal < 18*30) addButton(root, "🗑️  Delete Pokémon") { confirmGen4Delete(location, p) } else addButton(root, "🗑️  Delete Pokémon") { gen4LockedAction("Delete Pokémon") }
             addMutedLine(root, "Gen 4 boxed PK4 editing, Duplicate, Delete, Bank deposit/withdraw, Gen 4 → Gen 7 transfer and Deep Legality Check are enabled. Party writes remain locked.")
         } else if (detailGen == 3) {
