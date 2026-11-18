@@ -60013,7 +60013,12 @@ private data class Gen2ToGen5LegalisePlan(
                     require(parseGen2BankPayload(restored)?.let{sameGen2BankRecord(it,opened)}==true){"The restored Gen 2 Bank record identity did not verify."}
                 }.isSuccess
                 val destinationRestored=runCatching{if(writeStarted)file.writeBytes(fresh);val restored=file.readBytes();val restoredProfile=detectGen2Profile(restored);restored.contentEquals(fresh)&&restoredProfile?.key==openedProfile.key&&verifyGen2SaveIntegrity(restored).first}.getOrDefault(false)
-                val recovery=if(!writeStarted)"Nothing was written to the save and no Bank record was removed." else  if(bankRestored&&destinationRestored)"The exact Gen 2 destination and Bank record were restored or kept and verified." else  "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
+                val recovery=when{
+                    bankRestored&&destinationRestored->"The exact Gen 2 destination and Bank record were restored or kept and verified."
+                    bankRestored->"The exact Gen 2 Bank record was restored or kept, but destination recovery was not verified. Use the retained recovery backup before editing again."
+                    destinationRestored->"The exact Gen 2 destination was restored or kept, but Bank recovery was not verified. Keep the remaining Bank records and recovery files for review."
+                    else->"Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
+                }
                 showDialog("Withdraw failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return@setItems
             }
             Toast.makeText(this,"Withdrawn to Box $box and verified",Toast.LENGTH_LONG).show();showBank()
