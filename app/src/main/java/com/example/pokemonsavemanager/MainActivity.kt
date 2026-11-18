@@ -52801,8 +52801,17 @@ class MainActivity : Activity() {
         }catch(e:Exception){
             for((bank,bytes) in removed)runCatching{if(!bank.exists())require(bank.createNewFile()){"A Bank recovery path could not be reserved."};bank.writeBytes(bytes)}
             val banksRestored=prepared.all{item->runCatching{val bytes=item.bankFile.readBytes();bytes.contentEquals(item.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,item.source)}==true}.getOrDefault(false)}
-            val saveRestored=!writeStarted||runCatching{file.writeBytes(fresh);val restored=file.readBytes();val p=detectGen5Profile(restored);restored.contentEquals(fresh)&&p!=null&&gen5ChecksumTableValid(restored,p)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,p)}}.getOrDefault(false)
-            val recovery=if(banksRestored&&saveRestored)"The exact Gen 5 destination and every selected Gen 1 Bank record were restored or kept and verified." else "Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(fresh)
+                val restored=file.readBytes();val p=detectGen5Profile(restored)
+                restored.contentEquals(fresh)&&p!=null&&gen5ChecksumTableValid(restored,p)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,p)}
+            }.getOrDefault(false)
+            val recovery=when{
+                banksRestored&&saveRestored->"The exact Gen 5 destination and every selected Gen 1 Bank record were restored or kept and verified."
+                banksRestored->"Every selected Gen 1 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                saveRestored->"The exact Gen 5 destination was restored, but one or more Bank records were not verified. Keep every exact Gen 1 Bank recovery payload."
+                else->"Automatic recovery could not be verified. Keep the retained destination backup and every exact Gen 1 Bank recovery payload for review."
+            }
             showDialog("Gen 1 → Gen 5 multi-transfer failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
         }
         selectedBankFiles.clear();bankMultiSelectMode=false
