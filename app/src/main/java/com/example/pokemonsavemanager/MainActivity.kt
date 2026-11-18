@@ -11697,7 +11697,7 @@ class MainActivity : Activity() {
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val original=runCatching{file.readBytes()}.getOrNull()?:return showDialog("Gen 5 PSE Bank","The selected save could not be read.")
-        var bankFile:File?=null;var backup:File?=null;var writeStarted=false
+        var bankFile:File?=null;var bankRecord:ByteArray?=null;var backup:File?=null;var writeStarted=false
         try{
             require(bound()&&global in 0 until 720){"The source identity or PC slot changed."}
             val profile=detectGen5Profile(original)?:error("A valid Black, White, Black 2 or White 2 save is required.")
@@ -11709,6 +11709,7 @@ class MainActivity : Activity() {
             require(source.checksumValid&&source.pid==expected.pid&&source.species==expected.species&&source.tid==expected.tid&&source.sid==expected.sid){
                 "The source PK5 changed or failed its checksum."
             }
+            bankRecord=raw.copyOf()
             val created=File(bankDir(),"${System.currentTimeMillis()}_${source.species}.pk5");bankFile=created;created.writeBytes(raw)
             val bankBytes=created.readBytes();val bankMon=if(bankBytes.size==136)parsePk5(bankBytes,false)else null
             require(bankBytes.contentEquals(raw)&&bankMon!=null&&bankMon.checksumValid&&bankMon.pid==source.pid&&bankMon.species==source.species){
@@ -11733,9 +11734,26 @@ class MainActivity : Activity() {
             Toast.makeText(this,"Moved to Gen 5 PSE Bank and verified",Toast.LENGTH_LONG).show();bankViewGeneration=5
             val count=bankDir().listFiles()?.count{it.isFile&&it.extension.equals("pk5",true)}?:1;bankViewBox=(count-1).coerceAtLeast(0)/30;showBank()
         }catch(e:Exception){
-            val saveRestored=!writeStarted||runCatching{file.writeBytes(original);file.readBytes().contentEquals(original)}.getOrDefault(false)
-            val bankRemoved=runCatching{bankFile?.delete()!=false}.getOrDefault(false)
-            val recovery=if(saveRestored&&bankRemoved)"The original working save was restored and no new Bank entry was kept." else "Automatic recovery could not be fully confirmed; keep the retained backup for recovery."
+            val saveRestored=runCatching{
+                if(writeStarted)file.writeBytes(original)
+                val restored=file.readBytes();val restoredProfile=detectGen5Profile(restored)
+                restored.contentEquals(original)&&restoredProfile!=null&&gen5ChecksumTableValid(restored,restoredProfile)&&
+                    (0 until 24).all{gen5BoxChecksumValid(restored,it,restoredProfile)}
+            }.getOrDefault(false)
+            val bankRemoved=runCatching{
+                val created=bankFile;val expectedBank=bankRecord
+                if(created!=null&&created.exists()){
+                    require(expectedBank!=null&&created.readBytes().contentEquals(expectedBank)){"The new Bank entry changed and was kept for review."}
+                    require(created.delete()){"The new Bank entry could not be removed."}
+                }
+                created==null||!created.exists()
+            }.getOrDefault(false)
+            val recovery=when{
+                saveRestored&&bankRemoved->"The exact original Gen 5 save was restored or kept and no new Bank entry remained."
+                saveRestored->"The exact original Gen 5 save was restored or kept, but the new Bank entry could not be safely removed. Keep that entry and the retained backup for review."
+                bankRemoved->"No new Bank entry remained, but source recovery was not verified. Restore the retained Gen 5 backup before editing again."
+                else->"Automatic recovery could not be fully confirmed. Stop editing and keep the retained backup and any remaining Bank entry for review."
+            }
             showDialog("Gen 5 Bank move failed",(e.message?:"Unknown error")+"\n\n"+recovery+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:""))
         }
     }
