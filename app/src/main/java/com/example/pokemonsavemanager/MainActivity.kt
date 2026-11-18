@@ -11793,20 +11793,38 @@ class MainActivity : Activity() {
         showBank()
     }
 
-    private fun confirmGen5DepositToBank(location:String,pokemon:PokemonEntry){
+    private fun confirmGen5DepositToBank(location:String,pokemon:PokemonEntry,openedFile:File,openedUri:Uri?,openedLabel:String?,openedSource:ByteArray){
         val global=boxedLocationToGlobalIndex(location)
             ?:return showDialog("PSE Bank","Gen 5 Bank deposit is enabled for boxed Pokémon only.")
         if(global !in 0 until 24*30)return showDialog("PSE Bank","That is not a native Gen 5 PC slot.")
+        fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        if(!bound())return showDialog("PSE Bank","The loaded Gen 5 source identity changed after this Pokémon was opened. Reopen it. Nothing was changed.")
+        val current=runCatching{openedFile.readBytes()}.getOrNull()
+            ?:return showDialog("PSE Bank","The exact selected Gen 5 save could not be reopened. Nothing was changed.")
+        if(!current.contentEquals(openedSource))return showDialog("PSE Bank","The selected Gen 5 save changed after this Pokémon was opened. Reopen it. Nothing was changed.")
+        val profile=detectGen5Profile(openedSource)
+            ?:return showDialog("PSE Bank","The reviewed source is not a valid Black, White, Black 2 or White 2 save.")
+        if(!gen5ChecksumTableValid(openedSource,profile)||(0 until 24).any{!gen5BoxChecksumValid(openedSource,it,profile)})
+            return showDialog("PSE Bank","The reviewed Gen 5 save failed its native box or checksum-table validation. Nothing was changed.")
+        val offset=0x00400+(global/30)*0x1000+(global%30)*136
+        val reviewed=parsePk5(openedSource.copyOfRange(offset,offset+136),false)
+        if(reviewed==null||!reviewed.checksumValid||!sameReviewedPokemonEntry(reviewed,pokemon))
+            return showDialog("PSE Bank","The selected PK5 changed after review. Reopen this Pokémon. Nothing was changed.")
         AlertDialog.Builder(this).setTitle("Move ${pokemon.nickname.ifBlank{"Species #${pokemon.species}"}} to PSE Bank?")
             .setMessage("PSE will preserve the exact 136-byte PK5 record, verify the Gen 5 Bank copy, retain a recovery backup, then clear $location and rebuild the native box and checksum-table CRCs. If either side fails, the save and Bank entry roll back.")
-            .setNegativeButton("Cancel",null).setPositiveButton("Move to Bank"){_,_->depositGen5ToBank(global,pokemon)}.show()
+            .setNegativeButton("Cancel",null).setPositiveButton("Move to Bank"){_,_->
+                depositGen5ToBank(global,pokemon,openedFile,openedUri,openedLabel,openedSource)
+            }.show()
     }
 
-    private fun depositGen5ToBank(global:Int,expected:PokemonEntry){
-        val file=importedFile?:return
-        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+    private fun depositGen5ToBank(global:Int,expected:PokemonEntry,openedFile:File,openedUri:Uri?,openedLabel:String?,openedSource:ByteArray){
+        val file=openedFile
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
-        val original=runCatching{file.readBytes()}.getOrNull()?:return showDialog("Gen 5 PSE Bank","The selected save could not be read.")
+        if(!bound())return showDialog("Gen 5 PSE Bank","The loaded source identity changed before deposit. Reopen this Pokémon. Nothing was changed.")
+        val original=openedSource.copyOf()
+        val current=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog("Gen 5 PSE Bank","The exact selected save could not be reopened. Nothing was changed.")
+        if(!current.contentEquals(original))return showDialog("Gen 5 PSE Bank","The selected save changed after deposit review. Reopen this Pokémon. Nothing was changed.")
         var bankFile:File?=null;var bankRecord:ByteArray?=null;var backup:File?=null;var writeStarted=false;var bankReserved=false
         try{
             require(bound()&&global in 0 until 720){"The source identity or PC slot changed."}
@@ -11816,7 +11834,7 @@ class MainActivity : Activity() {
             }
             val box=global/30;val slot=global%30;val offset=0x00400+box*0x1000+slot*136
             val raw=original.copyOfRange(offset,offset+136);val source=parsePk5(raw,false)?:error("The boxed PK5 is no longer present.")
-            require(source.checksumValid&&source.pid==expected.pid&&source.species==expected.species&&source.tid==expected.tid&&source.sid==expected.sid){
+            require(source.checksumValid&&sameReviewedPokemonEntry(source,expected)){
                 "The source PK5 changed or failed its checksum."
             }
             bankRecord=raw.copyOf()
@@ -51370,7 +51388,17 @@ class MainActivity : Activity() {
         if (detailGen == 5) {
             addButton(root, "✓  Deep Legality Check") { checkGen5PokemonLegality(location, p) }
             addButton(root, "✏️  Edit Pokémon") { showGen5PokemonEditor(location,p) }
-            if (detailGlobal != null && detailGlobal < 24*30) addButton(root, "🏦  Move to PSE Bank") { confirmGen5DepositToBank(location,p) }
+            if (detailGlobal != null && detailGlobal < 24*30) {
+                val gen5BankFile=importedFile
+                val gen5BankUri=currentSourceUri
+                val gen5BankLabel=currentSourceLabel
+                val gen5BankOpened=gen5BankFile?.let{runCatching{it.readBytes()}.getOrNull()}
+                addButton(root, "🏦  Move to PSE Bank") {
+                    if(gen5BankFile!=null&&gen5BankOpened!=null)
+                        confirmGen5DepositToBank(location,p,gen5BankFile,gen5BankUri,gen5BankLabel,gen5BankOpened)
+                    else showDialog("PSE Bank","The selected Gen 5 save could not be read. Reopen this Pokémon. Nothing was changed.")
+                }
+            }
             addMutedLine(root, "Gen 5 boxed PK5 editing and PSE Bank deposit are enabled. Bank deposits preserve the exact PK5 before clearing the source slot, rebuild native box/checksum-table CRCs, retain a verified recovery backup and roll both sides back on failure. Default-form Party Pokémon support the editor; party Bank deposits remain locked.")
         } else if (detailGen == 4) {
             fun gen4LockedAction(name:String){ showDialog(name, "This Gen 4 action is still safety-locked. Boxed editing, Duplicate, Delete, PSE Bank and Deep Legality are enabled; party writes remain locked for now.") }
