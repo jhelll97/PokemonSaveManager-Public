@@ -10676,36 +10676,50 @@ class MainActivity : Activity() {
 
     private fun depositGen4ToBank(global:Int,expected:PokemonEntry){
         val file=importedFile?:return
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val original=try{file.readBytes()}catch(e:Exception){showDialog("PSE Bank",e.message?:"Could not read save");return}
         var bankFile:File?=null;var backup:File?=null;var bankBytes:ByteArray?=null
         var bankReserved=false;var sourceWriteStarted=false
         try{
-            require(global in 0 until 540){"Invalid Gen 4 PC slot"}
+            require(bound()&&global in 0 until 540){"The Gen 4 source identity or PC slot changed."}
             val save=original.copyOf(); val profile=detectGen4Profile(save) ?: throw IllegalStateException("Could not detect Gen 4 save layout")
             val before=gen4Validation(save,profile)
             if(!before.generalChecksum || !before.storageChecksum || before.badPk4!=0) throw IllegalStateException("Gen 4 save did not pass pre-deposit validation")
             val off=gen4BoxSlotOffset(save,profile,global); val raw=save.copyOfRange(off,off+136)
             val source=parsePk4(raw,false) ?: throw IllegalStateException("Pokémon is no longer present")
-            if(!source.checksumValid || source.pid!=expected.pid || source.species!=expected.species) throw IllegalStateException("Source PK4 changed or failed checksum validation")
+            if(!source.checksumValid || source.pid!=expected.pid || source.species!=expected.species ||
+                source.tid!=expected.tid || source.sid!=expected.sid) throw IllegalStateException("Source PK4 changed or failed checksum validation")
             bankBytes=raw.copyOf()
+            val recovery=File.createTempFile(backupGameName(file)+"_PreGen4BankDeposit_",".backup",backupsDir());backup=recovery
+            recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The Gen 4 recovery backup did not verify."}
             val created=File(bankDir(),"${System.currentTimeMillis()}_${source.species}.pk4")
             require(!created.exists()){"The destination Bank path is already occupied."}
             bankFile=created;bankReserved=true;created.writeBytes(raw)
             val bankRaw=created.readBytes(); val bankMon=if(bankRaw.size==136)parsePk4(bankRaw,false)else null
-            if(!bankRaw.contentEquals(raw) || bankMon==null || !bankMon.checksumValid || bankMon.pid!=source.pid || bankMon.species!=source.species) throw IllegalStateException("Gen 4 Bank entry verification failed")
+            if(!bankRaw.contentEquals(raw) || bankMon==null || !bankMon.checksumValid ||
+                bankMon.pid!=source.pid || bankMon.species!=source.species || bankMon.tid!=source.tid || bankMon.sid!=source.sid)
+                throw IllegalStateException("Gen 4 Bank entry verification failed")
             ByteArray(136).copyInto(save,off)
             val activeStorage=gen4ActiveBlock(save,profile.storageStart,profile.storageSize)
             updateGen4BlockChecksum(save,activeStorage*0x40000+profile.storageStart,profile.storageSize,profile)
             val after=gen4Validation(save,profile)
             if(!after.generalChecksum || !after.storageChecksum || after.badPk4!=0) throw IllegalStateException("Gen 4 checksum verification failed")
-            val recovery=File.createTempFile(backupGameName(file)+"_PreGen4BankDeposit_",".backup",backupsDir());backup=recovery
-            recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The Gen 4 recovery backup did not verify."}
+            require(bound()&&file.readBytes().contentEquals(original)&&created.readBytes().contentEquals(raw)&&
+                recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){
+                "The Gen 4 source, Bank record or retained recovery backup changed before writing."
+            }
             sourceWriteStarted=true;file.writeBytes(save)
             val verify=file.readBytes(); val vp=detectGen4Profile(verify) ?: throw IllegalStateException("Written save layout could not be re-read")
+            require(bound()&&verify.contentEquals(save)&&vp==profile){"The persisted Gen 4 source identity, bytes or game profile changed."}
             val vv=gen4Validation(verify,vp); if(!vv.generalChecksum || !vv.storageChecksum || vv.badPk4!=0) throw IllegalStateException("Written Gen 4 save failed verification")
             val vo=gen4BoxSlotOffset(verify,vp,global); val vr=verify.copyOfRange(vo,vo+136)
             if(!vr.all{it==0.toByte()} || parsePk4(vr,false)!=null) throw IllegalStateException("Source slot was not empty after re-read")
-            if(!created.readBytes().contentEquals(raw)) throw IllegalStateException("Bank copy changed during the transaction")
+            val finalBank=created.readBytes();val finalMon=if(finalBank.size==136)parsePk4(finalBank,false)else null
+            require(finalBank.contentEquals(raw)&&finalMon!=null&&finalMon.checksumValid&&
+                finalMon.pid==source.pid&&finalMon.species==source.species&&finalMon.tid==source.tid&&finalMon.sid==source.sid){
+                "The exact Gen 4 Bank copy changed after persistence."
+            }
             require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The retained Gen 4 recovery backup changed after persistence."}
             Toast.makeText(this,"Moved to Gen 4 PSE Bank and verified",Toast.LENGTH_LONG).show(); bankViewGeneration=4
             val count=bankDir().listFiles()?.count{it.isFile&&it.extension.equals("pk4",true)}?:1; bankViewBox=(count-1).coerceAtLeast(0)/30; showBank()
