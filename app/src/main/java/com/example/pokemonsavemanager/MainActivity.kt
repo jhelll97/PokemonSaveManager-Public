@@ -66678,11 +66678,21 @@ private data class Gen2ToGen5LegalisePlan(
         val original=try { file.readBytes() } catch (_:Exception) { ByteArray(0) }
         val currentGen = generationForSize(original.size)
         val bankGen = if (bankFile.extension.equals("pk7", true)) 7 else 6
+        var writeStarted=false
         if (!canBankTransfer(bankGen, currentGen, p.species)) {
             showDialog("Withdraw blocked", bankTransferBlockReason(bankGen, currentGen, p.species))
             return
         }
         val (boxOffset, slotCount, maxSpecies)=boxStorageInfo(original) ?: return
+        fun recoverDestination():Boolean=runCatching{
+            if(writeStarted)file.writeBytes(original)
+            val restored=file.readBytes()
+            restored.contentEquals(original)&&when(currentGen){
+                6->gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)
+                7->validateGen7CoreChecksums(restored).first
+                else->false
+            }
+        }.getOrDefault(false)
         if(target !in 0 until slotCount) return
         val offset=boxOffset+target*PK6_STORED_SIZE
         val structurallyEmpty=when(currentGen){
@@ -66706,18 +66716,19 @@ private data class Gen2ToGen5LegalisePlan(
             val work = original.copyOf()
             targetRaw.copyInto(work,offset)
             refreshBoxChecksum(work)
+            writeStarted=true
             file.writeBytes(work)
             val verifyData = file.readBytes()
             val actual = verifyData.copyOfRange(offset, offset + PK6_STORED_SIZE)
             val verifyPokemon = parsePk6(actual, 0, PK6_STORED_SIZE, false, maxSpecies)
             if (!actual.contentEquals(targetRaw) || verifyPokemon == null || !verifyPokemon.checksumValid) {
-                file.writeBytes(original)
-                showDialog("Withdraw verification failed", "PSE restored the original working copy because the withdrawn Pokémon did not verify.")
+                val restored=recoverDestination()
+                showDialog("Withdraw verification failed", if(restored)"PSE restored and verified the exact original working copy because the withdrawn Pokémon did not verify." else "The withdrawn Pokémon did not verify, and automatic destination recovery could not be verified. Keep the current files and restore a verified backup before continuing.")
                 return
             }
             if (!bankFile.delete()) {
-                file.writeBytes(original)
-                showDialog("Withdraw stopped", "PSE could not remove the verified Bank entry, so the save was restored to avoid creating an unintended duplicate.")
+                val restored=recoverDestination()
+                showDialog("Withdraw stopped", if(restored)"PSE could not remove the verified Bank entry, so the exact original save was restored and verified to avoid creating an unintended duplicate." else "PSE could not remove the verified Bank entry, and automatic destination recovery could not be verified. Keep the Bank record and current files, then restore a verified backup before continuing.")
                 return
             }
             val box=target/30+1; val slot=target%30+1
@@ -66725,8 +66736,8 @@ private data class Gen2ToGen5LegalisePlan(
             Toast.makeText(this,"${p.nickname.ifBlank{"Pokémon"}} moved to Box $box • Slot $slot$transferNote and verified",Toast.LENGTH_LONG).show()
             showPokemonViewer("boxes",box-1)
         } catch(e:Exception){
-            try { file.writeBytes(original) } catch (_:Exception) { }
-            showDialog("Withdraw failed", (e.message ?: "Unknown error") + " The original working copy was restored.")
+            val restored=recoverDestination()
+            showDialog("Withdraw failed", (e.message ?: "Unknown error") + if(restored)" The exact original working copy was restored and verified." else " Automatic destination recovery could not be verified. Keep the current files and restore a verified backup before continuing.")
         }
     }
 
