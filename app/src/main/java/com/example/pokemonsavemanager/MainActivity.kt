@@ -61136,7 +61136,8 @@ private data class Gen2ToGen5LegalisePlan(
     private fun depositGen1ToBank(p:Gen1Pokemon,location:String,party:Boolean) {
         val f=importedFile?:return
         val old=runCatching{f.readBytes()}.getOrNull()?:return
-        var bf:File?=null
+        var bf:File?=null;var backup:File?=null;var bankBytes:ByteArray?=null
+        var bankReserved=false;var sourceWriteStarted=false
         try {
             val integrity=verifyGen1SaveIntegrity(old);require(integrity.first){integrity.second}
             require(old.size==SIZE_G1 && hasValidGen1MainChecksum(old)){"The fresh Gen 1 save is invalid."}
@@ -61147,11 +61148,13 @@ private data class Gen2ToGen5LegalisePlan(
             if(party)require(before.size>1){"Cannot bank the final party Pokémon."}
             val bankCountBefore=gen1BankEntryCountForDeposit()
             requireGen1BankCapacity(bankCountBefore,1)
-            val payload=buildGen1BankPayload(old,source,location,party)
+            val payload=buildGen1BankPayload(old,source,location,party);bankBytes=payload.copyOf()
+            val recovery=File.createTempFile(backupGameName(f)+"_PreGen1BankDeposit_",".backup",backupsDir());backup=recovery
+            recovery.writeBytes(old);require(recovery.readBytes().contentEquals(old)&&isBackupKept(recovery)){"The Gen 1 recovery backup did not verify."}
             require(gen1BankEntryCountForDeposit()==bankCountBefore){"PSE Bank changed while the Gen 1 deposit was being staged. Nothing was changed."}
-            bf=File.createTempFile("pse1_${gen1DexFromInternalIndex(source.species)?:source.species}_",".pse1",bankDir())
-            bf.writeBytes(payload)
-            val stored=bf.readBytes();require(stored.contentEquals(payload)){"The staged Bank record changed while it was being written."}
+            val stagedFile=File.createTempFile("pse1_${gen1DexFromInternalIndex(source.species)?:source.species}_",".pse1",bankDir())
+            bf=stagedFile;bankReserved=true;stagedFile.writeBytes(payload)
+            val stored=stagedFile.readBytes();require(stored.contentEquals(payload)){"The staged Bank record changed while it was being written."}
             val staged=parseGen1BankPayload(stored)?:error("The staged Bank record did not parse.")
             require(sameGen1TransferRecord(staged,source)){"The staged Bank record did not preserve the selected Pokémon."}
             require(gen1BankEntryCountForDeposit()==bankCountBefore+1){"PSE Bank changed before the Gen 1 deposit could commit. Nothing was changed."}
@@ -61161,14 +61164,34 @@ private data class Gen2ToGen5LegalisePlan(
             val pre=verifyGen1WriteState(d,affected);require(pre.first){pre.second}
             val stagedRemaining=if(party)parseGen1Party(d).sortedBy{it.slot} else parseGen1Box(d,requireNotNull(affected)).pokemon.sortedBy{it.slot}
             require(stagedRemaining.size==expectedRemaining.size && stagedRemaining.zip(expectedRemaining).all{(a,b)->sameGen1TransferRecord(a,b,party)}){"A remaining Pokémon changed during Bank deposit staging."}
-            f.writeBytes(d)
+            sourceWriteStarted=true;f.writeBytes(d)
             val written=f.readBytes();require(written.contentEquals(d)){"The source save changed while the Gen 1 Bank deposit was being written."};val post=verifyGen1WriteState(written,affected);require(post.first){post.second}
             val remaining=if(party)parseGen1Party(written).sortedBy{it.slot} else parseGen1Box(written,requireNotNull(affected)).pokemon.sortedBy{it.slot}
             require(remaining.size==expectedRemaining.size && remaining.zip(expectedRemaining).all{(a,b)->sameGen1TransferRecord(a,b,party)}){"A remaining Pokémon changed after Bank deposit persistence."}
             val committed=bf?:error("The staged Bank record was lost.");val committedBytes=committed.readBytes();require(committed.exists() && committedBytes.contentEquals(payload) && parseGen1BankPayload(committedBytes)?.let{sameGen1TransferRecord(it,source)}==true){"The staged Bank record changed before commit completion."}
+            require(recovery.readBytes().contentEquals(old)&&isBackupKept(recovery)){"The retained Gen 1 recovery backup changed after persistence."}
             Toast.makeText(this,"Moved to PSE Bank and verified",Toast.LENGTH_LONG).show();showBank()
         } catch(e:Exception) {
-            runCatching{f.writeBytes(old)};runCatching{bf?.delete()};showDialog("PSE Bank move failed",e.message?:"Unknown error")
+            val sourceRestored=runCatching{
+                if(sourceWriteStarted)f.writeBytes(old)
+                val restored=f.readBytes()
+                restored.contentEquals(old)&&restored.size==SIZE_G1&&hasValidGen1MainChecksum(restored)&&verifyGen1SaveIntegrity(restored).first
+            }.getOrDefault(false)
+            val stagedBank=bf;val expectedBank=bankBytes
+            val bankCleared=if(!bankReserved)true else if(stagedBank==null||expectedBank==null)false else runCatching{
+                if(stagedBank.exists()){
+                    require(stagedBank.readBytes().contentEquals(expectedBank)){"The staged Bank record changed; it was not removed."}
+                    require(stagedBank.delete()){"The staged Bank record could not be removed."}
+                }
+                require(!stagedBank.exists()){"The staged Bank record still exists."}
+            }.isSuccess
+            val recovery=when{
+                sourceRestored&&bankCleared->"The exact Gen 1 source was restored or kept and no staged Bank record remained."
+                sourceRestored->"The exact Gen 1 source was restored or kept, but staged Bank cleanup was not verified. Keep the remaining exact PSE Bank record for review."
+                bankCleared->"The staged Bank record was cleared or absent, but source recovery was not verified. Use the retained Gen 1 backup before editing again."
+                else->"Automatic recovery could not be verified. Keep the retained Gen 1 backup and any remaining staged Bank record for review."
+            }
+            showDialog("PSE Bank move failed",(e.message?:"Unknown error")+".\n\n"+recovery+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:""))
         }
     }
     private fun gen1BankGridCell(slot:Int,pair:Pair<File,Gen1Pokemon>?):LinearLayout { val w=((resources.displayMetrics.widthPixels-dp(44))/6).coerceAtLeast(dp(50));return LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER;setPadding(dp(2),dp(4),dp(2),dp(4));setBackgroundColor(if(pair==null)Color.rgb(27,27,27)else if(bankMultiSelectMode && selectedBankFiles.contains(pair.first.absolutePath))Color.rgb(25,105,145)else CARD);layoutParams=GridLayout.LayoutParams().apply{width=w;height=dp(82);setMargins(dp(1),dp(1),dp(1),dp(1))};if(pair!=null){isClickable=true;setOnClickListener{if(bankMultiSelectMode){if(!selectedBankFiles.add(pair.first.absolutePath))selectedBankFiles.remove(pair.first.absolutePath);showBank()}else showGen1BankEntry(pair.first,pair.second)};val iv=ImageView(this@MainActivity).apply{scaleType=ImageView.ScaleType.FIT_CENTER};addView(iv,LinearLayout.LayoutParams(dp(52),dp(52)));loadGen1Sprite(iv,pair.second)}else addView(TextView(this@MainActivity).apply{text="○";textSize=24f;gravity=Gravity.CENTER;setTextColor(Color.rgb(80,80,80))},LinearLayout.LayoutParams(dp(52),dp(52)));addView(TextView(this@MainActivity).apply{text=(slot+1).toString();textSize=10f;gravity=Gravity.CENTER;setTextColor(MUTED)})} }
