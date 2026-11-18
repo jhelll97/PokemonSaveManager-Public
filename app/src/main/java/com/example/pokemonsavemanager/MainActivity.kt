@@ -66770,7 +66770,7 @@ private data class Gen2ToGen5LegalisePlan(
             runCatching{recovery.delete()}
             val box=target/30+1
             val slot=target%30+1
-            val transferNote=if(bankGen!=currentGen)" (Gen $bankGen → Gen $currentGen)"else""
+            val transferNote=if(bankGen!=currentGen) " (Gen $bankGen → Gen $currentGen)" else ""
             Toast.makeText(this,"${p.nickname.ifBlank{"Pokémon"}} moved to Box $box • Slot $slot$transferNote and verified",Toast.LENGTH_LONG).show()
             showPokemonViewer("boxes",box-1)
         }catch(e:Exception){
