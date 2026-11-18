@@ -11815,7 +11815,9 @@ class MainActivity : Activity() {
             }
             bankRecord=raw.copyOf()
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen5BankDeposit_",".backup",backupsDir());backup=recovery
-            recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The retained Gen 5 recovery backup did not verify."}
+            recovery.writeBytes(original)
+            retainGen6ToGen5SafetyBackup(recovery,original)
+            require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The retained Gen 5 recovery backup did not verify."}
             val created=File(bankDir(),"${System.currentTimeMillis()}_${source.species}.pk5")
             require(!created.exists()){"The destination Bank path is already occupied."}
             bankFile=created;bankReserved=true;created.writeBytes(raw)
