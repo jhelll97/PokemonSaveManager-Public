@@ -46401,15 +46401,11 @@ class MainActivity : Activity() {
                     item.bankFile.isFile && item.bankFile.readBytes().contentEquals(item.bankBytes)
                 }.getOrDefault(false)
             }
-            val saveRestored = if (writeStarted) {
-                runCatching {
-                    openedFile.writeBytes(openedDestination)
-                    val restored = openedFile.readBytes()
-                    restored.contentEquals(openedDestination) && gen3SaveValid(restored)
-                }.getOrDefault(false)
-            } else {
-                true
-            }
+            val saveRestored = runCatching {
+                if (writeStarted) openedFile.writeBytes(openedDestination)
+                val restored = openedFile.readBytes()
+                restored.contentEquals(openedDestination) && gen3SaveValid(restored)
+            }.getOrDefault(false)
             val recovery = when {
                 saveRestored && bankRestored ->
                     "The original save and every removed Bank record were preserved or restored."
