@@ -66447,6 +66447,7 @@ private data class Gen2ToGen5LegalisePlan(
             showDialog("Withdraw", "Import the destination save first.")
             return
         }
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         val data = try { file.readBytes() } catch (_: Exception) { ByteArray(0) }
         val currentGen = generationForSize(data.size)
         val bankGen = if (bankFile.extension.equals("pk7", true)) 7 else 6
@@ -66479,15 +66480,17 @@ private data class Gen2ToGen5LegalisePlan(
         AlertDialog.Builder(this)
             .setTitle("Withdraw ${p.nickname.ifBlank { "Pokémon" }} to…")
             .setItems(labels.toTypedArray()) { _, which ->
-                if (which == 0) withdrawFromBank(bankFile, p, firstEmpty)
-                else showWithdrawSlotGrid(bankFile, p, which - 1)
+                if (which == 0) withdrawFromBank(bankFile,p,firstEmpty,file,openedUri,openedLabel)
+                else showWithdrawSlotGrid(bankFile,p,which-1,file,openedUri,openedLabel)
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-    private fun showWithdrawSlotGrid(bankFile: File, p: PokemonEntry, boxIndex: Int) {
-        val file = importedFile ?: return
+    private fun showWithdrawSlotGrid(bankFile:File,p:PokemonEntry,boxIndex:Int,openedFile:File,openedUri:Uri?,openedLabel:String?) {
+        fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        if(!bound()){showDialog("Withdraw","The loaded destination identity changed after the box list opened. Reopen PSE Bank. Nothing was changed.");return}
+        val file=openedFile
         val data = try { file.readBytes() } catch (_: Exception) { ByteArray(0) }
         val currentGen = generationForSize(data.size)
         val bankGen = if (bankFile.extension.equals("pk7", true)) 7 else 6
@@ -66530,7 +66533,7 @@ private data class Gen2ToGen5LegalisePlan(
                 setTextColor(if (occupied) Color.rgb(105, 105, 105) else TEXT)
                 setBackgroundColor(if (occupied) Color.rgb(35, 35, 35) else Color.rgb(55, 55, 55))
                 isEnabled = !occupied
-                if (!occupied) setOnClickListener { withdrawFromBank(bankFile, p, global) }
+                if (!occupied) setOnClickListener { withdrawFromBank(bankFile,p,global,file,openedUri,openedLabel) }
             }
             grid.addView(cell, GridLayout.LayoutParams().apply {
                 width = cellWidth
@@ -66673,8 +66676,10 @@ private data class Gen2ToGen5LegalisePlan(
             showDialog("Gen $generation Bank move failed",(e.message?:"Unknown error")+".\n\n"+recovery+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:""))
         }
     }
-    private fun withdrawFromBank(bankFile: File, p: PokemonEntry, target: Int) {
-        val file=importedFile ?: return
+    private fun withdrawFromBank(bankFile:File,p:PokemonEntry,target:Int,openedFile:File,openedUri:Uri?,openedLabel:String?) {
+        fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        if(!bound()){showDialog("Withdraw","The loaded destination identity changed after slot selection. Reopen PSE Bank. Nothing was changed.");return}
+        val file=openedFile
         val original=try { file.readBytes() } catch (_:Exception) { ByteArray(0) }
         val currentGen = generationForSize(original.size)
         val bankGen = if (bankFile.extension.equals("pk7", true)) 7 else 6
@@ -66713,6 +66718,7 @@ private data class Gen2ToGen5LegalisePlan(
             return
         }
         try {
+            require(bound()&&file.readBytes().contentEquals(original)){"The destination identity or bytes changed before withdrawal."}
             val work = original.copyOf()
             targetRaw.copyInto(work,offset)
             refreshBoxChecksum(work)
@@ -66726,6 +66732,7 @@ private data class Gen2ToGen5LegalisePlan(
                 showDialog("Withdraw verification failed", if(restored)"PSE restored and verified the exact original working copy because the withdrawn Pokémon did not verify." else "The withdrawn Pokémon did not verify, and automatic destination recovery could not be verified. Keep the current files and restore a verified backup before continuing.")
                 return
             }
+            require(bound()&&file.readBytes().contentEquals(verifyData)){"The verified destination identity or bytes changed before Bank cleanup."}
             if (!bankFile.delete()) {
                 val restored=recoverDestination()
                 showDialog("Withdraw stopped", if(restored)"PSE could not remove the verified Bank entry, so the exact original save was restored and verified to avoid creating an unintended duplicate." else "PSE could not remove the verified Bank entry, and automatic destination recovery could not be verified. Keep the Bank record and current files, then restore a verified backup before continuing.")
