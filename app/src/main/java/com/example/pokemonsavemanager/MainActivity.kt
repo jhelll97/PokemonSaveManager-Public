@@ -45418,48 +45418,67 @@ class MainActivity : Activity() {
     private fun depositGen3ToBank(global:Int,p:PokemonEntry){
         val file=importedFile?:return
         val original=try{file.readBytes()}catch(e:Exception){showDialog("PSE Bank",e.message?:"Could not read save");return}
-        var bankFile:File?=null
+        var bankFile:File?=null;var backup:File?=null;var bankBytes:ByteArray?=null
+        var bankReserved=false;var sourceWriteStarted=false
         try{
             require(global in 0 until 420){"Invalid Gen 3 PC slot"}
+            require(gen3SaveValid(original)){"The Gen 3 source save failed native integrity validation."}
             val save=original.copyOf()
             val pc=gen3PcBuffer(save) ?: throw IllegalStateException("Could not reconstruct Gen 3 PC storage")
             val off=4+global*80
             val current=parsePk3(pc,off,false) ?: throw IllegalStateException("Pokémon is no longer present")
-            if(current.pid!=p.pid || current.species!=p.species) throw IllegalStateException("The box slot changed since the details screen was opened")
+            if(current.pid!=p.pid || current.species!=p.species || current.tid!=p.tid || current.sid!=p.sid)
+                throw IllegalStateException("The box slot changed since the details screen was opened")
             if(!current.checksumValid) throw IllegalStateException("The source PK3 checksum is invalid")
-            val raw=pc.copyOfRange(off,off+80)
-            bankFile=File(bankDir(),"${System.currentTimeMillis()}_${p.species}.pk3")
-            bankFile!!.writeBytes(raw)
-            val bankRaw=bankFile!!.readBytes()
+            val raw=pc.copyOfRange(off,off+80);bankBytes=raw.copyOf()
+            val recovery=File.createTempFile(backupGameName(file)+"_PreGen3BankDeposit_",".backup",backupsDir());backup=recovery
+            recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The Gen 3 recovery backup did not verify."}
+            val created=File(bankDir(),"${System.currentTimeMillis()}_${p.species}.pk3")
+            require(!created.exists()){"The destination Bank path is already occupied."}
+            bankFile=created;bankReserved=true;created.writeBytes(raw)
+            val bankRaw=created.readBytes()
             val bankParsed=if(bankRaw.size==80) parsePk3(bankRaw,0,false) else null
-            if(!bankRaw.contentEquals(raw) || bankParsed==null || !bankParsed.checksumValid || bankParsed.pid!=current.pid || bankParsed.species!=current.species)
+            if(!bankRaw.contentEquals(raw) || bankParsed==null || !bankParsed.checksumValid ||
+                bankParsed.pid!=current.pid || bankParsed.species!=current.species ||
+                bankParsed.tid!=current.tid || bankParsed.sid!=current.sid)
                 throw IllegalStateException("Gen 3 Bank entry verification failed")
             ByteArray(80).copyInto(pc,off)
             writeGen3PcBuffer(save,pc)
             if(!gen3SaveValid(save)) throw IllegalStateException("Gen 3 section checksum verification failed")
-            file.writeBytes(save)
+            sourceWriteStarted=true;file.writeBytes(save)
             val verify=file.readBytes()
             if(!gen3SaveValid(verify)) throw IllegalStateException("Written save failed verification")
             val verifyPc=gen3PcBuffer(verify) ?: throw IllegalStateException("Could not re-read Gen 3 PC storage")
             if(!verifyPc.copyOfRange(off,off+80).all{it==0.toByte()} || parsePk3(verifyPc,off,false)!=null)
                 throw IllegalStateException("Source slot was not empty after re-read")
-            if(!bankFile!!.readBytes().contentEquals(raw)) throw IllegalStateException("Bank copy changed during the transaction")
+            if(!created.readBytes().contentEquals(raw)) throw IllegalStateException("Bank copy changed during the transaction")
+            require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The retained Gen 3 recovery backup changed after persistence."}
             Toast.makeText(this,"Moved to Gen 3 PSE Bank and verified",Toast.LENGTH_LONG).show()
             bankViewGeneration=3; bankViewBox=((bankDir().listFiles()?.count{it.isFile&&it.extension.equals("pk3",true)}?:1)-1)/30
             showBank()
         }catch(e:Exception){
-            runCatching{file.writeBytes(original)}
-            runCatching{bankFile?.delete()}
-            showDialog("Gen 3 Bank move failed","${e.message?:"Unknown error"}. The original working copy was restored and no new Bank entry was kept.")
+            val sourceRestored=runCatching{
+                if(sourceWriteStarted)file.writeBytes(original)
+                val restored=file.readBytes()
+                restored.contentEquals(original)&&generationForSize(restored.size)==3&&gen3SaveValid(restored)
+            }.getOrDefault(false)
+            val stagedBank=bankFile;val expectedBank=bankBytes
+            val bankCleared=if(!bankReserved)true else if(stagedBank==null||expectedBank==null)false else runCatching{
+                if(stagedBank.exists()){
+                    require(stagedBank.readBytes().contentEquals(expectedBank)){"The staged Bank record changed; it was not removed."}
+                    require(stagedBank.delete()){"The staged Bank record could not be removed."}
+                }
+                require(!stagedBank.exists()){"The staged Bank record still exists."}
+            }.isSuccess
+            val recovery=when{
+                sourceRestored&&bankCleared->"The exact Gen 3 source was restored or kept and no staged Bank record remained."
+                sourceRestored->"The exact Gen 3 source was restored or kept, but staged Bank cleanup was not verified. Keep the remaining exact PK3 for review."
+                bankCleared->"The staged Bank record was cleared or absent, but source recovery was not verified. Use the retained Gen 3 backup before editing again."
+                else->"Automatic recovery could not be verified. Keep the retained Gen 3 backup and any remaining staged PK3 for review."
+            }
+            showDialog("Gen 3 Bank move failed",(e.message?:"Unknown error")+".\n\n"+recovery+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:""))
         }
     }
-
-    private data class Gen3ToGen7TransferMeta(
-        val speciesName:String,
-        val baseFriendship:Int,
-        val genderRate:Int,
-        val abilityId:Int
-    )
 
     private fun loadGen3ToGen7TransferMetaAsync(
         p:PokemonEntry,targetGeneration:Int=7,done:(Gen3ToGen7TransferMeta?)->Unit
