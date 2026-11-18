@@ -11724,7 +11724,7 @@ class MainActivity : Activity() {
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val original=runCatching{file.readBytes()}.getOrNull()?:return showDialog("Gen 5 PSE Bank","The selected save could not be read.")
-        var bankFile:File?=null;var bankRecord:ByteArray?=null;var backup:File?=null;var writeStarted=false
+        var bankFile:File?=null;var bankRecord:ByteArray?=null;var backup:File?=null;var writeStarted=false;var bankReserved=false
         try{
             require(bound()&&global in 0 until 720){"The source identity or PC slot changed."}
             val profile=detectGen5Profile(original)?:error("A valid Black, White, Black 2 or White 2 save is required.")
@@ -11737,19 +11737,23 @@ class MainActivity : Activity() {
                 "The source PK5 changed or failed its checksum."
             }
             bankRecord=raw.copyOf()
-            val created=File(bankDir(),"${System.currentTimeMillis()}_${source.species}.pk5");bankFile=created;created.writeBytes(raw)
+            val recovery=File.createTempFile(backupGameName(file)+"_PreGen5BankDeposit_",".backup",backupsDir());backup=recovery
+            recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The retained Gen 5 recovery backup did not verify."}
+            val created=File(bankDir(),"${System.currentTimeMillis()}_${source.species}.pk5")
+            require(!created.exists()){"The destination Bank path is already occupied."}
+            bankFile=created;bankReserved=true;created.writeBytes(raw)
             val bankBytes=created.readBytes();val bankMon=if(bankBytes.size==136)parsePk5(bankBytes,false)else null
-            require(bankBytes.contentEquals(raw)&&bankMon!=null&&bankMon.checksumValid&&bankMon.pid==source.pid&&bankMon.species==source.species){
+            require(bankBytes.contentEquals(raw)&&bankMon!=null&&bankMon.checksumValid&&
+                bankMon.pid==source.pid&&bankMon.species==source.species&&bankMon.tid==source.tid&&bankMon.sid==source.sid){
                 "The exact Gen 5 Bank record did not verify."
             }
-            val recovery=File.createTempFile(backupGameName(file)+"_PreGen5BankDeposit_",".backup",backupsDir());backup=recovery
-            recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)){"The recovery backup did not verify."}
             val work=original.copyOf();ByteArray(136).copyInto(work,offset);updateGen5BoxChecksum(work,box,profile)
             require(parsePk5(work.copyOfRange(offset,offset+136),false)==null&&gen5BoxChecksumValid(work,box,profile)&&gen5ChecksumTableValid(work,profile)){
                 "The staged source removal or native Gen 5 checksums did not verify."
             }
-            require(bound()&&file.readBytes().contentEquals(original)&&created.readBytes().contentEquals(raw)&&recovery.readBytes().contentEquals(original)){
-                "The source, Bank record or recovery backup changed before writing."
+            require(bound()&&file.readBytes().contentEquals(original)&&created.readBytes().contentEquals(raw)&&
+                recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){
+                "The source, Bank record or retained recovery backup changed before writing."
             }
             writeStarted=true;file.writeBytes(work)
             val written=file.readBytes();require(written.contentEquals(work)){"The persisted save differs from the reviewed write."}
@@ -11757,7 +11761,12 @@ class MainActivity : Activity() {
             require(gen5BoxChecksumValid(written,box,wp)&&gen5ChecksumTableValid(written,wp)&&parsePk5(written.copyOfRange(offset,offset+136),false)==null){
                 "The persisted source removal or native checksums did not verify."
             }
-            require(created.readBytes().contentEquals(raw)){"The Bank copy changed after persistence."}
+            val finalBank=created.readBytes();val finalMon=if(finalBank.size==136)parsePk5(finalBank,false)else null
+            require(finalBank.contentEquals(raw)&&finalMon!=null&&finalMon.checksumValid&&
+                finalMon.pid==source.pid&&finalMon.species==source.species&&finalMon.tid==source.tid&&finalMon.sid==source.sid){
+                "The exact Gen 5 Bank copy changed after persistence."
+            }
+            require(recovery.readBytes().contentEquals(original)&&isBackupKept(recovery)){"The retained Gen 5 recovery backup changed after persistence."}
             Toast.makeText(this,"Moved to Gen 5 PSE Bank and verified",Toast.LENGTH_LONG).show();bankViewGeneration=5
             val count=bankDir().listFiles()?.count{it.isFile&&it.extension.equals("pk5",true)}?:1;bankViewBox=(count-1).coerceAtLeast(0)/30;showBank()
         }catch(e:Exception){
@@ -11767,14 +11776,15 @@ class MainActivity : Activity() {
                 restored.contentEquals(original)&&restoredProfile!=null&&gen5ChecksumTableValid(restored,restoredProfile)&&
                     (0 until 24).all{gen5BoxChecksumValid(restored,it,restoredProfile)}
             }.getOrDefault(false)
-            val bankRemoved=runCatching{
+            val bankRemoved=if(!bankReserved)true else runCatching{
                 val created=bankFile;val expectedBank=bankRecord
-                if(created!=null&&created.exists()){
-                    require(expectedBank!=null&&created.readBytes().contentEquals(expectedBank)){"The new Bank entry changed and was kept for review."}
+                require(created!=null&&expectedBank!=null){"The staged Bank path could not be resolved."}
+                if(created.exists()){
+                    require(created.readBytes().contentEquals(expectedBank)){"The new Bank entry changed and was kept for review."}
                     require(created.delete()){"The new Bank entry could not be removed."}
                 }
-                created==null||!created.exists()
-            }.getOrDefault(false)
+                require(!created.exists()){"The staged Bank entry still exists."}
+            }.isSuccess
             val recovery=when{
                 saveRestored&&bankRemoved->"The exact original Gen 5 save was restored or kept and no new Bank entry remained."
                 saveRestored->"The exact original Gen 5 save was restored or kept, but the new Bank entry could not be safely removed. Keep that entry and the retained backup for review."
