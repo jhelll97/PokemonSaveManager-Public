@@ -1006,6 +1006,7 @@ class MainActivity : Activity() {
             val box=targets[which].first
             val fresh=runCatching{file.readBytes()}.getOrNull()?:return@setItems
             var writeStarted=false;var activeWriteAttempted=false;var safetyBackup:File?=null
+            var stagedDestination:ByteArray?=null
             val bankRecovery=ArrayList<File>();val cleanupAttempted=HashSet<String>()
             try {
                 require(bound()&&fresh.contentEquals(initial)){"The Gen 1 destination or its source identity changed after the box list opened."}
@@ -1049,6 +1050,7 @@ class MainActivity : Activity() {
                 }
                 require(bound()&&file.readBytes().contentEquals(fresh)&&activeMatches(fresh)&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The destination identity or retained backup changed before batch withdrawal."}
                 require(refreshed.indices.all{index->val item=refreshed[index];item.first.readBytes().contentEquals(item.second)&&bankRecovery[index].readBytes().contentEquals(item.second)}){"A selected Bank record or recovery snapshot changed before batch withdrawal."}
+                stagedDestination=work.copyOf()
                 writeStarted=true;file.writeBytes(work)
                 val written=file.readBytes();require(written.contentEquals(work)){"The working save changed while it was being written."}
                 val post=verifyGen1WriteState(written,box);require(post.first){post.second}
@@ -1086,9 +1088,18 @@ class MainActivity : Activity() {
                     bankRestored=recovered&&bankRestored
                 }
                 val destinationRestored=runCatching{
-                    if(writeStarted)file.writeBytes(fresh)
+                    val staged=stagedDestination
+                    val found=file.readBytes()
+                    if(writeStarted&&!found.contentEquals(fresh)){
+                        require(staged!=null&&found.contentEquals(staged)){"The Gen 1 working save no longer matches this batch's staged bytes; the retained backup was left for recovery."}
+                        file.writeBytes(fresh)
+                    }
                     val restored=file.readBytes();require(restored.contentEquals(fresh)&&verifyGen1SaveIntegrity(restored).first){"The restored Gen 1 working save did not verify."}
-                    if(activeWriteAttempted&&openedSource!=null)contentResolver.openOutputStream(openedSource,"wt")?.use{it.write(fresh)}?:error("The active Gen 1 save could not be reopened for recovery.")
+                    if(activeWriteAttempted&&openedSource!=null&&!activeMatches(fresh)){
+                        val activeNow=contentResolver.openInputStream(openedSource)?.use{it.readBytes()}?:error("The active Gen 1 save could not be reopened for recovery.")
+                        require(staged!=null&&activeNow.contentEquals(staged)){"The active Gen 1 save no longer matches this batch's staged bytes; it was left untouched."}
+                        contentResolver.openOutputStream(openedSource,"wt")?.use{it.write(fresh)}?:error("The active Gen 1 save could not be reopened for recovery.")
+                    }
                     require(activeMatches(fresh)){"The active Gen 1 save recovery did not verify."};true
                 }.getOrDefault(false)
                 if(bankRestored&&destinationRestored)bankRecovery.forEach{runCatching{it.delete()}}
