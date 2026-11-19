@@ -926,6 +926,7 @@ class MainActivity : Activity() {
         var stagedDestination:ByteArray?=null
         val recoveryProfileKey=detectGen2Profile(openedDestination)?.key
         var safetyBackup:File?=null
+        val bankRecovery=ArrayList<File>()
         try{
             require(bound()&&verifyGen2SaveIntegrity(fresh).first){"The captured Gen 2 batch source identity or full integrity changed."}
             require(selected.isNotEmpty()){"The prepared Gen 2 Bank selection is empty."};require(selected.map{it.bankFile.absolutePath}.distinct().size==selected.size){"The prepared selection contains a duplicate Gen 2 Bank entry."}
@@ -941,18 +942,33 @@ class MainActivity : Activity() {
             val backup=File.createTempFile(backupGameName(file)+"_PreGen2BankBatch_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The batch withdrawal recovery backup did not persist exactly."}
             retainGen2SafetyBackup(backup,fresh)
+            for((index,item) in refreshed.withIndex()){
+                val recovery=File.createTempFile("PSE_G2BatchWithdraw_${index+1}_",".tmp",bankDir());bankRecovery.add(recovery)
+                recovery.writeBytes(item.bankBytes)
+                val recovered=recovery.readBytes()
+                require(recovery.isFile&&recovered.contentEquals(item.bankBytes)&&parseGen2BankPayload(recovered)?.let{sameGen2BankRecord(it,item.source)}==true){"A Gen 2 Bank recovery snapshot did not verify."}
+            }
             require(refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"A selected Gen 2 Bank record changed during staging."}
             require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(fresh)){"The active Gen 2 destination changed during staging. Nothing was written."}
             require(bound()&&backup.readBytes().contentEquals(fresh)&&isBackupKept(backup)){"The source identity or retained recovery backup changed before batch withdrawal."}
+            require(refreshed.indices.all{index->
+                val recovered=bankRecovery[index].readBytes()
+                bankRecovery[index].isFile&&recovered.contentEquals(refreshed[index].bankBytes)&&parseGen2BankPayload(recovered)?.let{sameGen2BankRecord(it,refreshed[index].source)}==true
+            }){"A Gen 2 Bank recovery snapshot changed before batch withdrawal."}
             stagedDestination=work.copyOf()
             writeStarted=true
             file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)){"The Gen 2 destination changed while the batch was written."};val writtenProfile=detectGen2Profile(written)?:error("The persisted Gen 2 destination failed checksum verification.");require(gen2ChecksumValid(written,writtenProfile)){"The persisted Gen 2 checksum is invalid."};val afterPayloads=gen2LocationPayloads(written,location,writtenProfile);require(afterPayloads.size==stagedPayloads.size&&sameGen2PayloadList(afterPayloads,stagedPayloads)){"The persisted Gen 2 box records changed after staging."}
             require(bound()&&writtenProfile.key==profile.key&&verifyGen2SaveIntegrity(written).first){"The persisted Gen 2 batch withdrawal or source identity did not verify."}
             for(i in refreshed.indices){val item=refreshed[i];val slot=slots[i];val persisted=parseGen2Box(written,targetBox).firstOrNull{it.slot==slot};require(persisted!=null&&sameGen2BankRecord(persisted,item.source)){"A persisted Gen 2 Bank record did not preserve every supported field."};require(gen2BoxRawCore(written,targetBox,slot).contentEquals(rawRecords[i])){"An exact Gen 2 Bank record did not persist."};require(gen2PokedexOwnedSeen(written,writtenProfile,item.source.species)){"A transferred species was not registered Seen and Owned after persistence."}}
-            for(item in refreshed){require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 2 destination changed before Bank cleanup."};require(bound()){"The source identity changed before a batch Bank cleanup."};require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 batch recovery backup changed before Bank cleanup."};val cleanup=item.bankFile.readBytes();require(cleanup.contentEquals(item.bankBytes)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,item.source)}==true){"A selected Gen 2 Bank record changed before cleanup."};removed.add(item.bankFile to item.bankBytes);require(item.bankFile.delete()){"A selected Gen 2 Bank record could not be removed after destination verification."};require(!item.bankFile.exists()){"A removed Gen 2 Bank record still exists."}}
+            for((index,item) in refreshed.withIndex()){require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 2 destination changed before Bank cleanup."};require(bound()){"The source identity changed before a batch Bank cleanup."};require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 batch recovery backup changed before Bank cleanup."};val recoveryBytes=bankRecovery[index].readBytes();require(bankRecovery[index].isFile&&recoveryBytes.contentEquals(item.bankBytes)&&parseGen2BankPayload(recoveryBytes)?.let{sameGen2BankRecord(it,item.source)}==true){"A Gen 2 Bank recovery snapshot changed before cleanup."};val cleanup=item.bankFile.readBytes();require(cleanup.contentEquals(item.bankBytes)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,item.source)}==true){"A selected Gen 2 Bank record changed before cleanup."};removed.add(item.bankFile to item.bankBytes);require(item.bankFile.delete()){"A selected Gen 2 Bank record could not be removed after destination verification."};require(!item.bankFile.exists()){"A removed Gen 2 Bank record still exists."}}
             require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 2 destination changed after Bank cleanup."}
             require(bound()){"The source identity changed after batch Bank cleanup."}
             require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 batch recovery backup changed after Bank cleanup."}
+            require(refreshed.indices.all{index->
+                val recovered=bankRecovery[index].readBytes()
+                bankRecovery[index].isFile&&recovered.contentEquals(refreshed[index].bankBytes)&&parseGen2BankPayload(recovered)?.let{sameGen2BankRecord(it,refreshed[index].source)}==true
+            }){"A Gen 2 Bank recovery snapshot changed after Bank cleanup."}
+            bankRecovery.forEach{runCatching{it.delete()}}
         }catch(e:Exception){
             var bankRestored=true
             for(item in selected){
@@ -977,6 +993,15 @@ class MainActivity : Activity() {
             val retainedBackup=safetyBackup?.let{saved->runCatching{
                 saved.isFile&&isBackupKept(saved)&&saved.readBytes().contentEquals(fresh)
             }.getOrDefault(false)}?:false
+            val verifiedBankRecovery=bankRecovery.mapIndexedNotNull{index,copy->
+                val item=selected.getOrNull(index)?:return@mapIndexedNotNull null
+                runCatching{
+                    val recovered=copy.readBytes()
+                    if(copy.isFile&&recovered.contentEquals(item.bankBytes)&&parseGen2BankPayload(recovered)?.let{sameGen2BankRecord(it,item.source)}==true)copy else null
+                }.getOrNull()
+            }
+            val allBankRecoveryVerified=bankRecovery.size==selected.size&&verifiedBankRecovery.size==selected.size
+            if(bankRestored&&destinationRestored)bankRecovery.forEach{runCatching{it.delete()}}
             val recovery=when{
                 bankRestored&&destinationRestored->
                     "The exact Gen 2 destination and every selected Bank record were restored or kept and verified."
@@ -984,19 +1009,30 @@ class MainActivity : Activity() {
                     "Every selected Gen 2 Bank record was restored or kept. Destination restoration was not verified, but the exact retained destination backup verified."
                 bankRestored->
                     "Every selected Gen 2 Bank record was restored or kept, but destination restoration and its retained backup were not verified. Unknown destination bytes were left untouched."
-                destinationRestored&&retainedBackup->
-                    "The exact Gen 2 destination was restored and its retained backup verified, but one or more Bank records were not verified."
+                destinationRestored&&allBankRecoveryVerified->
+                    "The exact Gen 2 destination was restored. Bank restoration was incomplete, but every exact Bank recovery snapshot verified."
+                destinationRestored&&verifiedBankRecovery.isNotEmpty()->
+                    "The exact Gen 2 destination was restored. Bank restoration was incomplete; only ${verifiedBankRecovery.size} of ${selected.size} Bank recovery snapshots verified."
                 destinationRestored->
-                    "The exact Gen 2 destination was restored, but one or more Bank records and the retained destination backup were not verified."
+                    "The exact Gen 2 destination was restored, but Bank restoration and all Bank recovery snapshots were not verified."
+                retainedBackup&&allBankRecoveryVerified->
+                    "Destination and Bank restoration were incomplete, but the exact retained destination backup and every Bank recovery snapshot verified."
+                retainedBackup&&verifiedBankRecovery.isNotEmpty()->
+                    "Destination and Bank restoration were incomplete. The exact retained destination backup and ${verifiedBankRecovery.size} of ${selected.size} Bank recovery snapshots verified."
                 retainedBackup->
-                    "Destination and Bank restoration were incomplete, but the exact retained Gen 2 destination backup verified."
+                    "Destination and Bank restoration were incomplete. The exact retained destination backup verified, but no Bank recovery snapshot did."
+                allBankRecoveryVerified->
+                    "Destination and Bank restoration were incomplete. Every Bank recovery snapshot verified, but the retained destination backup did not."
+                verifiedBankRecovery.isNotEmpty()->
+                    "Destination and Bank restoration were incomplete. Only ${verifiedBankRecovery.size} of ${selected.size} Bank recovery snapshots verified; the retained destination backup did not."
                 else->
-                    "Automatic recovery and the retained destination backup could not be verified. Keep the current destination and remaining Bank files for review."
+                    "Automatic recovery and all retained recovery snapshots could not be verified. Keep the current destination and Bank files for review."
             }
             showDialog(
                 "Move selected failed",
                 (e.message?:"Unknown error")+"\n\n$recovery"+
-                    (safetyBackup?.takeIf{retainedBackup}?.let{"\n\nVerified recovery backup: "+it.name}?:"")
+                    (safetyBackup?.takeIf{retainedBackup}?.let{"\n\nVerified recovery backup: "+it.name}?:"")+
+                    (verifiedBankRecovery.filter{it.exists()}.takeIf{it.isNotEmpty()}?.joinToString(prefix="\nVerified Bank recovery snapshots: "){it.name}?:"")
             );return
         }
         selectedBankFiles.clear();bankMultiSelectMode=false;Toast.makeText(this,"${selected.size} Gen 2 Pokémon moved to Box $targetBox and verified",Toast.LENGTH_LONG).show();showBank()
