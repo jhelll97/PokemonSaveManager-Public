@@ -708,6 +708,7 @@ class MainActivity : Activity() {
     private fun withdrawSelectedGen7BankPokemon(selected:List<Gen7BankBatchItem>,openedDestination:ByteArray,targetBox:Int,targetSlots:List<Int>,file:File,openedUri:Uri?,openedLabel:String?){
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         var writeStarted=false;var safetyBackup:File?=null
+        var stagedDestination:ByteArray?=null
         val recoveryCopies=ArrayList<Pair<Gen7BankBatchItem,File>>()
         val cleanupAttempted=HashSet<String>()
         try{
@@ -744,6 +745,7 @@ class MainActivity : Activity() {
             }
             fun recoveryValid()=isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&recoveryCopies.size==refreshed.size&&recoveryCopies.all{(item,copy)->copy.readBytes().contentEquals(item.bankBytes)}
             require(bound()&&file.readBytes().contentEquals(original)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}&&recoveryValid()){ "The destination, Bank records or retained recovery data changed before writing." }
+            stagedDestination=work.copyOf()
             writeStarted=true;file.writeBytes(work);val written=file.readBytes()
             require(written.contentEquals(work)&&written.indices.all{it in allowed||written[it]==original[it]}){"The persisted Generation 7 save differs from the reviewed write scope."}
             require(validateGen7CoreChecksums(written).first){"The persisted Generation 7 save failed native checksum verification."}
@@ -765,7 +767,13 @@ class MainActivity : Activity() {
                 require(restored.contentEquals(item.bankBytes)&&parsed!=null&&parsed.checksumValid&&parsed.pid==item.source.pid&&parsed.species==item.source.species&&parsed.tid==item.source.tid&&parsed.sid==item.source.sid){"An exact Gen 7 Bank record could not be restored or verified."};true
             }.getOrDefault(false)}.all{it}
             val destinationRestored=runCatching{
-                if(writeStarted)file.writeBytes(openedDestination)
+                val current=file.readBytes()
+                if(!current.contentEquals(openedDestination)){
+                    require(writeStarted){"No Generation 7 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 7 destination no longer matches this batch withdrawal's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(openedDestination)
+                }
                 val restored=file.readBytes();require(restored.contentEquals(openedDestination)&&generationForSize(restored.size)==7&&validateGen7CoreChecksums(restored).first){"The restored Generation 7 destination did not verify."};true
             }.getOrDefault(false)
             if(bankRestored&&destinationRestored)recoveryCopies.forEach{runCatching{it.second.delete()}}
