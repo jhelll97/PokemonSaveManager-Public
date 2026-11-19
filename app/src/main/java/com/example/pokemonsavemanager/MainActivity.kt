@@ -923,6 +923,7 @@ class MainActivity : Activity() {
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedSource&&currentSourceLabel==openedLabel
         if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog("Move selected","The active save changed after destination selection. Reopen the Bank selection. Nothing was changed.");return}
         val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;val removed=ArrayList<Pair<File,ByteArray>>();var writeStarted=false
+        var stagedDestination:ByteArray?=null
         val recoveryProfileKey=detectGen2Profile(openedDestination)?.key
         var safetyBackup:File?=null
         try{
@@ -943,6 +944,7 @@ class MainActivity : Activity() {
             require(refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"A selected Gen 2 Bank record changed during staging."}
             require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(fresh)){"The active Gen 2 destination changed during staging. Nothing was written."}
             require(bound()&&backup.readBytes().contentEquals(fresh)&&isBackupKept(backup)){"The source identity or retained recovery backup changed before batch withdrawal."}
+            stagedDestination=work.copyOf()
             writeStarted=true
             file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)){"The Gen 2 destination changed while the batch was written."};val writtenProfile=detectGen2Profile(written)?:error("The persisted Gen 2 destination failed checksum verification.");require(gen2ChecksumValid(written,writtenProfile)){"The persisted Gen 2 checksum is invalid."};val afterPayloads=gen2LocationPayloads(written,location,writtenProfile);require(afterPayloads.size==stagedPayloads.size&&sameGen2PayloadList(afterPayloads,stagedPayloads)){"The persisted Gen 2 box records changed after staging."}
             require(bound()&&writtenProfile.key==profile.key&&verifyGen2SaveIntegrity(written).first){"The persisted Gen 2 batch withdrawal or source identity did not verify."}
@@ -963,7 +965,12 @@ class MainActivity : Activity() {
                 bankRestored=recovered&&bankRestored
             }
             val destinationRestored=runCatching{
-                if(writeStarted)file.writeBytes(fresh)
+                val found=file.readBytes()
+                if(writeStarted&&!found.contentEquals(fresh)){
+                    val staged=stagedDestination
+                    require(staged!=null&&found.contentEquals(staged)){"The Gen 2 destination no longer matches this batch's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(fresh)
+                }
                 val restored=file.readBytes();val restoredProfile=detectGen2Profile(restored)
                 require(restored.contentEquals(fresh)&&restoredProfile?.key==recoveryProfileKey&&verifyGen2SaveIntegrity(restored).first){"The restored Gen 2 destination bytes, profile or integrity did not verify."};true
             }.getOrDefault(false)
