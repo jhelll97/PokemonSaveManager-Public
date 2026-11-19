@@ -1102,16 +1102,47 @@ class MainActivity : Activity() {
                     }
                     require(activeMatches(fresh)){"The active Gen 1 save recovery did not verify."};true
                 }.getOrDefault(false)
+                val retainedBackup=safetyBackup?.let{saved->runCatching{
+                    saved.isFile&&isBackupKept(saved)&&saved.readBytes().contentEquals(fresh)
+                }.getOrDefault(false)}?:false
+                val verifiedBankRecovery=bankRecovery.mapIndexedNotNull{index,copy->
+                    val item=selected.getOrNull(index)?:return@mapIndexedNotNull null
+                    runCatching{
+                        val recovered=copy.readBytes()
+                        if(copy.isFile&&recovered.contentEquals(item.second)&&parseGen1BankPayload(recovered)?.let{sameGen1TransferRecord(it,item.third)}==true)copy else null
+                    }.getOrNull()
+                }
+                val allBankRecoveryVerified=bankRecovery.size==selected.size&&verifiedBankRecovery.size==selected.size
                 if(bankRestored&&destinationRestored)bankRecovery.forEach{runCatching{it.delete()}}
                 val recovery=when{
-                    bankRestored&&destinationRestored->"The exact Gen 1 destination and every selected Bank record were restored or kept and verified."
-                    bankRestored->"Every selected Gen 1 Bank record was restored or kept, but destination restoration was not verified. Use the retained destination backup before editing again."
-                    destinationRestored->"The exact Gen 1 destination was restored, but one or more Bank records were not verified. Keep the Bank recovery snapshots for review."
-                    else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshots for review."
+                    bankRestored&&destinationRestored->
+                        "The exact Gen 1 destination and every selected Bank record were restored or kept and verified."
+                    bankRestored&&retainedBackup->
+                        "Every selected Gen 1 Bank record was restored or kept. Destination restoration was not verified, but the exact retained destination backup verified."
+                    bankRestored->
+                        "Every selected Gen 1 Bank record was restored or kept, but destination restoration and its retained backup were not verified. Unknown destination bytes were left untouched."
+                    destinationRestored&&allBankRecoveryVerified->
+                        "The exact Gen 1 destination was restored. Bank restoration was incomplete, but every exact Bank recovery snapshot verified."
+                    destinationRestored&&verifiedBankRecovery.isNotEmpty()->
+                        "The exact Gen 1 destination was restored. Bank restoration was incomplete; only ${verifiedBankRecovery.size} of ${selected.size} Bank recovery snapshots verified."
+                    destinationRestored->
+                        "The exact Gen 1 destination was restored, but Bank restoration and all Bank recovery snapshots were not verified."
+                    retainedBackup&&allBankRecoveryVerified->
+                        "Destination and Bank restoration were incomplete, but the exact retained destination backup and every Bank recovery snapshot verified."
+                    retainedBackup&&verifiedBankRecovery.isNotEmpty()->
+                        "Destination and Bank restoration were incomplete. The exact retained destination backup and ${verifiedBankRecovery.size} of ${selected.size} Bank recovery snapshots verified."
+                    retainedBackup->
+                        "Destination and Bank restoration were incomplete. The exact retained destination backup verified, but no Bank recovery snapshot did."
+                    allBankRecoveryVerified->
+                        "Destination and Bank restoration were incomplete. Every Bank recovery snapshot verified, but the retained destination backup did not."
+                    verifiedBankRecovery.isNotEmpty()->
+                        "Destination and Bank restoration were incomplete. Only ${verifiedBankRecovery.size} of ${selected.size} Bank recovery snapshots verified; the retained destination backup did not."
+                    else->
+                        "Automatic recovery and all retained recovery snapshots could not be verified. Keep the current destination and Bank files for review."
                 }
                 showDialog("Move selected failed",(e.message?:"Unknown error")+"\n\n"+recovery+
-                    (safetyBackup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
-                    (bankRecovery.filter{it.exists()}.takeIf{it.isNotEmpty()}?.joinToString(prefix="\nBank recovery snapshots: "){it.name}?:""))
+                    (safetyBackup?.takeIf{retainedBackup}?.let{"\n\nVerified recovery backup: ${it.name}"}?:"")+
+                    (verifiedBankRecovery.filter{it.exists()}.takeIf{it.isNotEmpty()}?.joinToString(prefix="\nVerified Bank recovery snapshots: "){it.name}?:""))
             }
         }.setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
     }
