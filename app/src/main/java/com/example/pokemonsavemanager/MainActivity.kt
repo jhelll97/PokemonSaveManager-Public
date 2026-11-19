@@ -12133,15 +12133,29 @@ class MainActivity : Activity() {
                     ?:error("The restored Generation 5 layout is invalid.")
                 restored.contentEquals(original)&&gen5ChecksumTableValid(restored,profile)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,profile)}
             }.getOrDefault(false)
+            val retainedBackup=backup?.let{saved->runCatching{
+                saved.isFile&&isBackupKept(saved)&&saved.readBytes().contentEquals(original)
+            }.getOrDefault(false)}?:false
+            val bankRecoveryVerified=bankRecovery?.let{saved->runCatching{
+                val recovered=saved.readBytes();val parsed=if(recovered.size==136)parsePk5(recovered,false)else null
+                saved.isFile&&recovered.contentEquals(p.bankBytes)&&parsed!=null&&parsed.checksumValid&&
+                    parsed.pid==p.source.pid&&parsed.species==p.source.species&&parsed.tid==p.source.tid&&parsed.sid==p.source.sid
+            }.getOrDefault(false)}?:false
+            if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
                 bankRestored&&destinationRestored->"The exact Generation 5 destination and PK5 Bank record were restored or kept and verified."
-                bankRestored->"The exact PK5 Bank record was restored or kept, but destination recovery was not verified. Use the retained destination backup before editing again."
-                destinationRestored->"The exact Generation 5 destination was restored or kept, but PK5 Bank recovery was not verified. Keep the Bank recovery snapshot for review."
-                else->"Automatic recovery could not be fully verified. Stop editing and keep the retained destination backup and Bank recovery snapshot for review."
+                bankRestored&&retainedBackup->"The PK5 Bank record was restored or kept. Destination restoration was not verified, but the exact retained Generation 5 destination backup verified."
+                bankRestored->"The PK5 Bank record was restored or kept, but destination restoration and the retained backup were not verified. The current destination was left untouched."
+                destinationRestored&&bankRecoveryVerified->"The exact Generation 5 destination was restored. Bank restoration was not verified, but the exact PK5 recovery snapshot verified."
+                destinationRestored->"The exact Generation 5 destination was restored, but Bank restoration and its recovery snapshot were not verified."
+                retainedBackup&&bankRecoveryVerified->"Destination and Bank restoration were not verified, but both exact recovery snapshots verified."
+                retainedBackup->"Destination and Bank restoration were not verified. The exact retained destination backup verified, but the PK5 recovery snapshot did not."
+                bankRecoveryVerified->"Destination and Bank restoration were not verified. The exact PK5 recovery snapshot verified, but the retained destination backup did not."
+                else->"Automatic recovery and both retained recovery snapshots could not be verified. Keep the current destination and Bank files for review."
             }
             showDialog("Gen 5 Bank withdrawal failed",(e.message?:"Unknown error")+"\n\n"+recovery+
-                (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
-                (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery: ${it.name}"}?:""))
+                (backup?.takeIf{retainedBackup}?.let{"\n\nVerified recovery backup: ${it.name}"}?:"")+
+                (bankRecovery?.takeIf{bankRecoveryVerified&&it.exists()}?.let{"\nVerified Bank recovery snapshot: ${it.name}"}?:""))
             return
         }
         Toast.makeText(this,"Withdrew exact Gen 5 PK5 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
