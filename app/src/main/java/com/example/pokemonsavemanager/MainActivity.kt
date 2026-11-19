@@ -974,13 +974,30 @@ class MainActivity : Activity() {
                 val restored=file.readBytes();val restoredProfile=detectGen2Profile(restored)
                 require(restored.contentEquals(fresh)&&restoredProfile?.key==recoveryProfileKey&&verifyGen2SaveIntegrity(restored).first){"The restored Gen 2 destination bytes, profile or integrity did not verify."};true
             }.getOrDefault(false)
+            val retainedBackup=safetyBackup?.let{saved->runCatching{
+                saved.isFile&&isBackupKept(saved)&&saved.readBytes().contentEquals(fresh)
+            }.getOrDefault(false)}?:false
             val recovery=when{
-                bankRestored&&destinationRestored->"The exact Gen 2 destination and every selected Bank record were restored or kept and verified."
-                bankRestored->"Every selected Gen 2 Bank record was restored or kept, but destination restoration was not verified. Use the retained destination backup before editing again."
-                destinationRestored->"The exact Gen 2 destination was restored, but one or more Bank records were not verified. Keep the remaining Bank records and recovery details for review."
-                else->"Automatic recovery could not be verified. Stop editing and keep the working save, retained backup and remaining Bank records for review."
+                bankRestored&&destinationRestored->
+                    "The exact Gen 2 destination and every selected Bank record were restored or kept and verified."
+                bankRestored&&retainedBackup->
+                    "Every selected Gen 2 Bank record was restored or kept. Destination restoration was not verified, but the exact retained destination backup verified."
+                bankRestored->
+                    "Every selected Gen 2 Bank record was restored or kept, but destination restoration and its retained backup were not verified. Unknown destination bytes were left untouched."
+                destinationRestored&&retainedBackup->
+                    "The exact Gen 2 destination was restored and its retained backup verified, but one or more Bank records were not verified."
+                destinationRestored->
+                    "The exact Gen 2 destination was restored, but one or more Bank records and the retained destination backup were not verified."
+                retainedBackup->
+                    "Destination and Bank restoration were incomplete, but the exact retained Gen 2 destination backup verified."
+                else->
+                    "Automatic recovery and the retained destination backup could not be verified. Keep the current destination and remaining Bank files for review."
             }
-            showDialog("Move selected failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
+            showDialog(
+                "Move selected failed",
+                (e.message?:"Unknown error")+"\n\n$recovery"+
+                    (safetyBackup?.takeIf{retainedBackup}?.let{"\n\nVerified recovery backup: "+it.name}?:"")
+            );return
         }
         selectedBankFiles.clear();bankMultiSelectMode=false;Toast.makeText(this,"${selected.size} Gen 2 Pokémon moved to Box $targetBox and verified",Toast.LENGTH_LONG).show();showBank()
     }
