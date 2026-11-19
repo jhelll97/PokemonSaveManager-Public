@@ -46512,20 +46512,32 @@ class MainActivity : Activity() {
                     else -> false
                 }
             }.getOrDefault(false)
+            val retainedBackup = backup?.let { saved ->
+                runCatching {
+                    saved.isFile && isBackupKept(saved) &&
+                        saved.readBytes().contentEquals(openedDestination)
+                }.getOrDefault(false)
+            } ?: false
             val recovery = when {
                 saveRestored && bankRestored ->
                     "The original save and every removed Bank record were preserved or restored."
                 saveRestored ->
                     "The original save was restored, but one or more Bank records need manual recovery."
+                bankRestored && retainedBackup ->
+                    "Every Bank record was restored or kept. Destination restoration was not verified, but the exact retained Gen 3 destination backup verified."
                 bankRestored ->
-                    "Bank records were restored, but the save needs the retained recovery backup."
+                    "Every Bank record was restored or kept, but destination restoration and the retained backup were not verified. The current destination was left untouched."
+                retainedBackup ->
+                    "Destination and Bank recovery were not fully verified. The exact retained Gen 3 destination backup verified; keep it and the selected Bank files for review."
                 else ->
-                    "Automatic rollback was incomplete. Use the retained recovery backup and review PSE Bank."
+                    "Automatic recovery and the retained Gen 3 destination backup could not be verified. Keep the current destination and selected Bank files for review."
             }
             showDialog(
                 "Gen 3 Bank multi-withdrawal failed",
                 (error.message ?: "Unknown error") + "\n\n" + recovery +
-                    (backup?.let { "\n\nRecovery backup: ${it.name}" } ?: "")
+                    (backup?.takeIf { retainedBackup }?.let {
+                        "\n\nVerified recovery backup: ${it.name}"
+                    } ?: "")
             )
         }
     }
