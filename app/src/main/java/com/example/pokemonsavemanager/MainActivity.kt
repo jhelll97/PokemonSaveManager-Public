@@ -46692,6 +46692,7 @@ class MainActivity : Activity() {
         var writeStarted = false
         var stagedDestination: ByteArray? = null
         var backup: File? = null
+        val bankRecovery = ArrayList<File>()
         try {
             require(destinationBound()) {
                 "The loaded destination identity changed after box selection."
@@ -46807,6 +46808,25 @@ class MainActivity : Activity() {
                 "The recovery backup did not verify."
             }
             retainGen2ToGen3SafetyBackup(backup!!, fresh)
+            selected.forEachIndexed { index, item ->
+                val recovery = File.createTempFile(
+                    "PSE_G3BatchWithdraw_${index + 1}_",
+                    ".tmp",
+                    bankDir()
+                )
+                bankRecovery.add(recovery)
+                recovery.writeBytes(refreshed[index])
+                val recovered = recovery.readBytes()
+                val parsed = if (recovered.size == 80) parsePk3(recovered, 0, false) else null
+                require(recovery.isFile && recovered.contentEquals(refreshed[index]) &&
+                    parsed != null && parsed.checksumValid &&
+                    parsed.pid == item.pokemon.pid &&
+                    parsed.species == item.pokemon.species &&
+                    parsed.tid == item.pokemon.tid &&
+                    parsed.sid == item.pokemon.sid) {
+                    "A Gen 3 Bank recovery snapshot did not verify."
+                }
+            }
             require(destinationBound() &&
                 isBackupKept(backup!!) &&
                 backup!!.readBytes().contentEquals(fresh) &&
@@ -46817,6 +46837,23 @@ class MainActivity : Activity() {
                             .contentEquals(refreshed[index])
                 }) {
                 "The destination or a selected Bank record changed before writing."
+            }
+            require(selected.indices.all { index ->
+                val recovered = bankRecovery[index].readBytes()
+                val parsed = if (recovered.size == 80) {
+                    parsePk3(recovered, 0, false)
+                } else {
+                    null
+                }
+                bankRecovery[index].isFile &&
+                    recovered.contentEquals(refreshed[index]) &&
+                    parsed != null && parsed.checksumValid &&
+                    parsed.pid == selected[index].pokemon.pid &&
+                    parsed.species == selected[index].pokemon.species &&
+                    parsed.tid == selected[index].pokemon.tid &&
+                    parsed.sid == selected[index].pokemon.sid
+            }) {
+                "A Gen 3 Bank recovery snapshot changed before writing."
             }
 
             stagedDestination = work.copyOf()
@@ -46848,6 +46885,21 @@ class MainActivity : Activity() {
                 require(item.bankFile.readBytes().contentEquals(refreshed[index])) {
                     "A selected Bank record changed before removal."
                 }
+                val recoveryBytes = bankRecovery[index].readBytes()
+                val recoveryPokemon = if (recoveryBytes.size == 80) {
+                    parsePk3(recoveryBytes, 0, false)
+                } else {
+                    null
+                }
+                require(bankRecovery[index].isFile &&
+                    recoveryBytes.contentEquals(refreshed[index]) &&
+                    recoveryPokemon != null && recoveryPokemon.checksumValid &&
+                    recoveryPokemon.pid == item.pokemon.pid &&
+                    recoveryPokemon.species == item.pokemon.species &&
+                    recoveryPokemon.tid == item.pokemon.tid &&
+                    recoveryPokemon.sid == item.pokemon.sid) {
+                    "A Gen 3 Bank recovery snapshot changed before removal."
+                }
                 removed.add(item.bankFile to refreshed[index])
                 val deleted = item.bankFile.delete()
                 require(deleted && !item.bankFile.exists()) {
@@ -46864,6 +46916,24 @@ class MainActivity : Activity() {
             require(isBackupKept(backup!!) && backup!!.readBytes().contentEquals(fresh)) {
                 "The retained Gen 3 recovery backup changed after Bank cleanup."
             }
+            require(selected.indices.all { index ->
+                val recovered = bankRecovery[index].readBytes()
+                val parsed = if (recovered.size == 80) {
+                    parsePk3(recovered, 0, false)
+                } else {
+                    null
+                }
+                bankRecovery[index].isFile &&
+                    recovered.contentEquals(refreshed[index]) &&
+                    parsed != null && parsed.checksumValid &&
+                    parsed.pid == selected[index].pokemon.pid &&
+                    parsed.species == selected[index].pokemon.species &&
+                    parsed.tid == selected[index].pokemon.tid &&
+                    parsed.sid == selected[index].pokemon.sid
+            }) {
+                "A Gen 3 Bank recovery snapshot changed after Bank cleanup."
+            }
+            bankRecovery.forEach { runCatching { it.delete() } }
 
             selectedBankFiles.clear()
             bankMultiSelectMode = false
@@ -46906,26 +46976,68 @@ class MainActivity : Activity() {
                         saved.readBytes().contentEquals(openedDestination)
                 }.getOrDefault(false)
             } ?: false
+            val verifiedBankRecovery = bankRecovery.mapIndexedNotNull { index, copy ->
+                val item = selected.getOrNull(index)
+                    ?: return@mapIndexedNotNull null
+                runCatching {
+                    val recovered = copy.readBytes()
+                    val parsed = if (recovered.size == 80) {
+                        parsePk3(recovered, 0, false)
+                    } else {
+                        null
+                    }
+                    if (copy.isFile && recovered.contentEquals(item.bankBytes) &&
+                        parsed != null && parsed.checksumValid &&
+                        parsed.pid == item.pokemon.pid &&
+                        parsed.species == item.pokemon.species &&
+                        parsed.tid == item.pokemon.tid &&
+                        parsed.sid == item.pokemon.sid
+                    ) copy else null
+                }.getOrNull()
+            }
+            val allBankRecoveryVerified =
+                bankRecovery.size == selected.size &&
+                    verifiedBankRecovery.size == selected.size
+            if (saveRestored && bankRestored) {
+                bankRecovery.forEach { runCatching { it.delete() } }
+            }
             val recovery = when {
                 saveRestored && bankRestored ->
                     "The original save and every removed Bank record were preserved or restored."
-                saveRestored ->
-                    "The original save was restored, but one or more Bank records need manual recovery."
                 bankRestored && retainedBackup ->
                     "Every Bank record was restored or kept. Destination restoration was not verified, but the exact retained Gen 3 destination backup verified."
                 bankRestored ->
                     "Every Bank record was restored or kept, but destination restoration and the retained backup were not verified. The current destination was left untouched."
+                saveRestored && allBankRecoveryVerified ->
+                    "The original save was restored. Bank restoration was incomplete, but every exact PK3 recovery snapshot verified."
+                saveRestored && verifiedBankRecovery.isNotEmpty() ->
+                    "The original save was restored. Bank restoration was incomplete; only ${verifiedBankRecovery.size} of ${selected.size} PK3 recovery snapshots verified."
+                saveRestored ->
+                    "The original save was restored, but Bank restoration and all PK3 recovery snapshots were not verified."
+                retainedBackup && allBankRecoveryVerified ->
+                    "Destination and Bank restoration were incomplete, but the exact retained destination backup and every PK3 recovery snapshot verified."
+                retainedBackup && verifiedBankRecovery.isNotEmpty() ->
+                    "Destination and Bank restoration were incomplete. The exact retained destination backup and ${verifiedBankRecovery.size} of ${selected.size} PK3 recovery snapshots verified."
                 retainedBackup ->
-                    "Destination and Bank recovery were not fully verified. The exact retained Gen 3 destination backup verified; keep it and the selected Bank files for review."
+                    "Destination and Bank restoration were incomplete. The exact retained Gen 3 destination backup verified, but no PK3 recovery snapshot did."
+                allBankRecoveryVerified ->
+                    "Destination and Bank restoration were incomplete. Every PK3 recovery snapshot verified, but the retained destination backup did not."
+                verifiedBankRecovery.isNotEmpty() ->
+                    "Destination and Bank restoration were incomplete. Only ${verifiedBankRecovery.size} of ${selected.size} PK3 recovery snapshots verified; the retained destination backup did not."
                 else ->
-                    "Automatic recovery and the retained Gen 3 destination backup could not be verified. Keep the current destination and selected Bank files for review."
+                    "Automatic recovery and all retained recovery snapshots could not be verified. Keep the current destination and Bank files for review."
             }
             showDialog(
                 "Gen 3 Bank multi-withdrawal failed",
                 (error.message ?: "Unknown error") + "\n\n" + recovery +
                     (backup?.takeIf { retainedBackup }?.let {
                         "\n\nVerified recovery backup: ${it.name}"
-                    } ?: "")
+                    } ?: "") +
+                    (verifiedBankRecovery.filter { it.exists() }
+                        .takeIf { it.isNotEmpty() }
+                        ?.joinToString(prefix = "\nVerified Bank recovery snapshots: ") {
+                            it.name
+                        } ?: "")
             )
         }
     }
