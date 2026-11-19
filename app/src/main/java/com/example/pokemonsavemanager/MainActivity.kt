@@ -61443,6 +61443,7 @@ private data class Gen2ToGen5LegalisePlan(
         fun bound()=importedFile?.absolutePath==f.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val old=runCatching{f.readBytes()}.getOrNull()?:return
         var bf:File?=null;var backup:File?=null;var bankBytes:ByteArray?=null
+        var stagedSource:ByteArray?=null
         var bankReserved=false;var sourceWriteStarted=false
         try {
             require(bound()){"The loaded Gen 1 source identity changed."}
@@ -61477,6 +61478,7 @@ private data class Gen2ToGen5LegalisePlan(
                 recovery.readBytes().contentEquals(old)&&isBackupKept(recovery)){
                 "The Gen 1 source, Bank record or retained recovery backup changed before writing."
             }
+            stagedSource=d.copyOf()
             sourceWriteStarted=true;f.writeBytes(d)
             val written=f.readBytes();require(bound()&&written.contentEquals(d)){"The loaded source identity or Gen 1 save bytes changed while the Bank deposit was being written."};val post=verifyGen1WriteState(written,affected);require(post.first){post.second}
             val remaining=if(party)parseGen1Party(written).sortedBy{it.slot} else parseGen1Box(written,requireNotNull(affected)).pokemon.sortedBy{it.slot}
@@ -61486,7 +61488,12 @@ private data class Gen2ToGen5LegalisePlan(
             Toast.makeText(this,"Moved to PSE Bank and verified",Toast.LENGTH_LONG).show();showBank()
         } catch(e:Exception) {
             val sourceRestored=runCatching{
-                if(sourceWriteStarted)f.writeBytes(old)
+                val found=f.readBytes()
+                if(sourceWriteStarted&&!found.contentEquals(old)){
+                    val staged=stagedSource
+                    require(staged!=null&&found.contentEquals(staged)){"The Gen 1 source no longer matches this transaction's staged bytes; the retained backup was left for recovery."}
+                    f.writeBytes(old)
+                }
                 val restored=f.readBytes()
                 restored.contentEquals(old)&&restored.size==SIZE_G1&&hasValidGen1MainChecksum(restored)&&verifyGen1SaveIntegrity(restored).first
             }.getOrDefault(false)
