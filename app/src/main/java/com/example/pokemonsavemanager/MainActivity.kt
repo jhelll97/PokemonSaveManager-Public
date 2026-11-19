@@ -61638,6 +61638,7 @@ private data class Gen2ToGen5LegalisePlan(
             val box=targets[which].first
             val fresh=runCatching{file.readBytes()}.getOrElse{showDialog("Withdraw failed","The fresh Gen 1 save could not be read. Nothing was changed.");return@setItems}
             var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null;var bankRecovery:File?=null
+            var stagedDestination:ByteArray?=null
             try {
                 require(bound()&&fresh.contentEquals(openedDestination)){"The Gen 1 destination or its source identity changed after the box list opened."}
                 val freshIntegrity=verifyGen1SaveIntegrity(fresh);require(freshIntegrity.first){freshIntegrity.second}
@@ -61660,6 +61661,7 @@ private data class Gen2ToGen5LegalisePlan(
                 val bankCopy=File.createTempFile("PSE_G1Withdraw_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
                 bankCopy.writeBytes(raw);require(exactBank(bankCopy.readBytes())){"The exact Gen 1 Bank recovery snapshot did not verify."}
                 require(bound()&&file.readBytes().contentEquals(fresh)&&exactBank(bankFile.readBytes())&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&exactBank(bankCopy.readBytes())){"The destination, Bank record or retained recovery snapshots changed before writing."}
+                stagedDestination=d.copyOf()
                 writeStarted=true;file.writeBytes(d)
                 val written=file.readBytes();require(written.contentEquals(d)){"The destination save changed while the Gen 1 Bank withdrawal was being written."};val post=verifyGen1WriteState(written,box);require(post.first){post.second}
                 val after=parseGen1Box(written,box).pokemon.sortedBy{it.slot}
@@ -61677,7 +61679,12 @@ private data class Gen2ToGen5LegalisePlan(
                     require(exactBank(bankFile.readBytes())){"The exact Gen 1 Bank record could not be restored or verified."};true
                 }.getOrDefault(false)
                 val destinationRestored=runCatching{
-                    if(writeStarted)file.writeBytes(fresh)
+                    val found=file.readBytes()
+                    if(writeStarted&&!found.contentEquals(fresh)){
+                        val staged=stagedDestination
+                        require(staged!=null&&found.contentEquals(staged)){"The Gen 1 destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery."}
+                        file.writeBytes(fresh)
+                    }
                     val restored=file.readBytes();require(restored.contentEquals(fresh)){"The restored Gen 1 destination bytes did not verify."};require(verifyGen1SaveIntegrity(restored).first){"The restored Gen 1 destination integrity did not verify."};true
                 }.getOrDefault(false)
                 if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
