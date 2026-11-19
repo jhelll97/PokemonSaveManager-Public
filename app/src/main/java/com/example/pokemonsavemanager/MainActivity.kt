@@ -61434,19 +61434,26 @@ private data class Gen2ToGen5LegalisePlan(
     }
     private fun confirmGen1DepositToBank(p:Gen1Pokemon,location:String,party:Boolean) {
         val live=loadFreshGen1Selection(p,location,party,"Move to PSE Bank")?:return
-        if(party&&parseGen1Party(live.first).size<=1){showDialog("Move to PSE Bank","Cannot bank the final party Pokémon.");return}
-        AlertDialog.Builder(this).setTitle("Move to PSE Bank?").setMessage("PSE will preserve the original Gen 1 record and remove this Pokémon from $location in the working copy.").setNegativeButton("Cancel",null).setPositiveButton("Move"){_,_->depositGen1ToBank(live.second,location,party)}.show()
+        val openedFile=importedFile?:return showDialog("Move to PSE Bank","No working save is loaded. Nothing was changed.")
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel;val openedSource=live.first.copyOf()
+        val bound=runCatching{
+            importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel&&
+                openedFile.readBytes().contentEquals(openedSource)
+        }.getOrDefault(false)
+        if(!bound){showDialog("Move to PSE Bank","The loaded Gen 1 source identity or exact save changed before confirmation. Reopen the Pokémon. Nothing was changed.");return}
+        if(party&&parseGen1Party(openedSource).size<=1){showDialog("Move to PSE Bank","Cannot bank the final party Pokémon.");return}
+        AlertDialog.Builder(this).setTitle("Move to PSE Bank?").setMessage("PSE will preserve the original Gen 1 record and remove this Pokémon from $location in the working copy.").setNegativeButton("Cancel",null).setPositiveButton("Move"){_,_->
+            depositGen1ToBank(live.second,location,party,openedFile,openedUri,openedLabel,openedSource)
+        }.show()
     }
-    private fun depositGen1ToBank(p:Gen1Pokemon,location:String,party:Boolean) {
-        val f=importedFile?:return
-        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+    private fun depositGen1ToBank(p:Gen1Pokemon,location:String,party:Boolean,f:File,openedUri:Uri?,openedLabel:String?,openedSource:ByteArray) {
         fun bound()=importedFile?.absolutePath==f.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
-        val old=runCatching{f.readBytes()}.getOrNull()?:return
+        val old=openedSource.copyOf()
         var bf:File?=null;var backup:File?=null;var bankBytes:ByteArray?=null
         var stagedSource:ByteArray?=null
         var bankReserved=false;var sourceWriteStarted=false
         try {
-            require(bound()){"The loaded Gen 1 source identity changed."}
+            require(bound()&&f.readBytes().contentEquals(old)){"The loaded Gen 1 source identity or exact save changed after review."}
             val integrity=verifyGen1SaveIntegrity(old);require(integrity.first){integrity.second}
             require(old.size==SIZE_G1 && hasValidGen1MainChecksum(old)){"The fresh Gen 1 save is invalid."}
             val affected=if(party)null else requireNotNull(gen1BoxNumberFromLocation(location))
