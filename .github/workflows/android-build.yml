@@ -56,7 +56,7 @@ jobs:
           set +e
           set -uo pipefail
           log="$RUNNER_TEMP/compile-debug.log"
-          for attempt in 1 2 3; do
+          for attempt in 1 2 3 4 5; do
             refresh=()
             if [ "$attempt" -gt 1 ]; then
               refresh=(--refresh-dependencies)
@@ -72,7 +72,7 @@ jobs:
             if ! grep -Eqi "Received status code (429|504)|Could not resolve all artifacts for configuration 'classpath'|could not resolve plugin artifact|Plugin \[id: .*\] was not found in any of the following sources" "$log"; then
               exit "$status"
             fi
-            if [ "$attempt" -eq 3 ]; then
+            if [ "$attempt" -eq 5 ]; then
               exit "$status"
             fi
             echo "Dependency resolution failed before source compilation; refreshing dependencies after a bounded backoff."
