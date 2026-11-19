@@ -60497,11 +60497,16 @@ private data class Gen2ToGen5LegalisePlan(
                     val restored=file.readBytes();val restoredProfile=detectGen2Profile(restored)
                     restored.contentEquals(fresh)&&restoredProfile?.key==openedProfile.key&&verifyGen2SaveIntegrity(restored).first
                 }.getOrDefault(false)
+                val retainedBackup=safetyBackup?.let{saved->runCatching{
+                    saved.readBytes().contentEquals(fresh)&&isBackupKept(saved)
+                }.getOrDefault(false)}?:false
                 val recovery=when{
                     bankRestored&&destinationRestored->"The exact Gen 2 destination and Bank record were restored or kept and verified."
-                    bankRestored->"The exact Gen 2 Bank record was restored or kept, but destination recovery was not verified. Use the retained recovery backup before editing again."
+                    bankRestored&&retainedBackup->"The exact Gen 2 Bank record was restored or kept. Destination recovery was not verified, but the exact retained destination backup verified."
+                    bankRestored->"The exact Gen 2 Bank record was restored or kept, but destination recovery and the retained backup were not verified. The current destination was left untouched."
                     destinationRestored->"The exact Gen 2 destination was restored or kept, but Bank recovery was not verified. Keep the remaining Bank records and recovery files for review."
-                    else->"Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
+                    retainedBackup->"Destination and Bank recovery were not verified. The exact retained Gen 2 destination backup verified; keep it and the remaining Bank files for review."
+                    else->"Automatic recovery and the retained Gen 2 destination backup could not be verified. Keep the current destination and remaining Bank files for review."
                 }
                 showDialog("Withdraw failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return@setItems
             }
