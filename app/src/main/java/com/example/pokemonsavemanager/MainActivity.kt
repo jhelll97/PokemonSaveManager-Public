@@ -13300,16 +13300,29 @@ class MainActivity : Activity() {
                 restored.contentEquals(original)&&generationForSize(restored.size)==6&&
                     gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)
             }.getOrDefault(false)
+            val retainedBackup=backup?.let{saved->runCatching{
+                saved.isFile&&isBackupKept(saved)&&saved.readBytes().contentEquals(original)
+            }.getOrDefault(false)}?:false
+            val bankRecoveryVerified=bankRecovery?.let{saved->runCatching{
+                val recovered=saved.readBytes();val parsed=parsePk6(recovered,0,PK6_STORED_SIZE,false,721)
+                saved.isFile&&recovered.contentEquals(p.bankBytes)&&parsed!=null&&parsed.checksumValid&&
+                    parsed.pid==p.source.pid&&parsed.species==p.source.species&&parsed.tid==p.source.tid&&parsed.sid==p.source.sid
+            }.getOrDefault(false)}?:false
             if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
                 bankRestored&&destinationRestored->"The exact Generation 6 destination and PK6 Bank record were restored or kept and verified."
-                bankRestored->"The PK6 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
-                destinationRestored->"The Generation 6 destination was restored, but PK6 restoration was not verified. Keep the PK6 recovery snapshot for review."
-                else->"Automatic two-sided recovery could not be verified. Keep the retained destination backup and PK6 recovery snapshot for review."
+                bankRestored&&retainedBackup->"The PK6 Bank record was restored or kept. Destination restoration was not verified, but the exact retained Generation 6 destination backup verified."
+                bankRestored->"The PK6 Bank record was restored or kept, but destination restoration and the retained backup were not verified. The current destination was left untouched."
+                destinationRestored&&bankRecoveryVerified->"The exact Generation 6 destination was restored. Bank restoration was not verified, but the exact PK6 recovery snapshot verified."
+                destinationRestored->"The exact Generation 6 destination was restored, but Bank restoration and its recovery snapshot were not verified."
+                retainedBackup&&bankRecoveryVerified->"Destination and Bank restoration were not verified, but both exact recovery snapshots verified."
+                retainedBackup->"Destination and Bank restoration were not verified. The exact retained destination backup verified, but the PK6 recovery snapshot did not."
+                bankRecoveryVerified->"Destination and Bank restoration were not verified. The exact PK6 recovery snapshot verified, but the retained destination backup did not."
+                else->"Automatic recovery and both retained recovery snapshots could not be verified. Keep the current destination and Bank files for review."
             }
             showDialog("Gen 6 Bank withdrawal failed",(e.message?:"Unknown error")+"\n\n"+recovery+
-                (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
-                (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery: ${it.name}"}?:""));return
+                (backup?.takeIf{retainedBackup}?.let{"\n\nVerified recovery backup: ${it.name}"}?:"")+
+                (bankRecovery?.takeIf{bankRecoveryVerified&&it.exists()}?.let{"\nVerified Bank recovery snapshot: ${it.name}"}?:""));return
         }
         Toast.makeText(this,"Withdrew exact Gen 6 PK6 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
         showBank()
