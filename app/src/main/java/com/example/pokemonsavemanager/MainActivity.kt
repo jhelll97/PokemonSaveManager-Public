@@ -47826,6 +47826,7 @@ class MainActivity : Activity() {
 
     private fun chooseGen3BankWithdrawDestination(bankFile:File,p:PokemonEntry,openedBank:ByteArray){
         val file=importedFile ?: run { showDialog("Withdraw","Import a Gen 3 destination save first."); return }
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         val data=runCatching{file.readBytes()}.getOrDefault(ByteArray(0))
         if(generationForSize(data.size)!=3 || !gen3SaveValid(data)){ showDialog("Withdraw blocked","Load a valid Gen 3 save to withdraw an original PK3 Bank record."); return }
         val raw=openedBank.copyOf()
@@ -47841,26 +47842,29 @@ class MainActivity : Activity() {
         val labels=arrayOf("First structurally empty slot • Box ${first/30+1} • Slot ${first%30+1}","Choose a box / slot")
         AlertDialog.Builder(this).setTitle("Withdraw ${p.nickname.ifBlank{"Pokémon"}} to…")
             .setMessage("This is a PSE Bank withdrawal, not an official trade, Pokémon Bank transaction or provenance claim. No conversion or Legalise change is performed. Choose one structurally empty native PK3 slot; the exact Bank record remains until the destination and retained recovery data verify.")
-            .setItems(labels){_,which->if(which==0) withdrawGen3BankToSlot(bankFile,p,first,raw) else showGen3BankBoxPicker(bankFile,p,pc,raw)}
+            .setItems(labels){_,which->if(which==0) withdrawGen3BankToSlot(bankFile,p,first,raw,file,openedUri,openedLabel,data) else showGen3BankBoxPicker(bankFile,p,pc,raw,file,openedUri,openedLabel,data)}
             .setNegativeButton("Cancel",null).show()
     }
 
-    private fun showGen3BankBoxPicker(bankFile:File,p:PokemonEntry,pc:ByteArray,openedBank:ByteArray){
+    private fun showGen3BankBoxPicker(bankFile:File,p:PokemonEntry,pc:ByteArray,openedBank:ByteArray,openedFile:File,openedUri:Uri?,openedLabel:String?,openedDestination:ByteArray){
         val boxes=(0 until 14).filter{b->(0 until 30).any{s->gen3BankDestinationSlotIsStructurallyEmpty(pc,b*30+s)}}
         AlertDialog.Builder(this).setTitle("Choose Gen 3 destination box")
             .setItems(boxes.map{b->"Box ${b+1}"}.toTypedArray()){_,w->
                 val b=boxes[w]; val empties=(0 until 30).filter{s->gen3BankDestinationSlotIsStructurallyEmpty(pc,b*30+s)}
                 AlertDialog.Builder(this).setTitle("Box ${b+1} • choose slot")
-                    .setItems(empties.map{s->"Slot ${s+1}"}.toTypedArray()){_,sw->withdrawGen3BankToSlot(bankFile,p,b*30+empties[sw],openedBank)}
+                    .setItems(empties.map{s->"Slot ${s+1}"}.toTypedArray()){_,sw->withdrawGen3BankToSlot(bankFile,p,b*30+empties[sw],openedBank,openedFile,openedUri,openedLabel,openedDestination)}
                     .setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
     }
 
-    private fun withdrawGen3BankToSlot(bankFile:File,p:PokemonEntry,target:Int,openedBank:ByteArray){
-        val file=importedFile?:return
-        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+    private fun withdrawGen3BankToSlot(bankFile:File,p:PokemonEntry,target:Int,openedBank:ByteArray,openedFile:File,openedUri:Uri?,openedLabel:String?,openedDestination:ByteArray){
+        val file=openedFile
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
-        val original=try{file.readBytes()}catch(e:Exception){showDialog("Withdraw",e.message?:"Could not read save");return}
+        val original=openedDestination.copyOf()
+        val currentDestination=runCatching{file.readBytes()}.getOrNull()
+            ?:return showDialog("Withdraw","The reviewed Gen 3 destination could not be reopened. Nothing was changed.")
+        if(!bound()||!currentDestination.contentEquals(original))
+            return showDialog("Withdraw","The reviewed Gen 3 destination changed while choosing a slot. Reopen the save and try again. Nothing was changed.")
         val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return showDialog("Withdraw","The PSE Bank folder could not be verified.")
         val selected=runCatching{bankFile.canonicalFile}.getOrNull()?:return showDialog("Withdraw","The selected Gen 3 Bank path could not be verified.")
         if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk3",true))return showDialog("Withdraw","The selected record is outside the Generation 3 PSE Bank.")
