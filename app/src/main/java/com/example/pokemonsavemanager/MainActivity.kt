@@ -46520,7 +46520,12 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun showGen3BankEntry(bankFile:File,p:PokemonEntry){
+    private fun showGen3BankEntry(bankFile:File,listed:PokemonEntry){
+        val openedBank=runCatching{bankFile.readBytes()}.getOrNull()
+            ?:return showDialog("PSE Bank","The selected Gen 3 Bank record could not be read. Refresh Bank and try again.")
+        val p=if(openedBank.size==80)parsePk3(openedBank,0,false)else null
+        if(p==null||!p.checksumValid||p.pid!=listed.pid||p.species!=listed.species||p.tid!=listed.tid||p.sid!=listed.sid)
+            return showDialog("PSE Bank","The selected Gen 3 Bank record changed or failed validation. Refresh Bank and review it again.")
         val currentGen=importedFile?.let{generationForSize(it.length().toInt())}?:0
         val message=buildString{
             append("${p.nickname.ifBlank{canonicalGen3SpeciesName(p.species)?:"Pokémon #${p.species}"}} • Original PK3 preserved")
@@ -46540,7 +46545,7 @@ class MainActivity : Activity() {
         val b=AlertDialog.Builder(this).setTitle("${p.nickname.ifBlank{canonicalGen3SpeciesName(p.species)?:"Pokémon #${p.species}"}} • Gen 3 Bank").setMessage(message).setNegativeButton("Close",null)
             .setNeutralButton("Delete"){_,_->AlertDialog.Builder(this).setTitle("Delete Bank entry?").setMessage("This permanently removes the preserved Gen 3 PK3 copy.").setNegativeButton("Cancel",null).setPositiveButton("Delete"){_,_->if(bankFile.delete()){Toast.makeText(this,"Bank entry deleted",Toast.LENGTH_SHORT).show();showBank()}else showDialog("PSE Bank","The Bank entry could not be deleted.")}.show()}
         if(currentGen==1)b.setPositiveButton("PSE Convert to Gen 1"){_,_->prepareGen3ToGen1Transfer(bankFile,p)}
-        if(currentGen==3)b.setPositiveButton("Withdraw to Gen 3"){_,_->chooseGen3BankWithdrawDestination(bankFile,p)}
+        if(currentGen==3)b.setPositiveButton("Withdraw to Gen 3"){_,_->chooseGen3BankWithdrawDestination(bankFile,p,openedBank)}
         if(currentGen==2)b.setPositiveButton("PSE Convert to Gen 2"){_,_->prepareGen3ToGen2Transfer(bankFile,p)}
         if(currentGen==4)b.setPositiveButton("PSE Convert to Gen 4"){_,_->prepareGen3ToGen4Transfer(bankFile,p)}
         if(currentGen==5)b.setPositiveButton("PSE Convert to Gen 5"){_,_->prepareGen3ToGen5Transfer(bankFile,p)}
@@ -47819,13 +47824,16 @@ class MainActivity : Activity() {
         showBank()
     }
 
-    private fun chooseGen3BankWithdrawDestination(bankFile:File,p:PokemonEntry){
+    private fun chooseGen3BankWithdrawDestination(bankFile:File,p:PokemonEntry,openedBank:ByteArray){
         val file=importedFile ?: run { showDialog("Withdraw","Import a Gen 3 destination save first."); return }
         val data=runCatching{file.readBytes()}.getOrDefault(ByteArray(0))
         if(generationForSize(data.size)!=3 || !gen3SaveValid(data)){ showDialog("Withdraw blocked","Load a valid Gen 3 save to withdraw an original PK3 Bank record."); return }
-        val raw=runCatching{bankFile.readBytes()}.getOrDefault(ByteArray(0))
+        val raw=openedBank.copyOf()
+        val currentBank=runCatching{bankFile.readBytes()}.getOrNull()
+            ?:run{showDialog("Withdraw","The reviewed Gen 3 Bank record could not be reopened. Nothing was changed.");return}
+        if(!currentBank.contentEquals(raw)){showDialog("Withdraw","The reviewed Gen 3 Bank record changed before destination selection. Reopen it from Bank. Nothing was changed.");return}
         val source=if(raw.size==80) parsePk3(raw,0,false) else null
-        if(source==null || !source.checksumValid){showDialog("Withdraw","This Bank entry is not a valid PK3 record.");return}
+        if(source==null || !source.checksumValid || source.pid!=p.pid || source.species!=p.species || source.tid!=p.tid || source.sid!=p.sid){showDialog("Withdraw","This Bank entry changed or is not a valid reviewed PK3 record.");return}
         val pc=gen3PcBuffer(data) ?: run {showDialog("Withdraw","Could not reconstruct Gen 3 PC storage.");return}
         val empties=(0 until 420).filter{gen3BankDestinationSlotIsStructurallyEmpty(pc,it)}
         if(empties.isEmpty()){showDialog("Withdraw","No structurally empty Gen 3 PC slot is available. Existing or nonzero slot data was left unchanged.");return}
@@ -47833,22 +47841,22 @@ class MainActivity : Activity() {
         val labels=arrayOf("First structurally empty slot • Box ${first/30+1} • Slot ${first%30+1}","Choose a box / slot")
         AlertDialog.Builder(this).setTitle("Withdraw ${p.nickname.ifBlank{"Pokémon"}} to…")
             .setMessage("This is a PSE Bank withdrawal, not an official trade, Pokémon Bank transaction or provenance claim. No conversion or Legalise change is performed. Choose one structurally empty native PK3 slot; the exact Bank record remains until the destination and retained recovery data verify.")
-            .setItems(labels){_,which->if(which==0) withdrawGen3BankToSlot(bankFile,p,first) else showGen3BankBoxPicker(bankFile,p,pc)}
+            .setItems(labels){_,which->if(which==0) withdrawGen3BankToSlot(bankFile,p,first,raw) else showGen3BankBoxPicker(bankFile,p,pc,raw)}
             .setNegativeButton("Cancel",null).show()
     }
 
-    private fun showGen3BankBoxPicker(bankFile:File,p:PokemonEntry,pc:ByteArray){
+    private fun showGen3BankBoxPicker(bankFile:File,p:PokemonEntry,pc:ByteArray,openedBank:ByteArray){
         val boxes=(0 until 14).filter{b->(0 until 30).any{s->gen3BankDestinationSlotIsStructurallyEmpty(pc,b*30+s)}}
         AlertDialog.Builder(this).setTitle("Choose Gen 3 destination box")
             .setItems(boxes.map{b->"Box ${b+1}"}.toTypedArray()){_,w->
                 val b=boxes[w]; val empties=(0 until 30).filter{s->gen3BankDestinationSlotIsStructurallyEmpty(pc,b*30+s)}
                 AlertDialog.Builder(this).setTitle("Box ${b+1} • choose slot")
-                    .setItems(empties.map{s->"Slot ${s+1}"}.toTypedArray()){_,sw->withdrawGen3BankToSlot(bankFile,p,b*30+empties[sw])}
+                    .setItems(empties.map{s->"Slot ${s+1}"}.toTypedArray()){_,sw->withdrawGen3BankToSlot(bankFile,p,b*30+empties[sw],openedBank)}
                     .setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
     }
 
-    private fun withdrawGen3BankToSlot(bankFile:File,p:PokemonEntry,target:Int){
+    private fun withdrawGen3BankToSlot(bankFile:File,p:PokemonEntry,target:Int,openedBank:ByteArray){
         val file=importedFile?:return
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
@@ -47856,7 +47864,9 @@ class MainActivity : Activity() {
         val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return showDialog("Withdraw","The PSE Bank folder could not be verified.")
         val selected=runCatching{bankFile.canonicalFile}.getOrNull()?:return showDialog("Withdraw","The selected Gen 3 Bank path could not be verified.")
         if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk3",true))return showDialog("Withdraw","The selected record is outside the Generation 3 PSE Bank.")
-        val raw=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Withdraw","The selected Gen 3 Bank record could not be read.")
+        val raw=openedBank.copyOf()
+        val currentBank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Withdraw","The selected Gen 3 Bank record could not be read.")
+        if(!currentBank.contentEquals(raw))return showDialog("Withdraw","The reviewed Gen 3 Bank record changed while choosing a destination. Nothing was changed.")
         val source=if(raw.size==80)parsePk3(raw,0,false)else null
         if(source==null||!source.checksumValid||source.pid!=p.pid||source.species!=p.species||source.tid!=p.tid||source.sid!=p.sid)return showDialog("Withdraw","The selected Gen 3 Bank record changed or failed validation.")
         var writeStarted=false;var deleteAttempted=false;var safetyBackup:File?=null;var bankRecovery:File?=null
