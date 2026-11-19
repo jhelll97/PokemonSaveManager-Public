@@ -47860,6 +47860,7 @@ class MainActivity : Activity() {
         val source=if(raw.size==80)parsePk3(raw,0,false)else null
         if(source==null||!source.checksumValid||source.pid!=p.pid||source.species!=p.species||source.tid!=p.tid||source.sid!=p.sid)return showDialog("Withdraw","The selected Gen 3 Bank record changed or failed validation.")
         var writeStarted=false;var deleteAttempted=false;var safetyBackup:File?=null;var bankRecovery:File?=null
+        var stagedDestination:ByteArray?=null
         try{
             require(bound()&&generationForSize(original.size)==3&&gen3SaveValid(original)){"A valid bound Gen 3 destination save is required."}
             require(target in 0 until 420){"Invalid Gen 3 PC slot."}
@@ -47877,6 +47878,7 @@ class MainActivity : Activity() {
             val bankCopy=File.createTempFile("PSE_G3Withdraw_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
             bankCopy.writeBytes(raw);require(bankCopy.readBytes().contentEquals(raw)){"The exact PK3 Bank recovery snapshot did not verify."}
             require(bound()&&file.readBytes().contentEquals(original)&&selected.readBytes().contentEquals(raw)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The destination, Bank record or retained recovery snapshots changed before writing."}
+            stagedDestination=save.copyOf()
             writeStarted=true;file.writeBytes(save)
             val verify=file.readBytes();require(verify.contentEquals(save)&&gen3SaveValid(verify)){"Written save failed byte or checksum verification."}
             val vpc=gen3PcBuffer(verify)?:error("Could not re-read PC storage.")
@@ -47896,7 +47898,12 @@ class MainActivity : Activity() {
                 restored.contentEquals(raw)&&parsed!=null&&parsed.checksumValid&&parsed.pid==source.pid&&parsed.species==source.species&&parsed.tid==source.tid&&parsed.sid==source.sid
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                if(writeStarted)file.writeBytes(original)
+                val found=file.readBytes()
+                if(writeStarted&&!found.contentEquals(original)){
+                    val staged=stagedDestination
+                    require(staged!=null&&found.contentEquals(staged)){"The Gen 3 destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(original)
+                }
                 val restored=file.readBytes();restored.contentEquals(original)&&gen3SaveValid(restored)
             }.getOrDefault(false)
             if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
