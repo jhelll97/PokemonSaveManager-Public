@@ -47907,11 +47907,16 @@ class MainActivity : Activity() {
                 val restored=file.readBytes();restored.contentEquals(original)&&gen3SaveValid(restored)
             }.getOrDefault(false)
             if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
+            val retainedBackup=safetyBackup?.let{saved->runCatching{
+                saved.readBytes().contentEquals(original)&&isBackupKept(saved)
+            }.getOrDefault(false)}?:false
             val recovery=when{
                 bankRestored&&destinationRestored->"The exact Gen 3 destination and PK3 Bank record were restored or kept and verified."
-                bankRestored->"The PK3 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+                bankRestored&&retainedBackup->"The PK3 Bank record was restored or kept. Destination restoration was not verified, but the exact retained Gen 3 destination backup verified."
+                bankRestored->"The PK3 Bank record was restored or kept, but destination restoration and the retained backup were not verified. The current destination was left untouched."
                 destinationRestored->"The exact Gen 3 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
-                else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
+                retainedBackup->"Destination and Bank restoration were not verified. The exact retained Gen 3 destination backup verified; keep it and the Bank recovery snapshot for review."
+                else->"Automatic recovery and the retained Gen 3 destination backup could not be verified. Keep the current destination and Bank recovery snapshot for review."
             }
             showDialog("Gen 3 withdraw failed",(e.message?:"Unknown error")+"\n\n"+recovery+
                 (safetyBackup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
