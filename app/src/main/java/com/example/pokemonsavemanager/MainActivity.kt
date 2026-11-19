@@ -776,9 +776,51 @@ class MainActivity : Activity() {
                 }
                 val restored=file.readBytes();require(restored.contentEquals(openedDestination)&&generationForSize(restored.size)==7&&validateGen7CoreChecksums(restored).first){"The restored Generation 7 destination did not verify."};true
             }.getOrDefault(false)
+            val retainedBackup=safetyBackup?.let{saved->runCatching{
+                saved.isFile&&isBackupKept(saved)&&saved.readBytes().contentEquals(openedDestination)
+            }.getOrDefault(false)}?:false
+            val verifiedRecoveryCopies=recoveryCopies.filter{(item,copy)->runCatching{
+                val recovered=copy.readBytes();val parsed=if(recovered.size==PK6_STORED_SIZE)parsePk6(recovered,0,PK6_STORED_SIZE,false,807)else null
+                copy.isFile&&recovered.contentEquals(item.bankBytes)&&parsed!=null&&parsed.checksumValid&&
+                    parsed.pid==item.source.pid&&parsed.species==item.source.species&&
+                    parsed.tid==item.source.tid&&parsed.sid==item.source.sid
+            }.getOrDefault(false)}
+            val allRecoveryCopiesVerified=recoveryCopies.size==selected.size&&verifiedRecoveryCopies.size==selected.size
             if(bankRestored&&destinationRestored)recoveryCopies.forEach{runCatching{it.second.delete()}}
-            val recovery=when{bankRestored&&destinationRestored->"The exact Generation 7 destination and every selected PK7 Bank record were restored or kept and verified.";bankRestored->"Every selected PK7 Bank record was restored or kept, but destination restoration was not verified. Use the retained destination backup before editing again.";destinationRestored->"The exact Generation 7 destination was restored, but one or more Bank restorations were not verified. Keep the PK7 recovery snapshots for review.";else->"Automatic recovery could not be fully verified. Keep the retained destination backup and PK7 recovery snapshots for review."}
-            showDialog("Gen 7 Bank multi-withdrawal failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+(recoveryCopies.filter{it.second.exists()}.takeIf{it.isNotEmpty()}?.joinToString(prefix="\nBank recovery snapshots: "){it.second.name}?:""))
+            val recovery=when{
+                bankRestored&&destinationRestored->
+                    "The exact Generation 7 destination and every selected PK7 Bank record were restored or kept and verified."
+                bankRestored&&retainedBackup->
+                    "Every selected PK7 Bank record was restored or kept. Destination restoration was not verified, but the exact retained destination backup verified."
+                bankRestored->
+                    "Every selected PK7 Bank record was restored or kept, but destination restoration and its retained backup were not verified. The current destination was left untouched."
+                destinationRestored&&allRecoveryCopiesVerified->
+                    "The exact Generation 7 destination was restored. Bank restoration was incomplete, but every exact PK7 recovery snapshot verified."
+                destinationRestored&&verifiedRecoveryCopies.isNotEmpty()->
+                    "The exact Generation 7 destination was restored. Bank restoration was incomplete; only ${verifiedRecoveryCopies.size} of ${selected.size} PK7 recovery snapshots verified."
+                destinationRestored->
+                    "The exact Generation 7 destination was restored, but Bank restoration and all PK7 recovery snapshots were not verified."
+                retainedBackup&&allRecoveryCopiesVerified->
+                    "Destination and Bank restoration were incomplete, but the exact retained destination backup and every PK7 recovery snapshot verified."
+                retainedBackup&&verifiedRecoveryCopies.isNotEmpty()->
+                    "Destination and Bank restoration were incomplete. The exact retained destination backup and ${verifiedRecoveryCopies.size} of ${selected.size} PK7 recovery snapshots verified."
+                retainedBackup->
+                    "Destination and Bank restoration were incomplete. The exact retained destination backup verified, but no PK7 recovery snapshot did."
+                allRecoveryCopiesVerified->
+                    "Destination and Bank restoration were incomplete. Every PK7 recovery snapshot verified, but the retained destination backup did not."
+                verifiedRecoveryCopies.isNotEmpty()->
+                    "Destination and Bank restoration were incomplete. Only ${verifiedRecoveryCopies.size} of ${selected.size} PK7 recovery snapshots verified; the retained destination backup did not."
+                else->
+                    "Automatic recovery and all retained recovery snapshots could not be verified. Keep the current destination and Bank files for review."
+            }
+            showDialog(
+                "Gen 7 Bank multi-withdrawal failed",
+                "${e.message?:"Unknown error"}\n\n$recovery"+
+                    (safetyBackup?.takeIf{retainedBackup}?.let{"\n\nVerified recovery backup: ${it.name}"}?:"")+
+                    (verifiedRecoveryCopies.filter{it.second.exists()}.takeIf{it.isNotEmpty()}?.joinToString(
+                        prefix="\nVerified Bank recovery snapshots: "
+                    ){it.second.name}?:"")
+            )
         }
     }
 
