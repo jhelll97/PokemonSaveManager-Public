@@ -380,6 +380,7 @@ class MainActivity : Activity() {
     private fun withdrawSelectedGen5BankPokemon(selected:List<Gen5BankBatchItem>,openedDestination:ByteArray,targetBox:Int,targetSlots:List<Int>,file:File,openedUri:Uri?,openedLabel:String?){
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         var writeStarted=false;var safetyBackup:File?=null
+        var stagedDestination:ByteArray?=null
         val recoveryCopies=ArrayList<Pair<Gen5BankBatchItem,File>>();val cleanupAttempted=HashSet<String>()
         try{
             require(selected.isNotEmpty()&&selected.map{it.bankFile.absolutePath}.distinct().size==selected.size){"The prepared Gen 5 Bank selection is empty or contains a duplicate."}
@@ -412,6 +413,7 @@ class MainActivity : Activity() {
             }
             fun recoveryValid()=isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&recoveryCopies.size==refreshed.size&&recoveryCopies.all{(item,copy)->copy.readBytes().contentEquals(item.bankBytes)}
             require(bound()&&file.readBytes().contentEquals(original)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}&&recoveryValid()){"The destination, Bank records or retained recovery data changed before writing."}
+            stagedDestination=work.copyOf()
             writeStarted=true;file.writeBytes(work);val written=file.readBytes()
             require(written.contentEquals(work)&&written.indices.all{it in allowed||written[it]==original[it]}){"The persisted Generation 5 save differs from the reviewed write scope."}
             val writtenProfile=detectGen5Profile(written)?:error("The persisted Generation 5 save could not be reopened.")
@@ -439,7 +441,13 @@ class MainActivity : Activity() {
                 require(restored.contentEquals(item.bankBytes)&&parsed!=null&&parsed.checksumValid&&parsed.pid==item.source.pid&&parsed.species==item.source.species&&parsed.tid==item.source.tid&&parsed.sid==item.source.sid){"An exact Gen 5 Bank record could not be restored or verified."};true
             }.getOrDefault(false)}.all{it}
             val destinationRestored=runCatching{
-                if(writeStarted)file.writeBytes(openedDestination)
+                val current=file.readBytes()
+                if(!current.contentEquals(openedDestination)){
+                    require(writeStarted){"No Generation 5 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 5 destination no longer matches this batch withdrawal's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(openedDestination)
+                }
                 val restored=file.readBytes();val restoredProfile=detectGen5Profile(restored)
                 require(restored.contentEquals(openedDestination)&&restoredProfile!=null&&gen5ChecksumTableValid(restored,restoredProfile)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,restoredProfile)}){"The restored Generation 5 destination did not verify."};true
             }.getOrDefault(false)
