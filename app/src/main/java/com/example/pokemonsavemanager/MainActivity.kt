@@ -46302,6 +46302,7 @@ class MainActivity : Activity() {
 
         val removed = ArrayList<Pair<File, ByteArray>>()
         var writeStarted = false
+        var stagedDestination: ByteArray? = null
         var backup: File? = null
         try {
             require(destinationBound()) {
@@ -46430,6 +46431,7 @@ class MainActivity : Activity() {
                 "The destination or a selected Bank record changed before writing."
             }
 
+            stagedDestination = work.copyOf()
             writeStarted = true
             openedFile.writeBytes(work)
             val persisted = openedFile.readBytes()
@@ -46498,9 +46500,17 @@ class MainActivity : Activity() {
                 }.getOrDefault(false)
             }
             val saveRestored = runCatching {
-                if (writeStarted) openedFile.writeBytes(openedDestination)
-                val restored = openedFile.readBytes()
-                restored.contentEquals(openedDestination) && gen3SaveValid(restored)
+                val current = openedFile.readBytes()
+                when {
+                    current.contentEquals(openedDestination) ->
+                        gen3SaveValid(current)
+                    writeStarted && stagedDestination?.let { current.contentEquals(it) } == true -> {
+                        openedFile.writeBytes(openedDestination)
+                        val restored = openedFile.readBytes()
+                        restored.contentEquals(openedDestination) && gen3SaveValid(restored)
+                    }
+                    else -> false
+                }
             }.getOrDefault(false)
             val recovery = when {
                 saveRestored && bankRestored ->
