@@ -61500,8 +61500,9 @@ private data class Gen2ToGen5LegalisePlan(
             val stagedBank=bf;val expectedBank=bankBytes
             val bankCleared=if(!bankReserved)true else if(stagedBank==null||expectedBank==null)false else runCatching{
                 if(stagedBank.exists()){
-                    require(stagedBank.readBytes().contentEquals(expectedBank)){"The staged Bank record changed; it was not removed."}
-                    require(stagedBank.delete()){"The staged Bank record could not be removed."}
+                    val found=stagedBank.readBytes()
+                    require(found.isEmpty()||found.contentEquals(expectedBank)){"The staged Bank reservation changed; it was not removed."}
+                    require(stagedBank.delete()){"The staged Bank reservation could not be removed."}
                 }
                 require(!stagedBank.exists()){"The staged Bank record still exists."}
             }.isSuccess
