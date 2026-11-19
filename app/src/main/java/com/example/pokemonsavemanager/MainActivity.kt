@@ -12053,6 +12053,7 @@ class MainActivity : Activity() {
         val original=runCatching{file.readBytes()}.getOrNull()
             ?:return showDialog("Gen 5 Bank withdrawal","The destination save could not be read.")
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
+        var stagedDestination:ByteArray?=null
         try{
             require(original.contentEquals(p.destination)&&target in 0 until 720){"The prepared destination changed or the selected slot is invalid."}
             val profile=detectGen5Profile(original)?:error("The destination is no longer a valid native Generation 5 save.")
@@ -12087,6 +12088,7 @@ class MainActivity : Activity() {
                 p.bankFile.readBytes().contentEquals(bank)&&bankCopy.readBytes().contentEquals(bank)){
                 "The destination identity, retained backup or Bank snapshots changed before writing."
             }
+            stagedDestination=save.copyOf()
             writeStarted=true;file.writeBytes(save)
             val written=file.readBytes();require(written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){
                 "The persisted Generation 5 save differs from the reviewed write scope."
@@ -12120,7 +12122,14 @@ class MainActivity : Activity() {
                 }==true){"The original PK5 Bank record could not be verified exactly; no existing record was overwritten."}
             }.isSuccess
             val destinationRestored=runCatching{
-                if(writeStarted)file.writeBytes(original);val restored=file.readBytes();val profile=detectGen5Profile(restored)
+                val current=file.readBytes()
+                if(!current.contentEquals(original)){
+                    require(writeStarted){"No Generation 5 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 5 destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(original)
+                }
+                val restored=file.readBytes();val profile=detectGen5Profile(restored)
                     ?:error("The restored Generation 5 layout is invalid.")
                 restored.contentEquals(original)&&gen5ChecksumTableValid(restored,profile)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,profile)}
             }.getOrDefault(false)
