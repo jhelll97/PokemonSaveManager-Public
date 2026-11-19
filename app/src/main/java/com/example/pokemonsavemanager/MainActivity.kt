@@ -13224,6 +13224,7 @@ class MainActivity : Activity() {
         val original=runCatching{file.readBytes()}.getOrNull()
             ?:return showDialog("Gen 6 Bank withdrawal","The destination save could not be read.")
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
+        var stagedDestination:ByteArray?=null
         try{
             require(original.contentEquals(p.destination)&&generationForSize(original.size)==6){"The prepared Generation 6 destination changed."}
             require(gen6BoxChecksumValid(original)&&gen6BlockChecksumValid(original,20)){"The destination storage or Pokédex checksum changed."}
@@ -13255,6 +13256,7 @@ class MainActivity : Activity() {
                 p.bankFile.readBytes().contentEquals(bank)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
                 "The destination identity, retained backup or Bank snapshots changed before writing."
             }
+            stagedDestination=save.copyOf()
             writeStarted=true;file.writeBytes(save)
             val written=file.readBytes();require(written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){
                 "The persisted Generation 6 save differs from the reviewed write scope."
@@ -13287,7 +13289,13 @@ class MainActivity : Activity() {
                     parsed.species==p.source.species&&parsed.tid==p.source.tid&&parsed.sid==p.source.sid
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                if(writeStarted)file.writeBytes(original)
+                val current=file.readBytes()
+                if(!current.contentEquals(original)){
+                    require(writeStarted){"No Generation 6 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 6 destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(original)
+                }
                 val restored=file.readBytes()
                 restored.contentEquals(original)&&generationForSize(restored.size)==6&&
                     gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)
