@@ -60853,6 +60853,7 @@ private data class Gen2ToGen5LegalisePlan(
             if(importedFile?.absolutePath!=file.absolutePath){showDialog("Withdraw","The active save changed after the box list opened. Reopen PSE Bank. Nothing was changed.");return@setItems}
             val box=targets[which].first;var writeStarted=false;var bankDeleteAttempted=false;val fresh=runCatching{file.readBytes()}.getOrNull()?:return@setItems
             var safetyBackup:File?=null
+            var bankRecovery:File?=null
             var stagedDestination:ByteArray?=null
             try{
                 require(bound()&&verifyGen2SaveIntegrity(fresh).first&&detectGen2Profile(fresh)?.key==openedProfile.key){"The captured Gen 2 destination identity, integrity or profile changed."}
@@ -60864,9 +60865,14 @@ private data class Gen2ToGen5LegalisePlan(
                 val backup=File.createTempFile(backupGameName(file)+"_PreGen2BankWithdraw_",".backup",backupsDir());safetyBackup=backup
                 backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The withdrawal recovery backup did not persist exactly."}
                 retainGen2SafetyBackup(backup,fresh)
+                val bankCopy=File.createTempFile("PSE_G2Withdraw_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
+                bankCopy.writeBytes(openedBank)
+                val recoveredBank=bankCopy.readBytes()
+                require(bankCopy.isFile&&recoveredBank.contentEquals(openedBank)&&parseGen2BankPayload(recoveredBank)?.let{sameGen2BankRecord(it,opened)}==true){"The exact Gen 2 Bank recovery snapshot did not verify."}
                 require(bankFile.readBytes().contentEquals(openedBank)){"The selected Gen 2 Bank record changed during staging."}
                 require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(fresh)){"The active Gen 2 destination changed during staging. Nothing was written."}
                 require(bound()&&backup.readBytes().contentEquals(fresh)&&isBackupKept(backup)){"The source identity or retained recovery backup changed before withdrawal."}
+                require(bankCopy.isFile&&bankCopy.readBytes().contentEquals(openedBank)&&parseGen2BankPayload(bankCopy.readBytes())?.let{sameGen2BankRecord(it,opened)}==true){"The Bank recovery snapshot changed before withdrawal."}
                 stagedDestination=work.copyOf()
                 writeStarted=true
                 file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)){"The Gen 2 destination changed while withdrawal was written."};val writtenProfile=detectGen2Profile(written)?:error("The persisted Gen 2 save failed checksum verification.");require(gen2ChecksumValid(written,writtenProfile)){"The persisted Gen 2 checksum is invalid."};val afterPayloads=gen2LocationPayloads(written,location,writtenProfile);require(afterPayloads.size==stagedPayloads.size&&sameGen2PayloadList(afterPayloads,stagedPayloads)){"The persisted Gen 2 box records changed after staging."};val q=parseGen2Box(written,box).firstOrNull{it.slot==slot};require(q!=null&&sameGen2BankRecord(q,source)&&gen2BoxRawCore(written,box,slot).contentEquals(monRaw)){"The exact withdrawn Gen 2 Pokémon did not persist."};require(gen2PokedexOwnedSeen(written,writtenProfile,source.species)){"The withdrawn species was not registered Seen and Owned in Gen 2."}
@@ -60874,10 +60880,13 @@ private data class Gen2ToGen5LegalisePlan(
                 require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 2 destination changed before Bank cleanup."}
                 require(bound()){"The source identity changed before Bank cleanup."}
                 require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 recovery backup changed before Bank cleanup."}
+                require(bankCopy.isFile&&bankCopy.readBytes().contentEquals(openedBank)&&parseGen2BankPayload(bankCopy.readBytes())?.let{sameGen2BankRecord(it,opened)}==true){"The Bank recovery snapshot changed before Bank cleanup."}
                 val cleanup=bankFile.readBytes();require(cleanup.contentEquals(openedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true){"The selected Gen 2 Bank record changed before cleanup."};bankDeleteAttempted=true;require(bankFile.delete()){"The Bank entry could not be removed after destination verification."};require(!bankFile.exists()){"The removed Bank entry still exists."}
                 require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 2 destination changed after Bank cleanup."}
                 require(bound()){"The source identity changed after Bank cleanup."}
                 require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 recovery backup changed after Bank cleanup."}
+                require(bankCopy.isFile&&bankCopy.readBytes().contentEquals(openedBank)&&parseGen2BankPayload(bankCopy.readBytes())?.let{sameGen2BankRecord(it,opened)}==true){"The Bank recovery snapshot changed after Bank cleanup."}
+                runCatching{bankCopy.delete()}
             }catch(e:Exception){
                 val bankRestored=runCatching{
                     if(bankDeleteAttempted&&!bankFile.exists()){
@@ -60898,17 +60907,30 @@ private data class Gen2ToGen5LegalisePlan(
                     restored.contentEquals(fresh)&&restoredProfile?.key==openedProfile.key&&verifyGen2SaveIntegrity(restored).first
                 }.getOrDefault(false)
                 val retainedBackup=safetyBackup?.let{saved->runCatching{
-                    saved.readBytes().contentEquals(fresh)&&isBackupKept(saved)
+                    saved.isFile&&saved.readBytes().contentEquals(fresh)&&isBackupKept(saved)
                 }.getOrDefault(false)}?:false
+                val verifiedBankRecovery=bankRecovery?.let{copy->runCatching{
+                    val recovered=copy.readBytes()
+                    copy.isFile&&recovered.contentEquals(openedBank)&&parseGen2BankPayload(recovered)?.let{sameGen2BankRecord(it,opened)}==true
+                }.getOrDefault(false)}?:false
+                if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
                 val recovery=when{
                     bankRestored&&destinationRestored->"The exact Gen 2 destination and Bank record were restored or kept and verified."
                     bankRestored&&retainedBackup->"The exact Gen 2 Bank record was restored or kept. Destination recovery was not verified, but the exact retained destination backup verified."
                     bankRestored->"The exact Gen 2 Bank record was restored or kept, but destination recovery and the retained backup were not verified. The current destination was left untouched."
-                    destinationRestored->"The exact Gen 2 destination was restored or kept, but Bank recovery was not verified. Keep the remaining Bank records and recovery files for review."
-                    retainedBackup->"Destination and Bank recovery were not verified. The exact retained Gen 2 destination backup verified; keep it and the remaining Bank files for review."
-                    else->"Automatic recovery and the retained Gen 2 destination backup could not be verified. Keep the current destination and remaining Bank files for review."
+                    destinationRestored&&verifiedBankRecovery->"The exact Gen 2 destination was restored. Bank restoration was not verified, but the exact Bank recovery snapshot verified."
+                    destinationRestored->"The exact Gen 2 destination was restored, but Bank restoration and its recovery snapshot were not verified."
+                    retainedBackup&&verifiedBankRecovery->"Destination and Bank restoration were incomplete, but the exact retained destination backup and Bank recovery snapshot verified."
+                    retainedBackup->"Destination and Bank restoration were incomplete. The exact retained Gen 2 destination backup verified, but the Bank recovery snapshot did not."
+                    verifiedBankRecovery->"Destination and Bank restoration were incomplete. The exact Bank recovery snapshot verified, but the retained destination backup did not."
+                    else->"Automatic recovery and both retained recovery snapshots could not be verified. Keep the current destination and Bank files for review."
                 }
-                showDialog("Withdraw failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return@setItems
+                showDialog(
+                    "Withdraw failed",
+                    (e.message?:"Unknown error")+"\n\n$recovery"+
+                        (safetyBackup?.takeIf{retainedBackup}?.let{"\n\nVerified recovery backup: "+it.name}?:"")+
+                        (bankRecovery?.takeIf{verifiedBankRecovery&&it.exists()}?.let{"\nVerified Bank recovery snapshot: "+it.name}?:"")
+                );return@setItems
             }
             Toast.makeText(this,"Withdrawn to Box $box and verified",Toast.LENGTH_LONG).show();showBank()
         }.setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
