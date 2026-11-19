@@ -57225,7 +57225,11 @@ class MainActivity : Activity() {
             }.getOrDefault(false)
             val stagedBank=bankFile
             val bankCleared=if(!bankReserved)true else if(stagedBank==null)false else runCatching{
-                if(stagedBank.exists()){require(stagedBank.readBytes().contentEquals(expectedPayload)){"The reserved Bank record changed; it was not removed."};require(stagedBank.delete()){"The reserved Bank record could not be removed."}}
+                if(stagedBank.exists()){
+                    val found=stagedBank.readBytes()
+                    require(found.isEmpty()||found.contentEquals(expectedPayload)){"The reserved Bank record changed; it was not removed."}
+                    require(stagedBank.delete()){"The reserved Bank record could not be removed."}
+                }
                 require(!stagedBank.exists()){"The reserved Bank record still exists."}
             }.isSuccess
             val retainedBackup=safetyBackup?.let{saved->runCatching{
