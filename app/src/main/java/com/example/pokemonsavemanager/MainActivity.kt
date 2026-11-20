@@ -888,6 +888,7 @@ class MainActivity : Activity() {
         val recoveryProfileKey=detectGen2Profile(openedDestination)?.key
         var safetyBackup:File?=null
         val bankRecovery=ArrayList<File>()
+        var completionMessage=""
         try{
             require(bound()&&verifyGen2SaveIntegrity(fresh).first){"The captured Gen 2 batch source identity or full integrity changed."}
             require(selected.isNotEmpty()){"The prepared Gen 2 Bank selection is empty."};require(selected.map{it.bankFile.absolutePath}.distinct().size==selected.size){"The prepared selection contains a duplicate Gen 2 Bank entry."}
@@ -929,7 +930,9 @@ class MainActivity : Activity() {
                 val recovered=bankRecovery[index].readBytes()
                 bankRecovery[index].isFile&&recovered.contentEquals(refreshed[index].bankBytes)&&parseGen2BankPayload(recovered)?.let{sameGen2BankRecord(it,refreshed[index].source)}==true
             }){"A Gen 2 Bank recovery snapshot changed after Bank cleanup."}
-            bankRecovery.forEach{runCatching{it.delete()}}
+            completionMessage=finishSelectedGen2BankWithdrawal(
+                bankRecovery,refreshed.map{it.bankBytes},refreshed.size,targetBox
+            )
         }catch(e:Exception){
             var bankRestored=true
             for(item in selected){
@@ -962,7 +965,9 @@ class MainActivity : Activity() {
                 }.getOrNull()
             }
             val allBankRecoveryVerified=bankRecovery.size==selected.size&&verifiedBankRecovery.size==selected.size
-            if(bankRestored&&destinationRestored)bankRecovery.forEach{runCatching{it.delete()}}
+            if(bankRestored&&destinationRestored)cleanupExactBankRecoverySnapshots(
+                bankRecovery,selected.map{it.bankBytes}
+            )
             val recovery=when{
                 bankRestored&&destinationRestored->
                     "The exact Gen 2 destination and every selected Bank record were restored or kept and verified."
@@ -996,7 +1001,7 @@ class MainActivity : Activity() {
                     (verifiedBankRecovery.filter{it.exists()}.takeIf{it.isNotEmpty()}?.joinToString(prefix="\nVerified Bank recovery snapshots: "){it.name}?:"")
             );return
         }
-        selectedBankFiles.clear();bankMultiSelectMode=false;Toast.makeText(this,"${selected.size} Gen 2 Pokémon moved to Box $targetBox and verified",Toast.LENGTH_LONG).show();showBank()
+        selectedBankFiles.clear();bankMultiSelectMode=false;Toast.makeText(this,completionMessage,Toast.LENGTH_LONG).show();showBank()
     }
 
 
