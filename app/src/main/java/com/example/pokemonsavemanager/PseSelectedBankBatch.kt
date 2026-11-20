@@ -92,7 +92,14 @@ internal fun executeSelectedStandardBankBatch(
             "A Bank record or retained recovery snapshot changed before cleanup."
         }
         cleanupAttempted=true
-        sources.forEach{require(it.delete()&&!it.exists()){"A Bank record could not be removed after destination verification."}}
+        sources.forEachIndexed { index,source ->
+            require(bound()&&file.readBytes().contentEquals(work)&&nativeValid(work)&&
+                backup.readBytes().contentEquals(original)&&backupKept(backup)&&recoveriesValid()&&
+                source.readBytes().contentEquals(sourceBytes[index])){
+                "The verified destination, source record or retained recovery changed before Bank cleanup."
+            }
+            require(source.delete()&&!source.exists()){"A Bank record could not be removed after destination verification."}
+        }
         require(bound()&&file.readBytes().contentEquals(work)&&nativeValid(work)&&
             backup.readBytes().contentEquals(original)&&backupKept(backup)&&sources.none{it.exists()}&&recoveriesValid()){
             "The verified destination or retained recovery snapshots changed after Bank cleanup."
