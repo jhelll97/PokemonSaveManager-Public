@@ -499,6 +499,7 @@ internal fun executeSelectedStandardBankBatch(
     val sources=ArrayList<File>()
     val sourceBytes=ArrayList<ByteArray>()
     val bankRecoveries=ArrayList<File>()
+    val removed=ArrayList<File>()
     try {
         require(chosen.isNotEmpty()){"No Bank records are selected."}
         require(generation in 6..7&&nativeValid(original)){"The loaded save does not match this PSE Bank generation."}
@@ -562,13 +563,15 @@ internal fun executeSelectedStandardBankBatch(
         sources.forEachIndexed { index,source ->
             require(bound()&&file.readBytes().contentEquals(work)&&nativeValid(work)&&
                 backup.readBytes().contentEquals(original)&&backupKept(backup)&&recoveriesValid()&&
-                source.readBytes().contentEquals(sourceBytes[index])){
+                removed.none{it.exists()}&&source.readBytes().contentEquals(sourceBytes[index])){
                 "The verified destination, source record or retained recovery changed before Bank cleanup."
             }
             require(source.delete()&&!source.exists()){"A Bank record could not be removed after destination verification."}
+            removed.add(source)
         }
         require(bound()&&file.readBytes().contentEquals(work)&&nativeValid(work)&&
-            backup.readBytes().contentEquals(original)&&backupKept(backup)&&sources.none{it.exists()}&&recoveriesValid()){
+            backup.readBytes().contentEquals(original)&&backupKept(backup)&&removed.size==sources.size&&
+            removed.none{it.exists()}&&recoveriesValid()){
             "The verified destination or retained recovery snapshots changed after Bank cleanup."
         }
         val bankRecoveryClean=cleanupExactBankRecoverySnapshots(
