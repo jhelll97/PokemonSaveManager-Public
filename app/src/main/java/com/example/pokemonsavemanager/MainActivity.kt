@@ -11530,6 +11530,7 @@ class MainActivity : Activity() {
     ){
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
+        var stagedDestination:ByteArray?=null
         try{
             val fresh=file.readBytes()
             require(bound()&&fresh.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(fresh).first){"The destination save or source identity changed. Reopen PSE Bank."}
@@ -11556,6 +11557,7 @@ class MainActivity : Activity() {
                 isBackupKept(b)&&b.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){
                 "The source, destination or retained recovery snapshots changed before writing."
             }
+            stagedDestination=work.copyOf()
             writeStarted=true;file.writeBytes(work);val written=file.readBytes()
             val wp=detectGen2Profile(written)?:error("The persisted Gen 2 save failed validation.")
             require(bound()&&written.contentEquals(work)&&wp.key==profileKey&&verifyGen2SaveIntegrity(written).first){"The persisted Gen 2 destination failed verification."}
@@ -11584,10 +11586,17 @@ class MainActivity : Activity() {
                 }==true
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                if(writeStarted)file.writeBytes(openedDestination)
+                val current=file.readBytes()
+                if(!current.contentEquals(openedDestination)){
+                    require(writeStarted){"No Generation 2 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 2 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(openedDestination)
+                }
                 val restored=file.readBytes()
-                restored.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(restored).first&&
-                    detectGen2Profile(restored)?.key==profileKey
+                require(restored.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(restored).first&&
+                    detectGen2Profile(restored)?.key==profileKey){"The restored Generation 2 destination did not verify."}
+                true
             }.getOrDefault(false)
             if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
