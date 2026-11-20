@@ -37565,6 +37565,7 @@ class MainActivity : Activity() {
         if(!gen5ToGen4StillBound(p))return showDialog("Gen 5 → Gen 4","The prepared snapshots changed. Reopen PSE Bank.")
         val file=p.destinationFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
+        var stagedDestination:ByteArray?=null
         try{
             require(fresh.contentEquals(p.destination)&&target in 0 until 540){"The destination changed or the selected slot is invalid."}
             val profile=detectGen4Profile(fresh)?:error("The destination is no longer a valid Gen 4 save.")
@@ -37593,6 +37594,7 @@ class MainActivity : Activity() {
                 bankCopy.readBytes().contentEquals(p.bankBytes)){
                 "The destination identity, Bank record or retained recovery snapshots changed before writing."
             }
+            stagedDestination=work.copyOf()
             writeStarted=true;file.writeBytes(work);val written=file.readBytes()
             require(written.contentEquals(work)&&written.indices.all{it in allowed||written[it]==fresh[it]}){"The persisted destination changed outside the reviewed byte scope."}
             val wp=detectGen4Profile(written)?:error("The persisted Gen 4 layout could not be reopened.");val after=gen4Validation(written,wp)
@@ -37625,11 +37627,18 @@ class MainActivity : Activity() {
                     parsed.tid==p.source.tid&&parsed.sid==p.source.sid
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                if(writeStarted)file.writeBytes(fresh)
+                val current=file.readBytes()
+                if(!current.contentEquals(fresh)){
+                    require(writeStarted){"No Gen 4 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Gen 4 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(fresh)
+                }
                 val restored=file.readBytes()
                 val rp=detectGen4Profile(restored)?:error("The restored Generation 4 layout is invalid.")
                 val rv=gen4Validation(restored,rp)
-                restored.contentEquals(fresh)&&rv.generalChecksum&&rv.storageChecksum&&rv.badPk4==0
+                require(restored.contentEquals(fresh)&&rv.generalChecksum&&rv.storageChecksum&&rv.badPk4==0){"The restored Gen 4 destination did not verify."}
+                true
             }.getOrDefault(false)
             if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
