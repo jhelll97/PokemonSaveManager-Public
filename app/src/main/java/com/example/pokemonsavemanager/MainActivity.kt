@@ -60799,7 +60799,7 @@ private data class Gen2ToGen5LegalisePlan(
         if(!bound()){showDialog("Gen 2 → Gen 6 multi-transfer","The destination identity changed. Reopen PSE Bank. Nothing was changed.");return}
         if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog("Gen 2 → Gen 6 multi-transfer","The active save changed after destination selection. Reopen the Bank selection. Nothing was changed.");return}
         val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;val removed=ArrayList<Pair<File,ByteArray>>();var writeStarted=false
-        var safetyBackup:File?=null
+        var safetyBackup:File?=null;var stagedDestination:ByteArray?=null
         try{
             require(bound()){"The destination identity changed before batch validation."}
             require(prepared.isNotEmpty()){"The prepared selection is empty."};require(prepared.map{it.bankFile.absolutePath}.distinct().size==prepared.size){"The prepared selection contains a duplicate Bank entry."};require(fresh.contentEquals(preparedDestination)&&generationForSize(fresh.size)==6&&gen6BoxChecksumValid(fresh)&&gen6BlockChecksumValid(fresh,20)){"The Gen 6 destination changed or is no longer valid."}
@@ -60817,6 +60817,7 @@ private data class Gen2ToGen5LegalisePlan(
             val backup=File.createTempFile(backupGameName(file)+"_PreGen2ToGen6Batch_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The exact Gen 6 batch recovery backup did not verify."};retainGen2ToGen6SafetyBackup(backup,fresh)
             require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The Gen 6 destination, selected Bank records or retained backup changed before writing. Nothing was written."}
+            stagedDestination=work.copyOf()
             writeStarted=true
             file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)){"The destination changed while the batch was written."};require(gen6BoxChecksumValid(written)&&gen6BlockChecksumValid(written,20)){"The persisted Gen 6 save failed checksum validation."};require(written.indices.all{it in allowed||written[it]==fresh[it]}){"Unrelated Gen 6 data changed after persistence."}
             for((target,bytes,staged) in expected){val off=info.first+target*PK6_STORED_SIZE;val actual=written.copyOfRange(off,off+PK6_STORED_SIZE);val q=parsePk6(actual,0,PK6_STORED_SIZE,false,721)?:error("A persisted PK6 could not be parsed.");val mismatch=gen2ForwardPkMismatch(q,staged);val dexMatches=gen6DexCaught(written,q.species);require(actual.contentEquals(bytes)&&mismatch==null&&dexMatches){"Persisted PK6 verification failed: ${mismatch?:if(!dexMatches)"Pokédex registration" else "native record bytes"}."}}
@@ -60844,8 +60845,16 @@ private data class Gen2ToGen5LegalisePlan(
                 if(!recovered)bankRestored=false
             }
             val destinationRestored=runCatching{
-                if(writeStarted)file.writeBytes(fresh)
-                val restored=file.readBytes();require(restored.contentEquals(fresh)){"The restored Gen 6 destination bytes did not verify."};require(validGen2ToGen6Destination(restored)){"The restored Gen 6 destination integrity did not verify."};true
+                val current=file.readBytes()
+                if(!current.contentEquals(fresh)){
+                    require(writeStarted){"No Generation 6 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 6 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(fresh)
+                }
+                val restored=file.readBytes()
+                require(restored.contentEquals(fresh)&&validGen2ToGen6Destination(restored)){"The restored Generation 6 destination did not verify."}
+                true
             }.getOrDefault(false)
             val recovery=when{
                 bankRestored&&destinationRestored->"The exact Gen 6 destination and every selected Gen 2 Bank record were restored or kept and verified."
