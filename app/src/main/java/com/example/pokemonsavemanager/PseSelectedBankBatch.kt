@@ -112,9 +112,6 @@ internal fun finishSelectedGen3BankWithdrawal(
     moved: Int,
     targetBoxName: String
 ): String {
-    require(exactGen3BankRecoverySnapshots(recoveryFiles, expected)) {
-        "A Gen 3 Bank recovery snapshot changed after Bank cleanup."
-    }
     val recoveryClean=cleanupExactBankRecoverySnapshots(recoveryFiles, expected)
     return "$moved Gen 3 Pokémon moved to $targetBoxName and verified" +
         if(recoveryClean) "" else
@@ -127,9 +124,6 @@ internal fun finishSelectedGen2BankWithdrawal(
     moved: Int,
     targetBox: Int
 ): String {
-    require(exactGen3BankRecoverySnapshots(recoveryFiles, expected)) {
-        "A Gen 2 Bank recovery snapshot changed after Bank cleanup."
-    }
     val recoveryClean=cleanupExactBankRecoverySnapshots(recoveryFiles, expected)
     return "$moved Gen 2 Pokémon moved to Box $targetBox and verified" +
         if(recoveryClean) "" else
