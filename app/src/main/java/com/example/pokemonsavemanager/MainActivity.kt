@@ -51023,10 +51023,10 @@ class MainActivity : Activity() {
             }
             temporaryBankFiles.forEachIndexed { index, staged ->
                 val target = nextBankTarget(index, parsed[index].species)
-                finalBankFiles.add(target)
                 require(staged.renameTo(target)) {
                     "A staged Gen 3 Bank entry could not be finalized."
                 }
+                finalBankFiles.add(target)
                 val verifyRaw = target.readBytes()
                 val verifyPokemon = if (verifyRaw.size == 80) {
                     parsePk3(verifyRaw, 0, false)
@@ -51080,39 +51080,9 @@ class MainActivity : Activity() {
                 }
                 true
             }.getOrDefault(false)
-            var bankClean = true
-            val cleanupCandidates = ArrayList<Pair<File, ByteArray>>()
-            temporaryBankFiles.forEachIndexed { index, candidate ->
-                if (index in expectedBankPayloads.indices) {
-                    cleanupCandidates.add(candidate to expectedBankPayloads[index])
-                } else if (candidate.exists()) {
-                    bankClean = false
-                }
-            }
-            finalBankFiles.forEachIndexed { index, candidate ->
-                if (index in expectedBankPayloads.indices) {
-                    cleanupCandidates.add(candidate to expectedBankPayloads[index])
-                } else if (candidate.exists()) {
-                    bankClean = false
-                }
-            }
-            cleanupCandidates.distinctBy { it.first.absolutePath }
-                .forEach { (candidate, expected) ->
-                    val removed = runCatching {
-                        if (candidate.exists()) {
-                            require(candidate.readBytes().contentEquals(expected)) {
-                                "A staged Gen 3 Bank record changed; it was retained for review."
-                            }
-                            require(candidate.delete()) {
-                                "An exact staged Gen 3 Bank record could not be removed."
-                            }
-                        }
-                        require(!candidate.exists()) {
-                            "An exact staged Gen 3 Bank record still exists."
-                        }
-                    }.isSuccess
-                    if (!removed) bankClean = false
-                }
+            val bankClean = cleanupExactSelectedGen3BankCopies(
+                temporaryBankFiles, finalBankFiles, expectedBankPayloads
+            )
             val retainedBackup = recoveryBackup?.let { backup ->
                 runCatching {
                     backup.isFile && isBackupKept(backup) &&
