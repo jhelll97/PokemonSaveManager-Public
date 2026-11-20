@@ -4,7 +4,8 @@ import java.io.File
 
 internal data class PseSelectedBankBatchResult(
     val moved: Int=0,
-    val failure: String?=null
+    val failure: String?=null,
+    val notice: String?=null
 )
 
 internal fun retainedBankBackupMatches(
@@ -80,7 +81,7 @@ internal fun exactGen3BankRecoverySnapshots(
     }.getOrDefault(false)
 }
 
-internal fun cleanupExactGen3BankRecoverySnapshots(
+internal fun cleanupExactBankRecoverySnapshots(
     files: List<File>,
     expected: List<ByteArray>
 ): Boolean {
@@ -114,7 +115,7 @@ internal fun finishSelectedGen3BankWithdrawal(
     require(exactGen3BankRecoverySnapshots(recoveryFiles, expected)) {
         "A Gen 3 Bank recovery snapshot changed after Bank cleanup."
     }
-    val recoveryClean=cleanupExactGen3BankRecoverySnapshots(recoveryFiles, expected)
+    val recoveryClean=cleanupExactBankRecoverySnapshots(recoveryFiles, expected)
     return "$moved Gen 3 Pokémon moved to $targetBoxName and verified" +
         if(recoveryClean) "" else
             "; a Bank recovery snapshot was retained for review"
@@ -226,6 +227,9 @@ internal fun runSelectedStandardBankBatchReview(
                     )
                     result.failure?.let{showFailure("Move selected failed",it);return@setPositiveButton}
                     onSuccess(result.moved,which)
+                    result.notice?.let{
+                        showFailure("Move selected completed with retained recovery",it)
+                    }
                 }.setNegativeButton("Cancel",null).show()
         }.setNegativeButton("Cancel",null).show()
 }
@@ -331,8 +335,14 @@ internal fun executeSelectedStandardBankBatch(
             backup.readBytes().contentEquals(original)&&backupKept(backup)&&sources.none{it.exists()}&&recoveriesValid()){
             "The verified destination or retained recovery snapshots changed after Bank cleanup."
         }
-        bankRecoveries.forEach{runCatching{it.delete()}}
-        return PseSelectedBankBatchResult(moved=sources.size)
+        val bankRecoveryClean=cleanupExactBankRecoverySnapshots(
+            bankRecoveries,sourceBytes
+        )
+        return PseSelectedBankBatchResult(
+            moved=sources.size,
+            notice=if(bankRecoveryClean) null else
+                "The verified destination and selected Bank removals completed, but one or more exact temporary recovery snapshots could not be removed safely. Changed or unremovable snapshots were retained for review."
+        )
     } catch(error:Exception) {
         val bankRestored=runCatching {
             restoreExactBankRecords(sources,sourceBytes,bankRecoveries,cleanupAttempted)
