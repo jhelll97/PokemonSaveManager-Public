@@ -44334,6 +44334,7 @@ class MainActivity : Activity() {
         val finalBankFiles = ArrayList<File>()
         val expectedBankPayloads = ArrayList<ByteArray>()
         var writeStarted = false
+        var stagedSource: ByteArray? = null
         try {
             require(importedFile?.absolutePath == file.absolutePath &&
                 currentSourceUri == sourceUri && currentSourceLabel == sourceLabel) {
@@ -44448,6 +44449,7 @@ class MainActivity : Activity() {
                 }
             }
             if (!keepParty) {
+                stagedSource = work.copyOf()
                 writeStarted = true
                 file.writeBytes(work)
             }
@@ -44520,12 +44522,18 @@ class MainActivity : Activity() {
                 showGen3PokemonViewer("party")
             }
         } catch (error: Exception) {
-            val restored = if (writeStarted) {
-                runCatching {
-                    file.writeBytes(reviewed)
-                    file.readBytes().contentEquals(reviewed)
-                }.getOrDefault(false)
-            } else false
+            val restored = runCatching {
+                restoreExactStagedDestination(
+                    file, reviewed, stagedSource, writeStarted,
+                    "No Generation 3 party write began; unknown current bytes were left untouched.",
+                    "The Generation 3 party no longer matches this batch's staged bytes; the retained backup was left for recovery."
+                )
+                val reopened = file.readBytes()
+                require(reopened.contentEquals(reviewed) && gen3SaveValid(reopened)) {
+                    "The restored Generation 3 party source did not verify."
+                }
+                true
+            }.getOrDefault(false)
             val bankClean = when {
                 !toBank -> true
                 !writeStarted || restored -> cleanupExactSelectedGen3BankCopies(
