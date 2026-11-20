@@ -7,6 +7,88 @@ internal data class PseSelectedBankBatchResult(
     val failure: String?=null
 )
 
+internal fun runSelectedStandardBankBatchReview(
+    activity: android.app.Activity,
+    chosen: List<File>,
+    generation: Int,
+    file: File,
+    bound: () -> Boolean,
+    storageInfo: (ByteArray) -> Triple<Int,Int,Int>?,
+    bankDirectory: () -> File,
+    backupsDirectory: () -> File,
+    backupBaseName: () -> String,
+    structurallyEmpty: (ByteArray,Int,Int,Int,Int) -> Boolean,
+    recordValid: (ByteArray,Int) -> Boolean,
+    nativeValid: (ByteArray) -> Boolean,
+    refreshDestination: (ByteArray) -> Unit,
+    retainBackup: (File,ByteArray) -> Unit,
+    backupKept: (File) -> Boolean,
+    showFailure: (String,String) -> Unit,
+    onSuccess: (Int,Int) -> Unit
+) {
+    val reviewedDestination=runCatching{file.readBytes()}.getOrNull()
+        ?:return showFailure("Move selected","The destination save could not be reviewed. Nothing was changed.")
+    val info=storageInfo(reviewedDestination)
+        ?:return showFailure("Move selected","PSE could not resolve this save's PC storage. Nothing was changed.")
+    val(boxOffset,slotCount,maxSpecies)=info
+    val labels=(0 until slotCount/30).map{box->
+        val empty=(0 until 30).count{slot->
+            val global=box*30+slot
+            global<slotCount&&structurallyEmpty(reviewedDestination,boxOffset,slotCount,maxSpecies,global)
+        }
+        "Box ${box+1} • $empty structurally empty slot${if(empty==1)"" else "s"}"
+    }.toTypedArray()
+    android.app.AlertDialog.Builder(activity).setTitle("Move ${chosen.size} Pokémon to which box?")
+        .setItems(labels){_,which->
+            val current=runCatching{file.readBytes()}.getOrNull()
+            if(current==null||!bound()||!current.contentEquals(reviewedDestination)){
+                showFailure("Move selected","The reviewed destination identity or bytes changed. Reopen PSE Bank. Nothing was changed.")
+                return@setItems
+            }
+            val slots=(0 until 30).map{which*30+it}.filter{
+                it<slotCount&&structurallyEmpty(current,boxOffset,slotCount,maxSpecies,it)
+            }.take(chosen.size)
+            if(slots.size!=chosen.size){
+                showFailure("Move selected","Box ${which+1} no longer has enough structurally empty slots. Nonzero records were left unchanged.")
+                return@setItems
+            }
+            val reviewedSources=try{
+                val root=bankDirectory().canonicalFile
+                val paths=chosen.map{it.canonicalFile}
+                require(paths.distinct().size==paths.size){"The same Bank record was selected more than once."}
+                paths.map{selected->
+                    require(selected.parentFile==root&&selected.isFile&&selected.extension.equals("pk$generation",true)){
+                        "A selected Bank path is outside the Generation $generation PSE Bank."
+                    }
+                    val raw=selected.readBytes()
+                    require(recordValid(raw,maxSpecies)){"A selected Bank Pokémon failed its native size or checksum."}
+                    raw.copyOf()
+                }
+            }catch(error:Exception){
+                showFailure("Move selected",(error.message?:"The selected Bank records could not be reviewed.")+" Nothing was changed.")
+                return@setItems
+            }
+            val destinations=slots.joinToString(", "){slot->"Box ${slot/30+1} • Slot ${slot%30+1}"}
+            android.app.AlertDialog.Builder(activity).setTitle("Confirm PSE Bank batch withdrawal")
+                .setMessage("Generation $generation PSE withdrawal\n\nDestination slots: $destinations\n\nThe exact selected Bank bytes and destination save are bound to this review. No conversion or Legalise change occurs. This is not an official trade, Pokémon Bank or HOME transfer, legality certification, or verified provenance. Cancel leaves every file unchanged.")
+                .setPositiveButton("Move and verify"){_,_->
+                    val original=runCatching{file.readBytes()}.getOrNull()
+                    if(original==null||!bound()||!original.contentEquals(reviewedDestination)){
+                        showFailure("Move selected","The reviewed destination identity or bytes changed. Reopen PSE Bank. Nothing was changed.")
+                        return@setPositiveButton
+                    }
+                    val result=executeSelectedStandardBankBatch(
+                        chosen,generation,which,slots,reviewedSources,file,original,bankDirectory(),backupsDirectory(),backupBaseName(),
+                        boxOffset,slotCount,232,bound,
+                        {data,slot->structurallyEmpty(data,boxOffset,slotCount,maxSpecies,slot)},
+                        {raw->recordValid(raw,maxSpecies)},nativeValid,refreshDestination,retainBackup,backupKept
+                    )
+                    result.failure?.let{showFailure("Move selected failed",it);return@setPositiveButton}
+                    onSuccess(result.moved,which)
+                }.setNegativeButton("Cancel",null).show()
+        }.setNegativeButton("Cancel",null).show()
+}
+
 internal fun executeSelectedStandardBankBatch(
     chosen: List<File>,
     generation: Int,
