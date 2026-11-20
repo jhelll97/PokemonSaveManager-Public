@@ -1966,6 +1966,7 @@ class MainActivity : Activity() {
         val removed=ArrayList<Pair<File,ByteArray>>()
         var writeStarted=false
         var safetyBackup:File?=null
+        var stagedDestination:ByteArray?=null
         try{
             require(bound()&&fresh.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(fresh).first){"The selected batch destination save or source identity changed. Reopen the Bank selection."}
             require(chosen.isNotEmpty()){"No Gen 1 Bank entries were selected."}
@@ -2019,6 +2020,7 @@ class MainActivity : Activity() {
             backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The batch recovery backup did not persist exactly."}
             retainGen2SafetyBackup(backup,fresh)
             require(bound()&&file.readBytes().contentEquals(fresh)&&refreshed.all{(bankFile,bankBytes,_)->bankFile.readBytes().contentEquals(bankBytes)}&&backup.readBytes().contentEquals(fresh)&&isBackupKept(backup)){"The batch destination, Bank records, source identity or retained backup changed before writing."}
+            stagedDestination=work.copyOf()
             writeStarted=true
             file.writeBytes(work)
             val written=file.readBytes();require(written.contentEquals(work)){"The Gen 2 destination changed while the multi-transfer was being written."};val writtenProfile=detectGen2Profile(written)?:error("The written Gen 2 save failed checksum verification.")
@@ -2047,9 +2049,17 @@ class MainActivity : Activity() {
             for((bankFile,bankBytes) in removed)runCatching{if(!bankFile.exists())require(bankFile.createNewFile()){ "A batch Bank recovery path could not be reserved." };bankFile.writeBytes(bankBytes)}
             val banksRestored=chosen.all{item->runCatching{val bytes=item.bankFile.readBytes();bytes.contentEquals(item.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,item.source)}==true}.getOrDefault(false)}
             val saveRestored=runCatching{
-                if(writeStarted)file.writeBytes(fresh)
+                val current=file.readBytes()
+                if(!current.contentEquals(fresh)){
+                    require(writeStarted){"No Generation 2 batch destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 2 batch destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(fresh)
+                }
                 val restored=file.readBytes()
-                restored.contentEquals(fresh)&&verifyGen2SaveIntegrity(restored).first
+                require(restored.contentEquals(fresh)&&verifyGen2SaveIntegrity(restored).first&&
+                    detectGen2Profile(restored)?.key==profileKey){"The restored Generation 2 batch destination did not verify."}
+                true
             }.getOrDefault(false)
             val recovery=when{
                 banksRestored&&saveRestored->"The exact previous destination and every original Bank record were kept or restored and verified."
