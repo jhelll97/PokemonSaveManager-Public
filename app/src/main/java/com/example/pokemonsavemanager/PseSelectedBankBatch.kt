@@ -105,6 +105,21 @@ internal fun cleanupExactGen3BankRecoverySnapshots(
     return clean
 }
 
+internal fun finishSelectedGen3BankWithdrawal(
+    recoveryFiles: List<File>,
+    expected: List<ByteArray>,
+    moved: Int,
+    targetBoxName: String
+): String {
+    require(exactGen3BankRecoverySnapshots(recoveryFiles, expected)) {
+        "A Gen 3 Bank recovery snapshot changed after Bank cleanup."
+    }
+    val recoveryClean=cleanupExactGen3BankRecoverySnapshots(recoveryFiles, expected)
+    return "$moved Gen 3 Pokémon moved to $targetBoxName and verified" +
+        if(recoveryClean) "" else
+            "; a Bank recovery snapshot was retained for review"
+}
+
 internal fun cleanupExactSelectedGen3BankCopies(
     temporary: List<File>,
     finalized: List<File>,
