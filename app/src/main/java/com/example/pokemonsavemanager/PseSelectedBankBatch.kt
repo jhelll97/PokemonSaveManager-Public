@@ -80,6 +80,31 @@ internal fun exactGen3BankRecoverySnapshots(
     }.getOrDefault(false)
 }
 
+internal fun cleanupExactGen3BankRecoverySnapshots(
+    files: List<File>,
+    expected: List<ByteArray>
+): Boolean {
+    if (files.size != expected.size) return false
+    var clean=true
+    files.forEachIndexed { index,file ->
+        val removed=runCatching {
+            if(file.exists()){
+                require(file.isFile && file.readBytes().contentEquals(expected[index])){
+                    "A Gen 3 Bank recovery snapshot changed; it was retained for review."
+                }
+                require(file.delete()){
+                    "An exact Gen 3 Bank recovery snapshot could not be removed."
+                }
+            }
+            require(!file.exists()){
+                "An exact Gen 3 Bank recovery snapshot still exists."
+            }
+        }.isSuccess
+        if(!removed)clean=false
+    }
+    return clean
+}
+
 internal fun cleanupExactSelectedGen3BankCopies(
     temporary: List<File>,
     finalized: List<File>,

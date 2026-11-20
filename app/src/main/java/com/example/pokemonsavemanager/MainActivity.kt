@@ -46947,13 +46947,18 @@ class MainActivity : Activity() {
             require(exactGen3BankRecoverySnapshots(bankRecovery, refreshed)) {
                 "A Gen 3 Bank recovery snapshot changed after Bank cleanup."
             }
-            bankRecovery.forEach { runCatching { it.delete() } }
+            val bankRecoveryClean = cleanupExactGen3BankRecoverySnapshots(
+                bankRecovery,
+                refreshed
+            )
 
             selectedBankFiles.clear()
             bankMultiSelectMode = false
             Toast.makeText(
                 this,
-                "${selected.size} Gen 3 Pokémon moved to $targetBoxName and verified",
+                "${selected.size} Gen 3 Pokémon moved to $targetBoxName and verified" +
+                    if (bankRecoveryClean) "" else
+                        "; a Bank recovery snapshot was retained for review",
                 Toast.LENGTH_LONG
             ).show()
             showGen3PokemonViewer("boxes", targetBox)
