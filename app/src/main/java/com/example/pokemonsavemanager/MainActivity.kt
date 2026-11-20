@@ -50781,39 +50781,9 @@ class MainActivity : Activity() {
             bankViewBox = ((bankCount - 1).coerceAtLeast(0)) / 30
             showBank()
         } catch (error: Exception) {
-            var bankClean = true
-            val cleanupCandidates = ArrayList<Pair<File, ByteArray>>()
-            temporaryBankFiles.forEachIndexed { index, candidate ->
-                if (index in expectedBankPayloads.indices) {
-                    cleanupCandidates.add(candidate to expectedBankPayloads[index])
-                } else if (candidate.exists()) {
-                    bankClean = false
-                }
-            }
-            finalBankFiles.forEachIndexed { index, candidate ->
-                if (index in expectedBankPayloads.indices) {
-                    cleanupCandidates.add(candidate to expectedBankPayloads[index])
-                } else if (candidate.exists()) {
-                    bankClean = false
-                }
-            }
-            cleanupCandidates.distinctBy { it.first.absolutePath }
-                .forEach { (candidate, expected) ->
-                    val removed = runCatching {
-                        if (candidate.exists()) {
-                            require(candidate.readBytes().contentEquals(expected)) {
-                                "A staged Gen 3 Bank copy changed; it was retained for review."
-                            }
-                            require(candidate.delete()) {
-                                "An exact staged Gen 3 Bank copy could not be removed."
-                            }
-                        }
-                        require(!candidate.exists()) {
-                            "An exact staged Gen 3 Bank copy still exists."
-                        }
-                    }.isSuccess
-                    if (!removed) bankClean = false
-                }
+            val bankClean = cleanupExactSelectedGen3BankCopies(
+                temporaryBankFiles, finalBankFiles, expectedBankPayloads
+            )
             val sourcePreserved = runCatching {
                 file.readBytes().contentEquals(opened)
             }.getOrDefault(false)

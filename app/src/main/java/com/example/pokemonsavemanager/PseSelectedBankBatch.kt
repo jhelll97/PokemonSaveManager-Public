@@ -7,6 +7,34 @@ internal data class PseSelectedBankBatchResult(
     val failure: String?=null
 )
 
+internal fun cleanupExactSelectedGen3BankCopies(
+    temporary: List<File>,
+    finalized: List<File>,
+    expected: List<ByteArray>
+): Boolean {
+    var clean=true
+    val candidates=ArrayList<Pair<File,ByteArray>>()
+    temporary.forEachIndexed { index,file ->
+        if(index in expected.indices)candidates.add(file to expected[index])
+        else if(file.exists())clean=false
+    }
+    finalized.forEachIndexed { index,file ->
+        if(index in expected.indices)candidates.add(file to expected[index])
+        else if(file.exists())clean=false
+    }
+    candidates.distinctBy{it.first.absolutePath}.forEach { (file,bytes) ->
+        val removed=runCatching {
+            if(file.exists()){
+                require(file.readBytes().contentEquals(bytes)){"A staged Gen 3 Bank copy changed; it was retained for review."}
+                require(file.delete()){"An exact staged Gen 3 Bank copy could not be removed."}
+            }
+            require(!file.exists()){"An exact staged Gen 3 Bank copy still exists."}
+        }.isSuccess
+        if(!removed)clean=false
+    }
+    return clean
+}
+
 internal fun runSelectedStandardBankBatchReview(
     activity: android.app.Activity,
     chosen: List<File>,
