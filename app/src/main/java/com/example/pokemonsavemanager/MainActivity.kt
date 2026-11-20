@@ -44332,6 +44332,7 @@ class MainActivity : Activity() {
         val keepParty = action == Gen3PartyBatchAction.COPY_TO_BANK
         val temporaryBankFiles = ArrayList<File>()
         val finalBankFiles = ArrayList<File>()
+        val expectedBankPayloads = ArrayList<ByteArray>()
         var writeStarted = false
         try {
             require(importedFile?.absolutePath == file.absolutePath &&
@@ -44352,6 +44353,7 @@ class MainActivity : Activity() {
             val bankRecords = if (toBank) {
                 Gen3PartyEditing.copySelectedPartyRecords(party, count, orderedSlots)
             } else emptyList()
+            if (toBank) expectedBankPayloads.addAll(bankRecords.map { it.copyOf() })
             val result = if (keepParty) {
                 Gen3PartyRemovalResult(party.copyOf(), count)
             } else {
@@ -44524,19 +44526,12 @@ class MainActivity : Activity() {
                     file.readBytes().contentEquals(reviewed)
                 }.getOrDefault(false)
             } else false
-            var bankClean = true
-            if (toBank && (!writeStarted || restored)) {
-                (temporaryBankFiles + finalBankFiles).distinctBy { it.absolutePath }
-                    .forEach { candidate ->
-                        if (candidate.exists() && !runCatching {
-                                candidate.delete() && !candidate.exists()
-                            }.getOrDefault(false)) {
-                            bankClean = false
-                        }
-                    }
-            } else if (toBank) {
-                // Retain staged/finalized records when source restoration is uncertain.
-                bankClean = false
+            val bankClean = when {
+                !toBank -> true
+                !writeStarted || restored -> cleanupExactSelectedGen3BankCopies(
+                    temporaryBankFiles, finalBankFiles, expectedBankPayloads
+                )
+                else -> false // Retain Bank records while source restoration is uncertain.
             }
             val recovery = when {
                 !writeStarted && bankClean -> "No save changes or new Bank entries were kept."
