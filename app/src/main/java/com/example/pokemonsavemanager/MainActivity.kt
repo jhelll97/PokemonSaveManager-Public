@@ -61051,7 +61051,7 @@ private data class Gen2ToGen5LegalisePlan(
         if(binding.submitted||!bound()){showDialog("Gen 2 → Gen 7","The destination identity or original snapshots changed, or this selection was already submitted. Reopen PSE Bank. Nothing was changed.");return}
         binding.submitted=true
         val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return
-        var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null
+        var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null;var stagedDestination:ByteArray?=null
         try{
             require(bound()&&fresh.contentEquals(binding.destination)&&expectedBank.contentEquals(binding.bank)){"The original Gen 7 destination identity or Bank binding changed."}
             require(fresh.contentEquals(preparedDestination)&&generationForSize(fresh.size)==7){"The Gen 7 destination changed while the conversion was prepared."}
@@ -61090,7 +61090,7 @@ private data class Gen2ToGen5LegalisePlan(
             val backup=File.createTempFile(backupGameName(file)+"_PreGen2ToGen7Transfer_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The exact Gen 7 recovery backup did not verify."};retainGen2ToGen7SafetyBackup(backup,fresh)
             require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(expectedBank)){"The destination, Bank record or retained backup changed before writing."}
-            writeStarted=true;file.writeBytes(work)
+            stagedDestination=work.copyOf();writeStarted=true;file.writeBytes(work)
             val written=file.readBytes();require(written.contentEquals(work)&&boxStorageInfo(written)==info){"The destination changed while it was written."}
             val actual=written.copyOfRange(off,off+PK6_STORED_SIZE);val reopened=parsePk6(actual,0,PK6_STORED_SIZE,false,807)?:error("The persisted PK7 could not be parsed.")
             val reopenedMismatch=gen2ForwardPkMismatch(reopened,staged);val reopenedPpUpsMatch=gen6Pk6PpUps(actual).contentEquals(expectedPpUps)
@@ -61107,9 +61107,16 @@ private data class Gen2ToGen5LegalisePlan(
                 bankFile.readBytes().contentEquals(expectedBank)&&parseGen2BankPayload(bankFile.readBytes())?.let{sameGen2BankRecord(it,expected)}==true
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                if(writeStarted)file.writeBytes(fresh)
+                val current=file.readBytes()
+                if(!current.contentEquals(fresh)){
+                    require(writeStarted){"No Generation 7 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 7 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(fresh)
+                }
                 val restored=file.readBytes()
-                restored.contentEquals(fresh)&&validGen2ToGen7Destination(restored)
+                require(restored.contentEquals(fresh)&&validGen2ToGen7Destination(restored)){"The restored Generation 7 destination did not verify."}
+                true
             }.getOrDefault(false)
             val recovery=when{
                 bankRestored&&destinationRestored->"The exact Gen 7 destination and Gen 2 Bank record were restored or kept and verified."
