@@ -46332,12 +46332,6 @@ class MainActivity : Activity() {
         return enc
     }
 
-    private data class Gen3BankBatchItem(
-        val bankFile: File,
-        val bankBytes: ByteArray,
-        val pokemon: PokemonEntry
-    )
-
     private fun gen3BankDestinationSlotIsStructurallyEmpty(
         pc: ByteArray,
         global: Int
@@ -46581,37 +46575,21 @@ class MainActivity : Activity() {
             )
             selectedBankFiles.clear()
             bankMultiSelectMode = false
-            Toast.makeText(this,
-                if (copyOnly) "Copied ${selected.size} Pokémon to Party; Bank originals unchanged"
-                else "Withdrew ${selected.size} Pokémon to Party and verified", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                this, gen3BankPartyCompletionMessage(copyOnly, selected.size), Toast.LENGTH_LONG
+            ).show()
             showGen3PokemonViewer("party")
             bankRecovery.discardUnchecked()
         } catch (error: Exception) {
-            removed.forEach { item ->
-                runCatching {
-                    if (!item.bankFile.exists() && item.bankFile.createNewFile()) {
-                        item.bankFile.writeBytes(item.bankBytes)
-                    }
-                }
-            }
-            val bankRestored = selected.all { item ->
-                runCatching { item.bankFile.isFile && item.bankFile.readBytes().contentEquals(item.bankBytes) }
-                    .getOrDefault(false)
-            }
+            val bankRestored = restoreExactGen3BankPartyRecords(selected, removed)
             val restoredDestination = restoreExactGen3BankPartyDestination(
                 destination, opened, stagedDestination, writeStarted
             )
             val saveRestored = restoredDestination != null && gen3SaveValid(restoredDestination)
-            if (bankRestored && saveRestored) bankRecovery.discardUnchecked()
-            val recovery = when {
-                bankRestored && saveRestored -> "The original save and Bank records were preserved or restored."
-                bankRestored -> "Bank entries were restored. Restore the retained save backup before editing again."
-                saveRestored -> "The original save was restored. Bank recovery snapshots were retained; review Bank before editing."
-                else -> "Automatic rollback was incomplete. The save backup and Bank recovery snapshots were retained."
-            }
-            showDialog(if (copyOnly) "Gen 3 Bank-to-party copy failed" else "Gen 3 Bank-to-party withdrawal failed",
-                (error.message ?: "Unknown error") + "\n\n" + recovery +
-                    (backup?.let { "\nRecovery backup: ${it.name}" } ?: ""))
+            val failure = finishGen3BankPartyFailure(
+                copyOnly, error.message, bankRestored, saveRestored, backup, bankRecovery
+            )
+            showDialog(failure.title, failure.message)
         }
     }
 

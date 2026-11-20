@@ -2,6 +2,66 @@ package com.example.pokemonsavemanager
 
 import java.io.File
 
+internal data class Gen3BankBatchItem(
+    val bankFile: File,
+    val bankBytes: ByteArray,
+    val pokemon: MainActivity.PokemonEntry
+)
+
+internal data class Gen3BankPartyFailure(
+    val title: String,
+    val message: String
+)
+
+internal fun gen3BankPartyCompletionMessage(copyOnly: Boolean, count: Int): String =
+    if(copyOnly) "Copied $count Pokémon to Party; Bank originals unchanged"
+    else "Withdrew $count Pokémon to Party and verified"
+
+internal fun restoreExactGen3BankPartyRecords(
+    selected: List<Gen3BankBatchItem>,
+    removed: List<Gen3BankBatchItem>
+): Boolean {
+    removed.forEach { item ->
+        runCatching {
+            if(!item.bankFile.exists() && item.bankFile.createNewFile()) {
+                item.bankFile.writeBytes(item.bankBytes)
+            }
+        }
+    }
+    return selected.all { item ->
+        runCatching {
+            item.bankFile.isFile && item.bankFile.readBytes().contentEquals(item.bankBytes)
+        }.getOrDefault(false)
+    }
+}
+
+internal fun finishGen3BankPartyFailure(
+    copyOnly: Boolean,
+    errorMessage: String?,
+    bankRestored: Boolean,
+    saveRestored: Boolean,
+    backup: File?,
+    recoverySet: ExactBankRecoverySet
+): Gen3BankPartyFailure {
+    if(bankRestored && saveRestored) recoverySet.discardUnchecked()
+    val recovery = when {
+        bankRestored && saveRestored ->
+            "The original save and Bank records were preserved or restored."
+        bankRestored ->
+            "Bank entries were restored. Restore the retained save backup before editing again."
+        saveRestored ->
+            "The original save was restored. Bank recovery snapshots were retained; review Bank before editing."
+        else ->
+            "Automatic rollback was incomplete. The save backup and Bank recovery snapshots were retained."
+    }
+    return Gen3BankPartyFailure(
+        if(copyOnly) "Gen 3 Bank-to-party copy failed"
+        else "Gen 3 Bank-to-party withdrawal failed",
+        (errorMessage ?: "Unknown error") + "\n\n" + recovery +
+            (backup?.let { "\nRecovery backup: ${it.name}" } ?: "")
+    )
+}
+
 internal data class PseSelectedBankBatchResult(
     val moved: Int=0,
     val failure: String?=null,
