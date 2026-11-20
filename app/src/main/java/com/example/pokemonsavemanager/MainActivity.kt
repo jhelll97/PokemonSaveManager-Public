@@ -48068,7 +48068,7 @@ class MainActivity : Activity() {
         if(!preparedGen3ToGen4StillBound(p))return showDialog("Gen 3 → Gen 4","The destination identity or prepared snapshots changed. Reopen PSE Bank.")
         val file=p.destinationFile
         val fresh=runCatching{file.readBytes()}.getOrNull()?:return
-        var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null;var bankRecovery:File?=null
+        var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null;var bankRecovery:File?=null;var stagedDestination:ByteArray?=null
         try{
             require(bound()&&fresh.contentEquals(p.destination)){"The Gen 4 destination changed after review."}
             require(target in 0 until 540){"Invalid Gen 4 PC slot."}
@@ -48125,7 +48125,7 @@ class MainActivity : Activity() {
                 recovery.readBytes().contentEquals(p.bankBytes)){
                 "The destination, Bank record or retained recovery snapshots changed before writing."
             }
-            writeStarted=true;file.writeBytes(work)
+            stagedDestination=work.copyOf();writeStarted=true;file.writeBytes(work)
             val written=file.readBytes()
             require(written.contentEquals(work)&&written.indices.all{it in allowed||written[it]==fresh[it]}){
                 "The persisted destination changed outside the reviewed byte scope."
@@ -48166,9 +48166,10 @@ class MainActivity : Activity() {
                     parsed.pid==p.source.pid&&parsed.species==p.source.species&&parsed.tid==p.source.tid&&parsed.sid==p.source.sid){"The Gen 3 Bank record could not be restored exactly."}
             }.isSuccess
             val saveRestored=runCatching{
-                if(writeStarted)file.writeBytes(fresh)
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 4 destination write began; unknown current bytes were left untouched.","The Generation 4 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
-                restored.contentEquals(fresh)&&validGen2ToGen4Destination(restored)
+                require(restored.contentEquals(fresh)&&validGen2ToGen4Destination(restored)){"The restored Generation 4 destination did not verify."}
+                true
             }.getOrDefault(false)
             if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
