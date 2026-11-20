@@ -301,6 +301,7 @@ internal fun requireGen3BankPartyCleanupBoundary(
     kept: Boolean,
     stage: Int,
     recovery: ExactBankRecoverySet,
+    removed: List<Gen3BankBatchItem>,
     destinationBound: Boolean,
     destination: File,
     expectedDestination: ByteArray
@@ -316,6 +317,13 @@ internal fun requireGen3BankPartyCleanupBoundary(
             "The Gen 3 party destination identity or exact staged bytes changed before Bank cleanup."
         } else {
             "The Gen 3 party destination identity or exact staged bytes changed after Bank cleanup."
+        }
+    }
+    require(removed.all { !it.bankFile.exists() }) {
+        if(stage == 2) {
+            "A previously removed Gen 3 Bank source reappeared before the next cleanup step."
+        } else {
+            "A removed Gen 3 Bank source reappeared after cleanup."
         }
     }
 }

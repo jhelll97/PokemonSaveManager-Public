@@ -46551,7 +46551,7 @@ class MainActivity : Activity() {
                 selected.forEach { item ->
                     requireGen3BankPartyCleanupBoundary(
                         backup!!, fresh, isBackupKept(backup!!), 2, bankRecovery,
-                        bound(), destination, work
+                        removed, bound(), destination, work
                     )
                     require(item.bankFile.readBytes().contentEquals(item.bankBytes)) {
                         "A Bank record changed before removal."
@@ -46566,7 +46566,7 @@ class MainActivity : Activity() {
             }
             requireGen3BankPartyCleanupBoundary(
                 backup!!, fresh, isBackupKept(backup!!), 3, bankRecovery,
-                bound(), destination, work
+                removed, bound(), destination, work
             )
             selectedBankFiles.clear()
             bankMultiSelectMode = false
