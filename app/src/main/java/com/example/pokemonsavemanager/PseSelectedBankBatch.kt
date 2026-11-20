@@ -17,6 +17,23 @@ internal fun gen3BankPartyCompletionMessage(copyOnly: Boolean, count: Int): Stri
     if(copyOnly) "Copied $count Pokémon to Party; Bank originals unchanged"
     else "Withdrew $count Pokémon to Party and verified"
 
+internal fun finishGen3BankPartySuccess(
+    copyOnly: Boolean,
+    count: Int,
+    recoverySet: ExactBankRecoverySet
+): PseSelectedBankBatchResult {
+    val clean = recoverySet.cleanupExact()
+    val retained = recoverySet.retainedNames()
+    return PseSelectedBankBatchResult(
+        moved=count,
+        notice=if(clean) null else
+            (if(copyOnly) "The Party copy completed and every Bank original remains exact."
+            else "The Party withdrawal and selected Bank removals completed and verified.") +
+                " One or more temporary exact Bank recovery snapshots changed or could not be removed safely, so they were retained for review." +
+                (if(retained.isNotEmpty()) " Retained snapshots: $retained" else "")
+    )
+}
+
 internal fun restoreExactGen3BankPartyRecords(
     selected: List<Gen3BankBatchItem>,
     removed: List<Gen3BankBatchItem>
@@ -43,10 +60,17 @@ internal fun finishGen3BankPartyFailure(
     backup: File?,
     recoverySet: ExactBankRecoverySet
 ): Gen3BankPartyFailure {
-    if(bankRestored && saveRestored) recoverySet.discardUnchecked()
+    val recoveryClean = if(bankRestored && saveRestored) {
+        recoverySet.cleanupExact()
+    } else {
+        false
+    }
+    val retained = recoverySet.retainedNames()
     val recovery = when {
-        bankRestored && saveRestored ->
+        bankRestored && saveRestored && recoveryClean ->
             "The original save and Bank records were preserved or restored."
+        bankRestored && saveRestored ->
+            "The original save and Bank records were preserved or restored. One or more temporary exact Bank recovery snapshots changed or could not be removed safely and were retained for review."
         bankRestored ->
             "Bank entries were restored. Restore the retained save backup before editing again."
         saveRestored ->
@@ -58,7 +82,8 @@ internal fun finishGen3BankPartyFailure(
         if(copyOnly) "Gen 3 Bank-to-party copy failed"
         else "Gen 3 Bank-to-party withdrawal failed",
         (errorMessage ?: "Unknown error") + "\n\n" + recovery +
-            (backup?.let { "\nRecovery backup: ${it.name}" } ?: "")
+            (backup?.let { "\nRecovery backup: ${it.name}" } ?: "") +
+            (if(retained.isNotEmpty()) "\nBank recovery snapshots: $retained" else "")
     )
 }
 
@@ -208,9 +233,27 @@ internal class ExactBankRecoverySet {
         }.getOrDefault(false)
     }
 
-    fun discardUnchecked() {
-        entries.forEach { (file,_) -> runCatching { file.delete() } }
+    fun cleanupExact(): Boolean {
+        var clean=true
+        entries.forEach { (file,bytes) ->
+            if(!file.exists()) return@forEach
+            val exact=runCatching {
+                file.isFile && file.readBytes().contentEquals(bytes)
+            }.getOrDefault(false)
+            if(!exact) {
+                clean=false
+            } else {
+                val removed=runCatching {
+                    file.delete() || !file.exists()
+                }.getOrDefault(false)
+                if(!removed || file.exists()) clean=false
+            }
+        }
+        return clean
     }
+
+    fun retainedNames(): String =
+        entries.map { it.first }.filter { it.exists() }.joinToString(", ") { it.name }
 }
 
 internal fun requireGen3BankPartyWithdrawalBackup(
