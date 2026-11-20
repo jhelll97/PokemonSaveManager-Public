@@ -21,17 +21,13 @@ internal fun finishGen3BankPartySuccess(
     copyOnly: Boolean,
     count: Int,
     recoverySet: ExactBankRecoverySet
-): PseSelectedBankBatchResult {
-    val clean = recoverySet.cleanupExact()
-    val retained = recoverySet.retainedNames()
-    return PseSelectedBankBatchResult(
-        moved=count,
-        notice=if(clean) null else
-            (if(copyOnly) "The Party copy completed and every Bank original remains exact."
-            else "The Party withdrawal and selected Bank removals completed and verified.") +
-                " One or more temporary exact Bank recovery snapshots changed or could not be removed safely, so they were retained for review." +
-                (if(retained.isNotEmpty()) " Retained snapshots: $retained" else "")
-    )
+): String {
+    val message=gen3BankPartyCompletionMessage(copyOnly,count)
+    if(recoverySet.cleanupExact()) return message
+    val retained=recoverySet.retainedNames()
+    return message +
+        ". One or more temporary exact Bank recovery snapshots changed or could not be removed safely, so they were retained for review." +
+        (if(retained.isNotEmpty()) " Retained snapshots: $retained" else "")
 }
 
 internal fun restoreExactGen3BankPartyRecords(

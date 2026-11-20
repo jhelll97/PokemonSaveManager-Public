@@ -46575,15 +46575,11 @@ class MainActivity : Activity() {
             )
             selectedBankFiles.clear()
             bankMultiSelectMode = false
-            val completion = finishGen3BankPartySuccess(copyOnly, selected.size, bankRecovery)
             Toast.makeText(
-                this, gen3BankPartyCompletionMessage(copyOnly, selected.size), Toast.LENGTH_LONG
+                this, finishGen3BankPartySuccess(copyOnly, selected.size, bankRecovery),
+                Toast.LENGTH_LONG
             ).show()
             showGen3PokemonViewer("party")
-            val retainedRecovery = completion.notice
-            if (retainedRecovery != null) {
-                showDialog("Gen 3 Bank-to-party completed with retained recovery", retainedRecovery)
-            }
         } catch (error: Exception) {
             val bankRestored = restoreExactGen3BankPartyRecords(selected, removed)
             val restoredDestination = restoreExactGen3BankPartyDestination(
