@@ -848,93 +848,24 @@ class MainActivity : Activity() {
     private fun moveSelectedStandardBankPokemon(chosen:List<File>, generation:Int, targetBox:Int) {
         val file=importedFile?:return
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
-        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val original=runCatching{file.readBytes()}.getOrNull()?:return
-        val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return showDialog("Move selected","The PSE Bank folder could not be verified. Nothing was changed.")
-        var writeStarted=false;var cleanupAttempted=false;var safetyBackup:File?=null;var stagedDestination:ByteArray?=null
-        val sources=ArrayList<File>();val sourceBytes=ArrayList<ByteArray>();val bankRecoveries=ArrayList<File>()
-        try {
-            require(generation in 6..7&&generationForSize(original.size)==generation){"The loaded save does not match this PSE Bank generation."}
-            val info=boxStorageInfo(original)?:error("PSE could not resolve this save's PC storage.")
-            val boxOffset=info.first;val slotCount=info.second;val maxSpecies=info.third
-            require(targetBox in 0 until (slotCount/30)){"The selected destination box is unavailable."}
-            val empty=(0 until 30).map{targetBox*30+it}.filter{slot->
-                slot<slotCount&&if(generation==6)
-                    gen6BankDestinationSlotIsStructurallyEmpty(original,boxOffset,slotCount,maxSpecies,slot)
-                else gen7BankDestinationSlotIsStructurallyEmpty(original,boxOffset,slotCount,maxSpecies,slot)
-            }
-            require(empty.size>=chosen.size){"Box ${targetBox+1} has only ${empty.size} structurally empty slots but ${chosen.size} Pokémon are selected. Choose another box."}
-            chosen.forEach{selected->
-                val exact=selected.canonicalFile
-                require(exact.parentFile==root&&exact.isFile&&exact.extension.equals("pk$generation",true)){"A selected Bank record is outside the Generation $generation PSE Bank."}
-                require(exact !in sources){"The same Bank record was selected more than once."}
-                val raw=exact.readBytes();require(raw.size==PK6_STORED_SIZE){"A selected Bank record has the wrong size."}
-                val q=parsePk6(raw,0,PK6_STORED_SIZE,false,maxSpecies)
-                require(q!=null&&q.checksumValid){"A selected Bank Pokémon failed its PK checksum."}
-                sources.add(exact);sourceBytes.add(raw)
-            }
-            fun nativeValid(data:ByteArray)=if(generation==6)
-                generationForSize(data.size)==6&&gen6BoxChecksumValid(data)&&gen6BlockChecksumValid(data,20)
-            else generationForSize(data.size)==7&&validateGen7CoreChecksums(data).first
-            require(bound()&&nativeValid(original)&&file.readBytes().contentEquals(original)){"The destination identity, bytes or native checksums changed before staging."}
-            val work=original.copyOf()
-            sourceBytes.forEachIndexed{n,raw->raw.copyInto(work,boxOffset+empty[n]*PK6_STORED_SIZE)}
-            refreshBoxChecksum(work);require(nativeValid(work)){"The staged destination failed native checksum validation."}
-            sourceBytes.forEachIndexed{n,raw->
-                val off=boxOffset+empty[n]*PK6_STORED_SIZE;val actual=work.copyOfRange(off,off+PK6_STORED_SIZE)
-                require(actual.contentEquals(raw)&&parsePk6(actual,0,PK6_STORED_SIZE,false,maxSpecies)?.checksumValid==true){"A staged Bank Pokémon did not verify exactly."}
-            }
-            val backup=File.createTempFile(backupGameName(file)+"_PreSelectedBankMove_",".backup",backupsDir());safetyBackup=backup
-            backup.writeBytes(original);if(generation==6)retainGenToGen6SafetyBackup(backup,original)else retainGen1ToGen7SafetyBackup(backup,original)
-            require(backup.readBytes().contentEquals(original)&&isBackupKept(backup)){"The exact destination recovery backup did not verify."}
-            sourceBytes.forEachIndexed{n,raw->
-                val recovery=File.createTempFile("PSE_Selected_PK${generation}_BankRecovery_",".tmp",bankDir())
-                recovery.writeBytes(raw);require(recovery.readBytes().contentEquals(raw)){"Bank recovery snapshot ${n+1} did not verify."}
-                bankRecoveries.add(recovery)
-            }
-            fun recoveriesValid()=bankRecoveries.size==sourceBytes.size&&bankRecoveries.indices.all{
-                bankRecoveries[it].readBytes().contentEquals(sourceBytes[it])
-            }
-            require(bound()&&file.readBytes().contentEquals(original)&&sources.indices.all{
-                sources[it].readBytes().contentEquals(sourceBytes[it])
-            }&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&recoveriesValid()){
-                "The destination, Bank records or retained recovery snapshots changed before writing."
-            }
-            stagedDestination=work.copyOf();writeStarted=true;file.writeBytes(work)
-            val verify=file.readBytes();require(bound()&&verify.contentEquals(work)&&nativeValid(verify)){"The persisted destination or native checksums did not verify."}
-            sourceBytes.forEachIndexed{n,raw->
-                val off=boxOffset+empty[n]*PK6_STORED_SIZE;val actual=verify.copyOfRange(off,off+PK6_STORED_SIZE)
-                require(actual.contentEquals(raw)&&parsePk6(actual,0,PK6_STORED_SIZE,false,maxSpecies)?.checksumValid==true){"A moved Pokémon did not verify after persistence."}
-            }
-            require(sources.indices.all{sources[it].readBytes().contentEquals(sourceBytes[it])}&&recoveriesValid()){
-                "A Bank record or retained recovery snapshot changed before cleanup."
-            }
-            cleanupAttempted=true;sources.forEach{require(it.delete()&&!it.exists()){"A Bank record could not be removed after destination verification."}}
-            require(bound()&&file.readBytes().contentEquals(work)&&nativeValid(work)&&sources.none{it.exists()}&&recoveriesValid()){
-                "The verified destination or retained recovery snapshots changed after Bank cleanup."
-            }
-            bankRecoveries.forEach{runCatching{it.delete()}}
-            selectedBankFiles.clear();bankMultiSelectMode=false
-            Toast.makeText(this,"${sources.size} Pokémon moved to Box ${targetBox+1} and verified",Toast.LENGTH_LONG).show();showBank()
-        } catch(e:Exception) {
-            val bankRestored=runCatching{restoreExactBankRecords(sources,sourceBytes,bankRecoveries,cleanupAttempted);true}.getOrDefault(false)
-            val destinationRestored=runCatching{
-                restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Generation $generation destination write began; unknown current bytes were left untouched.","The Generation $generation destination no longer matches this batch's staged bytes; the retained backup was left for recovery.")
-                require(file.readBytes().let{it.contentEquals(original)&&if(generation==6)gen6BoxChecksumValid(it)&&gen6BlockChecksumValid(it,20)else validateGen7CoreChecksums(it).first}){"The exact destination could not be restored or verified."}
-                true
-            }.getOrDefault(false)
-            if(bankRestored&&destinationRestored)bankRecoveries.forEach{runCatching{it.delete()}}
-            val recovery=when{
-                bankRestored&&destinationRestored->"The exact destination and every Bank record were restored or kept and verified."
-                bankRestored->"Every Bank record was restored or kept, but destination recovery was not verified. Use the retained destination backup before editing again."
-                destinationRestored->"The exact destination was restored, but Bank recovery was not verified. Keep every Bank recovery snapshot for review."
-                else->"Automatic recovery could not be fully verified. Keep the retained destination backup and every Bank recovery snapshot for review."
-            }
-            val recoveryNames=bankRecoveries.filter{it.exists()}.joinToString(", "){it.name}
-            showDialog("Move selected failed",(e.message?:"Unknown error")+"\n\n"+recovery+
-                (safetyBackup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
-                (if(recoveryNames.isNotEmpty())"\nBank recovery snapshots: $recoveryNames" else ""))
-        }
+        val info=boxStorageInfo(original)?:return showDialog("Move selected","PSE could not resolve this save's PC storage.")
+        val maxSpecies=info.third
+        val result=executeSelectedStandardBankBatch(
+            chosen,generation,targetBox,file,original,bankDir(),backupsDir(),backupGameName(file),
+            info.first,info.second,PK6_STORED_SIZE,
+            {importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel},
+            {data,slot->if(generation==6)gen6BankDestinationSlotIsStructurallyEmpty(data,info.first,info.second,maxSpecies,slot)
+                else gen7BankDestinationSlotIsStructurallyEmpty(data,info.first,info.second,maxSpecies,slot)},
+            {raw->raw.size==PK6_STORED_SIZE&&parsePk6(raw,0,PK6_STORED_SIZE,false,maxSpecies)?.checksumValid==true},
+            {data->if(generation==6)generationForSize(data.size)==6&&gen6BoxChecksumValid(data)&&gen6BlockChecksumValid(data,20)
+                else generationForSize(data.size)==7&&validateGen7CoreChecksums(data).first},
+            {data->refreshBoxChecksum(data)},
+            {backup,data->if(generation==6)retainGenToGen6SafetyBackup(backup,data)else retainGen1ToGen7SafetyBackup(backup,data)}
+        )
+        result.failure?.let{showDialog("Move selected failed",it);return}
+        selectedBankFiles.clear();bankMultiSelectMode=false
+        Toast.makeText(this,"${result.moved} Pokémon moved to Box ${targetBox+1} and verified",Toast.LENGTH_LONG).show();showBank()
     }
 
     private data class Gen2BankBatchItem(val bankFile:File,val bankBytes:ByteArray,val source:Gen2Pokemon)
