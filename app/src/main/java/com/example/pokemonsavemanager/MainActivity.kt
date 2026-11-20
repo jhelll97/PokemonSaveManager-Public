@@ -58239,6 +58239,7 @@ class MainActivity : Activity() {
         if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog(routeTitle,"The active save changed after destination preparation. Reopen PSE Bank. Nothing was changed.");return}
         val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;var writeStarted=false;var bankDeleteAttempted=false
         var safetyBackup:File?=null;var bankRecovery:File?=null
+        var stagedDestination:ByteArray?=null
         try{
             require(bound()){"The destination identity changed before transfer validation."}
             require(fresh.contentEquals(preparedDestination)){"The Gen 1 destination changed after preparation."};val integrity=verifyGen1SaveIntegrity(fresh);require(integrity.first){integrity.second};require(targetBox in 1..12&&gen1BoxIsWritable(fresh,targetBox)){"The selected Gen 1 box is no longer writable."}
@@ -58260,6 +58261,7 @@ class MainActivity : Activity() {
                 file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(expectedBank)){
                 "The destination, Bank record or retained recovery snapshots changed before writing. Nothing was written."
             }
+            stagedDestination=work.copyOf()
             writeStarted=true
             file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)){"The Gen 1 destination changed while it was written."};val post=verifyGen1WriteState(written,targetBox);require(post.first){post.second};val after=parseGen1Box(written,targetBox).pokemon.sortedBy{it.slot};require(after.size==before.size+1&&after.take(before.size).zip(before).all{(a,b)->sameGen1TransferRecord(a,b)}){"The persisted Gen 1 box changed unexpectedly."};val q=after.firstOrNull{it.slot==slot};require(q!=null&&matches(q)){"The persisted Gen 1 conversion did not preserve every supported field."};val actualBase=gen1BoxDataOffset(written,targetBox)+GEN1_BOX_MONS+slot*GEN1_BOX_MON_SIZE;require(written.copyOfRange(actualBase,actualBase+GEN1_BOX_MON_SIZE).contentEquals(mon)){"The exact Gen 1 record did not persist."};require((written[0x25A3+dexIndex/8].toInt() and dexMask)!=0&&(written[0x25B6+dexIndex/8].toInt() and dexMask)!=0){"The species was not registered Seen and Caught in Gen 1."}
             require(bound()&&importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)&&
@@ -58283,9 +58285,16 @@ class MainActivity : Activity() {
                 restored.contentEquals(expectedBank)&&parseGen2BankPayload(restored)?.let{sameGen2BankRecord(it,expected)}==true
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                if(writeStarted)file.writeBytes(fresh)
+                val current=file.readBytes()
+                if(!current.contentEquals(fresh)){
+                    require(writeStarted){"No Generation 1 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 1 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(fresh)
+                }
                 val restored=file.readBytes()
-                restored.contentEquals(fresh)&&verifyGen1SaveIntegrity(restored).first
+                require(restored.contentEquals(fresh)&&verifyGen1SaveIntegrity(restored).first){"The restored Generation 1 destination did not verify."}
+                true
             }.getOrDefault(false)
             if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
