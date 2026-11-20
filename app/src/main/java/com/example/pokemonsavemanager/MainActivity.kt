@@ -53416,6 +53416,7 @@ class MainActivity : Activity() {
         var writeStarted=false
         var bankDeleteAttempted=false
         var safetyBackup:File?=null
+        var stagedDestination:ByteArray?=null
         try{
             require(bound()){"The destination identity changed."}
             require(target in 0 until 540){"Invalid Gen 4 PC slot."}
@@ -53444,6 +53445,7 @@ class MainActivity : Activity() {
             require(recovery.readBytes().contentEquals(original)){"The exact Gen 4 recovery backup did not verify."}
             retainGen2ToGen4SafetyBackup(recovery,original)
             require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&file.readBytes().contentEquals(original)&&bankFile.readBytes().contentEquals(openedBank)){"The destination, Bank record or retained recovery backup changed before writing."}
+            stagedDestination=save.copyOf()
             writeStarted=true
             file.writeBytes(save)
             val written=file.readBytes()
@@ -53469,9 +53471,16 @@ class MainActivity : Activity() {
                 bankFile.readBytes().contentEquals(openedBank)
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                if(writeStarted)file.writeBytes(original)
+                val current=file.readBytes()
+                if(!current.contentEquals(original)){
+                    require(writeStarted){"No Generation 4 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 4 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(original)
+                }
                 val restored=file.readBytes();val profile=detectGen4Profile(restored);val validation=profile?.let{gen4Validation(restored,it)}
-                restored.contentEquals(original)&&validation?.generalChecksum==true&&validation.storageChecksum&&validation.badPk4==0
+                require(restored.contentEquals(original)&&validation?.generalChecksum==true&&validation.storageChecksum&&validation.badPk4==0){"The restored Generation 4 destination did not verify."}
+                true
             }.getOrDefault(false)
             val recovery=when{
                 bankRestored&&saveRestored->"The exact Gen 4 destination and Gen 1 Bank record were restored or kept and verified."
