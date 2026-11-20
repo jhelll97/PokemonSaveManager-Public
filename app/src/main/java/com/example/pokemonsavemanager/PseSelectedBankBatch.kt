@@ -130,6 +130,12 @@ internal fun finishSelectedGen2BankWithdrawal(
             "; a Bank recovery snapshot was retained for review"
 }
 
+internal fun discardGen3BankPartyRecoverySnapshots(
+    recoveryFiles: List<File>
+) {
+    recoveryFiles.forEach { runCatching { it.delete() } }
+}
+
 internal fun requireGen3BankPartyWithdrawalBackup(
     backup: File,
     expected: ByteArray,

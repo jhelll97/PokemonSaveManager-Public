@@ -46587,7 +46587,7 @@ class MainActivity : Activity() {
                 if (copyOnly) "Copied ${selected.size} Pokémon to Party; Bank originals unchanged"
                 else "Withdrew ${selected.size} Pokémon to Party and verified", Toast.LENGTH_LONG).show()
             showGen3PokemonViewer("party")
-            recoveryFiles.forEach { runCatching { it.delete() } }
+            discardGen3BankPartyRecoverySnapshots(recoveryFiles)
         } catch (error: Exception) {
             removed.forEach { item ->
                 runCatching {
@@ -46604,7 +46604,7 @@ class MainActivity : Activity() {
                 destination, opened, stagedDestination, writeStarted
             )
             val saveRestored = restoredDestination != null && gen3SaveValid(restoredDestination)
-            if (bankRestored && saveRestored) recoveryFiles.forEach { runCatching { it.delete() } }
+            if (bankRestored && saveRestored) discardGen3BankPartyRecoverySnapshots(recoveryFiles)
             val recovery = when {
                 bankRestored && saveRestored -> "The original save and Bank records were preserved or restored."
                 bankRestored -> "Bank entries were restored. Restore the retained save backup before editing again."
