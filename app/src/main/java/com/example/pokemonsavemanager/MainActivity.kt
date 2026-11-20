@@ -13925,6 +13925,7 @@ class MainActivity : Activity() {
         if(!bound()){showDialog("Gen 6 → Gen 1","The destination identity changed. Reopen PSE Bank. Nothing was changed.");return}
         val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return
         var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null;var bankRecovery:File?=null
+        var stagedDestination:ByteArray?=null
         try{
             require(bound()&&fresh.contentEquals(preparedDestination)){"The Gen 1 destination changed after review."}
             val integrity=verifyGen1SaveIntegrity(fresh);require(integrity.first){integrity.second}
@@ -13965,6 +13966,7 @@ class MainActivity : Activity() {
                 bankCopy.readBytes().contentEquals(expectedBank)){
                 "The destination, Bank record or retained recovery snapshots changed before writing."
             }
+            stagedDestination=work.copyOf()
             writeStarted=true
             file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)){"The Gen 1 destination changed while it was written."}
             val post=verifyGen1WriteState(written,targetBox);require(post.first){post.second}
@@ -13999,8 +14001,16 @@ class MainActivity : Activity() {
                 }==true
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                if(writeStarted)file.writeBytes(fresh);val restored=file.readBytes()
-                restored.contentEquals(fresh)&&verifyGen1SaveIntegrity(restored).first
+                val current=file.readBytes()
+                if(!current.contentEquals(fresh)){
+                    require(writeStarted){"No Generation 1 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 1 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(fresh)
+                }
+                val restored=file.readBytes()
+                require(restored.contentEquals(fresh)&&verifyGen1SaveIntegrity(restored).first){"The restored Generation 1 destination did not verify."}
+                true
             }.getOrDefault(false)
             if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
