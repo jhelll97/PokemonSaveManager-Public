@@ -36894,6 +36894,7 @@ class MainActivity : Activity() {
         if(!gen7ToGen5StillBound(p))return showDialog("Gen 7 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")
         val file=p.destinationFile;val original=runCatching{file.readBytes()}.getOrNull()?:return
         var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
+        var stagedDestination:ByteArray?=null
         try{
             require(original.contentEquals(p.destination)&&target in 0 until 720){"The prepared Generation 5 destination changed or the selected slot is invalid."}
             val profile=detectGen5Profile(original)?:error("The destination is no longer a valid Generation 5 save.")
@@ -36935,6 +36936,7 @@ class MainActivity : Activity() {
                 recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(p.bankBytes)){
                 "The source identity or retained destination and Bank recovery snapshots changed before writing."
             }
+            stagedDestination=save.copyOf()
             writeStarted=true;file.writeBytes(save);val written=file.readBytes()
             require(written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){"The persisted Generation 5 save differs from the reviewed write scope."}
             val wp=detectGen5Profile(written)?:error("The persisted Generation 5 save could not be reopened.")
@@ -36968,10 +36970,18 @@ class MainActivity : Activity() {
                 }==true
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                if(writeStarted)file.writeBytes(original)
+                val current=file.readBytes()
+                if(!current.contentEquals(original)){
+                    require(writeStarted){"No Gen 5 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Gen 5 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(original)
+                }
                 val restored=file.readBytes()
                 val rp=detectGen5Profile(restored)?:error("The restored Generation 5 layout is invalid.")
-                restored.contentEquals(original)&&gen5ChecksumTableValid(restored,rp)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,rp)}
+                require(restored.contentEquals(original)&&gen5ChecksumTableValid(restored,rp)&&
+                    (0 until 24).all{gen5BoxChecksumValid(restored,it,rp)}){"The restored Gen 5 destination did not verify."}
+                true
             }.getOrDefault(false)
             if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
