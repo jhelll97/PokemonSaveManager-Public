@@ -36472,6 +36472,7 @@ class MainActivity : Activity() {
     private fun transferGen6BankToGen5(p:Gen6Gen5Prepared,target:Int){
         if(!gen6ToGen5StillBound(p))return showDialog("Gen 6 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")
         val file=p.destinationFile;val original=runCatching{file.readBytes()}.getOrNull()?:return;var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
+        var stagedDestination:ByteArray?=null
         try{
             require(original.contentEquals(p.destination)&&target in 0 until 720){"The prepared Generation 5 destination changed or the selected slot is invalid."};val profile=detectGen5Profile(original)?:error("The destination is no longer a valid Generation 5 save.");require(gen5ChecksumTableValid(original,profile)&&(0 until 24).all{gen5BoxChecksumValid(original,it,profile)}){"The destination box checksums or checksum table changed."}
             val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The Gen 6 Bank record changed."};val source=parsePk6(bank,0,PK6_STORED_SIZE,false,721)?:error("The PK6 Bank record is invalid.");require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&source.tid==p.source.tid&&source.sid==p.source.sid){"The selected source no longer matches the reviewed Pokémon."}
@@ -36481,6 +36482,7 @@ class MainActivity : Activity() {
             registerGen1ToGen5Pokedex(save,profile,staged);updateGen5BoxChecksum(save,box,profile);require(save.indices.all{it in allowed||save[it]==original[it]}){"The conversion changed data outside the selected PK5, required Pokédex flags, box CRC and checksum table."};require(gen5BoxChecksumValid(save,box,profile)&&gen5ChecksumTableValid(save,profile)&&gen1ToGen5DexRegistered(save,profile,staged)){"The staged Generation 5 save failed storage, Pokédex or checksum verification."}
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen6ToGen5_",".backup",backupsDir());backup=recovery;recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)){"The Generation 5 recovery backup did not verify."};retainGen6ToGen5SafetyBackup(recovery,original)
             val bankCopy=File.createTempFile("PSE_G6ToG5_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy;bankCopy.writeBytes(p.bankBytes);require(bankCopy.readBytes().contentEquals(p.bankBytes)){"The Bank recovery snapshot did not verify."};require(gen6ToGen5StillBound(p)&&file.readBytes().contentEquals(original)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(p.bankBytes)){"The source identity, snapshots or retained recovery files changed before writing."}
+            stagedDestination=save.copyOf()
             writeStarted=true;file.writeBytes(save);val written=file.readBytes();require(written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){"The persisted Generation 5 save differs from the reviewed write scope."};val wp=detectGen5Profile(written)?:error("The persisted Generation 5 save could not be reopened.");require(gen5BoxChecksumValid(written,box,wp)&&gen5ChecksumTableValid(written,wp)&&gen1ToGen5DexRegistered(written,wp,staged)){"The persisted Generation 5 save failed checksum or Pokédex validation."};val actual=written.copyOfRange(offset,offset+136);val reopened=parsePk5(actual,false);require(actual.contentEquals(pk5)&&reopened!=null&&sameGen6ToGen5Pk5(reopened,p.converted)&&gen5Pk5PpUps(actual).contentEquals(gen6Pk6PpUps(bank))){"The exact converted PK5 did not persist after reopening."}
             require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&
                 currentSourceLabel==p.sourceLabel&&p.bankFile.readBytes().contentEquals(p.bankBytes)&&
@@ -36510,11 +36512,18 @@ class MainActivity : Activity() {
                 }==true
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                if(writeStarted)file.writeBytes(original)
+                val current=file.readBytes()
+                if(!current.contentEquals(original)){
+                    require(writeStarted){"No Gen 5 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Gen 5 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(original)
+                }
                 val restored=file.readBytes()
                 val rp=detectGen5Profile(restored)?:error("The restored Generation 5 layout is invalid.")
-                restored.contentEquals(original)&&gen5ChecksumTableValid(restored,rp)&&
-                    (0 until 24).all{gen5BoxChecksumValid(restored,it,rp)}
+                require(restored.contentEquals(original)&&gen5ChecksumTableValid(restored,rp)&&
+                    (0 until 24).all{gen5BoxChecksumValid(restored,it,rp)}){"The restored Gen 5 destination did not verify."}
+                true
             }.getOrDefault(false)
             if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
