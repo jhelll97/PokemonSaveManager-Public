@@ -44335,6 +44335,7 @@ class MainActivity : Activity() {
         val expectedBankPayloads = ArrayList<ByteArray>()
         var writeStarted = false
         var stagedSource: ByteArray? = null
+        var recoveryBackup: File? = null
         try {
             require(importedFile?.absolutePath == file.absolutePath &&
                 currentSourceUri == sourceUri && currentSourceLabel == sourceLabel) {
@@ -44413,9 +44414,11 @@ class MainActivity : Activity() {
             val backup = File.createTempFile(
                 backupGameName(file) + backupSuffix, ".backup", backupsDir()
             )
+            recoveryBackup = backup
             backup.writeBytes(fresh)
             require(backup.readBytes().contentEquals(fresh)) { "The recovery backup did not verify." }
             retainGen2ToGen3SafetyBackup(backup, fresh)
+            requireGen3PartyBatchBackup(backup, fresh, this::isBackupKept, 0)
             require(importedFile?.absolutePath == file.absolutePath &&
                 currentSourceUri == sourceUri && currentSourceLabel == sourceLabel &&
                 file.readBytes().contentEquals(fresh)) {
@@ -44448,6 +44451,7 @@ class MainActivity : Activity() {
                     "The Bank inventory or source save changed before writing."
                 }
             }
+            requireGen3PartyBatchBackup(backup, fresh, this::isBackupKept, 1)
             if (!keepParty) {
                 stagedSource = work.copyOf()
                 writeStarted = true
@@ -44504,6 +44508,7 @@ class MainActivity : Activity() {
                     "The finalized Bank batch or source party did not verify exactly."
                 }
             }
+            requireGen3PartyBatchBackup(backup, fresh, this::isBackupKept, 2)
             resetGen3BoxSelection()
             Toast.makeText(
                 this,
@@ -44541,6 +44546,9 @@ class MainActivity : Activity() {
                 )
                 else -> false // Retain Bank records while source restoration is uncertain.
             }
+            val retainedBackup = retainedBankBackupMatches(
+                recoveryBackup, reviewed, this::isBackupKept
+            )
             val recovery = when {
                 !writeStarted && bankClean -> "No save changes or new Bank entries were kept."
                 !writeStarted -> "The save was not written, but some staged Bank files need manual review."
@@ -44548,6 +44556,10 @@ class MainActivity : Activity() {
                 restored -> "The reviewed save was restored, but some new Bank files could not be removed. Review PSE Bank before editing again."
                 toBank -> "Source rollback could not be verified. Staged and finalized Bank files were retained for recovery. Restore the retained save backup and review PSE Bank before editing again."
                 else -> "Automatic rollback could not be verified. Restore the retained recovery backup before editing again."
+            } + if (retainedBackup) {
+                " The exact Keep-pinned Gen 3 party batch backup was reopened and verified."
+            } else {
+                " The exact Keep-pinned Gen 3 party batch backup was not verified; keep any recovery file and Bank records for review."
             }
             showDialog(
                 if (keepParty) "Gen 3 party batch Bank copy failed"

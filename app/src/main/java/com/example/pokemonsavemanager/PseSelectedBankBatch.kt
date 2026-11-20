@@ -7,6 +7,31 @@ internal data class PseSelectedBankBatchResult(
     val failure: String?=null
 )
 
+internal fun retainedBankBackupMatches(
+    backup: File?,
+    expected: ByteArray,
+    kept: (File) -> Boolean
+): Boolean = backup?.let { file ->
+    runCatching {
+        file.isFile && kept(file) && file.readBytes().contentEquals(expected)
+    }.getOrDefault(false)
+} ?: false
+
+internal fun requireGen3PartyBatchBackup(
+    backup: File,
+    expected: ByteArray,
+    kept: (File) -> Boolean,
+    stage: Int
+) {
+    require(retainedBankBackupMatches(backup, expected, kept)) {
+        when (stage) {
+            0 -> "The retained Gen 3 party batch backup did not remain available."
+            1 -> "The retained Gen 3 party batch backup changed before writing."
+            else -> "The retained Gen 3 party batch backup changed after persistence."
+        }
+    }
+}
+
 internal fun cleanupExactSelectedGen3BankCopies(
     temporary: List<File>,
     finalized: List<File>,
