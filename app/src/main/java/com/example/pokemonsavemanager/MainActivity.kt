@@ -54062,6 +54062,7 @@ class MainActivity : Activity() {
         var writeStarted=false
         var bankDeleteAttempted=false
         var safetyBackup:File?=null
+        var stagedDestination:ByteArray?=null
         try{
             require(bound()){"The destination identity changed."}
             require(original.contentEquals(preparedDestination)){"The Gen 6 destination changed while the conversion was being prepared."}
@@ -54104,6 +54105,7 @@ class MainActivity : Activity() {
             require(recovery.readBytes().contentEquals(original)){"The exact Gen 6 recovery backup did not verify."}
             retainGenToGen6SafetyBackup(recovery,original)
             require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&file.readBytes().contentEquals(original)&&bankFile.readBytes().contentEquals(openedBank)){"The destination, Bank record or retained recovery backup changed before writing."}
+            stagedDestination=save.copyOf()
             writeStarted=true
             file.writeBytes(save)
             val written=file.readBytes()
@@ -54133,9 +54135,16 @@ class MainActivity : Activity() {
                 bankFile.readBytes().contentEquals(openedBank)&&parseGen1BankPayload(bankFile.readBytes())?.let{sameGen1TransferRecord(it,expected)}==true
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                if(writeStarted)file.writeBytes(original)
+                val current=file.readBytes()
+                if(!current.contentEquals(original)){
+                    require(writeStarted){"No Generation 6 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 6 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(original)
+                }
                 val restored=file.readBytes()
-                restored.contentEquals(original)&&generationForSize(restored.size)==6&&gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)
+                require(restored.contentEquals(original)&&generationForSize(restored.size)==6&&gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)){"The restored Generation 6 destination did not verify."}
+                true
             }.getOrDefault(false)
             val recovery=when{
                 bankRestored&&saveRestored->"The exact Gen 6 destination and Gen 1 Bank record were restored or kept and verified."
