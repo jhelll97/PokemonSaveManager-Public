@@ -1912,13 +1912,7 @@ class MainActivity : Activity() {
             for((bankFile,bankBytes) in removed)runCatching{if(!bankFile.exists())require(bankFile.createNewFile()){"A Bank recovery path could not be reserved."};bankFile.writeBytes(bankBytes)}
             val banksRestored=chosen.all{item->runCatching{val bytes=item.bankFile.readBytes();bytes.contentEquals(item.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,item.source)}==true}.getOrDefault(false)}
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 3 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 3 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 3 destination write began; unknown current bytes were left untouched.","The Generation 3 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&generationForSize(restored.size)==3&&gen3SaveValid(restored)){"The restored Generation 3 destination did not verify."}
                 true
@@ -2056,13 +2050,7 @@ class MainActivity : Activity() {
             for((bankFile,bankBytes) in removed)runCatching{if(!bankFile.exists())require(bankFile.createNewFile()){ "A batch Bank recovery path could not be reserved." };bankFile.writeBytes(bankBytes)}
             val banksRestored=chosen.all{item->runCatching{val bytes=item.bankFile.readBytes();bytes.contentEquals(item.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,item.source)}==true}.getOrDefault(false)}
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 2 batch destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 2 batch destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 2 batch destination write began; unknown current bytes were left untouched.","The Generation 2 batch destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&verifyGen2SaveIntegrity(restored).first&&
                     detectGen2Profile(restored)?.key==profileKey){"The restored Generation 2 batch destination did not verify."}
@@ -11324,13 +11312,7 @@ class MainActivity : Activity() {
                 }==true
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 1 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 1 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 1 destination write began; unknown current bytes were left untouched.","The Generation 1 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&verifyGen1SaveIntegrity(restored).first){"The restored Generation 1 destination did not verify."}
                 true
@@ -12410,13 +12392,7 @@ class MainActivity : Activity() {
                 }==true){"The original PK5 Bank record could not be verified exactly; no existing record was overwritten."}
             }.isSuccess
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(original)){
-                    require(writeStarted){"No Generation 5 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 5 destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(original)
-                }
+                restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Generation 5 destination write began; unknown current bytes were left untouched.","The Generation 5 destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes();val profile=detectGen5Profile(restored)
                     ?:error("The restored Generation 5 layout is invalid.")
                 restored.contentEquals(original)&&gen5ChecksumTableValid(restored,profile)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,profile)}
@@ -12700,13 +12676,7 @@ class MainActivity : Activity() {
                 }==true
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 1 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 1 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 1 destination write began; unknown current bytes were left untouched.","The Generation 1 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&verifyGen1SaveIntegrity(restored).first){"The restored Generation 1 destination did not verify."}
                 true
@@ -13546,13 +13516,7 @@ class MainActivity : Activity() {
                     parsed.species==p.source.species&&parsed.tid==p.source.tid&&parsed.sid==p.source.sid
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(original)){
-                    require(writeStarted){"No Generation 6 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 6 destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(original)
-                }
+                restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Generation 6 destination write began; unknown current bytes were left untouched.","The Generation 6 destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 restored.contentEquals(original)&&generationForSize(restored.size)==6&&
                     gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)
@@ -13811,13 +13775,7 @@ class MainActivity : Activity() {
                 }==true
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 1 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 1 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 1 destination write began; unknown current bytes were left untouched.","The Generation 1 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&verifyGen1SaveIntegrity(restored).first){"The restored Generation 1 destination did not verify."}
                 true
@@ -14018,13 +13976,7 @@ class MainActivity : Activity() {
                 }==true
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 1 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 1 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 1 destination write began; unknown current bytes were left untouched.","The Generation 1 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&verifyGen1SaveIntegrity(restored).first){"The restored Generation 1 destination did not verify."}
                 true
@@ -14475,13 +14427,7 @@ class MainActivity : Activity() {
                 }==true
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Gen 3 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Gen 3 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Gen 3 destination write began; unknown current bytes were left untouched.","The Gen 3 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&gen3SaveValid(restored)){"The restored Gen 3 destination did not verify."}
                 true
@@ -35333,13 +35279,7 @@ class MainActivity : Activity() {
                     parsed.species==p.source.species&&parsed.tid==p.source.tid&&parsed.sid==p.source.sid
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(original)){
-                    require(writeStarted){"No Generation 7 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 7 destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(original)
-                }
+                restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Generation 7 destination write began; unknown current bytes were left untouched.","The Generation 7 destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 restored.contentEquals(original)&&generationForSize(restored.size)==7&&validateGen7CoreChecksums(restored).first
             }.getOrDefault(false)
@@ -35878,13 +35818,7 @@ class MainActivity : Activity() {
                 }==true
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Gen 3 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Gen 3 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Gen 3 destination write began; unknown current bytes were left untouched.","The Gen 3 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&gen3SaveValid(restored)){"The restored Gen 3 destination did not verify."}
                 true
@@ -36128,13 +36062,7 @@ class MainActivity : Activity() {
                 }==true
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Gen 4 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Gen 4 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Gen 4 destination write began; unknown current bytes were left untouched.","The Gen 4 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 val rp=detectGen4Profile(restored)?:error("The restored Generation 4 layout is invalid.")
                 val rv=gen4Validation(restored,rp)
@@ -36366,13 +36294,7 @@ class MainActivity : Activity() {
                 }==true
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Gen 4 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Gen 4 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Gen 4 destination write began; unknown current bytes were left untouched.","The Gen 4 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 val rp=detectGen4Profile(restored)?:error("The restored Generation 4 layout is invalid.")
                 val rv=gen4Validation(restored,rp)
@@ -36605,13 +36527,7 @@ class MainActivity : Activity() {
                 }==true
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(original)){
-                    require(writeStarted){"No Gen 5 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Gen 5 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(original)
-                }
+                restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Gen 5 destination write began; unknown current bytes were left untouched.","The Gen 5 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 val rp=detectGen5Profile(restored)?:error("The restored Generation 5 layout is invalid.")
                 require(restored.contentEquals(original)&&gen5ChecksumTableValid(restored,rp)&&
@@ -37063,13 +36979,7 @@ class MainActivity : Activity() {
                 }==true
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(original)){
-                    require(writeStarted){"No Gen 5 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Gen 5 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(original)
-                }
+                restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Gen 5 destination write began; unknown current bytes were left untouched.","The Gen 5 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 val rp=detectGen5Profile(restored)?:error("The restored Generation 5 layout is invalid.")
                 require(restored.contentEquals(original)&&gen5ChecksumTableValid(restored,rp)&&
@@ -37274,13 +37184,7 @@ class MainActivity : Activity() {
                 }==true
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Gen 6 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Gen 6 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Gen 6 destination write began; unknown current bytes were left untouched.","The Gen 6 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)){"The restored Gen 6 destination did not verify."}
                 true
@@ -37490,13 +37394,7 @@ class MainActivity : Activity() {
                 p.bankFile.readBytes().contentEquals(p.bankBytes)
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Gen 3 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Gen 3 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Gen 3 destination write began; unknown current bytes were left untouched.","The Gen 3 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&generationForSize(restored.size)==3&&gen3SaveValid(restored)){"The restored Gen 3 destination did not verify."}
                 true
@@ -37748,13 +37646,7 @@ class MainActivity : Activity() {
                     parsed.tid==p.source.tid&&parsed.sid==p.source.sid
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Gen 4 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Gen 4 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Gen 4 destination write began; unknown current bytes were left untouched.","The Gen 4 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 val rp=detectGen4Profile(restored)?:error("The restored Generation 4 layout is invalid.")
                 val rv=gen4Validation(restored,rp)
@@ -38072,13 +37964,7 @@ class MainActivity : Activity() {
                 require(restored.contentEquals(openedBank)&&parsed!=null&&parsed.checksumValid&&parsed.pid==p.pid&&parsed.species==p.species&&parsed.tid==p.tid&&parsed.sid==p.sid){"The exact Gen 4 Bank record could not be restored or verified."};true
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(original)){
-                    require(writeStarted){"No Gen 4 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Gen 4 destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(original)
-                }
+                restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Gen 4 destination write began; unknown current bytes were left untouched.","The Gen 4 destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes();val rp=detectGen4Profile(restored)?:error("The restored Gen 4 layout is invalid.");val rv=gen4Validation(restored,rp)
                 require(restored.contentEquals(original)&&rv.generalChecksum&&rv.storageChecksum&&rv.badPk4==0){"The restored Gen 4 destination did not verify."};true
             }.getOrDefault(false)
@@ -47425,13 +47311,7 @@ class MainActivity : Activity() {
                 }==true
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 1 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 1 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 1 destination write began; unknown current bytes were left untouched.","The Generation 1 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&verifyGen1SaveIntegrity(restored).first){"The restored Generation 1 destination did not verify."}
                 true
@@ -53471,13 +53351,7 @@ class MainActivity : Activity() {
                 bankFile.readBytes().contentEquals(openedBank)
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(original)){
-                    require(writeStarted){"No Generation 4 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 4 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(original)
-                }
+                restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Generation 4 destination write began; unknown current bytes were left untouched.","The Generation 4 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes();val profile=detectGen4Profile(restored);val validation=profile?.let{gen4Validation(restored,it)}
                 require(restored.contentEquals(original)&&validation?.generalChecksum==true&&validation.storageChecksum&&validation.badPk4==0){"The restored Generation 4 destination did not verify."}
                 true
@@ -53555,13 +53429,7 @@ class MainActivity : Activity() {
             for((bank,bytes) in removed)runCatching{if(!bank.exists())require(bank.createNewFile()){"A Bank recovery path could not be reserved."};bank.writeBytes(bytes)}
             val banksRestored=prepared.all{item->runCatching{val bytes=item.bankFile.readBytes();bytes.contentEquals(item.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,item.source)}==true}.getOrDefault(false)}
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 4 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 4 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 4 destination write began; unknown current bytes were left untouched.","The Generation 4 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes();val p=detectGen4Profile(restored);val validation=p?.let{gen4Validation(restored,it)}
                 require(restored.contentEquals(fresh)&&validation?.let{it.generalChecksum&&it.storageChecksum&&it.badPk4==0}==true){"The restored Generation 4 destination did not verify."}
                 true
@@ -53798,13 +53666,7 @@ class MainActivity : Activity() {
                 bankFile.readBytes().contentEquals(openedBank)
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(original)){
-                    require(writeStarted){"No Generation 5 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 5 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(original)
-                }
+                restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Generation 5 destination write began; unknown current bytes were left untouched.","The Generation 5 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes();val profile=detectGen5Profile(restored)
                 require(restored.contentEquals(original)&&profile!=null&&gen5ChecksumTableValid(restored,profile)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,profile)}){"The restored Generation 5 destination did not verify."}
                 true
@@ -53905,13 +53767,7 @@ class MainActivity : Activity() {
             for((bank,bytes) in removed)runCatching{if(!bank.exists())require(bank.createNewFile()){"A Bank recovery path could not be reserved."};bank.writeBytes(bytes)}
             val banksRestored=prepared.all{item->runCatching{val bytes=item.bankFile.readBytes();bytes.contentEquals(item.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,item.source)}==true}.getOrDefault(false)}
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 5 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 5 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 5 destination write began; unknown current bytes were left untouched.","The Generation 5 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes();val p=detectGen5Profile(restored)
                 require(restored.contentEquals(fresh)&&p!=null&&gen5ChecksumTableValid(restored,p)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,p)}){"The restored Generation 5 destination did not verify."}
                 true
@@ -54135,13 +53991,7 @@ class MainActivity : Activity() {
                 bankFile.readBytes().contentEquals(openedBank)&&parseGen1BankPayload(bankFile.readBytes())?.let{sameGen1TransferRecord(it,expected)}==true
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(original)){
-                    require(writeStarted){"No Generation 6 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 6 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(original)
-                }
+                restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Generation 6 destination write began; unknown current bytes were left untouched.","The Generation 6 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(original)&&generationForSize(restored.size)==6&&gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)){"The restored Generation 6 destination did not verify."}
                 true
@@ -54242,13 +54092,7 @@ class MainActivity : Activity() {
             for((bank,bytes) in removed)runCatching{if(!bank.exists())require(bank.createNewFile()){"A Bank recovery path could not be reserved."};bank.writeBytes(bytes)}
             val banksRestored=prepared.all{item->runCatching{val bytes=item.bankFile.readBytes();bytes.contentEquals(item.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,item.source)}==true}.getOrDefault(false)}
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 6 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 6 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 6 destination write began; unknown current bytes were left untouched.","The Generation 6 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&generationForSize(restored.size)==6&&gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)){"The restored Generation 6 destination did not verify."}
                 true
@@ -54438,13 +54282,7 @@ class MainActivity : Activity() {
                 bankFile.readBytes().contentEquals(originalBank)
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 3 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 3 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 3 destination write began; unknown current bytes were left untouched.","The Generation 3 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&generationForSize(restored.size)==3&&gen3SaveValid(restored)){"The restored Generation 3 destination did not verify."}
                 true
@@ -54729,13 +54567,7 @@ class MainActivity : Activity() {
                 restored.contentEquals(expected)&&parsed!=null&&sameGen1TransferRecord(parsed,p)
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 2 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 2 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 2 destination write began; unknown current bytes were left untouched.","The Generation 2 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&verifyGen2SaveIntegrity(restored).first&&
                     detectGen2Profile(restored)?.key==profileKey){"The restored Generation 2 destination did not verify."}
@@ -58350,13 +58182,7 @@ class MainActivity : Activity() {
                 restored.contentEquals(expectedBank)&&parseGen2BankPayload(restored)?.let{sameGen2BankRecord(it,expected)}==true
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 1 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 1 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 1 destination write began; unknown current bytes were left untouched.","The Generation 1 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&verifyGen1SaveIntegrity(restored).first){"The restored Generation 1 destination did not verify."}
                 true
@@ -58491,13 +58317,7 @@ class MainActivity : Activity() {
                 if(!recovered)bankRestored=false
             }
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 1 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 1 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 1 destination write began; unknown current bytes were left untouched.","The Generation 1 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&verifyGen1SaveIntegrity(restored).first){"The restored Generation 1 destination did not verify."}
                 true
@@ -59383,13 +59203,7 @@ class MainActivity : Activity() {
                 restored.contentEquals(expectedBank)&&parseGen2BankPayload(restored)?.let{sameGen2BankRecord(it,expected)}==true
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 3 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 3 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 3 destination write began; unknown current bytes were left untouched.","The Generation 3 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&gen3SaveValid(restored)){"The restored Generation 3 destination did not verify."}
                 true
@@ -59539,13 +59353,7 @@ class MainActivity : Activity() {
                 if(!recovered)bankRestored=false
             }
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 3 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 3 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 3 destination write began; unknown current bytes were left untouched.","The Generation 3 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&gen3SaveValid(restored)){"The restored Generation 3 destination did not verify."}
                 true
@@ -59812,13 +59620,7 @@ class MainActivity : Activity() {
                 require(restored.contentEquals(expectedBank)&&parseGen2BankPayload(restored)?.let{sameGen2BankRecord(it,expected)}==true){"The original Gen 2 Bank record could not be verified; no existing record was overwritten."}
             }.isSuccess
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 4 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 4 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 4 destination write began; unknown current bytes were left untouched.","The Generation 4 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&validGen2ToGen4Destination(restored)){"The restored Generation 4 destination did not verify."}
                 true
@@ -59966,13 +59768,7 @@ class MainActivity : Activity() {
                 if(!recovered)bankRestored=false
             }
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 4 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 4 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 4 destination write began; unknown current bytes were left untouched.","The Generation 4 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&validGen2ToGen4Destination(restored)){"The restored Generation 4 destination did not verify."}
                 true
@@ -60222,13 +60018,7 @@ private data class Gen2ToGen5LegalisePlan(
                 require(restored.contentEquals(expectedBank)&&parseGen2BankPayload(restored)?.let{sameGen2BankRecord(it,expected)}==true){"The original Gen 2 Bank record could not be verified; no existing record was overwritten."}
             }.isSuccess
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(original)){
-                    require(writeStarted){"No Generation 5 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 5 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(original)
-                }
+                restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Generation 5 destination write began; unknown current bytes were left untouched.","The Generation 5 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(original)&&validGen2ToGen5Destination(restored)){"The restored Generation 5 destination did not verify."}
                 true
@@ -60417,13 +60207,7 @@ private data class Gen2ToGen5LegalisePlan(
                 if(!recovered)bankRestored=false
             }
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 5 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 5 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 5 destination write began; unknown current bytes were left untouched.","The Generation 5 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&validGen2ToGen5Destination(restored)){"The restored Generation 5 destination did not verify."}
                 true
@@ -60746,13 +60530,7 @@ private data class Gen2ToGen5LegalisePlan(
                 bankFile.readBytes().contentEquals(expectedBank)&&parseGen2BankPayload(bankFile.readBytes())?.let{sameGen2BankRecord(it,expected)}==true
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 6 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 6 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 6 destination write began; unknown current bytes were left untouched.","The Generation 6 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&validGen2ToGen6Destination(restored)){"The restored Generation 6 destination did not verify."}
                 true
@@ -60910,13 +60688,7 @@ private data class Gen2ToGen5LegalisePlan(
                 if(!recovered)bankRestored=false
             }
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 6 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 6 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 6 destination write began; unknown current bytes were left untouched.","The Generation 6 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&validGen2ToGen6Destination(restored)){"The restored Generation 6 destination did not verify."}
                 true
@@ -61172,13 +60944,7 @@ private data class Gen2ToGen5LegalisePlan(
                 bankFile.readBytes().contentEquals(expectedBank)&&parseGen2BankPayload(bankFile.readBytes())?.let{sameGen2BankRecord(it,expected)}==true
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 7 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 7 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 7 destination write began; unknown current bytes were left untouched.","The Generation 7 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&validGen2ToGen7Destination(restored)){"The restored Generation 7 destination did not verify."}
                 true
@@ -61337,13 +61103,7 @@ private data class Gen2ToGen5LegalisePlan(
                 if(!recovered)bankRestored=false
             }
             val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 7 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 7 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 7 destination write began; unknown current bytes were left untouched.","The Generation 7 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&validGen2ToGen7Destination(restored)){"The restored Generation 7 destination did not verify."}
                 true
