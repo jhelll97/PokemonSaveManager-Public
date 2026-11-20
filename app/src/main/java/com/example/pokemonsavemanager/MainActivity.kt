@@ -861,7 +861,8 @@ class MainActivity : Activity() {
             {data->if(generation==6)generationForSize(data.size)==6&&gen6BoxChecksumValid(data)&&gen6BlockChecksumValid(data,20)
                 else generationForSize(data.size)==7&&validateGen7CoreChecksums(data).first},
             {data->refreshBoxChecksum(data)},
-            {backup,data->if(generation==6)retainGenToGen6SafetyBackup(backup,data)else retainGen1ToGen7SafetyBackup(backup,data)}
+            {backup,data->if(generation==6)retainGenToGen6SafetyBackup(backup,data)else retainGen1ToGen7SafetyBackup(backup,data)},
+            {backup->isBackupKept(backup)}
         )
         result.failure?.let{showDialog("Move selected failed",it);return}
         selectedBankFiles.clear();bankMultiSelectMode=false

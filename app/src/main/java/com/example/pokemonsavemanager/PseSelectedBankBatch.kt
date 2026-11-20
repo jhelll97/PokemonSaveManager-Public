@@ -24,7 +24,8 @@ internal fun executeSelectedStandardBankBatch(
     recordValid: (ByteArray) -> Boolean,
     nativeValid: (ByteArray) -> Boolean,
     refreshDestination: (ByteArray) -> Unit,
-    retainBackup: (File,ByteArray) -> Unit
+    retainBackup: (File,ByteArray) -> Unit,
+    backupKept: (File) -> Boolean
 ): PseSelectedBankBatchResult {
     var writeStarted=false
     var cleanupAttempted=false
@@ -62,7 +63,7 @@ internal fun executeSelectedStandardBankBatch(
         safetyBackup=backup
         backup.writeBytes(original)
         retainBackup(backup,original)
-        require(backup.readBytes().contentEquals(original)){"The exact destination recovery backup did not verify."}
+        require(backup.readBytes().contentEquals(original)&&backupKept(backup)){"The exact kept destination recovery backup did not verify."}
         sourceBytes.forEachIndexed { index,raw ->
             val recovery=File.createTempFile("PSE_Selected_PK${generation}_BankRecovery_",".tmp",bankDirectory)
             recovery.writeBytes(raw)
@@ -74,7 +75,7 @@ internal fun executeSelectedStandardBankBatch(
         }
         require(bound()&&file.readBytes().contentEquals(original)&&sources.indices.all {
             sources[it].readBytes().contentEquals(sourceBytes[it])
-        }&&backup.readBytes().contentEquals(original)&&recoveriesValid()){
+        }&&backup.readBytes().contentEquals(original)&&backupKept(backup)&&recoveriesValid()){
             "The destination, Bank records or retained recovery snapshots changed before writing."
         }
         stagedDestination=work.copyOf()
@@ -92,7 +93,8 @@ internal fun executeSelectedStandardBankBatch(
         }
         cleanupAttempted=true
         sources.forEach{require(it.delete()&&!it.exists()){"A Bank record could not be removed after destination verification."}}
-        require(bound()&&file.readBytes().contentEquals(work)&&nativeValid(work)&&sources.none{it.exists()}&&recoveriesValid()){
+        require(bound()&&file.readBytes().contentEquals(work)&&nativeValid(work)&&
+            backup.readBytes().contentEquals(original)&&backupKept(backup)&&sources.none{it.exists()}&&recoveriesValid()){
             "The verified destination or retained recovery snapshots changed after Bank cleanup."
         }
         bankRecoveries.forEach{runCatching{it.delete()}}
