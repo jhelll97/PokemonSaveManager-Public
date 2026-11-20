@@ -67668,11 +67668,15 @@ private data class Gen2ToGen5LegalisePlan(
             require(bound()&&file.readBytes().contentEquals(verifyData)&&nativeValid(verifyData)&&recoveryValid()&&!exactBankFile.exists()){
                 "The verified destination or retained recovery data changed after Bank cleanup."
             }
-            runCatching{recovery.delete()}
+            val bankRecoveryClean=cleanupExactBankRecoverySnapshots(
+                listOf(recovery),listOf(raw)
+            )
             val box=target/30+1
             val slot=target%30+1
             val transferNote=if(bankGen!=currentGen) " (Gen $bankGen → Gen $currentGen)" else ""
-            Toast.makeText(this,"${p.nickname.ifBlank{"Pokémon"}} moved to Box $box • Slot $slot$transferNote and verified",Toast.LENGTH_LONG).show()
+            val recoveryNotice=if(bankRecoveryClean) "" else
+                "; exact temporary Bank recovery retained for review"
+            Toast.makeText(this,"${p.nickname.ifBlank{"Pokémon"}} moved to Box $box • Slot $slot$transferNote and verified$recoveryNotice",Toast.LENGTH_LONG).show()
             showPokemonViewer("boxes",box-1)
         }catch(e:Exception){
             val bankRestored=runCatching{
@@ -67696,9 +67700,14 @@ private data class Gen2ToGen5LegalisePlan(
                 require(restored.contentEquals(original)&&nativeValid(restored)){"The exact Generation $currentGen destination could not be restored or verified."}
                 true
             }.getOrDefault(false)
-            if(bankRestored&&destinationRestored)bankRecovery?.let{runCatching{it.delete()}}
+            val bankRecoveryClean=if(bankRestored&&destinationRestored){
+                bankRecovery?.let{
+                    cleanupExactBankRecoverySnapshots(listOf(it),listOf(raw))
+                }?:false
+            }else false
             val recoveryMessage=when{
-                bankRestored&&destinationRestored->"The exact destination and PK$bankGen Bank record were restored or kept and verified."
+                bankRestored&&destinationRestored&&bankRecoveryClean->"The exact destination and PK$bankGen Bank record were restored or kept and verified."
+                bankRestored&&destinationRestored->"The exact destination and PK$bankGen Bank record were restored or kept and verified. The exact temporary Bank recovery snapshot changed or could not be removed safely and was retained for review."
                 bankRestored->"The exact PK$bankGen Bank record was restored or kept, but destination recovery was not verified. Use the retained destination backup before editing again."
                 destinationRestored->"The exact destination was restored, but Bank recovery was not verified. Keep the PK$bankGen recovery snapshot for review."
                 else->"Automatic recovery could not be fully verified. Keep the retained destination backup and PK$bankGen recovery snapshot for review."
