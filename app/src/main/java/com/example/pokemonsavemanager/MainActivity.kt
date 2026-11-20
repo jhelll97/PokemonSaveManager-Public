@@ -59277,7 +59277,7 @@ class MainActivity : Activity() {
         if(!bound()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return}
         if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog("Gen 2 → Gen 3","The active save changed after destination selection. Reopen PSE Bank. Nothing was changed.");return}
         val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;var writeStarted=false;var bankDeleteAttempted=false
-        var safetyBackup:File?=null;var bankRecovery:File?=null
+        var safetyBackup:File?=null;var bankRecovery:File?=null;var stagedDestination:ByteArray?=null
         try{
             require(bound()){"The Gen 3 destination identity changed before transfer validation."}
             require(fresh.contentEquals(preparedDestination)&&generationForSize(fresh.size)==3&&gen3SaveValid(fresh)){"The Gen 3 destination changed or is no longer valid."};require(target in 0 until 420){"The selected Gen 3 destination slot is invalid."}
@@ -59297,6 +59297,7 @@ class MainActivity : Activity() {
                 file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(expectedBank)){
                 "The Gen 3 destination, Bank record or retained recovery snapshots changed before writing. Nothing was written."
             }
+            stagedDestination=save.copyOf()
             writeStarted=true
             file.writeBytes(save);val written=file.readBytes();require(written.contentEquals(save)&&gen3SaveValid(written)&&gen2ToGen3DexRegistered(written,converted.species)){"The persisted Gen 3 save, checksums or Pokédex mirrors failed verification."};val vpc=gen3PcBuffer(written)?:error("Could not re-open Gen 3 PC storage.");val actual=vpc.copyOfRange(off,off+80);val q=parsePk3(actual,0,false)?:error("The persisted PK3 could not be parsed.");require(actual.contentEquals(pk3)&&sameGen2ToGen3Pk3(q,staged)&&gen3MovePpUps(actual).contentEquals(expectedPpUps)){"The exact converted PK3 or PP Ups did not persist."};require(vpc.indices.all{it in off until off+80||vpc[it]==beforePc[it]}){"Unrelated Gen 3 PC data changed after persistence."}
             require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(save)){"The verified Gen 3 destination changed before Bank cleanup."}
@@ -59317,8 +59318,16 @@ class MainActivity : Activity() {
                 restored.contentEquals(expectedBank)&&parseGen2BankPayload(restored)?.let{sameGen2BankRecord(it,expected)}==true
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                if(writeStarted)file.writeBytes(fresh);val restored=file.readBytes()
-                restored.contentEquals(fresh)&&gen3SaveValid(restored)
+                val current=file.readBytes()
+                if(!current.contentEquals(fresh)){
+                    require(writeStarted){"No Generation 3 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 3 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(fresh)
+                }
+                val restored=file.readBytes()
+                require(restored.contentEquals(fresh)&&gen3SaveValid(restored)){"The restored Generation 3 destination did not verify."}
+                true
             }.getOrDefault(false)
             if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
