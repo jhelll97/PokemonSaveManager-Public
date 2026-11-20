@@ -46435,8 +46435,7 @@ class MainActivity : Activity() {
         fun bound(): Boolean = importedFile?.absolutePath == destination.absolutePath &&
             currentSourceUri == sourceUri && currentSourceLabel == sourceLabel
         val removed = ArrayList<Gen3BankBatchItem>()
-        val recoveryFiles = ArrayList<File>()
-        val expectedBankPayloads = ArrayList<ByteArray>()
+        val bankRecovery = ExactBankRecoverySet()
         var writeStarted = false
         var stagedDestination: ByteArray? = null
         var backup: File? = null
@@ -46528,13 +46527,7 @@ class MainActivity : Activity() {
                 backup!!, fresh, isBackupKept(backup!!), 0
             )
             selected.forEach { item ->
-                val recovery = File.createTempFile("PSE_G3_BankPartyRecovery_", ".tmp", bankDir())
-                recoveryFiles.add(recovery)
-                expectedBankPayloads.add(item.bankBytes)
-                recovery.writeBytes(item.bankBytes)
-                require(recovery.readBytes().contentEquals(item.bankBytes)) {
-                    "A Bank recovery snapshot did not verify."
-                }
+                bankRecovery.capture(item.bankBytes, bankDir())
             }
             require(bound() && destination.readBytes().contentEquals(fresh) &&
                 selected.all { it.bankFile.isFile && it.bankFile.readBytes().contentEquals(it.bankBytes) }) {
@@ -46542,7 +46535,7 @@ class MainActivity : Activity() {
             }
             requireGen3BankPartyWithdrawalBackup(
                 backup!!, fresh, isBackupKept(backup!!), 1,
-                recoveryFiles, expectedBankPayloads
+                bankRecovery
             )
             stagedDestination = work.copyOf()
             writeStarted = true
@@ -46569,7 +46562,7 @@ class MainActivity : Activity() {
                 selected.forEach { item ->
                     requireGen3BankPartyWithdrawalBackup(
                         backup!!, fresh, isBackupKept(backup!!), 2,
-                        recoveryFiles, expectedBankPayloads
+                        bankRecovery
                     )
                     require(item.bankFile.readBytes().contentEquals(item.bankBytes)) {
                         "A Bank record changed before removal."
@@ -46584,7 +46577,7 @@ class MainActivity : Activity() {
             }
             requireGen3BankPartyWithdrawalBackup(
                 backup!!, fresh, isBackupKept(backup!!), 3,
-                recoveryFiles, expectedBankPayloads
+                bankRecovery
             )
             selectedBankFiles.clear()
             bankMultiSelectMode = false
@@ -46592,7 +46585,7 @@ class MainActivity : Activity() {
                 if (copyOnly) "Copied ${selected.size} Pokémon to Party; Bank originals unchanged"
                 else "Withdrew ${selected.size} Pokémon to Party and verified", Toast.LENGTH_LONG).show()
             showGen3PokemonViewer("party")
-            discardGen3BankPartyRecoverySnapshots(recoveryFiles)
+            bankRecovery.discardUnchecked()
         } catch (error: Exception) {
             removed.forEach { item ->
                 runCatching {
@@ -46609,7 +46602,7 @@ class MainActivity : Activity() {
                 destination, opened, stagedDestination, writeStarted
             )
             val saveRestored = restoredDestination != null && gen3SaveValid(restoredDestination)
-            if (bankRestored && saveRestored) discardGen3BankPartyRecoverySnapshots(recoveryFiles)
+            if (bankRestored && saveRestored) bankRecovery.discardUnchecked()
             val recovery = when {
                 bankRestored && saveRestored -> "The original save and Bank records were preserved or restored."
                 bankRestored -> "Bank entries were restored. Restore the retained save backup before editing again."

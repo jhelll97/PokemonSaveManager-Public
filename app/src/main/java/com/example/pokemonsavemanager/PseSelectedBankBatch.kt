@@ -130,10 +130,27 @@ internal fun finishSelectedGen2BankWithdrawal(
             "; a Bank recovery snapshot was retained for review"
 }
 
-internal fun discardGen3BankPartyRecoverySnapshots(
-    recoveryFiles: List<File>
-) {
-    recoveryFiles.forEach { runCatching { it.delete() } }
+internal class ExactBankRecoverySet {
+    private val entries=ArrayList<Pair<File,ByteArray>>()
+
+    fun capture(bytes: ByteArray, directory: File) {
+        val file=File.createTempFile("PSE_G3_BankPartyRecovery_", ".tmp", directory)
+        entries.add(file to bytes.copyOf())
+        file.writeBytes(bytes)
+        require(file.isFile && file.readBytes().contentEquals(bytes)) {
+            "A Bank recovery snapshot did not verify."
+        }
+    }
+
+    fun matches(): Boolean = entries.all { (file,bytes) ->
+        runCatching {
+            file.isFile && file.readBytes().contentEquals(bytes)
+        }.getOrDefault(false)
+    }
+
+    fun discardUnchecked() {
+        entries.forEach { (file,_) -> runCatching { file.delete() } }
+    }
 }
 
 internal fun requireGen3BankPartyWithdrawalBackup(
@@ -141,8 +158,7 @@ internal fun requireGen3BankPartyWithdrawalBackup(
     expected: ByteArray,
     kept: Boolean,
     stage: Int,
-    recoveryFiles: List<File>? = null,
-    recoveryExpected: List<ByteArray>? = null
+    recovery: ExactBankRecoverySet? = null
 ) {
     require(retainedBankBackupMatches(backup, expected, kept)) {
         when(stage) {
@@ -152,9 +168,8 @@ internal fun requireGen3BankPartyWithdrawalBackup(
             else -> "The retained Gen 3 Bank-to-party backup changed after persistence."
         }
     }
-    if(recoveryFiles != null || recoveryExpected != null) {
-        require(recoveryFiles != null && recoveryExpected != null &&
-            exactGen3BankRecoverySnapshots(recoveryFiles, recoveryExpected)) {
+    recovery?.let {
+        require(it.matches()) {
             when(stage) {
                 1 -> "A Gen 3 Bank-to-party recovery snapshot changed before writing."
                 2 -> "A Gen 3 Bank-to-party recovery snapshot changed before Bank cleanup."
