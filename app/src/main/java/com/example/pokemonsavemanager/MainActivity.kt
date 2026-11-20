@@ -50856,6 +50856,7 @@ class MainActivity : Activity() {
         val expectedBankPayloads = ArrayList<ByteArray>()
         var writeStarted = false
         var stagedSource: ByteArray? = null
+        var recoveryBackup: File? = null
         try {
             require(selectedSlots.isNotEmpty() &&
                 selectedSlots.size == selectedSlots.toSet().size &&
@@ -50947,6 +50948,7 @@ class MainActivity : Activity() {
                 ".backup",
                 backupsDir()
             )
+            recoveryBackup = backup
             backup.writeBytes(fresh)
             require(backup.readBytes().contentEquals(fresh)) {
                 "The recovery backup did not verify."
@@ -51115,15 +51117,25 @@ class MainActivity : Activity() {
                     }.isSuccess
                     if (!removed) bankClean = false
                 }
+            val retainedBackup = recoveryBackup?.let { backup ->
+                runCatching {
+                    backup.isFile && isBackupKept(backup) &&
+                        backup.readBytes().contentEquals(opened)
+                }.getOrDefault(false)
+            } ?: false
             val recovery = when {
                 saveRestored && bankClean ->
                     "The exact fresh Gen 3 source was restored or kept, and every exact staged Bank file was removed."
                 saveRestored ->
                     "The exact fresh Gen 3 source was restored or kept, but one or more staged Bank files remain for review."
                 bankClean ->
-                    "Every exact staged Bank file was removed, but source recovery was not verified. Use the retained Gen 3 batch backup before editing again."
+                    "Every exact staged Bank file was removed, but source recovery was not verified."
                 else ->
-                    "Automatic recovery could not be verified. Keep the retained Gen 3 batch backup and any remaining Bank files for review."
+                    "Automatic source recovery and Bank cleanup could not both be verified."
+            } + if (retainedBackup) {
+                " The exact Keep-pinned Gen 3 batch backup was reopened and verified."
+            } else {
+                " The exact Keep-pinned Gen 3 batch backup was not verified; keep any recovery file and remaining Bank files for review."
             }
             showDialog(
                 "Gen 3 batch Bank move failed",
