@@ -130,6 +130,23 @@ internal fun finishSelectedGen2BankWithdrawal(
             "; a Bank recovery snapshot was retained for review"
 }
 
+internal fun restoreExactGen3BankPartyDestination(
+    file: File,
+    original: ByteArray,
+    staged: ByteArray?,
+    writeStarted: Boolean
+): ByteArray? = runCatching {
+    restoreExactStagedDestination(
+        file,
+        original,
+        staged,
+        writeStarted,
+        "No Generation 3 party destination write began; unknown current bytes were left untouched.",
+        "The Generation 3 party destination no longer matches this transaction's staged bytes; the retained backup was left for recovery."
+    )
+    file.readBytes().takeIf { it.contentEquals(original) }
+}.getOrNull()
+
 internal fun finishSelectedGen1BankWithdrawal(
     recoveryFiles: List<File>,
     expected: List<ByteArray>,

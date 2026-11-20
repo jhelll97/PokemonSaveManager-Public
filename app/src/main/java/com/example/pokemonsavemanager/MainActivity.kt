@@ -46437,6 +46437,7 @@ class MainActivity : Activity() {
         val removed = ArrayList<Gen3BankBatchItem>()
         val recoveryFiles = ArrayList<File>()
         var writeStarted = false
+        var stagedDestination: ByteArray? = null
         var backup: File? = null
         try {
             require(bound()) { "The destination identity changed after review." }
@@ -46534,6 +46535,7 @@ class MainActivity : Activity() {
                 selected.all { it.bankFile.isFile && it.bankFile.readBytes().contentEquals(it.bankBytes) }) {
                 "The destination or Bank records changed before writing."
             }
+            stagedDestination = work.copyOf()
             writeStarted = true
             destination.writeBytes(work)
             val persisted = destination.readBytes()
@@ -46586,11 +46588,10 @@ class MainActivity : Activity() {
                 runCatching { item.bankFile.isFile && item.bankFile.readBytes().contentEquals(item.bankBytes) }
                     .getOrDefault(false)
             }
-            val saveRestored = runCatching {
-                if (writeStarted) destination.writeBytes(opened)
-                val restored = destination.readBytes()
-                restored.contentEquals(opened) && gen3SaveValid(restored)
-            }.getOrDefault(false)
+            val restoredDestination = restoreExactGen3BankPartyDestination(
+                destination, opened, stagedDestination, writeStarted
+            )
+            val saveRestored = restoredDestination != null && gen3SaveValid(restoredDestination)
             if (bankRestored && saveRestored) recoveryFiles.forEach { runCatching { it.delete() } }
             val recovery = when {
                 bankRestored && saveRestored -> "The original save and Bank records were preserved or restored."
