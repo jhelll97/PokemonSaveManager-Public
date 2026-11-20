@@ -50658,6 +50658,7 @@ class MainActivity : Activity() {
     ) {
         val temporaryBankFiles = ArrayList<File>()
         val finalBankFiles = ArrayList<File>()
+        val expectedBankPayloads = ArrayList<ByteArray>()
         try {
             require(selectedSlots.isNotEmpty() &&
                 selectedSlots.size == selectedSlots.toSet().size &&
@@ -50683,6 +50684,7 @@ class MainActivity : Activity() {
                 boxIndex,
                 selectedSlots
             )
+            expectedBankPayloads.addAll(snapshot.records.map { it.copyOf() })
             val parsed = snapshot.records.mapIndexed { index, raw ->
                 val pokemon = parsePk3(raw, 0, false)
                 require(pokemon != null && pokemon.checksumValid) {
@@ -50738,10 +50740,10 @@ class MainActivity : Activity() {
             }
             temporaryBankFiles.forEachIndexed { index, staged ->
                 val target = nextBankCopyTarget(index, parsed[index].species)
-                finalBankFiles.add(target)
                 require(staged.renameTo(target)) {
                     "A staged Gen 3 Bank copy could not be finalized."
                 }
+                finalBankFiles.add(target)
                 val verifyRaw = target.readBytes()
                 val verifyPokemon = if (verifyRaw.size == 80) {
                     parsePk3(verifyRaw, 0, false)
@@ -50780,13 +50782,37 @@ class MainActivity : Activity() {
             showBank()
         } catch (error: Exception) {
             var bankClean = true
-            (temporaryBankFiles + finalBankFiles).distinctBy { it.absolutePath }
-                .forEach { candidate ->
-                    if (candidate.exists() && !runCatching {
-                            candidate.delete() && !candidate.exists()
-                        }.getOrDefault(false)) {
-                        bankClean = false
-                    }
+            val cleanupCandidates = ArrayList<Pair<File, ByteArray>>()
+            temporaryBankFiles.forEachIndexed { index, candidate ->
+                if (index in expectedBankPayloads.indices) {
+                    cleanupCandidates.add(candidate to expectedBankPayloads[index])
+                } else if (candidate.exists()) {
+                    bankClean = false
+                }
+            }
+            finalBankFiles.forEachIndexed { index, candidate ->
+                if (index in expectedBankPayloads.indices) {
+                    cleanupCandidates.add(candidate to expectedBankPayloads[index])
+                } else if (candidate.exists()) {
+                    bankClean = false
+                }
+            }
+            cleanupCandidates.distinctBy { it.first.absolutePath }
+                .forEach { (candidate, expected) ->
+                    val removed = runCatching {
+                        if (candidate.exists()) {
+                            require(candidate.readBytes().contentEquals(expected)) {
+                                "A staged Gen 3 Bank copy changed; it was retained for review."
+                            }
+                            require(candidate.delete()) {
+                                "An exact staged Gen 3 Bank copy could not be removed."
+                            }
+                        }
+                        require(!candidate.exists()) {
+                            "An exact staged Gen 3 Bank copy still exists."
+                        }
+                    }.isSuccess
+                    if (!removed) bankClean = false
                 }
             val sourcePreserved = runCatching {
                 file.readBytes().contentEquals(opened)
