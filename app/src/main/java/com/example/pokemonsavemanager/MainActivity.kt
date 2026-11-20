@@ -60106,7 +60106,7 @@ private data class Gen2ToGen5LegalisePlan(
         if(!bound()){showDialog("Gen 2 → Gen 5","The destination identity changed. Reopen PSE Bank. Nothing was changed.");return}
         if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog("Gen 2 → Gen 5","The active save changed after destination selection. Reopen PSE Bank. Nothing was changed.");return}
         val file=openedFile;val original=runCatching{file.readBytes()}.getOrNull()?:return;var writeStarted=false;var bankDeleteAttempted=false
-        var safetyBackup:File?=null
+        var safetyBackup:File?=null;var stagedDestination:ByteArray?=null
         try{
             require(bound()){"The Gen 5 destination identity changed before validation."}
             require(original.contentEquals(preparedDestination)){"The Gen 5 destination changed while the conversion was prepared."}
@@ -60134,6 +60134,7 @@ private data class Gen2ToGen5LegalisePlan(
             val backup=File.createTempFile(backupGameName(file)+"_PreGen2ToGen5Transfer_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(original);require(backup.readBytes().contentEquals(original)){"The exact Gen 5 recovery backup did not verify."};retainGen2ToGen5SafetyBackup(backup,original)
             require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&file.readBytes().contentEquals(original)&&bankFile.readBytes().contentEquals(expectedBank)){"The Gen 5 destination, Bank record or retained backup changed before writing. Nothing was written."}
+            stagedDestination=work.copyOf()
             writeStarted=true
             file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)){"The Gen 5 destination changed while it was written."}
             val persistedProfile=detectGen5Profile(written)?:error("The persisted Gen 5 layout could not be re-read.")
@@ -60156,9 +60157,16 @@ private data class Gen2ToGen5LegalisePlan(
                 require(restored.contentEquals(expectedBank)&&parseGen2BankPayload(restored)?.let{sameGen2BankRecord(it,expected)}==true){"The original Gen 2 Bank record could not be verified; no existing record was overwritten."}
             }.isSuccess
             val destinationRestored=runCatching{
-                if(writeStarted)file.writeBytes(original)
+                val current=file.readBytes()
+                if(!current.contentEquals(original)){
+                    require(writeStarted){"No Generation 5 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 5 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(original)
+                }
                 val restored=file.readBytes()
-                restored.contentEquals(original)&&validGen2ToGen5Destination(restored)
+                require(restored.contentEquals(original)&&validGen2ToGen5Destination(restored)){"The restored Generation 5 destination did not verify."}
+                true
             }.getOrDefault(false)
             val recovery=when{
                 bankRestored&&destinationRestored->"The exact Gen 5 destination and Gen 2 Bank record were restored or kept and verified."
