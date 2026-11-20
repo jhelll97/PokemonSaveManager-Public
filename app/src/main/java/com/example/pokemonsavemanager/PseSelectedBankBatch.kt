@@ -10,17 +10,17 @@ internal data class PseSelectedBankBatchResult(
 internal fun retainedBankBackupMatches(
     backup: File?,
     expected: ByteArray,
-    kept: (File) -> Boolean
+    kept: Boolean
 ): Boolean = backup?.let { file ->
     runCatching {
-        file.isFile && kept(file) && file.readBytes().contentEquals(expected)
+        file.isFile && kept && file.readBytes().contentEquals(expected)
     }.getOrDefault(false)
 } ?: false
 
 internal fun requireGen3PartyBatchBackup(
     backup: File,
     expected: ByteArray,
-    kept: (File) -> Boolean,
+    kept: Boolean,
     stage: Int
 ) {
     require(retainedBankBackupMatches(backup, expected, kept)) {
@@ -30,6 +30,31 @@ internal fun requireGen3PartyBatchBackup(
             else -> "The retained Gen 3 party batch backup changed after persistence."
         }
     }
+}
+
+internal fun gen3PartyBatchBackupStatus(verified: Boolean): String =
+    if (verified) {
+        " The exact Keep-pinned Gen 3 party batch backup was reopened and verified."
+    } else {
+        " The exact Keep-pinned Gen 3 party batch backup was not verified; keep any recovery file and Bank records for review."
+    }
+
+internal fun gen3PartyBatchRecoveryMessage(
+    writeStarted: Boolean,
+    bankClean: Boolean,
+    restored: Boolean,
+    toBank: Boolean,
+    retainedBackup: Boolean
+): String {
+    val source = when {
+        !writeStarted && bankClean -> "No save changes or new Bank entries were kept."
+        !writeStarted -> "The save was not written, but some staged Bank files need manual review."
+        restored && bankClean -> "The reviewed save was restored and verified; no new Bank entries were kept."
+        restored -> "The reviewed save was restored, but some new Bank files could not be removed. Review PSE Bank before editing again."
+        toBank -> "Source rollback could not be verified. Staged and finalized Bank files were retained for recovery. Restore the retained save backup and review PSE Bank before editing again."
+        else -> "Automatic rollback could not be verified. Restore the retained recovery backup before editing again."
+    }
+    return source + gen3PartyBatchBackupStatus(retainedBackup)
 }
 
 internal fun cleanupExactSelectedGen3BankCopies(
