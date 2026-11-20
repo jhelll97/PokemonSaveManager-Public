@@ -11757,7 +11757,7 @@ class MainActivity : Activity() {
     }
 
     private fun transferGen4BankToGen3(p:Gen4Gen3Prepared,target:Int){
-        if(!gen4ToGen3StillBound(p))return showDialog("Gen 4 → Gen 3","The prepared snapshots changed. Reopen PSE Bank.");val file=p.destinationFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
+        if(!gen4ToGen3StillBound(p))return showDialog("Gen 4 → Gen 3","The prepared snapshots changed. Reopen PSE Bank.");val file=p.destinationFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null;var stagedDestination:ByteArray?=null
         try{
             require(fresh.contentEquals(p.destination)&&generationForSize(fresh.size)==3&&gen3SaveValid(fresh)){"The Gen 3 destination changed or failed validation."};require(target in 0 until 420){"The destination slot is invalid."};val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The PK4 Bank record changed."};val source=parsePk4(bank,false)?:error("The PK4 Bank record is invalid.");require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&source.tid==p.source.tid&&source.sid==p.source.sid){"The selected Pokémon changed."}
             val pk3=buildGen4ToGen3Pk3(bank,source,fresh,p.plan);val converted=parsePk3(pk3,0,false)?:error("The refreshed PK3 could not be parsed.");require(pk3.contentEquals(p.pk3)&&sameGen4ToGen3Pk3(converted,p.converted)){"The prepared conversion changed before writing."}
@@ -11770,7 +11770,7 @@ class MainActivity : Activity() {
             val bankCopy=File.createTempFile("PSE_G4ToG3_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
             bankCopy.writeBytes(p.bankBytes);require(bankCopy.readBytes().contentEquals(p.bankBytes)){"The Bank recovery snapshot did not verify."}
             require(isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(p.bankBytes)&&gen4ToGen3StillBound(p)){"The retained snapshots, destination identity or Bank record changed before writing."}
-            writeStarted=true;file.writeBytes(save);val written=file.readBytes();require(written.contentEquals(save)&&gen3SaveValid(written)&&gen2ToGen3DexRegistered(written,converted.species)){"The persisted Gen 3 save failed verification."};require(written.indices.all{it in allowed||written[it]==fresh[it]}){"The reopened save changed outside the reviewed scope."};val vpc=gen3PcBuffer(written)?:error("Could not reopen Gen 3 PC storage.");val actual=vpc.copyOfRange(off,off+80);val q=parsePk3(actual,0,false)?:error("The persisted PK3 could not be parsed.");require(actual.contentEquals(pk3)&&sameGen4ToGen3Pk3(q,staged)){"The exact native PK3 did not persist."}
+            stagedDestination=save.copyOf();writeStarted=true;file.writeBytes(save);val written=file.readBytes();require(written.contentEquals(save)&&gen3SaveValid(written)&&gen2ToGen3DexRegistered(written,converted.species)){"The persisted Gen 3 save failed verification."};require(written.indices.all{it in allowed||written[it]==fresh[it]}){"The reopened save changed outside the reviewed scope."};val vpc=gen3PcBuffer(written)?:error("Could not reopen Gen 3 PC storage.");val actual=vpc.copyOfRange(off,off+80);val q=parsePk3(actual,0,false)?:error("The persisted PK3 could not be parsed.");require(actual.contentEquals(pk3)&&sameGen4ToGen3Pk3(q,staged)){"The exact native PK3 did not persist."}
             require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&p.bankFile.readBytes().contentEquals(p.bankBytes)&&file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(p.bankBytes)){"The source identity, PK4 Bank record, verified Gen 3 destination or retained recovery snapshots changed before cleanup."}
             deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The PK4 Bank record could not be removed after destination verification."}
             require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(p.bankBytes)){"The verified Gen 3 destination or retained recovery snapshots changed after Bank cleanup."}
@@ -11786,9 +11786,10 @@ class MainActivity : Activity() {
                     parsed.pid==p.source.pid&&parsed.species==p.source.species&&parsed.tid==p.source.tid&&parsed.sid==p.source.sid
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                if(writeStarted)file.writeBytes(fresh)
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 3 destination write began; unknown current bytes were left untouched.","The Generation 3 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
-                restored.contentEquals(fresh)&&gen3SaveValid(restored)
+                require(restored.contentEquals(fresh)&&gen3SaveValid(restored)){"The restored Generation 3 destination did not verify."}
+                true
             }.getOrDefault(false)
             if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
