@@ -55043,13 +55043,7 @@ class MainActivity : Activity() {
                 bankFile.readBytes().contentEquals(originalBankBytes)&&parseGen1BankPayload(bankFile.readBytes())?.let{sameGen1TransferRecord(it,parseGen1BankPayload(originalBankBytes)!!)}==true
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(fresh)){
-                    require(writeStarted){"No Generation 7 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 7 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(fresh)
-                }
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"Generation 7")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&generationForSize(restored.size)==7&&validateGen7CoreChecksums(restored).first){"The restored Generation 7 destination did not verify."}
                 true
