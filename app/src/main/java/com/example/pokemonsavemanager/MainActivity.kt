@@ -66234,6 +66234,7 @@ private data class Gen2ToGen5LegalisePlan(
         val created=ArrayList<Pair<File,ByteArray>>()
         var sourceWriteStarted=false
         var safetyBackup:File?=null
+        var stagedSource:ByteArray?=null
         try{
             require(bound()&&file.readBytes().contentEquals(original)&&nativeValid(original)){"The loaded Gen $generation source changed before staging."}
             val work=original.copyOf()
@@ -66304,6 +66305,7 @@ private data class Gen2ToGen5LegalisePlan(
                 "The Gen $generation source identity or retained backup changed before writing."
             }
 
+            stagedSource=work.copyOf()
             sourceWriteStarted=true
             file.writeBytes(work)
             val written=file.readBytes()
@@ -66330,9 +66332,10 @@ private data class Gen2ToGen5LegalisePlan(
             showBank()
         }catch(error:Exception){
             val sourceRestored=runCatching{
-                if(sourceWriteStarted)file.writeBytes(original)
+                restoreExactStagedDestination(file,original,stagedSource,sourceWriteStarted,"No Generation $generation source write began; unknown current bytes were left untouched.","The Generation $generation source no longer matches this batch deposit's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
-                restored.contentEquals(original)&&nativeValid(restored)
+                require(restored.contentEquals(original)&&nativeValid(restored)){"The restored Generation $generation source did not verify."}
+                true
             }.getOrDefault(false)
             var bankClean=true
             for((bankFile,expected) in created){
