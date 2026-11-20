@@ -2065,6 +2065,7 @@ class MainActivity : Activity() {
         val created=ArrayList<Pair<File,ByteArray>>()
         var sourceWriteStarted=false
         var safetyBackup:File?=null
+        var stagedSource:ByteArray?=null
         try{
             require(bound()){"The loaded Gen 1 source identity changed."}
             require(fresh.size==SIZE_G1&&hasValidGen1MainChecksum(fresh)&&verifyGen1SaveIntegrity(fresh).first){"The fresh Gen 1 save is invalid."}
@@ -2109,6 +2110,7 @@ class MainActivity : Activity() {
                 "The Gen 1 source, staged Bank records or retained recovery backup changed before writing."
             }
 
+            stagedSource=work.copyOf()
             sourceWriteStarted=true
             file.writeBytes(work)
             val written=file.readBytes()
@@ -2131,9 +2133,10 @@ class MainActivity : Activity() {
             showGen1PokemonViewer("boxes",boxNumber)
         }catch(error:Exception){
             val sourceRestored=runCatching{
-                if(sourceWriteStarted)file.writeBytes(fresh)
+                restoreExactStagedDestination(file,fresh,stagedSource,sourceWriteStarted,"No Generation 1 source write began; unknown current bytes were left untouched.","The Generation 1 source no longer matches this box batch deposit's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
-                restored.contentEquals(fresh)&&restored.size==SIZE_G1&&hasValidGen1MainChecksum(restored)&&verifyGen1SaveIntegrity(restored).first
+                require(restored.contentEquals(fresh)&&restored.size==SIZE_G1&&hasValidGen1MainChecksum(restored)&&verifyGen1SaveIntegrity(restored).first){"The restored Generation 1 source did not verify."}
+                true
             }.getOrDefault(false)
             var bankClean=true
             for((out,payload) in created){
