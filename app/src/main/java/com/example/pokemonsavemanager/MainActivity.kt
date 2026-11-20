@@ -46436,6 +46436,7 @@ class MainActivity : Activity() {
             currentSourceUri == sourceUri && currentSourceLabel == sourceLabel
         val removed = ArrayList<Gen3BankBatchItem>()
         val recoveryFiles = ArrayList<File>()
+        val expectedBankPayloads = ArrayList<ByteArray>()
         var writeStarted = false
         var stagedDestination: ByteArray? = null
         var backup: File? = null
@@ -46529,6 +46530,7 @@ class MainActivity : Activity() {
             selected.forEach { item ->
                 val recovery = File.createTempFile("PSE_G3_BankPartyRecovery_", ".tmp", bankDir())
                 recoveryFiles.add(recovery)
+                expectedBankPayloads.add(item.bankBytes)
                 recovery.writeBytes(item.bankBytes)
                 require(recovery.readBytes().contentEquals(item.bankBytes)) {
                     "A Bank recovery snapshot did not verify."
@@ -46539,7 +46541,8 @@ class MainActivity : Activity() {
                 "The destination or Bank records changed before writing."
             }
             requireGen3BankPartyWithdrawalBackup(
-                backup!!, fresh, isBackupKept(backup!!), 1
+                backup!!, fresh, isBackupKept(backup!!), 1,
+                recoveryFiles, expectedBankPayloads
             )
             stagedDestination = work.copyOf()
             writeStarted = true
@@ -46565,7 +46568,8 @@ class MainActivity : Activity() {
             } else {
                 selected.forEach { item ->
                     requireGen3BankPartyWithdrawalBackup(
-                        backup!!, fresh, isBackupKept(backup!!), 2
+                        backup!!, fresh, isBackupKept(backup!!), 2,
+                        recoveryFiles, expectedBankPayloads
                     )
                     require(item.bankFile.readBytes().contentEquals(item.bankBytes)) {
                         "A Bank record changed before removal."
@@ -46579,7 +46583,8 @@ class MainActivity : Activity() {
                 }
             }
             requireGen3BankPartyWithdrawalBackup(
-                backup!!, fresh, isBackupKept(backup!!), 3
+                backup!!, fresh, isBackupKept(backup!!), 3,
+                recoveryFiles, expectedBankPayloads
             )
             selectedBankFiles.clear()
             bankMultiSelectMode = false

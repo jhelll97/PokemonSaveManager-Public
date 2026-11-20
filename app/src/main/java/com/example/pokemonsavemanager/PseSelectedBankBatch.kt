@@ -140,7 +140,9 @@ internal fun requireGen3BankPartyWithdrawalBackup(
     backup: File,
     expected: ByteArray,
     kept: Boolean,
-    stage: Int
+    stage: Int,
+    recoveryFiles: List<File>? = null,
+    recoveryExpected: List<ByteArray>? = null
 ) {
     require(retainedBankBackupMatches(backup, expected, kept)) {
         when(stage) {
@@ -148,6 +150,16 @@ internal fun requireGen3BankPartyWithdrawalBackup(
             1 -> "The retained Gen 3 Bank-to-party backup changed before writing."
             2 -> "The retained Gen 3 Bank-to-party backup changed before Bank cleanup."
             else -> "The retained Gen 3 Bank-to-party backup changed after persistence."
+        }
+    }
+    if(recoveryFiles != null || recoveryExpected != null) {
+        require(recoveryFiles != null && recoveryExpected != null &&
+            exactGen3BankRecoverySnapshots(recoveryFiles, recoveryExpected)) {
+            when(stage) {
+                1 -> "A Gen 3 Bank-to-party recovery snapshot changed before writing."
+                2 -> "A Gen 3 Bank-to-party recovery snapshot changed before Bank cleanup."
+                else -> "A Gen 3 Bank-to-party recovery snapshot changed after persistence."
+            }
         }
     }
 }
