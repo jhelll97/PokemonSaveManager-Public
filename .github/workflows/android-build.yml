@@ -38,6 +38,8 @@ jobs:
 
       - name: Set up Gradle dependency cache
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
 
       - name: Install Android SDK packages
         shell: bash
