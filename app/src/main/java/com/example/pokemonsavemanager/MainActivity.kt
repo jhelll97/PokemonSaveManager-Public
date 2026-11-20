@@ -59435,7 +59435,7 @@ class MainActivity : Activity() {
         if(!bound()){showDialog("Gen 2 → Gen 3 multi-transfer","The destination identity changed. Reopen PSE Bank. Nothing was changed.");return}
         if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog("Gen 2 → Gen 3 multi-transfer","The active save changed after destination selection. Reopen the Bank selection. Nothing was changed.");return}
         val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;val removed=ArrayList<Pair<File,ByteArray>>();var writeStarted=false
-        var safetyBackup:File?=null
+        var safetyBackup:File?=null;var stagedDestination:ByteArray?=null
         try{
             require(bound()){"The destination identity changed before batch validation."}
             require(prepared.isNotEmpty()){"The prepared selection is empty."};require(prepared.map{it.bankFile.absolutePath}.distinct().size==prepared.size){"The prepared selection contains a duplicate Bank entry."};require(fresh.contentEquals(preparedDestination)&&generationForSize(fresh.size)==3&&gen3SaveValid(fresh)){"The Gen 3 destination changed or is no longer valid."};require(targetBox in 0..13){"The selected Gen 3 destination box is invalid."};require(targetSlots.size==prepared.size&&targetSlots.distinct().size==targetSlots.size&&targetSlots.all{it in 0 until 30}){"The reviewed Gen 3 destination slots are invalid."}
@@ -59451,6 +59451,7 @@ class MainActivity : Activity() {
             val backup=File.createTempFile(backupGameName(file)+"_PreGen2ToGen3Batch_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The exact Gen 3 batch recovery backup did not verify."};retainGen2ToGen3SafetyBackup(backup,fresh)
             require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The Gen 3 destination, selected Bank records or retained backup changed before writing. Nothing was written."}
+            stagedDestination=save.copyOf()
             writeStarted=true
             file.writeBytes(save);val written=file.readBytes();require(written.contentEquals(save)&&gen3SaveValid(written)&&dexes.distinct().all{gen2ToGen3DexRegistered(written,it)}){"The persisted Gen 3 save, checksums or Pokédex mirrors failed verification."};val vpc=gen3PcBuffer(written)?:error("Could not re-open Gen 3 PC storage.")
             for((target,pk3,staged) in expected){val off=4+target*80;val actual=vpc.copyOfRange(off,off+80);val q=parsePk3(actual,0,false)?:error("A persisted PK3 could not be parsed.");require(actual.contentEquals(pk3)&&sameGen2ToGen3Pk3(q,staged)){"An exact converted PK3 did not persist."}};require(vpc.indices.all{it in changed||vpc[it]==beforePc[it]}){"Unrelated Gen 3 PC data changed after batch persistence."}
@@ -59473,8 +59474,16 @@ class MainActivity : Activity() {
                 if(!recovered)bankRestored=false
             }
             val destinationRestored=runCatching{
-                if(writeStarted)file.writeBytes(fresh)
-                val restored=file.readBytes();require(restored.contentEquals(fresh)){"The restored Gen 3 destination bytes did not verify."};require(gen3SaveValid(restored)){"The restored Gen 3 destination integrity did not verify."};true
+                val current=file.readBytes()
+                if(!current.contentEquals(fresh)){
+                    require(writeStarted){"No Generation 3 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 3 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(fresh)
+                }
+                val restored=file.readBytes()
+                require(restored.contentEquals(fresh)&&gen3SaveValid(restored)){"The restored Generation 3 destination did not verify."}
+                true
             }.getOrDefault(false)
             val recovery=when{
                 bankRestored&&destinationRestored->"The exact Gen 3 destination and every selected Gen 2 Bank record were restored or kept and verified."
