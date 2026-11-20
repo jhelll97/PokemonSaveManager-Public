@@ -46523,6 +46523,9 @@ class MainActivity : Activity() {
             backup!!.writeBytes(fresh)
             require(backup!!.readBytes().contentEquals(fresh)) { "The save recovery backup did not verify." }
             retainGen2ToGen3SafetyBackup(backup!!, fresh)
+            requireGen3BankPartyWithdrawalBackup(
+                backup!!, fresh, isBackupKept(backup!!), 0
+            )
             selected.forEach { item ->
                 val recovery = File.createTempFile("PSE_G3_BankPartyRecovery_", ".tmp", bankDir())
                 recoveryFiles.add(recovery)
@@ -46535,6 +46538,9 @@ class MainActivity : Activity() {
                 selected.all { it.bankFile.isFile && it.bankFile.readBytes().contentEquals(it.bankBytes) }) {
                 "The destination or Bank records changed before writing."
             }
+            requireGen3BankPartyWithdrawalBackup(
+                backup!!, fresh, isBackupKept(backup!!), 1
+            )
             stagedDestination = work.copyOf()
             writeStarted = true
             destination.writeBytes(work)
@@ -46558,6 +46564,9 @@ class MainActivity : Activity() {
                 }) { "A Bank original changed during the party copy." }
             } else {
                 selected.forEach { item ->
+                    requireGen3BankPartyWithdrawalBackup(
+                        backup!!, fresh, isBackupKept(backup!!), 2
+                    )
                     require(item.bankFile.readBytes().contentEquals(item.bankBytes)) {
                         "A Bank record changed before removal."
                     }
@@ -46569,6 +46578,9 @@ class MainActivity : Activity() {
                     "The Bank batch was not removed completely."
                 }
             }
+            requireGen3BankPartyWithdrawalBackup(
+                backup!!, fresh, isBackupKept(backup!!), 3
+            )
             selectedBankFiles.clear()
             bankMultiSelectMode = false
             Toast.makeText(this,

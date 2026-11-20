@@ -130,6 +130,22 @@ internal fun finishSelectedGen2BankWithdrawal(
             "; a Bank recovery snapshot was retained for review"
 }
 
+internal fun requireGen3BankPartyWithdrawalBackup(
+    backup: File,
+    expected: ByteArray,
+    kept: Boolean,
+    stage: Int
+) {
+    require(retainedBankBackupMatches(backup, expected, kept)) {
+        when(stage) {
+            0 -> "The retained Gen 3 Bank-to-party backup did not remain available."
+            1 -> "The retained Gen 3 Bank-to-party backup changed before writing."
+            2 -> "The retained Gen 3 Bank-to-party backup changed before Bank cleanup."
+            else -> "The retained Gen 3 Bank-to-party backup changed after persistence."
+        }
+    }
+}
+
 internal fun restoreExactGen3BankPartyDestination(
     file: File,
     original: ByteArray,
