@@ -48486,8 +48486,12 @@ class MainActivity : Activity() {
             require(bound()&&file.readBytes().contentEquals(save)&&selected.readBytes().contentEquals(raw)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The verified destination or retained recovery snapshots changed before Bank cleanup."}
             deleteAttempted=true;require(selected.delete()&&!selected.exists()){"The Gen 3 Bank entry could not be removed after destination verification."}
             require(bound()&&file.readBytes().contentEquals(save)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The verified destination or retained recovery snapshots changed after Bank cleanup."}
-            runCatching{bankCopy.delete()}
-            Toast.makeText(this,"Withdrawn to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
+            val bankRecoveryClean=cleanupExactBankRecoverySnapshots(
+                listOf(bankCopy),listOf(raw)
+            )
+            val recoveryNotice=if(bankRecoveryClean) "" else
+                "; exact temporary Bank recovery retained for review"
+            Toast.makeText(this,"Withdrawn to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show()
             showBank()
         }catch(e:Exception){
             val bankRestored=runCatching{
@@ -48510,12 +48514,17 @@ class MainActivity : Activity() {
                 copy.isFile&&recovered.contentEquals(raw)&&parsed!=null&&parsed.checksumValid&&
                     parsed.pid==source.pid&&parsed.species==source.species&&parsed.tid==source.tid&&parsed.sid==source.sid
             }.getOrDefault(false)}?:false
-            if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
+            val bankRecoveryClean=if(bankRestored&&destinationRestored){
+                bankRecovery?.let{
+                    cleanupExactBankRecoverySnapshots(listOf(it),listOf(raw))
+                }?:true
+            }else false
             val retainedBackup=safetyBackup?.let{saved->runCatching{
                 saved.isFile&&saved.readBytes().contentEquals(original)&&isBackupKept(saved)
             }.getOrDefault(false)}?:false
             val recovery=when{
-                bankRestored&&destinationRestored->"The exact Gen 3 destination and PK3 Bank record were restored or kept and verified."
+                bankRestored&&destinationRestored&&bankRecoveryClean->"The exact Gen 3 destination and PK3 Bank record were restored or kept and verified."
+                bankRestored&&destinationRestored->"The exact Gen 3 destination and PK3 Bank record were restored or kept and verified. The exact temporary Bank recovery snapshot changed or could not be removed safely and was retained for review."
                 bankRestored&&retainedBackup->"The PK3 Bank record was restored or kept. Destination restoration was not verified, but the exact retained Gen 3 destination backup verified."
                 bankRestored->"The PK3 Bank record was restored or kept, but destination restoration and the retained backup were not verified. The current destination was left untouched."
                 destinationRestored&&verifiedBankRecovery->"The exact Gen 3 destination was restored. Bank restoration was not verified, but the exact PK3 recovery snapshot verified."
