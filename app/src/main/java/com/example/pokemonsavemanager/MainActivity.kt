@@ -47462,6 +47462,7 @@ class MainActivity : Activity() {
     private fun transferGen3BankToGen2(bankFile:File,source:PokemonEntry,bankBytes:ByteArray,mon:ByteArray,ot:ByteArray,nick:ByteArray,targetBox:Int,file:File,openedDestination:ByteArray,openedUri:Uri?,openedLabel:String?,profileKey:String){
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
+        var stagedDestination:ByteArray?=null
         try{
             val fresh=file.readBytes();require(bound()&&fresh.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(fresh).first){"The destination save or source identity changed. Reopen PSE Bank."}
             val profile=detectGen2Profile(fresh)?:error("The destination is no longer a valid Gen 2 save.");require(profile.key==profileKey&&targetBox in 1..14){"The selected Gen 2 profile or PC Box changed."}
@@ -47478,6 +47479,7 @@ class MainActivity : Activity() {
                 isBackupKept(b)&&b.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){
                 "The source, destination or retained recovery snapshots changed before writing."
             }
+            stagedDestination=work.copyOf()
             writeStarted=true;file.writeBytes(work);val written=file.readBytes();val wp=detectGen2Profile(written)?:error("The persisted Gen 2 save failed validation.");require(bound()&&written.contentEquals(work)&&wp.key==profileKey&&verifyGen2SaveIntegrity(written).first){"The persisted Gen 2 destination failed verification."}
             val after=gen2LocationPayloads(written,"Box $targetBox",wp);require(after.size==before.size+1&&sameGen2PayloadList(after.take(before.size),before)&&gen2BoxRawCore(written,targetBox,slot).contentEquals(mon)&&gen2PokedexOwnedSeen(written,wp,source.species)){"The exact converted record, existing Box contents or Pokédex registration did not persist."}
             require(bankFile.readBytes().contentEquals(bankBytes)&&bound()&&file.readBytes().contentEquals(written)&&
@@ -47501,9 +47503,17 @@ class MainActivity : Activity() {
                     parsed.pid==source.pid&&parsed.species==source.species&&parsed.tid==source.tid&&parsed.sid==source.sid
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                if(writeStarted)file.writeBytes(openedDestination)
+                val current=file.readBytes()
+                if(!current.contentEquals(openedDestination)){
+                    require(writeStarted){"No Generation 2 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 2 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(openedDestination)
+                }
                 val restored=file.readBytes()
-                restored.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(restored).first
+                require(restored.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(restored).first&&
+                    detectGen2Profile(restored)?.key==profileKey){"The restored Generation 2 destination did not verify."}
+                true
             }.getOrDefault(false)
             if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
