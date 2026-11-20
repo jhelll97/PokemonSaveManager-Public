@@ -57,6 +57,19 @@ internal fun gen3PartyBatchRecoveryMessage(
     return source + gen3PartyBatchBackupStatus(retainedBackup)
 }
 
+internal fun restoreExactMissingGen3BankFile(
+    file: File,
+    expected: ByteArray
+): Boolean = runCatching {
+    if (!file.exists()) {
+        require(file.createNewFile()) {
+            "A Gen 3 Bank recovery path could not be reserved."
+        }
+        file.writeBytes(expected)
+    }
+    file.isFile && file.readBytes().contentEquals(expected)
+}.getOrDefault(false)
+
 internal fun cleanupExactSelectedGen3BankCopies(
     temporary: List<File>,
     finalized: List<File>,

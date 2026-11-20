@@ -46984,10 +46984,7 @@ class MainActivity : Activity() {
         } catch (error: Exception) {
             var bankRestored = true
             removed.forEach { (file, bytes) ->
-                val restored = runCatching {
-                    if (!file.exists()) file.writeBytes(bytes)
-                    file.isFile && file.readBytes().contentEquals(bytes)
-                }.getOrDefault(false)
+                val restored = restoreExactMissingGen3BankFile(file, bytes)
                 if (!restored) bankRestored = false
             }
             bankRestored = bankRestored && selected.all { item ->
