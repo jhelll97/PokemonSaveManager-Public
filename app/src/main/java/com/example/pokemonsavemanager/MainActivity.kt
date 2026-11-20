@@ -54986,7 +54986,7 @@ class MainActivity : Activity() {
         if(!bound()){showDialog("Gen 1 → Gen 7","The destination identity changed. Reopen PSE Bank. Nothing was changed.");return}
         val file=openedFile
         val fresh=runCatching{file.readBytes()}.getOrElse{showDialog("Gen 1 → Gen 7","The fresh Gen 7 destination could not be read. Nothing was changed.");return}
-        var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null
+        var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null;var stagedDestination:ByteArray?=null
         try{
             require(bound()&&fresh.contentEquals(preparedDestination)){"The destination identity or reviewed snapshot changed."}
             require(generationForSize(fresh.size)==7){"The loaded destination is no longer a Gen 7 save."}
@@ -55025,7 +55025,7 @@ class MainActivity : Activity() {
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen1ToGen7_",".backup",backupsDir());safetyBackup=recovery
             recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The exact Gen 7 recovery backup did not verify."};retainGen1ToGen7SafetyBackup(recovery,fresh)
             require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(originalBankBytes)){"The destination, Bank record or retained recovery backup changed before writing."}
-            writeStarted=true;file.writeBytes(work)
+            stagedDestination=work.copyOf();writeStarted=true;file.writeBytes(work)
             val written=file.readBytes();require(written.contentEquals(work)&&boxStorageInfo(written)==info){"The persisted Gen 7 destination or PC layout changed unexpectedly."}
             val actual=written.copyOfRange(offset,offset+PK6_STORED_SIZE);val reopened=parsePk6(actual,0,PK6_STORED_SIZE,false,807)?:error("The persisted PK7 could not be parsed.")
             val reopenedMismatch=gen1ToGen7PkMismatch(reopened,prepared)
@@ -55043,9 +55043,16 @@ class MainActivity : Activity() {
                 bankFile.readBytes().contentEquals(originalBankBytes)&&parseGen1BankPayload(bankFile.readBytes())?.let{sameGen1TransferRecord(it,parseGen1BankPayload(originalBankBytes)!!)}==true
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                if(writeStarted)file.writeBytes(fresh)
+                val current=file.readBytes()
+                if(!current.contentEquals(fresh)){
+                    require(writeStarted){"No Generation 7 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 7 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(fresh)
+                }
                 val restored=file.readBytes()
-                restored.contentEquals(fresh)&&generationForSize(restored.size)==7&&validateGen7CoreChecksums(restored).first
+                require(restored.contentEquals(fresh)&&generationForSize(restored.size)==7&&validateGen7CoreChecksums(restored).first){"The restored Generation 7 destination did not verify."}
+                true
             }.getOrDefault(false)
             val recovery=when{
                 bankRestored&&saveRestored->"The exact Gen 7 destination and Gen 1 Bank record were restored or kept and verified."
