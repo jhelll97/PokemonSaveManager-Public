@@ -54318,6 +54318,7 @@ class MainActivity : Activity() {
         var writeStarted=false
         var bankDeleteAttempted=false
         var safetyBackup:File?=null
+        var stagedDestination:ByteArray?=null
         try{
             require(generationForSize(fresh.size)==3&&gen3SaveValid(fresh)){"The loaded destination is no longer a valid Gen 3 save."}
             require(target in 0 until 420){"The selected Gen 3 destination slot is invalid."}
@@ -54358,6 +54359,7 @@ class MainActivity : Activity() {
             require(recovery.readBytes().contentEquals(fresh)){"The exact Gen 3 recovery backup did not verify."}
             retainGen2ToGen3SafetyBackup(recovery,fresh)
             require(isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(bankBytes)){"The destination, Bank record or retained recovery backup changed before writing."}
+            stagedDestination=save.copyOf()
             writeStarted=true
             file.writeBytes(save)
             val verify=file.readBytes();require(verify.contentEquals(save)){"The Gen 3 destination changed while the conversion was being written."};require(gen3SaveValid(verify)){"The written Gen 3 save failed checksum verification."}
@@ -54381,9 +54383,16 @@ class MainActivity : Activity() {
                 bankFile.readBytes().contentEquals(originalBank)
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                if(writeStarted)file.writeBytes(fresh)
+                val current=file.readBytes()
+                if(!current.contentEquals(fresh)){
+                    require(writeStarted){"No Generation 3 destination write began; unknown current bytes were left untouched."}
+                    val staged=stagedDestination
+                    require(staged!=null&&current.contentEquals(staged)){"The Generation 3 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery."}
+                    file.writeBytes(fresh)
+                }
                 val restored=file.readBytes()
-                restored.contentEquals(fresh)&&generationForSize(restored.size)==3&&gen3SaveValid(restored)
+                require(restored.contentEquals(fresh)&&generationForSize(restored.size)==3&&gen3SaveValid(restored)){"The restored Generation 3 destination did not verify."}
+                true
             }.getOrDefault(false)
             val recovery=when{
                 bankRestored&&saveRestored->"The exact Gen 3 destination and Gen 1 Bank record were restored or kept and verified."
