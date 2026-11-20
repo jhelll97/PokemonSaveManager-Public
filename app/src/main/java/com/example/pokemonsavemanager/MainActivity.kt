@@ -13246,7 +13246,7 @@ class MainActivity : Activity() {
         if(!gen5ToGen6StillBound(p))return showDialog(title,"The destination or Bank record changed. Reopen PSE Bank.")
         val file=p.destinationFile
         val original=runCatching{file.readBytes()}.getOrNull()?:return showDialog(title,"The destination save could not be read.")
-        var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
+        var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null;var stagedDestination:ByteArray?=null
         try{
             require(original.contentEquals(p.destination)&&(original.size==SIZE_G6_XY||original.size==SIZE_G6_ORAS)){"The prepared Gen 6 destination changed."};require(gen6BoxChecksumValid(original)&&gen6BlockChecksumValid(original,20)){"The destination storage or Pokédex checksum changed."}
             val info=boxStorageInfo(original)?:error("PSE could not resolve native Gen 6 PC storage.");require(target in 0 until info.second){"The selected Gen 6 slot is invalid."};val offset=info.first+target*PK6_STORED_SIZE;require(gen6DestinationSlotIsStructurallyEmpty(original,info.first,info.second,info.third,target)){"The selected Gen 6 slot is no longer structurally empty. Nonzero records were left unchanged."}
@@ -13297,7 +13297,7 @@ class MainActivity : Activity() {
             bankCopy.writeBytes(p.bankBytes);require(bankCopy.readBytes().contentEquals(p.bankBytes)){"The Bank recovery snapshot did not verify."}
             require(gen5ToGen6StillBound(p)&&file.readBytes().contentEquals(original)&&isBackupKept(recovery)&&
                 recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(p.bankBytes)){"The source identity, snapshots or retained recovery changed before writing."}
-            writeStarted=true;file.writeBytes(save)
+            stagedDestination=save.copyOf();writeStarted=true;file.writeBytes(save)
             val written=file.readBytes()
             require(written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){"The persisted Gen 6 save differs from the reviewed write scope."}
             require(gen6BoxChecksumValid(written)&&gen6BlockChecksumValid(written,20)&&gen6DexCaught(written,staged.species)){"The persisted Gen 6 save failed checksum or Pokédex validation."}
@@ -13336,9 +13336,10 @@ class MainActivity : Activity() {
                 }
             }.getOrDefault(false)
             val saveRestored=runCatching{
-                if(writeStarted)file.writeBytes(original)
+                restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Generation 6 destination write began; unknown current bytes were left untouched.","The Generation 6 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
-                restored.contentEquals(original)&&gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)
+                require(restored.contentEquals(original)&&gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)){"The restored Generation 6 destination did not verify."}
+                true
             }.getOrDefault(false)
             if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
