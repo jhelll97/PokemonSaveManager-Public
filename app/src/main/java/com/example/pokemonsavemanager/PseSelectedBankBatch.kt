@@ -70,6 +70,16 @@ internal fun restoreExactMissingGen3BankFile(
     file.isFile && file.readBytes().contentEquals(expected)
 }.getOrDefault(false)
 
+internal fun exactGen3BankRecoverySnapshots(
+    files: List<File>,
+    expected: List<ByteArray>
+): Boolean = files.size == expected.size && files.indices.all { index ->
+    runCatching {
+        files[index].isFile &&
+            files[index].readBytes().contentEquals(expected[index])
+    }.getOrDefault(false)
+}
+
 internal fun cleanupExactSelectedGen3BankCopies(
     temporary: List<File>,
     finalized: List<File>,

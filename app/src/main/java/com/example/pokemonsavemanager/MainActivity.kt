@@ -46876,21 +46876,7 @@ class MainActivity : Activity() {
                 }) {
                 "The destination or a selected Bank record changed before writing."
             }
-            require(selected.indices.all { index ->
-                val recovered = bankRecovery[index].readBytes()
-                val parsed = if (recovered.size == 80) {
-                    parsePk3(recovered, 0, false)
-                } else {
-                    null
-                }
-                bankRecovery[index].isFile &&
-                    recovered.contentEquals(refreshed[index]) &&
-                    parsed != null && parsed.checksumValid &&
-                    parsed.pid == selected[index].pokemon.pid &&
-                    parsed.species == selected[index].pokemon.species &&
-                    parsed.tid == selected[index].pokemon.tid &&
-                    parsed.sid == selected[index].pokemon.sid
-            }) {
+            require(exactGen3BankRecoverySnapshots(bankRecovery, refreshed)) {
                 "A Gen 3 Bank recovery snapshot changed before writing."
             }
 
@@ -46914,6 +46900,10 @@ class MainActivity : Activity() {
                 "The exact Gen 3 Bank batch did not persist in the destination box."
             }
             selected.forEachIndexed { index, item ->
+                require(removed.all { !it.first.exists() } &&
+                    exactGen3BankRecoverySnapshots(bankRecovery, refreshed)) {
+                    "An earlier Gen 3 Bank removal or recovery snapshot changed during cleanup."
+                }
                 require(destinationBound() && openedFile.readBytes().contentEquals(work)) {
                     "The verified Gen 3 destination changed before Bank cleanup."
                 }
@@ -46954,21 +46944,7 @@ class MainActivity : Activity() {
             require(isBackupKept(backup!!) && backup!!.readBytes().contentEquals(fresh)) {
                 "The retained Gen 3 recovery backup changed after Bank cleanup."
             }
-            require(selected.indices.all { index ->
-                val recovered = bankRecovery[index].readBytes()
-                val parsed = if (recovered.size == 80) {
-                    parsePk3(recovered, 0, false)
-                } else {
-                    null
-                }
-                bankRecovery[index].isFile &&
-                    recovered.contentEquals(refreshed[index]) &&
-                    parsed != null && parsed.checksumValid &&
-                    parsed.pid == selected[index].pokemon.pid &&
-                    parsed.species == selected[index].pokemon.species &&
-                    parsed.tid == selected[index].pokemon.tid &&
-                    parsed.sid == selected[index].pokemon.sid
-            }) {
+            require(exactGen3BankRecoverySnapshots(bankRecovery, refreshed)) {
                 "A Gen 3 Bank recovery snapshot changed after Bank cleanup."
             }
             bankRecovery.forEach { runCatching { it.delete() } }
