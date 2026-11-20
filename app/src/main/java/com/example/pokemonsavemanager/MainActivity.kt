@@ -50855,6 +50855,7 @@ class MainActivity : Activity() {
         val finalBankFiles = ArrayList<File>()
         val expectedBankPayloads = ArrayList<ByteArray>()
         var writeStarted = false
+        var stagedSource: ByteArray? = null
         try {
             require(selectedSlots.isNotEmpty() &&
                 selectedSlots.size == selectedSlots.toSet().size &&
@@ -50993,6 +50994,7 @@ class MainActivity : Activity() {
                 "The active save changed before writing. Nothing was changed."
             }
 
+            stagedSource = work.copyOf()
             writeStarted = true
             file.writeBytes(work)
             val persisted = file.readBytes()
@@ -51067,11 +51069,18 @@ class MainActivity : Activity() {
             showBank()
         } catch (error: Exception) {
             val saveRestored = runCatching {
-                if (writeStarted) file.writeBytes(opened)
+                restoreExactStagedDestination(
+                    file, opened, stagedSource, writeStarted,
+                    "No Generation 3 source write began; unknown current bytes were left untouched.",
+                    "The Generation 3 source no longer matches this box batch deposit's staged bytes; the retained backup was left for recovery."
+                )
                 val restored = file.readBytes()
-                restored.contentEquals(opened) &&
+                require(restored.contentEquals(opened) &&
                     restored.size == opened.size &&
-                    gen3SaveValid(restored)
+                    gen3SaveValid(restored)) {
+                    "The restored Generation 3 source did not verify."
+                }
+                true
             }.getOrDefault(false)
             var bankClean = true
             val cleanupCandidates = ArrayList<Pair<File, ByteArray>>()
