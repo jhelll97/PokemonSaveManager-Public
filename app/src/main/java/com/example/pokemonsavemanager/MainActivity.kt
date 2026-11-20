@@ -54476,6 +54476,7 @@ class MainActivity : Activity() {
         var recoveryBankBytes:ByteArray?=null
         var safetyBackup:File?=null;var bankRecovery:File?=null
         var stagedDestination:ByteArray?=null
+        var retainedRecovery=false
         try{
             require(bound()&&fresh.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(fresh).first){"The selected destination save or source identity changed. Reopen the Bank entry."}
             val profile=detectGen2Profile(fresh)?:error("The loaded destination is no longer a valid Gen 2 save.")
@@ -54537,7 +54538,9 @@ class MainActivity : Activity() {
             require(!bankFile.exists()){"The Bank deletion could not be verified."}
             require(bound()&&file.readBytes().contentEquals(written)){"The verified Gen 2 destination changed after Bank cleanup."}
             require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){"A retained Gen 2 or Bank recovery snapshot changed after Bank cleanup."}
-            runCatching{bankCopy.delete()}
+            retainedRecovery=!cleanupExactBankRecoverySnapshots(
+                listOf(bankCopy),listOf(bankBytes)
+            )
             committedSlot=slot
         }catch(e:Exception){
             val bankRestored=runCatching{
@@ -54556,9 +54559,16 @@ class MainActivity : Activity() {
                     detectGen2Profile(restored)?.key==profileKey){"The restored Generation 2 destination did not verify."}
                 true
             }.getOrDefault(false)
-            if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
+            val bankRecoveryClean=if(bankRestored&&destinationRestored){
+                bankRecovery?.let{copy->
+                    recoveryBankBytes?.let{expected->
+                        cleanupExactBankRecoverySnapshots(listOf(copy),listOf(expected))
+                    }?:false
+                }?:true
+            }else false
             val recovery=when{
-                bankRestored&&destinationRestored->"The exact Gen 2 destination and Gen 1 Bank record were restored or kept and verified."
+                bankRestored&&destinationRestored&&bankRecoveryClean->"The exact Gen 2 destination and Gen 1 Bank record were restored or kept and verified."
+                bankRestored&&destinationRestored->"The exact Gen 2 destination and Gen 1 Bank record were restored or kept and verified. The exact temporary Bank recovery snapshot changed or could not be removed safely and was retained for review."
                 bankRestored->"The Gen 1 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
                 destinationRestored->"The exact Gen 2 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
                 else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
@@ -54568,7 +54578,9 @@ class MainActivity : Activity() {
                 (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery: "+it.name}?:""))
             return
         }
-        Toast.makeText(this,"PSE converted Gen 1 → Gen 2 to Box $targetBox • Slot ${committedSlot+1} and verified",Toast.LENGTH_LONG).show()
+        val recoveryNotice=if(retainedRecovery)
+            "; exact temporary Bank recovery retained for review" else ""
+        Toast.makeText(this,"PSE converted Gen 1 → Gen 2 to Box $targetBox • Slot ${committedSlot+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show()
         showGen2PokemonViewer("boxes",targetBox)
     }
 
