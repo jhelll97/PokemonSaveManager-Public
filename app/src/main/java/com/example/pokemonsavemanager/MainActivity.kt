@@ -1348,7 +1348,7 @@ class MainActivity : Activity() {
         val openedFile=file;val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val fresh=runCatching{file.readBytes()}.getOrElse{showDialog("Gen 1 → Gen 7 multi-transfer failed","The fresh Gen 7 destination save could not be read. Nothing was changed.");return}
-        val removed=ArrayList<Pair<File,ByteArray>>();var writeStarted=false;var safetyBackup:File?=null
+        val removed=ArrayList<Pair<File,ByteArray>>();var writeStarted=false;var safetyBackup:File?=null;var stagedDestination:ByteArray?=null
         try{
             require(bound()){"The Gen 7 destination identity changed. Nothing was changed."}
             require(preparedBatch.isNotEmpty()){"No Gen 1 Bank entries were prepared."}
@@ -1405,6 +1405,7 @@ class MainActivity : Activity() {
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen1BatchToGen7_",".backup",backupsDir());safetyBackup=recovery
             recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The exact Gen 7 batch recovery backup did not verify."};retainGen1ToGen7SafetyBackup(recovery,fresh)
             require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination, selected Bank records or retained recovery backup changed before writing."}
+            stagedDestination=work.copyOf()
             writeStarted=true
             file.writeBytes(work)
             val written=file.readBytes();require(written.contentEquals(work)){"The Gen 7 destination changed while the batch was being written."};require(boxStorageInfo(written)==info){"The persisted Gen 7 PC layout changed unexpectedly."}
@@ -1428,9 +1429,10 @@ class MainActivity : Activity() {
             for((bankFile,bankBytes) in removed)runCatching{if(!bankFile.exists())require(bankFile.createNewFile()){"A Bank recovery path could not be reserved."};bankFile.writeBytes(bankBytes)}
             val banksRestored=preparedBatch.all{prepared->runCatching{val bytes=prepared.bankFile.readBytes();bytes.contentEquals(prepared.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,prepared.source)}==true}.getOrDefault(false)}
             val saveRestored=runCatching{
-                if(writeStarted)file.writeBytes(fresh)
+                restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 7 destination write began; unknown current bytes were left untouched.","The Generation 7 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
-                restored.contentEquals(fresh)&&validateGen7CoreChecksums(restored).first
+                require(restored.contentEquals(fresh)&&validateGen7CoreChecksums(restored).first){"The restored Generation 7 destination did not verify."}
+                true
             }.getOrDefault(false)
             val recovery=when{
                 banksRestored&&saveRestored->"The exact Gen 7 destination and every selected Gen 1 Bank record were restored or kept and verified."
