@@ -1100,9 +1100,11 @@ class MainActivity : Activity() {
                 require(bound()&&file.readBytes().contentEquals(work)&&activeMatches(work)){"The verified Gen 1 destination changed after Bank cleanup."}
                 require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&refreshed.indices.all{bankRecovery[it].readBytes().contentEquals(refreshed[it].second)}){"A retained Gen 1 recovery copy changed after Bank cleanup."}
                 updateSourceBaseline(analysis.sha256,analysis.trainer?.exactGame?:analysis.family,written.size.toLong())
-                bankRecovery.forEach{runCatching{it.delete()}}
+                val completionMessage=finishSelectedGen1BankWithdrawal(
+                    bankRecovery,refreshed.map{it.second},refreshed.size,box
+                )
                 selectedBankFiles.clear();bankMultiSelectMode=false
-                Toast.makeText(this,"${refreshed.size} Gen 1 Pokémon moved to Box $box and verified",Toast.LENGTH_LONG).show();showBank()
+                Toast.makeText(this,completionMessage,Toast.LENGTH_LONG).show();showBank()
             }catch(e:Exception){
                 var bankRestored=true
                 for((bankFile,bankBytes,source) in selected){
@@ -1139,7 +1141,9 @@ class MainActivity : Activity() {
                     }.getOrNull()
                 }
                 val allBankRecoveryVerified=bankRecovery.size==selected.size&&verifiedBankRecovery.size==selected.size
-                if(bankRestored&&destinationRestored)bankRecovery.forEach{runCatching{it.delete()}}
+                if(bankRestored&&destinationRestored)cleanupExactBankRecoverySnapshots(
+                    bankRecovery,selected.map{it.second}
+                )
                 val recovery=when{
                     bankRestored&&destinationRestored->
                         "The exact Gen 1 destination and every selected Bank record were restored or kept and verified."
