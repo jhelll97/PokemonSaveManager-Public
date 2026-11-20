@@ -67693,6 +67693,7 @@ private data class Gen2ToGen5LegalisePlan(
         var cleanupAttempted=false
         var safetyBackup:File?=null
         var bankRecovery:File?=null
+        var stagedDestination:ByteArray?=null
         try{
             require(bound()&&nativeValid(original)&&file.readBytes().contentEquals(original)){"The destination identity, bytes or native checksums changed before withdrawal."}
             require(exactBankFile.readBytes().contentEquals(raw)){"The selected PK$bankGen Bank record changed before recovery staging."}
@@ -67715,6 +67716,7 @@ private data class Gen2ToGen5LegalisePlan(
             require(bound()&&file.readBytes().contentEquals(original)&&exactBankFile.readBytes().contentEquals(raw)&&recoveryValid()){
                 "The destination, Bank record or retained recovery data changed before writing."
             }
+            stagedDestination=work.copyOf()
             writeStarted=true
             file.writeBytes(work)
             val verifyData=file.readBytes()
@@ -67754,7 +67756,7 @@ private data class Gen2ToGen5LegalisePlan(
                 true
             }.getOrDefault(false)
             val destinationRestored=runCatching{
-                if(writeStarted)file.writeBytes(original)
+                restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Generation $currentGen destination write began; unknown current bytes were left untouched.","The Generation $currentGen destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(original)&&nativeValid(restored)){"The exact Generation $currentGen destination could not be restored or verified."}
                 true
