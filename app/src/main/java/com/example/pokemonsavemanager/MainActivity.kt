@@ -826,33 +826,69 @@ class MainActivity : Activity() {
 
     private fun chooseSelectedStandardBankDestination(chosen:List<File>, generation:Int) {
         val file=importedFile?:return
-        val data=runCatching{file.readBytes()}.getOrNull()?:return
-        val info=boxStorageInfo(data)?:return
-        val boxOffset=info.first; val slotCount=info.second; val maxSpecies=info.third
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
+        val reviewedDestination=runCatching{file.readBytes()}.getOrNull()?:return
+        val info=boxStorageInfo(reviewedDestination)?:return
+        val boxOffset=info.first;val slotCount=info.second;val maxSpecies=info.third
+        fun structurallyEmpty(data:ByteArray,slot:Int)=if(generation==6)
+            gen6BankDestinationSlotIsStructurallyEmpty(data,boxOffset,slotCount,maxSpecies,slot)
+        else gen7BankDestinationSlotIsStructurallyEmpty(data,boxOffset,slotCount,maxSpecies,slot)
         val boxCount=slotCount/30
         val labels=(0 until boxCount).map { box ->
-            var empty=0
-            for(slot in 0 until 30) {
-                val global=box*30+slot
-                if(global<slotCount && parsePk6(data,boxOffset+global*PK6_STORED_SIZE,PK6_STORED_SIZE,false,maxSpecies)==null) empty++
-            }
-            "Box ${box+1} • $empty empty slot${if(empty==1) "" else "s"}"
+            val empty=(0 until 30).count{slot->val global=box*30+slot;global<slotCount&&structurallyEmpty(reviewedDestination,global)}
+            "Box ${box+1} • $empty structurally empty slot${if(empty==1)"" else "s"}"
         }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle("Move ${chosen.size} Pokémon to which box?")
-            .setItems(labels){_,which->moveSelectedStandardBankPokemon(chosen,generation,which)}
-            .setNegativeButton("Cancel",null)
-            .show()
+        AlertDialog.Builder(this).setTitle("Move ${chosen.size} Pokémon to which box?")
+            .setItems(labels){_,which->
+                val current=runCatching{file.readBytes()}.getOrNull()
+                if(current==null||importedFile?.absolutePath!=file.absolutePath||currentSourceUri!=openedUri||
+                    currentSourceLabel!=openedLabel||!current.contentEquals(reviewedDestination)){
+                    showDialog("Move selected","The reviewed destination identity or bytes changed. Reopen PSE Bank. Nothing was changed.")
+                    return@setItems
+                }
+                val slots=(0 until 30).map{which*30+it}.filter{it<slotCount&&structurallyEmpty(current,it)}.take(chosen.size)
+                if(slots.size!=chosen.size){
+                    showDialog("Move selected","Box ${which+1} no longer has enough structurally empty slots. Nonzero records were left unchanged.")
+                    return@setItems
+                }
+                val reviewedSources=try{
+                    val root=bankDir().canonicalFile
+                    val paths=chosen.map{it.canonicalFile}
+                    require(paths.distinct().size==paths.size){"The same Bank record was selected more than once."}
+                    paths.map{selected->
+                        require(selected.parentFile==root&&selected.isFile&&selected.extension.equals("pk$generation",true)){"A selected Bank path is outside the Generation $generation PSE Bank."}
+                        val raw=selected.readBytes()
+                        require(raw.size==PK6_STORED_SIZE&&parsePk6(raw,0,PK6_STORED_SIZE,false,maxSpecies)?.checksumValid==true){"A selected Bank Pokémon failed its native size or checksum."}
+                        raw.copyOf()
+                    }
+                }catch(error:Exception){
+                    showDialog("Move selected",(error.message?:"The selected Bank records could not be reviewed.")+" Nothing was changed.")
+                    return@setItems
+                }
+                val destinations=slots.joinToString(", "){slot->"Box ${slot/30+1} • Slot ${slot%30+1}"}
+                AlertDialog.Builder(this).setTitle("Confirm PSE Bank batch withdrawal")
+                    .setMessage("Generation $generation PSE withdrawal\n\nDestination slots: $destinations\n\nThe exact selected Bank bytes and destination save are bound to this review. No conversion or Legalise change occurs. This is not an official trade, Pokémon Bank or HOME transfer, legality certification, or verified provenance. Cancel leaves every file unchanged.")
+                    .setPositiveButton("Move and verify"){_,_->
+                        moveSelectedStandardBankPokemon(chosen,generation,which,current,openedUri,openedLabel,reviewedSources,slots)
+                    }.setNegativeButton("Cancel",null).show()
+            }.setNegativeButton("Cancel",null).show()
     }
 
-    private fun moveSelectedStandardBankPokemon(chosen:List<File>, generation:Int, targetBox:Int) {
+    private fun moveSelectedStandardBankPokemon(
+        chosen:List<File>,generation:Int,targetBox:Int,reviewedDestination:ByteArray,
+        openedUri:Uri?,openedLabel:String?,reviewedSources:List<ByteArray>,plannedSlots:List<Int>
+    ) {
         val file=importedFile?:return
-        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         val original=runCatching{file.readBytes()}.getOrNull()?:return
+        if(importedFile?.absolutePath!=file.absolutePath||currentSourceUri!=openedUri||currentSourceLabel!=openedLabel||
+            !original.contentEquals(reviewedDestination)){
+            showDialog("Move selected","The reviewed destination identity or bytes changed. Reopen PSE Bank. Nothing was changed.")
+            return
+        }
         val info=boxStorageInfo(original)?:return showDialog("Move selected","PSE could not resolve this save's PC storage.")
         val maxSpecies=info.third
         val result=executeSelectedStandardBankBatch(
-            chosen,generation,targetBox,file,original,bankDir(),backupsDir(),backupGameName(file),
+            chosen,generation,targetBox,plannedSlots,reviewedSources,file,original,bankDir(),backupsDir(),backupGameName(file),
             info.first,info.second,PK6_STORED_SIZE,
             {importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel},
             {data,slot->if(generation==6)gen6BankDestinationSlotIsStructurallyEmpty(data,info.first,info.second,maxSpecies,slot)

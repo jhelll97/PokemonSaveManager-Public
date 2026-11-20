@@ -11,6 +11,8 @@ internal fun executeSelectedStandardBankBatch(
     chosen: List<File>,
     generation: Int,
     targetBox: Int,
+    plannedSlots: List<Int>,
+    reviewedSources: List<ByteArray>,
     file: File,
     original: ByteArray,
     bankDirectory: File,
@@ -38,25 +40,27 @@ internal fun executeSelectedStandardBankBatch(
         require(chosen.isNotEmpty()){"No Bank records are selected."}
         require(generation in 6..7&&nativeValid(original)){"The loaded save does not match this PSE Bank generation."}
         require(targetBox in 0 until (slotCount/30)){"The selected destination box is unavailable."}
+        require(plannedSlots.size==chosen.size&&reviewedSources.size==chosen.size&&
+            plannedSlots.distinct().size==plannedSlots.size&&plannedSlots.all{it in 0 until slotCount&&it/30==targetBox&&structurallyEmpty(original,it)}){
+            "The reviewed destination slots changed or are no longer structurally empty."
+        }
         val root=bankDirectory.canonicalFile
-        val empty=(0 until 30).map{targetBox*30+it}.filter{it<slotCount&&structurallyEmpty(original,it)}
-        require(empty.size>=chosen.size){"Box ${targetBox+1} has only ${empty.size} structurally empty slots but ${chosen.size} Pokémon are selected. Choose another box."}
-        chosen.forEach { selected ->
+        chosen.forEachIndexed { index,selected ->
             val exact=selected.canonicalFile
             require(exact.parentFile==root&&exact.isFile&&exact.extension.equals("pk$generation",true)){"A selected Bank record is outside the Generation $generation PSE Bank."}
             require(exact !in sources){"The same Bank record was selected more than once."}
             val raw=exact.readBytes()
-            require(recordValid(raw)){"A selected Bank Pokémon failed its native size or PK checksum."}
+            require(raw.contentEquals(reviewedSources[index])&&recordValid(raw)){"A selected Bank Pokémon changed after review or failed its native size or PK checksum."}
             sources.add(exact)
             sourceBytes.add(raw)
         }
         require(bound()&&file.readBytes().contentEquals(original)){"The destination identity or bytes changed before staging."}
         val work=original.copyOf()
-        sourceBytes.forEachIndexed { index,raw -> raw.copyInto(work,boxOffset+empty[index]*recordSize) }
+        sourceBytes.forEachIndexed { index,raw -> raw.copyInto(work,boxOffset+plannedSlots[index]*recordSize) }
         refreshDestination(work)
         require(nativeValid(work)){"The staged destination failed native checksum validation."}
         sourceBytes.forEachIndexed { index,raw ->
-            val off=boxOffset+empty[index]*recordSize
+            val off=boxOffset+plannedSlots[index]*recordSize
             require(work.copyOfRange(off,off+recordSize).contentEquals(raw)&&recordValid(raw)){"A staged Bank Pokémon did not verify exactly."}
         }
         val backup=File.createTempFile(backupBaseName+"_PreSelectedBankMove_",".backup",backupsDirectory)
@@ -84,7 +88,7 @@ internal fun executeSelectedStandardBankBatch(
         val verify=file.readBytes()
         require(bound()&&verify.contentEquals(work)&&nativeValid(verify)){"The persisted destination or native checksums did not verify."}
         sourceBytes.forEachIndexed { index,raw ->
-            val off=boxOffset+empty[index]*recordSize
+            val off=boxOffset+plannedSlots[index]*recordSize
             val actual=verify.copyOfRange(off,off+recordSize)
             require(actual.contentEquals(raw)&&recordValid(actual)){"A moved Pokémon did not verify after persistence."}
         }
