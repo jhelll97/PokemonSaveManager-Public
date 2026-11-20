@@ -252,6 +252,23 @@ internal class ExactBankRecoverySet {
         entries.map { it.first }.filter { it.exists() }.joinToString(", ") { it.name }
 }
 
+internal fun requireExactGen3BankPartySource(
+    item: Gen3BankBatchItem,
+    root: File,
+    parsed: MainActivity.PokemonEntry?
+) {
+    require(item.bankFile.canonicalFile == item.bankFile &&
+        item.bankFile.parentFile == root && item.bankFile.isFile &&
+        item.bankFile.readBytes().contentEquals(item.bankBytes)) {
+        "A selected Bank record changed after review."
+    }
+    require(parsed != null && parsed.checksumValid &&
+        parsed.pid == item.pokemon.pid && parsed.species == item.pokemon.species &&
+        parsed.isEgg == item.pokemon.isEgg) {
+        "A selected Bank PK3 failed revalidation."
+    }
+}
+
 internal fun requireGen3BankPartyWithdrawalBackup(
     backup: File,
     expected: ByteArray,
@@ -274,6 +291,31 @@ internal fun requireGen3BankPartyWithdrawalBackup(
                 2 -> "A Gen 3 Bank-to-party recovery snapshot changed before Bank cleanup."
                 else -> "A Gen 3 Bank-to-party recovery snapshot changed after persistence."
             }
+        }
+    }
+}
+
+internal fun requireGen3BankPartyCleanupBoundary(
+    backup: File,
+    expectedBackup: ByteArray,
+    kept: Boolean,
+    stage: Int,
+    recovery: ExactBankRecoverySet,
+    destinationBound: Boolean,
+    destination: File,
+    expectedDestination: ByteArray
+) {
+    requireGen3BankPartyWithdrawalBackup(
+        backup, expectedBackup, kept, stage, recovery
+    )
+    require(destinationBound && runCatching {
+        destination.isFile &&
+            destination.readBytes().contentEquals(expectedDestination)
+    }.getOrDefault(false)) {
+        if(stage == 2) {
+            "The Gen 3 party destination identity or exact staged bytes changed before Bank cleanup."
+        } else {
+            "The Gen 3 party destination identity or exact staged bytes changed after Bank cleanup."
         }
     }
 }

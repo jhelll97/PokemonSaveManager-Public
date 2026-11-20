@@ -46445,15 +46445,10 @@ class MainActivity : Activity() {
                 "The prepared Bank selection is empty or contains duplicates."
             }
             selected.forEach { item ->
-                require(item.bankFile.canonicalFile == item.bankFile && item.bankFile.parentFile == root &&
-                    item.bankFile.isFile && item.bankFile.readBytes().contentEquals(item.bankBytes)) {
-                    "A selected Bank record changed after review."
-                }
-                val p = if (item.bankBytes.size == 80) parsePk3(item.bankBytes, 0, false) else null
-                require(p != null && p.checksumValid && p.pid == item.pokemon.pid &&
-                    p.species == item.pokemon.species && p.isEgg == item.pokemon.isEgg) {
-                    "A selected Bank PK3 failed revalidation."
-                }
+                requireExactGen3BankPartySource(
+                    item, root,
+                    if (item.bankBytes.size == 80) parsePk3(item.bankBytes, 0, false) else null
+                )
             }
             val builds = gen3BankPartyBuilds(selected)
             val game = detectGen3GameFromData(fresh, sourceLabel ?: destination.name)
@@ -46554,9 +46549,9 @@ class MainActivity : Activity() {
                 }) { "A Bank original changed during the party copy." }
             } else {
                 selected.forEach { item ->
-                    requireGen3BankPartyWithdrawalBackup(
-                        backup!!, fresh, isBackupKept(backup!!), 2,
-                        bankRecovery
+                    requireGen3BankPartyCleanupBoundary(
+                        backup!!, fresh, isBackupKept(backup!!), 2, bankRecovery,
+                        bound(), destination, work
                     )
                     require(item.bankFile.readBytes().contentEquals(item.bankBytes)) {
                         "A Bank record changed before removal."
@@ -46569,9 +46564,9 @@ class MainActivity : Activity() {
                     "The Bank batch was not removed completely."
                 }
             }
-            requireGen3BankPartyWithdrawalBackup(
-                backup!!, fresh, isBackupKept(backup!!), 3,
-                bankRecovery
+            requireGen3BankPartyCleanupBoundary(
+                backup!!, fresh, isBackupKept(backup!!), 3, bankRecovery,
+                bound(), destination, work
             )
             selectedBankFiles.clear()
             bankMultiSelectMode = false
