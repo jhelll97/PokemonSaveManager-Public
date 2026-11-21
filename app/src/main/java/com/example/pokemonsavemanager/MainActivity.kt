@@ -37336,6 +37336,7 @@ class MainActivity : Activity() {
         if(!gen7ToGen6SnapshotsMatch(p)||p.submitted)return showDialog("Gen 7 → Gen 6","The destination or Bank record changed, or this conversion was already submitted. Reopen PSE Bank.")
         val file=p.destinationFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return showDialog("Gen 7 → Gen 6","The destination save could not be read. Nothing was changed.");p.submitted=true;var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
         var stagedDestination:ByteArray?=null
+        var retainedRecovery=false
         try{
             require(fresh.contentEquals(p.destination)&&generationForSize(fresh.size)==6){"The prepared Gen 6 destination changed."};require(gen6BoxChecksumValid(fresh)&&gen6BlockChecksumValid(fresh,20)){"The destination storage or Pokédex checksum changed."};val info=boxStorageInfo(fresh)?:error("PSE could not resolve native Gen 6 PC storage.");require(target in 0 until info.second){"The selected Gen 6 slot is invalid."};val off=info.first+target*PK6_STORED_SIZE;require(gen6DestinationSlotIsStructurallyEmpty(fresh,info.first,info.second,info.third,target)){"The selected Gen 6 slot is no longer structurally empty. Nonzero destination records were left unchanged."}
             val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The Gen 7 Bank record changed."};val source=parsePk6(bank,0,PK6_STORED_SIZE,false,807)?:error("The PK7 Bank record is invalid.");require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&source.tid==p.source.tid&&source.sid==p.source.sid){"The selected source no longer matches the reviewed Pokémon."};val pk6=buildGen7ToGen6Pk6(bank,source,p.originGame);require(pk6.contentEquals(p.pk6)){"The reviewed PK6 conversion changed before writing."}
@@ -37359,7 +37360,9 @@ class MainActivity : Activity() {
                 bankCopy.readBytes().contentEquals(p.bankBytes)){
                 "The verified Gen 6 destination or retained recovery snapshots changed after Bank cleanup."
             }
-            runCatching{bankCopy.delete()}
+            retainedRecovery=!cleanupExactBankRecoverySnapshots(
+                listOf(bankCopy),listOf(p.bankBytes)
+            )
         }catch(e:Exception){
             val bankRestored=runCatching{
                 if(deleteAttempted&&!p.bankFile.exists()){
@@ -37378,9 +37381,14 @@ class MainActivity : Activity() {
                 require(restored.contentEquals(fresh)&&gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)){"The restored Gen 6 destination did not verify."}
                 true
             }.getOrDefault(false)
-            if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
+            val bankRecoveryClean=if(bankRestored&&destinationRestored){
+                bankRecovery?.let{
+                    cleanupExactBankRecoverySnapshots(listOf(it),listOf(p.bankBytes))
+                }?:true
+            }else false
             val recovery=when{
-                bankRestored&&destinationRestored->"The exact Gen 6 destination and Gen 7 Bank record were restored or kept and verified."
+                bankRestored&&destinationRestored&&bankRecoveryClean->"The exact Gen 6 destination and Gen 7 Bank record were restored or kept and verified."
+                bankRestored&&destinationRestored->"The exact Gen 6 destination and Gen 7 Bank record were restored or kept and verified. The exact temporary Bank recovery snapshot changed or could not be removed safely and was retained for review."
                 bankRestored->"The Gen 7 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
                 destinationRestored->"The exact Gen 6 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
                 else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
@@ -37389,7 +37397,9 @@ class MainActivity : Activity() {
                 (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
                 (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery snapshot: ${it.name}"}?:""));return
         }
-        Toast.makeText(this,"PSE converted Gen 7 → Gen 6 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show();showBank()
+        val recoveryNotice=if(retainedRecovery)
+            "; exact temporary Bank recovery retained for review" else ""
+        Toast.makeText(this,"PSE converted Gen 7 → Gen 6 to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
     }
 
 
