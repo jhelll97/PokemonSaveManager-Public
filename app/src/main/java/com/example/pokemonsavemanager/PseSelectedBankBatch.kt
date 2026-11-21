@@ -228,6 +228,32 @@ internal fun finishSelectedGen2BankWithdrawal(
     recoveryFiles, expected, moved, targetBox
 ).message
 
+internal fun finishSelectedGen2BankWithdrawal(
+    recoveryFiles: List<File>,
+    expected: List<ByteArray>,
+    moved: Int,
+    targetBox: Int,
+    destinationBound: Boolean,
+    destination: File,
+    expectedDestination: ByteArray,
+    backup: File,
+    expectedBackup: ByteArray,
+    kept: Boolean,
+    removed: List<Pair<File, ByteArray>>
+): String {
+    val completion=finishSelectedGen2BankWithdrawalCompletion(
+        recoveryFiles, expected, moved, targetBox
+    )
+    require(destinationBound &&
+        destination.isFile && destination.readBytes().contentEquals(expectedDestination) &&
+        retainedBankBackupMatches(backup, expectedBackup, kept) &&
+        removed.size == moved && removed.all { !it.first.exists() } &&
+        (!completion.recoveryClean || recoveryFiles.none { it.exists() })) {
+        "The verified Gen 2 destination, removed Bank batch or retained destination backup changed during recovery cleanup."
+    }
+    return completion.message
+}
+
 internal class ExactBankRecoverySet {
     private val entries=ArrayList<Pair<File,ByteArray>>()
 

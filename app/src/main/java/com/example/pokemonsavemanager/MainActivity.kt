@@ -963,18 +963,10 @@ class MainActivity : Activity() {
                 val recovered=bankRecovery[index].readBytes()
                 bankRecovery[index].isFile&&recovered.contentEquals(refreshed[index].bankBytes)&&parseGen2BankPayload(recovered)?.let{sameGen2BankRecord(it,refreshed[index].source)}==true
             }){"A Gen 2 Bank recovery snapshot changed after Bank cleanup."}
-            val completion=finishSelectedGen2BankWithdrawalCompletion(
-                bankRecovery,refreshed.map{it.bankBytes},refreshed.size,targetBox
+            completionMessage=finishSelectedGen2BankWithdrawal(
+                bankRecovery,refreshed.map{it.bankBytes},refreshed.size,targetBox,
+                bound(),file,work,backup,fresh,isBackupKept(backup),removed
             )
-            completionMessage=completion.message
-            val postCleanup=file.readBytes()
-            require(bound()&&postCleanup.contentEquals(work)&&
-                detectGen2Profile(postCleanup)?.key==profile.key&&verifyGen2SaveIntegrity(postCleanup).first&&
-                isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&
-                removed.size==refreshed.size&&removed.all{!it.first.exists()}&&
-                (!completion.recoveryClean||bankRecovery.none{it.exists()})){
-                "The verified Gen 2 destination, removed Bank batch or retained destination backup changed during recovery cleanup."
-            }
         }catch(e:Exception){
             var bankRestored=true
             for(item in selected){
