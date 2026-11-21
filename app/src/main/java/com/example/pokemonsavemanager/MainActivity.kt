@@ -38107,6 +38107,10 @@ class MainActivity : Activity() {
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
                 recoveryCopies.map{it.second},recoveryCopies.map{it.first.bankBytes}
             )
+            requireSelectedNativeBankBatchPostCleanup(
+                4,bound(),retainedRecovery,recoveryCopies.map{it.second},
+                file,work,backup,original,isBackupKept(backup),refreshed.map{it.bankFile}
+            )
             selectedBankFiles.clear();bankMultiSelectMode=false
             val recoveryNotice=if(retainedRecovery)
                 "; one or more exact temporary Bank recoveries retained for review" else ""
