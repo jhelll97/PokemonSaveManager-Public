@@ -38232,6 +38232,10 @@ class MainActivity : Activity() {
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
                 listOf(bankCopy),listOf(openedBank)
             )
+            requireNativeBankWithdrawalPostCleanup(
+                4,bound(),retainedRecovery,bankCopy,
+                file,save,backup,original,isBackupKept(backup),bankFile
+            )
             val recoveryNotice=if(retainedRecovery)
                 "; exact temporary Bank recovery retained for review" else ""
             Toast.makeText(this,"Withdrawn to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
