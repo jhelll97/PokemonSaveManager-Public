@@ -61160,6 +61160,7 @@ private data class Gen2ToGen5LegalisePlan(
             var safetyBackup:File?=null
             var bankRecovery:File?=null
             var stagedDestination:ByteArray?=null
+            var retainedRecovery=false
             try{
                 require(bound()&&verifyGen2SaveIntegrity(fresh).first&&detectGen2Profile(fresh)?.key==openedProfile.key){"The captured Gen 2 destination identity, integrity or profile changed."}
                 require(fresh.contentEquals(openedDestination)){"The Gen 2 destination changed after the box list opened."};val profile=detectGen2Profile(fresh)?:error("The fresh Gen 2 destination is invalid.");require(gen2ChecksumValid(fresh,profile)){"The fresh Gen 2 checksum is invalid."}
@@ -61191,7 +61192,9 @@ private data class Gen2ToGen5LegalisePlan(
                 require(bound()){"The source identity changed after Bank cleanup."}
                 require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 recovery backup changed after Bank cleanup."}
                 require(bankCopy.isFile&&bankCopy.readBytes().contentEquals(openedBank)&&parseGen2BankPayload(bankCopy.readBytes())?.let{sameGen2BankRecord(it,opened)}==true){"The Bank recovery snapshot changed after Bank cleanup."}
-                runCatching{bankCopy.delete()}
+                retainedRecovery=!cleanupExactBankRecoverySnapshots(
+                    listOf(bankCopy),listOf(openedBank)
+                )
             }catch(e:Exception){
                 val bankRestored=runCatching{
                     if(bankDeleteAttempted&&!bankFile.exists()){
@@ -61218,9 +61221,14 @@ private data class Gen2ToGen5LegalisePlan(
                     val recovered=copy.readBytes()
                     copy.isFile&&recovered.contentEquals(openedBank)&&parseGen2BankPayload(recovered)?.let{sameGen2BankRecord(it,opened)}==true
                 }.getOrDefault(false)}?:false
-                if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
+                val bankRecoveryClean=if(bankRestored&&destinationRestored){
+                    bankRecovery?.let{
+                        cleanupExactBankRecoverySnapshots(listOf(it),listOf(openedBank))
+                    }?:true
+                }else false
                 val recovery=when{
-                    bankRestored&&destinationRestored->"The exact Gen 2 destination and Bank record were restored or kept and verified."
+                    bankRestored&&destinationRestored&&bankRecoveryClean->"The exact Gen 2 destination and Bank record were restored or kept and verified."
+                    bankRestored&&destinationRestored->"The exact Gen 2 destination and Bank record were restored or kept and verified. The exact temporary Bank recovery snapshot changed or could not be removed safely and was retained for review."
                     bankRestored&&retainedBackup->"The exact Gen 2 Bank record was restored or kept. Destination recovery was not verified, but the exact retained destination backup verified."
                     bankRestored->"The exact Gen 2 Bank record was restored or kept, but destination recovery and the retained backup were not verified. The current destination was left untouched."
                     destinationRestored&&verifiedBankRecovery->"The exact Gen 2 destination was restored. Bank restoration was not verified, but the exact Bank recovery snapshot verified."
@@ -61237,7 +61245,9 @@ private data class Gen2ToGen5LegalisePlan(
                         (bankRecovery?.takeIf{verifiedBankRecovery&&it.exists()}?.let{"\nVerified Bank recovery snapshot: "+it.name}?:"")
                 );return@setItems
             }
-            Toast.makeText(this,"Withdrawn to Box $box and verified",Toast.LENGTH_LONG).show();showBank()
+            val recoveryNotice=if(retainedRecovery)
+                "; exact temporary Bank recovery retained for review" else ""
+            Toast.makeText(this,"Withdrawn to Box $box and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
         }.setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
     }
 
