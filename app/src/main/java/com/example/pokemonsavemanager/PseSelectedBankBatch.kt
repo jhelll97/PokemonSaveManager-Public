@@ -426,6 +426,64 @@ internal fun finishSelectedGen1BankWithdrawal(
             "; a Bank recovery snapshot was retained for review"
 }
 
+internal fun gen5BankBatchSuccessMessage(
+    moved: Int,
+    targetBox: Int,
+    targetSlots: List<Int>,
+    retainedRecovery: Boolean
+): String {
+    val recoveryNotice=if(retainedRecovery)
+        "; one or more exact temporary Bank recoveries retained for review" else ""
+    return "Withdrew $moved exact Gen 5 PK5 records to Box ${targetBox+1} • Slots ${targetSlots.joinToString(", "){(it+1).toString()}} and verified$recoveryNotice"
+}
+
+internal fun gen5BankBatchFailureMessage(
+    errorMessage: String?,
+    bankRestored: Boolean,
+    destinationRestored: Boolean,
+    recoveryCopiesClean: Boolean,
+    retainedBackup: Boolean,
+    allRecoveryCopiesVerified: Boolean,
+    verifiedRecoveryCount: Int,
+    selectedCount: Int,
+    safetyBackup: File?,
+    verifiedRecoveryCopies: List<Pair<*, File>>
+): String {
+    val recovery=when {
+        bankRestored&&destinationRestored&&recoveryCopiesClean->
+            "The exact Generation 5 destination and every selected PK5 Bank record were restored or kept and verified."
+        bankRestored&&destinationRestored->
+            "The exact Generation 5 destination and every selected PK5 Bank record were restored or kept and verified. One or more exact temporary Bank recovery snapshots changed or could not be removed safely and were retained for review."
+        bankRestored&&retainedBackup->
+            "Every selected PK5 Bank record was restored or kept. Destination restoration was not verified, but the exact retained destination backup verified."
+        bankRestored->
+            "Every selected PK5 Bank record was restored or kept, but destination restoration and its retained backup were not verified. The current destination was left untouched."
+        destinationRestored&&allRecoveryCopiesVerified->
+            "The exact Generation 5 destination was restored. Bank restoration was incomplete, but every exact PK5 recovery snapshot verified."
+        destinationRestored&&verifiedRecoveryCount>0->
+            "The exact Generation 5 destination was restored. Bank restoration was incomplete; only $verifiedRecoveryCount of $selectedCount PK5 recovery snapshots verified."
+        destinationRestored->
+            "The exact Generation 5 destination was restored, but Bank restoration and all PK5 recovery snapshots were not verified."
+        retainedBackup&&allRecoveryCopiesVerified->
+            "Destination and Bank restoration were incomplete, but the exact retained destination backup and every PK5 recovery snapshot verified."
+        retainedBackup&&verifiedRecoveryCount>0->
+            "Destination and Bank restoration were incomplete. The exact retained destination backup and $verifiedRecoveryCount of $selectedCount PK5 recovery snapshots verified."
+        retainedBackup->
+            "Destination and Bank restoration were incomplete. The exact retained destination backup verified, but no PK5 recovery snapshot did."
+        allRecoveryCopiesVerified->
+            "Destination and Bank restoration were incomplete. Every PK5 recovery snapshot verified, but the retained destination backup did not."
+        verifiedRecoveryCount>0->
+            "Destination and Bank restoration were incomplete. Only $verifiedRecoveryCount of $selectedCount PK5 recovery snapshots verified; the retained destination backup did not."
+        else->
+            "Automatic recovery and all retained recovery snapshots could not be verified. Keep the current destination and Bank files for review."
+    }
+    return (errorMessage?:"Unknown error")+"\n\n"+recovery+
+        (safetyBackup?.takeIf{retainedBackup}?.let{"\n\nVerified recovery backup: ${it.name}"}?:"")+
+        (verifiedRecoveryCopies.filter{it.second.exists()}.takeIf{it.isNotEmpty()}?.joinToString(
+            prefix="\nVerified Bank recovery snapshots: "
+        ){it.second.name}?:"")
+}
+
 internal fun finishSelectedNativeBankBatchRecoveryCleanup(
     recoveryFiles: List<File>,
     expected: List<ByteArray>

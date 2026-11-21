@@ -435,9 +435,10 @@ class MainActivity : Activity() {
                 file,work,backup,original,isBackupKept(backup),refreshed.map{it.bankFile}
             )
             selectedBankFiles.clear();bankMultiSelectMode=false
-            val recoveryNotice=if(retainedRecovery)
-                "; one or more exact temporary Bank recoveries retained for review" else ""
-            Toast.makeText(this,"Withdrew ${refreshed.size} exact Gen 5 PK5 records to Box ${targetBox+1} • Slots ${targetSlots.joinToString(", "){(it+1).toString()}} and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
+            Toast.makeText(
+                this,gen5BankBatchSuccessMessage(refreshed.size,targetBox,targetSlots,retainedRecovery),
+                Toast.LENGTH_LONG
+            ).show();showBank()
         }catch(e:Exception){
             val bankRestored=selected.map{item->runCatching{
                 val copy=recoveryCopies.firstOrNull{it.first.bankFile.absolutePath==item.bankFile.absolutePath}?.second
@@ -474,41 +475,13 @@ class MainActivity : Activity() {
                     recoveryCopies.map{it.second},recoveryCopies.map{it.first.bankBytes}
                 )
             }else false
-            val recovery=when{
-                bankRestored&&destinationRestored&&recoveryCopiesClean->
-                    "The exact Generation 5 destination and every selected PK5 Bank record were restored or kept and verified."
-                bankRestored&&destinationRestored->
-                    "The exact Generation 5 destination and every selected PK5 Bank record were restored or kept and verified. One or more exact temporary Bank recovery snapshots changed or could not be removed safely and were retained for review."
-                bankRestored&&retainedBackup->
-                    "Every selected PK5 Bank record was restored or kept. Destination restoration was not verified, but the exact retained destination backup verified."
-                bankRestored->
-                    "Every selected PK5 Bank record was restored or kept, but destination restoration and its retained backup were not verified. The current destination was left untouched."
-                destinationRestored&&allRecoveryCopiesVerified->
-                    "The exact Generation 5 destination was restored. Bank restoration was incomplete, but every exact PK5 recovery snapshot verified."
-                destinationRestored&&verifiedRecoveryCopies.isNotEmpty()->
-                    "The exact Generation 5 destination was restored. Bank restoration was incomplete; only ${verifiedRecoveryCopies.size} of ${selected.size} PK5 recovery snapshots verified."
-                destinationRestored->
-                    "The exact Generation 5 destination was restored, but Bank restoration and all PK5 recovery snapshots were not verified."
-                retainedBackup&&allRecoveryCopiesVerified->
-                    "Destination and Bank restoration were incomplete, but the exact retained destination backup and every PK5 recovery snapshot verified."
-                retainedBackup&&verifiedRecoveryCopies.isNotEmpty()->
-                    "Destination and Bank restoration were incomplete. The exact retained destination backup and ${verifiedRecoveryCopies.size} of ${selected.size} PK5 recovery snapshots verified."
-                retainedBackup->
-                    "Destination and Bank restoration were incomplete. The exact retained destination backup verified, but no PK5 recovery snapshot did."
-                allRecoveryCopiesVerified->
-                    "Destination and Bank restoration were incomplete. Every PK5 recovery snapshot verified, but the retained destination backup did not."
-                verifiedRecoveryCopies.isNotEmpty()->
-                    "Destination and Bank restoration were incomplete. Only ${verifiedRecoveryCopies.size} of ${selected.size} PK5 recovery snapshots verified; the retained destination backup did not."
-                else->
-                    "Automatic recovery and all retained recovery snapshots could not be verified. Keep the current destination and Bank files for review."
-            }
             showDialog(
                 "Gen 5 Bank multi-withdrawal failed",
-                "${e.message?:"Unknown error"}\n\n$recovery"+
-                    (safetyBackup?.takeIf{retainedBackup}?.let{"\n\nVerified recovery backup: ${it.name}"}?:"")+
-                    (verifiedRecoveryCopies.filter{it.second.exists()}.takeIf{it.isNotEmpty()}?.joinToString(
-                        prefix="\nVerified Bank recovery snapshots: "
-                    ){it.second.name}?:"")
+                gen5BankBatchFailureMessage(
+                    e.message,bankRestored,destinationRestored,recoveryCopiesClean,
+                    retainedBackup,allRecoveryCopiesVerified,verifiedRecoveryCopies.size,
+                    selected.size,safetyBackup,verifiedRecoveryCopies
+                )
             )
         }
     }
