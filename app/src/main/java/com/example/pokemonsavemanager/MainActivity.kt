@@ -1137,10 +1137,11 @@ class MainActivity : Activity() {
                 }
                 require(bound()&&file.readBytes().contentEquals(work)&&activeMatches(work)){"The verified Gen 1 destination changed after Bank cleanup."}
                 require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&refreshed.indices.all{bankRecovery[it].readBytes().contentEquals(refreshed[it].second)}){"A retained Gen 1 recovery copy changed after Bank cleanup."}
-                updateSourceBaseline(analysis.sha256,analysis.trainer?.exactGame?:analysis.family,written.size.toLong())
                 val completionMessage=finishSelectedGen1BankWithdrawal(
-                    bankRecovery,refreshed.map{it.second},refreshed.size,box
-                )
+                    bankRecovery,refreshed.map{it.second},refreshed.size,box,
+                    file,work,backup,fresh,isBackupKept(backup),refreshed.map{it.first}
+                ){bound()&&activeMatches(work)}
+                updateSourceBaseline(analysis.sha256,analysis.trainer?.exactGame?:analysis.family,written.size.toLong())
                 selectedBankFiles.clear();bankMultiSelectMode=false
                 Toast.makeText(this,completionMessage,Toast.LENGTH_LONG).show();showBank()
             }catch(e:Exception){

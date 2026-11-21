@@ -392,6 +392,32 @@ internal fun finishSelectedGen1BankWithdrawal(
     recoveryFiles: List<File>,
     expected: List<ByteArray>,
     moved: Int,
+    targetBox: Int,
+    destination: File,
+    expectedDestination: ByteArray,
+    backup: File,
+    expectedBackup: ByteArray,
+    kept: Boolean,
+    sources: List<File>,
+    postCleanupIdentity: () -> Boolean
+): String {
+    val recoveryClean=cleanupExactBankRecoverySnapshots(recoveryFiles, expected)
+    require(postCleanupIdentity() &&
+        destination.isFile && destination.readBytes().contentEquals(expectedDestination) &&
+        retainedBankBackupMatches(backup, expectedBackup, kept) &&
+        sources.size == moved && sources.none { it.exists() } &&
+        (!recoveryClean || recoveryFiles.none { it.exists() })) {
+        "The verified Gen 1 destination, removed Bank batch or retained destination backup changed during recovery cleanup."
+    }
+    return "$moved Gen 1 Pokémon moved to Box $targetBox and verified" +
+        if(recoveryClean) "" else
+            "; a Bank recovery snapshot was retained for review"
+}
+
+internal fun finishSelectedGen1BankWithdrawal(
+    recoveryFiles: List<File>,
+    expected: List<ByteArray>,
+    moved: Int,
     targetBox: Int
 ): String {
     val recoveryClean=cleanupExactBankRecoverySnapshots(recoveryFiles, expected)
