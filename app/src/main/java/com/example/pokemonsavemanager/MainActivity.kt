@@ -35312,6 +35312,7 @@ class MainActivity : Activity() {
             ?:return showDialog("Gen 7 Bank withdrawal","The destination save could not be read.")
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
         var stagedDestination:ByteArray?=null
+        var retainedRecovery=false
         try{
             require(original.contentEquals(p.destination)&&generationForSize(original.size)==7){"The prepared Generation 7 destination changed."}
             require(validateGen7CoreChecksums(original).first){"The destination core checksums changed."}
@@ -35365,7 +35366,9 @@ class MainActivity : Activity() {
                 isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
                 "The destination identity, verified save or retained recovery snapshots changed after cleanup."
             }
-            runCatching{bankCopy.delete()}
+            retainedRecovery=!cleanupExactBankRecoverySnapshots(
+                listOf(bankCopy),listOf(p.bankBytes)
+            )
         }catch(e:Exception){
             val bankRestored=runCatching{
                 if(bankDeleteAttempted&&!p.bankFile.exists()){
@@ -35389,9 +35392,14 @@ class MainActivity : Activity() {
                 saved.isFile&&recovered.contentEquals(p.bankBytes)&&parsed!=null&&parsed.checksumValid&&
                     parsed.pid==p.source.pid&&parsed.species==p.source.species&&parsed.tid==p.source.tid&&parsed.sid==p.source.sid
             }.getOrDefault(false)}?:false
-            if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
+            val bankRecoveryClean=if(bankRestored&&destinationRestored){
+                bankRecovery?.let{
+                    cleanupExactBankRecoverySnapshots(listOf(it),listOf(p.bankBytes))
+                }?:true
+            }else false
             val recovery=when{
-                bankRestored&&destinationRestored->"The exact Generation 7 destination and PK7 Bank record were restored or kept and verified."
+                bankRestored&&destinationRestored&&bankRecoveryClean->"The exact Generation 7 destination and PK7 Bank record were restored or kept and verified."
+                bankRestored&&destinationRestored->"The exact Generation 7 destination and PK7 Bank record were restored or kept and verified. The exact temporary Bank recovery snapshot changed or could not be removed safely and was retained for review."
                 bankRestored&&retainedBackup->"The PK7 Bank record was restored or kept. Destination restoration was not verified, but the exact retained Generation 7 destination backup verified."
                 bankRestored->"The PK7 Bank record was restored or kept, but destination restoration and the retained backup were not verified. The current destination was left untouched."
                 destinationRestored&&bankRecoveryVerified->"The exact Generation 7 destination was restored. Bank restoration was not verified, but the exact PK7 recovery snapshot verified."
@@ -35405,7 +35413,9 @@ class MainActivity : Activity() {
                 (backup?.takeIf{retainedBackup}?.let{"\n\nVerified recovery backup: ${it.name}"}?:"")+
                 (bankRecovery?.takeIf{bankRecoveryVerified&&it.exists()}?.let{"\nVerified Bank recovery snapshot: ${it.name}"}?:""));return
         }
-        Toast.makeText(this,"Withdrew exact Gen 7 PK7 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
+        val recoveryNotice=if(retainedRecovery)
+            "; exact temporary Bank recovery retained for review" else ""
+        Toast.makeText(this,"Withdrew exact Gen 7 PK7 to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show()
         showBank()
     }
 
