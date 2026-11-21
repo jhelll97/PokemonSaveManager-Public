@@ -47242,14 +47242,11 @@ class MainActivity : Activity() {
                 }
             }
             require(removed.size == selected.size &&
-                removed.all { !it.first.exists() }) {
-                "The selected Gen 3 Bank batch was not removed completely."
-            }
-            require(destinationBound() && openedFile.readBytes().contentEquals(work)) {
-                "The verified Gen 3 destination changed after Bank cleanup."
-            }
-            require(isBackupKept(backup!!) && backup!!.readBytes().contentEquals(fresh)) {
-                "The retained Gen 3 recovery backup changed after Bank cleanup."
+                removed.all { !it.first.exists() } &&
+                destinationBound() && openedFile.readBytes().contentEquals(work) &&
+                isBackupKept(backup!!) && backup!!.readBytes().contentEquals(fresh) &&
+                exactGen3BankRecoverySnapshots(bankRecovery, refreshed)) {
+                "The verified Gen 3 destination, removed Bank batch or retained recovery snapshots changed after Bank cleanup."
             }
             val withdrawalSuccess = finishSelectedGen3BankWithdrawal(
                 bankRecovery,
