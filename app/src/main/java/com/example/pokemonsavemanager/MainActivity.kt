@@ -55161,7 +55161,7 @@ class MainActivity : Activity() {
             require(bound()&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(originalBankBytes)){"The source or destination changed before backup."}
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen1ToGen7_",".backup",backupsDir());safetyBackup=recovery
             recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The exact Gen 7 recovery backup did not verify."};retainGen1ToGen7SafetyBackup(recovery,fresh)
-            val bankCopy=BankTransferRecovery.createGen1ToGen7(bankDir(),originalBankBytes);bankRecovery=bankCopy
+            val bankCopy=BankTransferRecovery.create(bankDir(),originalBankBytes,BankTransferRecovery.GEN1_TO_7);bankRecovery=bankCopy
             require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&BankTransferRecovery.matches(bankCopy,originalBankBytes)&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(originalBankBytes)){"The destination, Bank record or retained recovery backup changed before writing."}
             stagedDestination=work.copyOf();writeStarted=true;file.writeBytes(work)
             val written=file.readBytes();require(written.contentEquals(work)&&boxStorageInfo(written)==info){"The persisted Gen 7 destination or PC layout changed unexpectedly."}
@@ -55191,7 +55191,7 @@ class MainActivity : Activity() {
             val bankRecoveryClean=if(bankRestored&&saveRestored){
                 if(bankRecovery==null)true else if(verifiedBankRecovery)BankTransferRecovery.cleanup(bankRecovery,originalBankBytes) else false
             }else false
-            val recovery=BankTransferRecovery.gen1ToGen7FailureMessage(bankRestored,saveRestored,bankRecovery!=null,verifiedBankRecovery,bankRecoveryClean)
+            val recovery=BankTransferRecovery.failureMessage(BankTransferRecovery.GEN1_TO_7,bankRestored,saveRestored,bankRecovery!=null,verifiedBankRecovery,bankRecoveryClean)
             val retainedBankRecovery=BankTransferRecovery.retainedPath(bankRecovery)
             showDialog("Gen 1 → Gen 7 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:"")+retainedBankRecovery);return
         }
@@ -60330,7 +60330,7 @@ private data class Gen2ToGen5LegalisePlan(
             require(bound()&&validGen2ToGen5Destination(work)){"The staged Gen 5 destination identity or integrity is invalid."}
             val backup=File.createTempFile(backupGameName(file)+"_PreGen2ToGen5Transfer_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(original);require(backup.readBytes().contentEquals(original)){"The exact Gen 5 recovery backup did not verify."};retainGen2ToGen5SafetyBackup(backup,original)
-            val bankCopy=BankTransferRecovery.createGen2ToGen5(bankDir(),expectedBank);bankRecovery=bankCopy
+            val bankCopy=BankTransferRecovery.create(bankDir(),expectedBank,BankTransferRecovery.GEN2_TO_5);bankRecovery=bankCopy
             require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&BankTransferRecovery.matches(bankCopy,expectedBank)&&file.readBytes().contentEquals(original)&&bankFile.readBytes().contentEquals(expectedBank)){"The Gen 5 destination, Bank record or retained backup changed before writing. Nothing was written."}
             stagedDestination=work.copyOf()
             writeStarted=true
@@ -60365,7 +60365,7 @@ private data class Gen2ToGen5LegalisePlan(
             val bankRecoveryClean=if(bankRestored&&destinationRestored){
                 if(bankRecovery==null)true else if(verifiedBankRecovery)BankTransferRecovery.cleanup(bankRecovery,expectedBank) else false
             }else false
-            val recovery=BankTransferRecovery.gen2ToGen5FailureMessage(bankRestored,destinationRestored,bankRecovery!=null,verifiedBankRecovery,bankRecoveryClean)
+            val recovery=BankTransferRecovery.failureMessage(BankTransferRecovery.GEN2_TO_5,bankRestored,destinationRestored,bankRecovery!=null,verifiedBankRecovery,bankRecoveryClean)
             val retainedBankRecovery=BankTransferRecovery.retainedPath(bankRecovery)
             showDialog("Gen 2 → Gen 5 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:"")+retainedBankRecovery);return
         }
@@ -60852,7 +60852,7 @@ private data class Gen2ToGen5LegalisePlan(
             require(validGen2ToGen6Destination(save)){"The staged Gen 6 destination integrity is invalid."}
             val backup=File.createTempFile(backupGameName(file)+"_PreGen2ToGen6Transfer_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The exact Gen 6 recovery backup did not verify."};retainGen2ToGen6SafetyBackup(backup,fresh)
-            val bankCopy=BankTransferRecovery.createGen2ToGen6(bankDir(),expectedBank);bankRecovery=bankCopy
+            val bankCopy=BankTransferRecovery.create(bankDir(),expectedBank,BankTransferRecovery.GEN2_TO_6);bankRecovery=bankCopy
             require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&BankTransferRecovery.matches(bankCopy,expectedBank)&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(expectedBank)){"The destination, Bank record or retained backup changed before writing."}
             stagedDestination=save.copyOf();writeStarted=true;file.writeBytes(save)
             val written=file.readBytes();require(written.contentEquals(save)){"The destination changed while it was written."}
@@ -60881,7 +60881,7 @@ private data class Gen2ToGen5LegalisePlan(
             val bankRecoveryClean=if(bankRestored&&destinationRestored){
                 if(bankRecovery==null)true else if(verifiedBankRecovery)BankTransferRecovery.cleanup(bankRecovery,expectedBank) else false
             }else false
-            val recovery=BankTransferRecovery.gen2ToGen6FailureMessage(bankRestored,destinationRestored,bankRecovery!=null,verifiedBankRecovery,bankRecoveryClean)
+            val recovery=BankTransferRecovery.failureMessage(BankTransferRecovery.GEN2_TO_6,bankRestored,destinationRestored,bankRecovery!=null,verifiedBankRecovery,bankRecoveryClean)
             val retainedBankRecovery=BankTransferRecovery.retainedPath(bankRecovery)
             showDialog("Gen 2 → Gen 6 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:"")+retainedBankRecovery);return
         }
@@ -61270,7 +61270,7 @@ private data class Gen2ToGen5LegalisePlan(
             require(validGen2ToGen7Destination(work)){"The staged Gen 7 destination integrity is invalid."}
             val backup=File.createTempFile(backupGameName(file)+"_PreGen2ToGen7Transfer_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The exact Gen 7 recovery backup did not verify."};retainGen2ToGen7SafetyBackup(backup,fresh)
-            val bankCopy=BankTransferRecovery.createGen2ToGen7(bankDir(),expectedBank);bankRecovery=bankCopy
+            val bankCopy=BankTransferRecovery.create(bankDir(),expectedBank,BankTransferRecovery.GEN2_TO_7);bankRecovery=bankCopy
             require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&BankTransferRecovery.matches(bankCopy,expectedBank)&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(expectedBank)){"The destination, Bank record or retained backup changed before writing."}
             stagedDestination=work.copyOf();writeStarted=true;file.writeBytes(work)
             val written=file.readBytes();require(written.contentEquals(work)&&boxStorageInfo(written)==info){"The destination changed while it was written."}
@@ -61299,7 +61299,7 @@ private data class Gen2ToGen5LegalisePlan(
             val bankRecoveryClean=if(bankRestored&&destinationRestored){
                 if(bankRecovery==null)true else if(verifiedBankRecovery)BankTransferRecovery.cleanup(bankRecovery,expectedBank) else false
             }else false
-            val recovery=BankTransferRecovery.gen2ToGen7FailureMessage(bankRestored,destinationRestored,bankRecovery!=null,verifiedBankRecovery,bankRecoveryClean)
+            val recovery=BankTransferRecovery.failureMessage(BankTransferRecovery.GEN2_TO_7,bankRestored,destinationRestored,bankRecovery!=null,verifiedBankRecovery,bankRecoveryClean)
             val retainedBankRecovery=BankTransferRecovery.retainedPath(bankRecovery)
             showDialog("Gen 2 → Gen 7 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:"")+retainedBankRecovery);return
         }

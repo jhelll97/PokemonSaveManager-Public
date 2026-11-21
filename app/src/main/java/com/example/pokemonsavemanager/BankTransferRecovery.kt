@@ -3,19 +3,19 @@ package com.example.pokemonsavemanager
 import java.io.File
 
 internal object BankTransferRecovery {
-    fun createGen1ToGen7(directory: File, expected: ByteArray): File =
-        create(directory,expected,"PSE_G1ToGen7_BankRecovery_","The exact Gen 1 Bank recovery snapshot did not verify.")
+    const val GEN1_TO_7=1
+    const val GEN2_TO_7=2
+    const val GEN2_TO_6=3
+    const val GEN2_TO_5=4
 
-    fun createGen2ToGen7(directory: File, expected: ByteArray): File =
-        create(directory,expected,"PSE_G2ToGen7_BankRecovery_","The exact Gen 2 Bank recovery snapshot did not verify.")
-
-    fun createGen2ToGen6(directory: File, expected: ByteArray): File =
-        create(directory,expected,"PSE_G2ToGen6_BankRecovery_","The exact Gen 2 Bank recovery snapshot did not verify.")
-
-    fun createGen2ToGen5(directory: File, expected: ByteArray): File =
-        create(directory,expected,"PSE_G2ToGen5_BankRecovery_","The exact Gen 2 Bank recovery snapshot did not verify.")
-
-    private fun create(directory: File, expected: ByteArray, prefix: String, failure: String): File {
+    fun create(directory: File, expected: ByteArray, route: Int): File {
+        val(prefix,failure)=when(route){
+            GEN1_TO_7->"PSE_G1ToGen7_BankRecovery_" to "The exact Gen 1 Bank recovery snapshot did not verify."
+            GEN2_TO_7->"PSE_G2ToGen7_BankRecovery_" to "The exact Gen 2 Bank recovery snapshot did not verify."
+            GEN2_TO_6->"PSE_G2ToGen6_BankRecovery_" to "The exact Gen 2 Bank recovery snapshot did not verify."
+            GEN2_TO_5->"PSE_G2ToGen5_BankRecovery_" to "The exact Gen 2 Bank recovery snapshot did not verify."
+            else->error("Unsupported Bank recovery route.")
+        }
         val copy=File.createTempFile(prefix,".tmp",directory)
         copy.writeBytes(expected)
         require(matches(copy,expected)){failure}
@@ -35,7 +35,22 @@ internal object BankTransferRecovery {
         }.getOrDefault(false)
     }
 
-    fun gen1ToGen7FailureMessage(
+    fun failureMessage(
+        route: Int,
+        bankRestored: Boolean,
+        saveRestored: Boolean,
+        snapshotCreated: Boolean,
+        snapshotVerified: Boolean,
+        snapshotClean: Boolean
+    ): String = when(route){
+        GEN1_TO_7->gen1ToGen7FailureMessage(bankRestored,saveRestored,snapshotCreated,snapshotVerified,snapshotClean)
+        GEN2_TO_7->gen2ToGen7FailureMessage(bankRestored,saveRestored,snapshotCreated,snapshotVerified,snapshotClean)
+        GEN2_TO_6->gen2ToGen6FailureMessage(bankRestored,saveRestored,snapshotCreated,snapshotVerified,snapshotClean)
+        GEN2_TO_5->gen2ToGen5FailureMessage(bankRestored,saveRestored,snapshotCreated,snapshotVerified,snapshotClean)
+        else->"Automatic recovery could not be verified. Keep all retained files for review."
+    }
+
+    private fun gen1ToGen7FailureMessage(
         bankRestored: Boolean,
         saveRestored: Boolean,
         snapshotCreated: Boolean,
@@ -58,7 +73,7 @@ internal object BankTransferRecovery {
             "Automatic recovery could not be verified. Keep the retained destination backup and exact Gen 1 Bank payload for review."
     }
 
-    fun gen2ToGen7FailureMessage(
+    private fun gen2ToGen7FailureMessage(
         bankRestored: Boolean,
         saveRestored: Boolean,
         snapshotCreated: Boolean,
@@ -81,7 +96,7 @@ internal object BankTransferRecovery {
             "Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
     }
 
-    fun gen2ToGen6FailureMessage(
+    private fun gen2ToGen6FailureMessage(
         bankRestored: Boolean,
         saveRestored: Boolean,
         snapshotCreated: Boolean,
@@ -104,7 +119,7 @@ internal object BankTransferRecovery {
             "Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
     }
 
-    fun gen2ToGen5FailureMessage(
+    private fun gen2ToGen5FailureMessage(
         bankRestored: Boolean,
         saveRestored: Boolean,
         snapshotCreated: Boolean,
