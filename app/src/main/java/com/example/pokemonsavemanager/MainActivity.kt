@@ -55161,8 +55161,8 @@ class MainActivity : Activity() {
             require(bound()&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(originalBankBytes)){"The source or destination changed before backup."}
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen1ToGen7_",".backup",backupsDir());safetyBackup=recovery
             recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The exact Gen 7 recovery backup did not verify."};retainGen1ToGen7SafetyBackup(recovery,fresh)
-            val bankCopy=Gen1ToGen7BankRecovery.create(bankDir(),originalBankBytes);bankRecovery=bankCopy
-            require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&Gen1ToGen7BankRecovery.matches(bankCopy,originalBankBytes)&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(originalBankBytes)){"The destination, Bank record or retained recovery backup changed before writing."}
+            val bankCopy=BankTransferRecovery.createGen1ToGen7(bankDir(),originalBankBytes);bankRecovery=bankCopy
+            require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&BankTransferRecovery.matches(bankCopy,originalBankBytes)&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(originalBankBytes)){"The destination, Bank record or retained recovery backup changed before writing."}
             stagedDestination=work.copyOf();writeStarted=true;file.writeBytes(work)
             val written=file.readBytes();require(written.contentEquals(work)&&boxStorageInfo(written)==info){"The persisted Gen 7 destination or PC layout changed unexpectedly."}
             val actual=written.copyOfRange(offset,offset+PK6_STORED_SIZE);val reopened=parsePk6(actual,0,PK6_STORED_SIZE,false,807)?:error("The persisted PK7 could not be parsed.")
@@ -55172,10 +55172,10 @@ class MainActivity : Activity() {
             require(actual.contentEquals(convertedPk7)&&reopenedMismatch==null&&reopenedPpUpsMatch&&reopenedDexMatches){"Persisted PK7 verification failed: ${reopenedMismatch?:if(!reopenedPpUpsMatch)"PP-Up data" else if(!reopenedDexMatches)"Pokédex registration" else "native record bytes"}."}
             val writtenChecks=validateGen7CoreChecksums(written);require(writtenChecks.first){writtenChecks.second};require(pcIsolated(written)){"Unrelated Gen 7 PC data changed after persistence."}
             val cleanup=bankFile.readBytes()
-            require(bound()&&cleanup.contentEquals(originalBankBytes)&&parseGen1BankPayload(cleanup)?.let{sameGen1TransferRecord(it,originalSource)}==true&&file.readBytes().contentEquals(work)&&isBackupKept(recovery)&&Gen1ToGen7BankRecovery.matches(bankCopy,originalBankBytes)){"The Bank record, destination identity or retained backup changed before cleanup."}
+            require(bound()&&cleanup.contentEquals(originalBankBytes)&&parseGen1BankPayload(cleanup)?.let{sameGen1TransferRecord(it,originalSource)}==true&&file.readBytes().contentEquals(work)&&isBackupKept(recovery)&&BankTransferRecovery.matches(bankCopy,originalBankBytes)){"The Bank record, destination identity or retained backup changed before cleanup."}
             bankDeleteAttempted=true;require(bankFile.delete()&&!bankFile.exists()){"The Gen 1 Bank entry could not be removed after destination verification."}
-            require(bound()&&file.readBytes().contentEquals(work)&&Gen1ToGen7BankRecovery.matches(bankCopy,originalBankBytes)){"The verified Gen 7 destination changed after Bank cleanup."}
-            retainedRecovery=!Gen1ToGen7BankRecovery.cleanup(bankCopy,originalBankBytes)
+            require(bound()&&file.readBytes().contentEquals(work)&&BankTransferRecovery.matches(bankCopy,originalBankBytes)){"The verified Gen 7 destination changed after Bank cleanup."}
+            retainedRecovery=!BankTransferRecovery.cleanup(bankCopy,originalBankBytes)
         }catch(e:Exception){
             val bankRestored=runCatching{
                 if(bankDeleteAttempted){if(!bankFile.exists())require(bankFile.createNewFile()){"The Bank recovery path could not be reserved."};bankFile.writeBytes(originalBankBytes)}
@@ -55187,16 +55187,16 @@ class MainActivity : Activity() {
                 require(restored.contentEquals(fresh)&&generationForSize(restored.size)==7&&validateGen7CoreChecksums(restored).first){"The restored Generation 7 destination did not verify."}
                 true
             }.getOrDefault(false)
-            val verifiedBankRecovery=Gen1ToGen7BankRecovery.matches(bankRecovery,originalBankBytes)
+            val verifiedBankRecovery=BankTransferRecovery.matches(bankRecovery,originalBankBytes)
             val bankRecoveryClean=if(bankRestored&&saveRestored){
-                if(bankRecovery==null)true else if(verifiedBankRecovery)Gen1ToGen7BankRecovery.cleanup(bankRecovery,originalBankBytes) else false
+                if(bankRecovery==null)true else if(verifiedBankRecovery)BankTransferRecovery.cleanup(bankRecovery,originalBankBytes) else false
             }else false
-            val recovery=Gen1ToGen7BankRecovery.failureMessage(bankRestored,saveRestored,bankRecovery!=null,verifiedBankRecovery,bankRecoveryClean)
-            val retainedBankRecovery=Gen1ToGen7BankRecovery.retainedPath(bankRecovery)
+            val recovery=BankTransferRecovery.gen1ToGen7FailureMessage(bankRestored,saveRestored,bankRecovery!=null,verifiedBankRecovery,bankRecoveryClean)
+            val retainedBankRecovery=BankTransferRecovery.retainedPath(bankRecovery)
             showDialog("Gen 1 → Gen 7 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:"")+retainedBankRecovery);return
         }
         val box=target/30+1;val slot=target%30+1
-        val recoveryNotice=Gen1ToGen7BankRecovery.successNotice(retainedRecovery)
+        val recoveryNotice=BankTransferRecovery.successNotice(retainedRecovery)
         Toast.makeText(this,"PSE converted Gen 1 → Gen 7 to Box $box • Slot $slot and verified$recoveryNotice",Toast.LENGTH_LONG).show()
         showPokemonViewer("boxes",box-1)
     }
@@ -61223,7 +61223,8 @@ private data class Gen2ToGen5LegalisePlan(
         if(binding.submitted||!bound()){showDialog("Gen 2 → Gen 7","The destination identity or original snapshots changed, or this selection was already submitted. Reopen PSE Bank. Nothing was changed.");return}
         binding.submitted=true
         val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return
-        var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null;var stagedDestination:ByteArray?=null
+        var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null;var bankRecovery:File?=null
+        var stagedDestination:ByteArray?=null;var retainedRecovery=false
         try{
             require(bound()&&fresh.contentEquals(binding.destination)&&expectedBank.contentEquals(binding.bank)){"The original Gen 7 destination identity or Bank binding changed."}
             require(fresh.contentEquals(preparedDestination)&&generationForSize(fresh.size)==7){"The Gen 7 destination changed while the conversion was prepared."}
@@ -61261,7 +61262,8 @@ private data class Gen2ToGen5LegalisePlan(
             require(validGen2ToGen7Destination(work)){"The staged Gen 7 destination integrity is invalid."}
             val backup=File.createTempFile(backupGameName(file)+"_PreGen2ToGen7Transfer_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The exact Gen 7 recovery backup did not verify."};retainGen2ToGen7SafetyBackup(backup,fresh)
-            require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(expectedBank)){"The destination, Bank record or retained backup changed before writing."}
+            val bankCopy=BankTransferRecovery.createGen2ToGen7(bankDir(),expectedBank);bankRecovery=bankCopy
+            require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&BankTransferRecovery.matches(bankCopy,expectedBank)&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(expectedBank)){"The destination, Bank record or retained backup changed before writing."}
             stagedDestination=work.copyOf();writeStarted=true;file.writeBytes(work)
             val written=file.readBytes();require(written.contentEquals(work)&&boxStorageInfo(written)==info){"The destination changed while it was written."}
             val actual=written.copyOfRange(off,off+PK6_STORED_SIZE);val reopened=parsePk6(actual,0,PK6_STORED_SIZE,false,807)?:error("The persisted PK7 could not be parsed.")
@@ -61270,9 +61272,10 @@ private data class Gen2ToGen5LegalisePlan(
             require(actual.contentEquals(pk7)&&reopenedMismatch==null&&reopenedPpUpsMatch&&reopenedDexMatches){"Persisted PK7 verification failed: ${reopenedMismatch?:if(!reopenedPpUpsMatch)"PP-Up data" else if(!reopenedDexMatches)"Pokédex registration" else "native record bytes"}."}
             val writtenChecks=validateGen7CoreChecksums(written);require(writtenChecks.first){writtenChecks.second};require(pcIsolated(written)){"Unrelated Gen 7 PC data changed after persistence."}
             val cleanup=bankFile.readBytes()
-            require(bound()&&cleanup.contentEquals(expectedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true&&file.readBytes().contentEquals(work)&&isBackupKept(backup)){"The Bank record, destination identity or retained backup changed before cleanup."}
+            require(bound()&&cleanup.contentEquals(expectedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true&&file.readBytes().contentEquals(work)&&isBackupKept(backup)&&BankTransferRecovery.matches(bankCopy,expectedBank)){"The Bank record, destination identity or retained backup changed before cleanup."}
             bankDeleteAttempted=true;require(bankFile.delete()&&!bankFile.exists()){"The Gen 2 Bank entry could not be removed after destination verification."}
-            require(bound()&&file.readBytes().contentEquals(work)){"The verified Gen 7 destination changed after Bank cleanup."}
+            require(bound()&&file.readBytes().contentEquals(work)&&BankTransferRecovery.matches(bankCopy,expectedBank)){"The verified Gen 7 destination changed after Bank cleanup."}
+            retainedRecovery=!BankTransferRecovery.cleanup(bankCopy,expectedBank)
         }catch(e:Exception){
             val bankRestored=runCatching{
                 if(bankDeleteAttempted){if(!bankFile.exists())require(bankFile.createNewFile()){"The Bank recovery path could not be reserved."};bankFile.writeBytes(expectedBank)}
@@ -61284,15 +61287,16 @@ private data class Gen2ToGen5LegalisePlan(
                 require(restored.contentEquals(fresh)&&validGen2ToGen7Destination(restored)){"The restored Generation 7 destination did not verify."}
                 true
             }.getOrDefault(false)
-            val recovery=when{
-                bankRestored&&destinationRestored->"The exact Gen 7 destination and Gen 2 Bank record were restored or kept and verified."
-                bankRestored->"The Gen 2 Bank record was restored or kept, but destination recovery was not verified. Use the retained recovery backup before editing again."
-                destinationRestored->"The exact Gen 7 destination was restored or kept, but Bank recovery was not verified. Keep the remaining Bank record and recovery files for review."
-                else->"Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
-            }
-            showDialog("Gen 2 → Gen 7 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
+            val verifiedBankRecovery=BankTransferRecovery.matches(bankRecovery,expectedBank)
+            val bankRecoveryClean=if(bankRestored&&destinationRestored){
+                if(bankRecovery==null)true else if(verifiedBankRecovery)BankTransferRecovery.cleanup(bankRecovery,expectedBank) else false
+            }else false
+            val recovery=BankTransferRecovery.gen2ToGen7FailureMessage(bankRestored,destinationRestored,bankRecovery!=null,verifiedBankRecovery,bankRecoveryClean)
+            val retainedBankRecovery=BankTransferRecovery.retainedPath(bankRecovery)
+            showDialog("Gen 2 → Gen 7 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:"")+retainedBankRecovery);return
         }
-        Toast.makeText(this,"PSE converted Gen 2 → Gen 7 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
+        val recoveryNotice=BankTransferRecovery.successNotice(retainedRecovery)
+        Toast.makeText(this,"PSE converted Gen 2 → Gen 7 to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show()
         showBank()
     }
 
