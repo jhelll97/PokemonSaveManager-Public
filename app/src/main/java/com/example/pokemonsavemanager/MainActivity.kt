@@ -428,9 +428,12 @@ class MainActivity : Activity() {
             }
             require(bound()&&file.readBytes().contentEquals(work)&&recoveryValid()){"The verified Generation 5 destination or retained recovery data changed after Bank cleanup."}
             retainedRecovery=finishSelectedNativeBankBatchRecoveryCleanup(
-                5,recoveryCopies.map{it.second},recoveryCopies.map{it.first.bankBytes},
+                recoveryCopies.map{it.second},recoveryCopies.map{it.first.bankBytes}
+            )
+            requireSelectedNativeBankBatchPostCleanup(
+                5,bound(),retainedRecovery,recoveryCopies.map{it.second},
                 file,work,backup,original,isBackupKept(backup),refreshed.map{it.bankFile}
-            ){bound()}
+            )
             selectedBankFiles.clear();bankMultiSelectMode=false
             val recoveryNotice=if(retainedRecovery)
                 "; one or more exact temporary Bank recoveries retained for review" else ""
