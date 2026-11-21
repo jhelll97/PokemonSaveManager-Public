@@ -54521,7 +54521,11 @@ class MainActivity : Activity() {
     }
 
     private fun transferGen1BankToGen3(bankFile:File,p:Gen1Pokemon,pk3:ByteArray,converted:PokemonEntry,target:Int){
-        val file=importedFile?:return
+        val openedFile=importedFile?:return
+        val openedUri=currentSourceUri
+        val openedLabel=currentSourceLabel
+        fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val file=openedFile
         val fresh=runCatching{file.readBytes()}.getOrElse{
             showDialog("Gen 1 → Gen 3 failed","The fresh destination save could not be read. Nothing was changed.");return
         }
@@ -54586,7 +54590,11 @@ class MainActivity : Activity() {
             require(currentBank.contentEquals(bankBytes)&&parseGen1BankPayload(currentBank)?.let{sameGen1TransferRecord(it,source)}==true&&file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&BankTransferRecovery.matches(bankCopy,bankBytes)){"The selected Gen 1 Bank record, verified destination or retained backup changed before cleanup."}
             bankDeleteAttempted=true
             require(bankFile.delete()&&!bankFile.exists()){"The Gen 1 Bank entry could not be removed after destination verification."}
-            require(file.readBytes().contentEquals(save)&&BankTransferRecovery.matches(bankCopy,bankBytes)){"The verified Gen 3 destination changed after Bank cleanup."}
+            require(!bankFile.exists()&&bound()&&file.readBytes().contentEquals(save)&&
+                isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&
+                BankTransferRecovery.matches(bankCopy,bankBytes)){
+                "The verified Gen 3 destination identity, removed Gen 1 Bank path or retained recovery snapshots changed after Bank cleanup."
+            }
             retainedRecovery=!BankTransferRecovery.cleanup(bankCopy,bankBytes)
         }catch(e:Exception){
             val originalBank=expectedBank
