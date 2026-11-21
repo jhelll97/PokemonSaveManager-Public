@@ -11311,9 +11311,9 @@ class MainActivity : Activity() {
             val cleanup=bankFile.readBytes();require(cleanup.contentEquals(expectedBank)){"The Gen 4 Bank record changed before cleanup."}
             val cleanupSource=parsePk4(cleanup,false);require(cleanupSource!=null&&cleanupSource.checksumValid&&cleanupSource.pid==expected.pid&&cleanupSource.species==expected.species&&cleanupSource.tid==expected.tid&&cleanupSource.sid==expected.sid){"The Gen 4 Bank record failed final verification."}
             bankDeleteAttempted=true;require(bankFile.delete()){"The Gen 4 Bank entry could not be removed after destination verification."};require(!bankFile.exists()){"The removed Gen 4 Bank entry still exists."}
-            require(bound()&&file.readBytes().contentEquals(work)&&isBackupKept(backup)&&
+            require(!bankFile.exists()&&bound()&&file.readBytes().contentEquals(work)&&isBackupKept(backup)&&
                 backup.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(expectedBank)){
-                "The verified Gen 1 destination identity or retained recovery snapshots changed after Bank cleanup."
+                "The verified Gen 1 destination identity, removed Gen 4 Bank path or retained recovery snapshots changed after Bank cleanup."
             }
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
                 listOf(bankCopy),listOf(expectedBank)
