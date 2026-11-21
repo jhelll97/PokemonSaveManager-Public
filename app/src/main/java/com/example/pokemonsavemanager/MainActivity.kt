@@ -54897,8 +54897,10 @@ class MainActivity : Activity() {
             bankDeleteAttempted=true
             require(bankFile.delete()){"The verified destination was written, but Bank cleanup failed."}
             require(!bankFile.exists()){"The Bank deletion could not be verified."}
-            require(bound()&&file.readBytes().contentEquals(written)){"The verified Gen 2 destination changed after Bank cleanup."}
-            require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){"A retained Gen 2 or Bank recovery snapshot changed after Bank cleanup."}
+            require(!bankFile.exists()&&bound()&&file.readBytes().contentEquals(written)&&
+                isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){
+                "The verified Gen 2 destination identity, removed Gen 1 Bank path or retained recovery snapshots changed after Bank cleanup."
+            }
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
                 listOf(bankCopy),listOf(bankBytes)
             )
