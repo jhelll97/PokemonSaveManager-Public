@@ -37950,6 +37950,7 @@ class MainActivity : Activity() {
         val original=try{file.readBytes()}catch(e:Exception){showDialog("Withdraw",e.message?:"Could not read save");return}
         var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null;var bankRecovery:File?=null
         var stagedDestination:ByteArray?=null
+        var retainedRecovery=false
         try{
             require(bound()&&original.contentEquals(openedDestination)){"The Gen 4 destination or source identity changed after slot selection."}
             require(target in 0 until 540){"Invalid Gen 4 PC slot"}; val profile=detectGen4Profile(original) ?: throw IllegalStateException("A valid Gen 4 destination save is required")
@@ -37974,8 +37975,12 @@ class MainActivity : Activity() {
             require(bound()&&file.readBytes().contentEquals(save)&&bankFile.readBytes().contentEquals(raw)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The verified destination or retained recovery snapshots changed before Bank cleanup."}
             bankDeleteAttempted=true;require(bankFile.delete()&&!bankFile.exists()){"The destination verified, but the Bank entry could not be removed"}
             require(bound()&&file.readBytes().contentEquals(save)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The verified destination or retained recovery snapshots changed after Bank cleanup."}
-            runCatching{bankCopy.delete()}
-            Toast.makeText(this,"Withdrawn to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show();showBank()
+            retainedRecovery=!cleanupExactBankRecoverySnapshots(
+                listOf(bankCopy),listOf(openedBank)
+            )
+            val recoveryNotice=if(retainedRecovery)
+                "; exact temporary Bank recovery retained for review" else ""
+            Toast.makeText(this,"Withdrawn to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
         }catch(e:Exception){
             val bankRestored=runCatching{
                 if(bankDeleteAttempted&&!bankFile.exists()){require(bankFile.createNewFile()){ "The Bank recovery path could not be reserved." };bankFile.writeBytes(openedBank)}
@@ -37995,9 +38000,14 @@ class MainActivity : Activity() {
                 saved.isFile&&recovered.contentEquals(openedBank)&&parsed!=null&&parsed.checksumValid&&
                     parsed.pid==p.pid&&parsed.species==p.species&&parsed.tid==p.tid&&parsed.sid==p.sid
             }.getOrDefault(false)}?:false
-            if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
+            val bankRecoveryClean=if(bankRestored&&destinationRestored){
+                bankRecovery?.let{
+                    cleanupExactBankRecoverySnapshots(listOf(it),listOf(openedBank))
+                }?:true
+            }else false
             val recovery=when{
-                bankRestored&&destinationRestored->"The exact Gen 4 destination and PK4 Bank record were restored or kept and verified."
+                bankRestored&&destinationRestored&&bankRecoveryClean->"The exact Gen 4 destination and PK4 Bank record were restored or kept and verified."
+                bankRestored&&destinationRestored->"The exact Gen 4 destination and PK4 Bank record were restored or kept and verified. The exact temporary Bank recovery snapshot changed or could not be removed safely and was retained for review."
                 bankRestored&&retainedBackup->"The PK4 Bank record was restored or kept. Destination restoration was not verified, but the exact retained Gen 4 destination backup verified."
                 bankRestored->"The PK4 Bank record was restored or kept, but destination restoration and the retained backup were not verified. The current destination was left untouched."
                 destinationRestored&&bankRecoveryVerified->"The exact Gen 4 destination was restored. Bank restoration was not verified, but the exact PK4 recovery snapshot verified."
