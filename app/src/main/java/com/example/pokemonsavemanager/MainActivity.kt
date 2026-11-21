@@ -60302,7 +60302,8 @@ private data class Gen2ToGen5LegalisePlan(
         if(!bound()){showDialog("Gen 2 → Gen 5","The destination identity changed. Reopen PSE Bank. Nothing was changed.");return}
         if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog("Gen 2 → Gen 5","The active save changed after destination selection. Reopen PSE Bank. Nothing was changed.");return}
         val file=openedFile;val original=runCatching{file.readBytes()}.getOrNull()?:return;var writeStarted=false;var bankDeleteAttempted=false
-        var safetyBackup:File?=null;var stagedDestination:ByteArray?=null
+        var safetyBackup:File?=null;var bankRecovery:File?=null;var stagedDestination:ByteArray?=null
+        var retainedRecovery=false
         try{
             require(bound()){"The Gen 5 destination identity changed before validation."}
             require(original.contentEquals(preparedDestination)){"The Gen 5 destination changed while the conversion was prepared."}
@@ -60329,7 +60330,8 @@ private data class Gen2ToGen5LegalisePlan(
             require(bound()&&validGen2ToGen5Destination(work)){"The staged Gen 5 destination identity or integrity is invalid."}
             val backup=File.createTempFile(backupGameName(file)+"_PreGen2ToGen5Transfer_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(original);require(backup.readBytes().contentEquals(original)){"The exact Gen 5 recovery backup did not verify."};retainGen2ToGen5SafetyBackup(backup,original)
-            require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&file.readBytes().contentEquals(original)&&bankFile.readBytes().contentEquals(expectedBank)){"The Gen 5 destination, Bank record or retained backup changed before writing. Nothing was written."}
+            val bankCopy=BankTransferRecovery.createGen2ToGen5(bankDir(),expectedBank);bankRecovery=bankCopy
+            require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&BankTransferRecovery.matches(bankCopy,expectedBank)&&file.readBytes().contentEquals(original)&&bankFile.readBytes().contentEquals(expectedBank)){"The Gen 5 destination, Bank record or retained backup changed before writing. Nothing was written."}
             stagedDestination=work.copyOf()
             writeStarted=true
             file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)){"The Gen 5 destination changed while it was written."}
@@ -60339,10 +60341,11 @@ private data class Gen2ToGen5LegalisePlan(
             require(actual.contentEquals(pk5)&&verified!=null&&sameGen2ToGen5Pk5(verified,staged)&&gen5Pk5PpUps(actual).contentEquals(expectedPpUps)){"The exact converted PK5 or PP Ups did not persist."}
             require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 5 destination changed before Bank cleanup."}
             require(bound()&&validGen2ToGen5Destination(written)){"The Gen 5 destination identity or integrity changed before Bank cleanup."}
-            val cleanup=bankFile.readBytes();require(cleanup.contentEquals(expectedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true){"The Gen 2 Bank record changed before cleanup."}
+            val cleanup=bankFile.readBytes();require(cleanup.contentEquals(expectedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true&&BankTransferRecovery.matches(bankCopy,expectedBank)){"The Gen 2 Bank record changed before cleanup."}
             bankDeleteAttempted=true;require(bankFile.delete()){"The Gen 2 Bank entry could not be removed after destination verification."};require(!bankFile.exists()){"The removed Gen 2 Bank entry still exists."}
             require(bound()){"The Gen 5 destination identity changed after Bank cleanup."}
-            require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 5 destination changed after Bank cleanup."}
+            require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)&&BankTransferRecovery.matches(bankCopy,expectedBank)){"The verified Gen 5 destination changed after Bank cleanup."}
+            retainedRecovery=!BankTransferRecovery.cleanup(bankCopy,expectedBank)
         }catch(e:Exception){
             val bankRestored=runCatching{
                 if(bankDeleteAttempted&&!bankFile.exists()){
@@ -60358,15 +60361,16 @@ private data class Gen2ToGen5LegalisePlan(
                 require(restored.contentEquals(original)&&validGen2ToGen5Destination(restored)){"The restored Generation 5 destination did not verify."}
                 true
             }.getOrDefault(false)
-            val recovery=when{
-                bankRestored&&destinationRestored->"The exact Gen 5 destination and Gen 2 Bank record were restored or kept and verified."
-                bankRestored->"The Gen 2 Bank record was restored or kept, but destination recovery was not verified. Use the retained recovery backup before editing again."
-                destinationRestored->"The exact Gen 5 destination was restored or kept, but Bank recovery was not verified. Keep the remaining Bank record and recovery files for review."
-                else->"Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
-            }
-            showDialog("Gen 2 → Gen 5 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
+            val verifiedBankRecovery=BankTransferRecovery.matches(bankRecovery,expectedBank)
+            val bankRecoveryClean=if(bankRestored&&destinationRestored){
+                if(bankRecovery==null)true else if(verifiedBankRecovery)BankTransferRecovery.cleanup(bankRecovery,expectedBank) else false
+            }else false
+            val recovery=BankTransferRecovery.gen2ToGen5FailureMessage(bankRestored,destinationRestored,bankRecovery!=null,verifiedBankRecovery,bankRecoveryClean)
+            val retainedBankRecovery=BankTransferRecovery.retainedPath(bankRecovery)
+            showDialog("Gen 2 → Gen 5 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:"")+retainedBankRecovery);return
         }
-        Toast.makeText(this,"Transferred Gen 2 → Gen 5 to Box "+(target/30+1)+" • Slot "+(target%30+1)+" and verified",Toast.LENGTH_LONG).show();showBank()
+        val recoveryNotice=BankTransferRecovery.successNotice(retainedRecovery)
+        Toast.makeText(this,"Transferred Gen 2 → Gen 5 to Box "+(target/30+1)+" • Slot "+(target%30+1)+" and verified"+recoveryNotice,Toast.LENGTH_LONG).show();showBank()
     }
 
         private data class Gen2Gen5BatchPrepared(
