@@ -12103,10 +12103,11 @@ class MainActivity : Activity() {
             }
             bankDeleteAttempted=true
             require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen ${p.sourceGeneration} Bank entry could not be removed after the Gen 5 destination was written."}
-            require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
+            require(!p.bankFile.exists()&&importedFile?.absolutePath==file.absolutePath&&
+                currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
                 file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&
                 bankCopy.readBytes().contentEquals(bank)){
-                "The verified Gen 5 destination or retained recovery snapshots changed after Bank cleanup."
+                "The verified Gen 5 destination, removed Gen ${p.sourceGeneration} Bank path or retained recovery snapshots changed after Bank cleanup."
             }
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
                 listOf(bankCopy),listOf(p.bankBytes)
