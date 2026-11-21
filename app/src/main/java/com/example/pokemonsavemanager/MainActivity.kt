@@ -38235,7 +38235,10 @@ class MainActivity : Activity() {
             if(!actual.contentEquals(raw)||mon==null||!mon.checksumValid||mon.pid!=source.pid||mon.species!=source.species||mon.tid!=source.tid||mon.sid!=source.sid)throw IllegalStateException("Withdrawn PK4 did not verify after re-read")
             require(bound()&&file.readBytes().contentEquals(save)&&bankFile.readBytes().contentEquals(raw)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The verified destination or retained recovery snapshots changed before Bank cleanup."}
             bankDeleteAttempted=true;require(bankFile.delete()&&!bankFile.exists()){"The destination verified, but the Bank entry could not be removed"}
-            require(bound()&&file.readBytes().contentEquals(save)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The verified destination or retained recovery snapshots changed after Bank cleanup."}
+            require(!bankFile.exists()&&bound()&&file.readBytes().contentEquals(save)&&isBackupKept(backup)&&
+                backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){
+                "The verified destination, removed Gen 4 Bank path or retained recovery snapshots changed after Bank cleanup."
+            }
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
                 listOf(bankCopy),listOf(openedBank)
             )
