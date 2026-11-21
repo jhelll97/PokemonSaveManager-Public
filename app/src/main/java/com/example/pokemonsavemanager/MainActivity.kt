@@ -62851,6 +62851,18 @@ private data class Gen2ToGen5LegalisePlan(
                 val bankRecoveryClean=cleanupExactBankRecoverySnapshots(
                     listOf(bankCopy),listOf(raw)
                 )
+                requireNativeBankWithdrawalPostCleanup(
+                    generation=1,
+                    destinationBound=bound()&&importedFile?.absolutePath==file.absolutePath,
+                    retainedRecovery=!bankRecoveryClean,
+                    recoveryFile=bankCopy,
+                    destination=file,
+                    expectedDestination=d,
+                    backup=backup,
+                    expectedBackup=fresh,
+                    kept=isBackupKept(backup),
+                    source=bankFile
+                )
                 val recoveryNotice=if(bankRecoveryClean) "" else
                     "; exact temporary Bank recovery retained for review"
                 Toast.makeText(this,"Withdrawn to Box $box and verified$recoveryNotice",Toast.LENGTH_LONG).show();showGen1PokemonViewer("boxes",box)
