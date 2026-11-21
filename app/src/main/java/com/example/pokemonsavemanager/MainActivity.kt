@@ -61591,10 +61591,12 @@ private data class Gen2ToGen5LegalisePlan(
                 require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 recovery backup changed before Bank cleanup."}
                 require(bankCopy.isFile&&bankCopy.readBytes().contentEquals(openedBank)&&parseGen2BankPayload(bankCopy.readBytes())?.let{sameGen2BankRecord(it,opened)}==true){"The Bank recovery snapshot changed before Bank cleanup."}
                 val cleanup=bankFile.readBytes();require(cleanup.contentEquals(openedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true){"The selected Gen 2 Bank record changed before cleanup."};bankDeleteAttempted=true;require(bankFile.delete()){"The Bank entry could not be removed after destination verification."};require(!bankFile.exists()){"The removed Bank entry still exists."}
-                require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 2 destination changed after Bank cleanup."}
-                require(bound()){"The source identity changed after Bank cleanup."}
-                require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 recovery backup changed after Bank cleanup."}
-                require(bankCopy.isFile&&bankCopy.readBytes().contentEquals(openedBank)&&parseGen2BankPayload(bankCopy.readBytes())?.let{sameGen2BankRecord(it,opened)}==true){"The Bank recovery snapshot changed after Bank cleanup."}
+                require(!bankFile.exists()&&importedFile?.absolutePath==file.absolutePath&&bound()&&
+                    file.readBytes().contentEquals(work)&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&
+                    bankCopy.isFile&&bankCopy.readBytes().contentEquals(openedBank)&&
+                    parseGen2BankPayload(bankCopy.readBytes())?.let{sameGen2BankRecord(it,opened)}==true){
+                    "The verified Gen 2 destination identity, removed Bank path or retained recovery snapshots changed after Bank cleanup."
+                }
                 retainedRecovery=!cleanupExactBankRecoverySnapshots(
                     listOf(bankCopy),listOf(openedBank)
                 )
