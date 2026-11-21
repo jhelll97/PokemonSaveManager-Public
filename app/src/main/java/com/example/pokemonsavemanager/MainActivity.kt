@@ -60901,7 +60901,11 @@ private data class Gen2ToGen5LegalisePlan(
             val cleanup=bankFile.readBytes()
             require(bound()&&cleanup.contentEquals(expectedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true&&file.readBytes().contentEquals(save)&&isBackupKept(backup)&&BankTransferRecovery.matches(bankCopy,expectedBank)){"The Bank record, destination identity or retained backup changed before cleanup."}
             bankDeleteAttempted=true;require(bankFile.delete()&&!bankFile.exists()){"The Gen 2 Bank entry could not be removed after destination verification."}
-            require(bound()&&file.readBytes().contentEquals(save)&&BankTransferRecovery.matches(bankCopy,expectedBank)){"The verified Gen 6 destination changed after Bank cleanup."}
+            require(!bankFile.exists()&&bound()&&file.readBytes().contentEquals(save)&&
+                isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&
+                BankTransferRecovery.matches(bankCopy,expectedBank)){
+                "The verified Gen 6 destination identity, removed Gen 2 Bank path or retained recovery snapshots changed after Bank cleanup."
+            }
             retainedRecovery=!BankTransferRecovery.cleanup(bankCopy,expectedBank)
         }catch(e:Exception){
             val bankRestored=runCatching{
