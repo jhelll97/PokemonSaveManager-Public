@@ -59175,6 +59175,7 @@ class MainActivity : Activity() {
         if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog("Gen 2 → Gen 3","The active save changed after destination selection. Reopen PSE Bank. Nothing was changed.");return}
         val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;var writeStarted=false;var bankDeleteAttempted=false
         var safetyBackup:File?=null;var bankRecovery:File?=null;var stagedDestination:ByteArray?=null
+        var retainedRecovery=false
         try{
             require(bound()){"The Gen 3 destination identity changed before transfer validation."}
             require(fresh.contentEquals(preparedDestination)&&generationForSize(fresh.size)==3&&gen3SaveValid(fresh)){"The Gen 3 destination changed or is no longer valid."};require(target in 0 until 420){"The selected Gen 3 destination slot is invalid."}
@@ -59204,7 +59205,9 @@ class MainActivity : Activity() {
             require(bound()){"The Gen 3 destination identity changed after Bank cleanup."}
             require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(save)){"The verified Gen 3 destination changed after Bank cleanup."}
             require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(expectedBank)){"A retained Gen 3 or Bank recovery snapshot changed after Bank cleanup."}
-            runCatching{bankCopy.delete()}
+            retainedRecovery=!cleanupExactBankRecoverySnapshots(
+                listOf(bankCopy),listOf(expectedBank)
+            )
         }catch(e:Exception){
             val bankRestored=runCatching{
                 if(bankDeleteAttempted&&!bankFile.exists()){
@@ -59220,9 +59223,14 @@ class MainActivity : Activity() {
                 require(restored.contentEquals(fresh)&&gen3SaveValid(restored)){"The restored Generation 3 destination did not verify."}
                 true
             }.getOrDefault(false)
-            if(bankRestored&&destinationRestored)runCatching{bankRecovery?.delete()}
+            val bankRecoveryClean=if(bankRestored&&destinationRestored){
+                bankRecovery?.let{
+                    cleanupExactBankRecoverySnapshots(listOf(it),listOf(expectedBank))
+                }?:true
+            }else false
             val recovery=when{
-                bankRestored&&destinationRestored->"The exact Gen 3 destination and Gen 2 Bank record were restored or kept and verified."
+                bankRestored&&destinationRestored&&bankRecoveryClean->"The exact Gen 3 destination and Gen 2 Bank record were restored or kept and verified."
+                bankRestored&&destinationRestored->"The exact Gen 3 destination and Gen 2 Bank record were restored or kept and verified. The exact temporary Bank recovery snapshot changed or could not be removed safely and was retained for review."
                 bankRestored->"The Gen 2 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
                 destinationRestored->"The exact Gen 3 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
                 else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
@@ -59231,7 +59239,9 @@ class MainActivity : Activity() {
                 (safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:"")+
                 (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery: "+it.name}?:""));return
         }
-        Toast.makeText(this,"PSE converted Gen 2 → Gen 3 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show();showBank()
+        val recoveryNotice=if(retainedRecovery)
+            "; exact temporary Bank recovery retained for review" else ""
+        Toast.makeText(this,"PSE converted Gen 2 → Gen 3 to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
     }
 
     private data class Gen2Gen3BatchPrepared(
