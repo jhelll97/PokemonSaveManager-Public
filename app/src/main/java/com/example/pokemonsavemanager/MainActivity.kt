@@ -62828,7 +62828,10 @@ private data class Gen2ToGen5LegalisePlan(
                 val bit2=dex-1;val mask2=1 shl(bit2%8);require((written[0x25A3+bit2/8].toInt() and mask2)!=0&&(written[0x25B6+bit2/8].toInt() and mask2)!=0){"Withdrawn Pokémon did not register Seen + Caught after the save was re-read."}
                 require(bound()&&file.readBytes().contentEquals(d)&&exactBank(bankFile.readBytes())&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&exactBank(bankCopy.readBytes())){"The verified destination or retained recovery snapshots changed before Bank cleanup."}
                 bankDeleteAttempted=true;require(bankFile.delete()&&!bankFile.exists()){"The Gen 1 Bank entry could not be removed after destination verification."}
-                require(bound()&&file.readBytes().contentEquals(d)&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&exactBank(bankCopy.readBytes())){"The verified destination or retained recovery snapshots changed after Bank cleanup."}
+                require(!bankFile.exists()&&bound()&&file.readBytes().contentEquals(d)&&isBackupKept(backup)&&
+                    backup.readBytes().contentEquals(fresh)&&exactBank(bankCopy.readBytes())){
+                    "The verified destination, removed Gen 1 Bank path or retained recovery snapshots changed after Bank cleanup."
+                }
                 val bankRecoveryClean=cleanupExactBankRecoverySnapshots(
                     listOf(bankCopy),listOf(raw)
                 )
