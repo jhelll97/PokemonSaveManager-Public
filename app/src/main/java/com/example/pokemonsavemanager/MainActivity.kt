@@ -58507,9 +58507,9 @@ class MainActivity : Activity() {
                 "The verified Gen 1 destination or retained recovery snapshots changed before Bank cleanup."
             }
             val cleanup=bankFile.readBytes();require(cleanup.contentEquals(expectedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true){"The Gen 2 Bank record changed before cleanup."};bankDeleteAttempted=true;require(bankFile.delete()){"The Gen 2 Bank entry could not be removed after destination verification."};require(!bankFile.exists()){"The removed Gen 2 Bank entry still exists."}
-            require(bound()&&importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)&&
+            require(!bankFile.exists()&&bound()&&importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)&&
                 isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(expectedBank)){
-                "The verified Gen 1 destination identity or retained recovery snapshots changed after Bank cleanup."
+                "The verified Gen 1 destination identity, removed Gen 2 Bank path or retained recovery snapshots changed after Bank cleanup."
             }
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
                 listOf(bankCopy),listOf(expectedBank)
