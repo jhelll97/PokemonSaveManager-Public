@@ -549,6 +549,7 @@ class MainActivity : Activity() {
         var stagedDestination:ByteArray?=null
         val recoveryCopies=ArrayList<Pair<Gen6BankBatchItem,File>>()
         val cleanupAttempted=HashSet<String>()
+        var retainedRecovery=false
         try{
             require(selected.isNotEmpty()&&selected.map{it.bankFile.absolutePath}.distinct().size==selected.size){"The prepared Gen 6 Bank selection is empty or contains a duplicate."}
             require(targetBox>=0&&targetSlots.size==selected.size&&targetSlots.distinct().size==targetSlots.size&&targetSlots.all{it in 0 until 30}){"The prepared Generation 6 destination slots are invalid."}
@@ -594,9 +595,13 @@ class MainActivity : Activity() {
                 require(item.bankFile.delete()&&!item.bankFile.exists()){ "A selected Gen 6 Bank record could not be removed after destination verification." }
             }
             require(bound()&&file.readBytes().contentEquals(work)&&recoveryValid()){ "The verified Generation 6 destination or retained recovery data changed after Bank cleanup." }
-            recoveryCopies.forEach{runCatching{it.second.delete()}}
+            retainedRecovery=!cleanupExactBankRecoverySnapshots(
+                recoveryCopies.map{it.second},recoveryCopies.map{it.first.bankBytes}
+            )
             selectedBankFiles.clear();bankMultiSelectMode=false
-            Toast.makeText(this,"Withdrew ${refreshed.size} exact Gen 6 PK6 records to Box ${targetBox+1} • Slots ${targetSlots.joinToString(", "){(it+1).toString()}} and verified",Toast.LENGTH_LONG).show();showBank()
+            val recoveryNotice=if(retainedRecovery)
+                "; one or more exact temporary Bank recoveries retained for review" else ""
+            Toast.makeText(this,"Withdrew ${refreshed.size} exact Gen 6 PK6 records to Box ${targetBox+1} • Slots ${targetSlots.joinToString(", "){(it+1).toString()}} and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
         }catch(e:Exception){
             val bankRestored=selected.map{item->runCatching{
                 if(!item.bankFile.exists()){require(cleanupAttempted.contains(item.bankFile.absolutePath)){"A Gen 6 Bank record disappeared before PSE attempted cleanup; its path was not overwritten."};require(item.bankFile.createNewFile()){ "A Bank recovery path could not be reserved." };item.bankFile.writeBytes(item.bankBytes)}
@@ -623,10 +628,16 @@ class MainActivity : Activity() {
                     parsed.tid==item.source.tid&&parsed.sid==item.source.sid
             }.getOrDefault(false)}
             val allRecoveryCopiesVerified=recoveryCopies.size==selected.size&&verifiedRecoveryCopies.size==selected.size
-            if(bankRestored&&destinationRestored)recoveryCopies.forEach{runCatching{it.second.delete()}}
+            val recoveryCopiesClean=if(bankRestored&&destinationRestored){
+                cleanupExactBankRecoverySnapshots(
+                    recoveryCopies.map{it.second},recoveryCopies.map{it.first.bankBytes}
+                )
+            }else false
             val recovery=when{
-                bankRestored&&destinationRestored->
+                bankRestored&&destinationRestored&&recoveryCopiesClean->
                     "The exact Generation 6 destination and every selected PK6 Bank record were restored or kept and verified."
+                bankRestored&&destinationRestored->
+                    "The exact Generation 6 destination and every selected PK6 Bank record were restored or kept and verified. One or more exact temporary Bank recovery snapshots changed or could not be removed safely and were retained for review."
                 bankRestored&&retainedBackup->
                     "Every selected PK6 Bank record was restored or kept. Destination restoration was not verified, but the exact retained destination backup verified."
                 bankRestored->
