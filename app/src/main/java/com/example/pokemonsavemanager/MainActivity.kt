@@ -59972,8 +59972,11 @@ class MainActivity : Activity() {
             require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 4 destination changed before Bank cleanup."}
             require(bound()&&validGen2ToGen4Destination(written)){"The Gen 4 destination identity or integrity changed before Bank cleanup."}
             val cleanup=bankFile.readBytes();require(cleanup.contentEquals(expectedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true&&BankTransferRecovery.matches(bankCopy,expectedBank)){"The Gen 2 Bank record changed before cleanup."};bankDeleteAttempted=true;require(bankFile.delete()){"The Gen 2 Bank entry could not be removed after destination verification."};require(!bankFile.exists()){"The removed Gen 2 Bank entry still exists."}
-            require(bound()){"The Gen 4 destination identity changed after Bank cleanup."}
-            require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)&&BankTransferRecovery.matches(bankCopy,expectedBank)){"The verified Gen 4 destination changed after Bank cleanup."}
+            require(!bankFile.exists()&&bound()&&importedFile?.absolutePath==file.absolutePath&&
+                file.readBytes().contentEquals(work)&&isBackupKept(backup)&&
+                backup.readBytes().contentEquals(fresh)&&BankTransferRecovery.matches(bankCopy,expectedBank)){
+                "The verified Gen 4 destination identity, removed Gen 2 Bank path or retained recovery snapshots changed after Bank cleanup."
+            }
             retainedRecovery=!BankTransferRecovery.cleanup(bankCopy,expectedBank)
         }catch(e:Exception){
             val bankRestored=runCatching{
