@@ -60377,8 +60377,11 @@ private data class Gen2ToGen5LegalisePlan(
             require(bound()&&validGen2ToGen5Destination(written)){"The Gen 5 destination identity or integrity changed before Bank cleanup."}
             val cleanup=bankFile.readBytes();require(cleanup.contentEquals(expectedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true&&BankTransferRecovery.matches(bankCopy,expectedBank)){"The Gen 2 Bank record changed before cleanup."}
             bankDeleteAttempted=true;require(bankFile.delete()){"The Gen 2 Bank entry could not be removed after destination verification."};require(!bankFile.exists()){"The removed Gen 2 Bank entry still exists."}
-            require(bound()){"The Gen 5 destination identity changed after Bank cleanup."}
-            require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)&&BankTransferRecovery.matches(bankCopy,expectedBank)){"The verified Gen 5 destination changed after Bank cleanup."}
+            require(!bankFile.exists()&&bound()&&importedFile?.absolutePath==file.absolutePath&&
+                file.readBytes().contentEquals(work)&&isBackupKept(backup)&&
+                backup.readBytes().contentEquals(original)&&BankTransferRecovery.matches(bankCopy,expectedBank)){
+                "The verified Gen 5 destination identity, removed Gen 2 Bank path or retained recovery snapshots changed after Bank cleanup."
+            }
             retainedRecovery=!BankTransferRecovery.cleanup(bankCopy,expectedBank)
         }catch(e:Exception){
             val bankRestored=runCatching{
