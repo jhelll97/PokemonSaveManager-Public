@@ -489,6 +489,27 @@ internal fun finishSelectedNativeBankBatchRecoveryCleanup(
     expected: List<ByteArray>
 ): Boolean = !cleanupExactBankRecoverySnapshots(recoveryFiles, expected)
 
+internal fun requireNativeBankWithdrawalPostCleanup(
+    generation: Int,
+    destinationBound: Boolean,
+    retainedRecovery: Boolean,
+    recoveryFile: File,
+    destination: File,
+    expectedDestination: ByteArray,
+    backup: File,
+    expectedBackup: ByteArray,
+    kept: Boolean,
+    source: File
+) {
+    require(destinationBound &&
+        destination.isFile && destination.readBytes().contentEquals(expectedDestination) &&
+        retainedBankBackupMatches(backup, expectedBackup, kept) &&
+        !source.exists() &&
+        (retainedRecovery || !recoveryFile.exists())) {
+        "The verified Generation $generation destination, removed Bank source or retained recovery data changed during recovery cleanup."
+    }
+}
+
 internal fun requireSelectedNativeBankBatchPostCleanup(
     generation: Int,
     destinationBound: Boolean,
