@@ -7,6 +7,7 @@ internal object BankTransferRecovery {
     const val GEN2_TO_7=2
     const val GEN2_TO_6=3
     const val GEN2_TO_5=4
+    const val GEN2_TO_4=5
 
     fun create(directory: File, expected: ByteArray, route: Int): File {
         val(prefix,failure)=when(route){
@@ -14,6 +15,7 @@ internal object BankTransferRecovery {
             GEN2_TO_7->"PSE_G2ToGen7_BankRecovery_" to "The exact Gen 2 Bank recovery snapshot did not verify."
             GEN2_TO_6->"PSE_G2ToGen6_BankRecovery_" to "The exact Gen 2 Bank recovery snapshot did not verify."
             GEN2_TO_5->"PSE_G2ToGen5_BankRecovery_" to "The exact Gen 2 Bank recovery snapshot did not verify."
+            GEN2_TO_4->"PSE_G2ToGen4_BankRecovery_" to "The exact Gen 2 Bank recovery snapshot did not verify."
             else->error("Unsupported Bank recovery route.")
         }
         val copy=File.createTempFile(prefix,".tmp",directory)
@@ -47,6 +49,7 @@ internal object BankTransferRecovery {
         GEN2_TO_7->gen2ToGen7FailureMessage(bankRestored,saveRestored,snapshotCreated,snapshotVerified,snapshotClean)
         GEN2_TO_6->gen2ToGen6FailureMessage(bankRestored,saveRestored,snapshotCreated,snapshotVerified,snapshotClean)
         GEN2_TO_5->gen2ToGen5FailureMessage(bankRestored,saveRestored,snapshotCreated,snapshotVerified,snapshotClean)
+        GEN2_TO_4->gen2ToGen4FailureMessage(bankRestored,saveRestored,snapshotCreated,snapshotVerified,snapshotClean)
         else->"Automatic recovery could not be verified. Keep all retained files for review."
     }
 
@@ -136,6 +139,29 @@ internal object BankTransferRecovery {
             "The exact Gen 5 destination was restored or kept, but Bank recovery was not verified. The exact verified Gen 2 Bank recovery snapshot was retained for recovery."
         saveRestored->
             "The exact Gen 5 destination was restored or kept, but Bank recovery was not verified. Keep the remaining Bank record and recovery files for review."
+        snapshotCreated&&snapshotVerified->
+            "Automatic recovery could not be verified. Keep the retained destination backup and exact verified Gen 2 Bank recovery snapshot for review."
+        else->
+            "Automatic recovery could not be verified. Stop editing and keep the working save and remaining Bank record until a verified backup and Bank contents have been reviewed."
+    }
+
+    private fun gen2ToGen4FailureMessage(
+        bankRestored: Boolean,
+        saveRestored: Boolean,
+        snapshotCreated: Boolean,
+        snapshotVerified: Boolean,
+        snapshotClean: Boolean
+    ): String = when {
+        bankRestored&&saveRestored&&snapshotClean->
+            "The exact Gen 4 destination and Gen 2 Bank record were restored or kept and verified."
+        bankRestored&&saveRestored->
+            "The exact Gen 4 destination and Gen 2 Bank record were restored or kept and verified. The temporary Bank recovery snapshot changed or could not be removed safely and was retained for review."
+        bankRestored->
+            "The Gen 2 Bank record was restored or kept, but destination recovery was not verified. Use the retained recovery backup before editing again."
+        saveRestored&&snapshotVerified->
+            "The exact Gen 4 destination was restored or kept, but Bank recovery was not verified. The exact verified Gen 2 Bank recovery snapshot was retained for recovery."
+        saveRestored->
+            "The exact Gen 4 destination was restored or kept, but Bank recovery was not verified. Keep the remaining Bank record and recovery files for review."
         snapshotCreated&&snapshotVerified->
             "Automatic recovery could not be verified. Keep the retained destination backup and exact verified Gen 2 Bank recovery snapshot for review."
         else->
