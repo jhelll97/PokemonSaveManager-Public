@@ -53965,7 +53965,11 @@ class MainActivity : Activity() {
             require(bound()&&currentBank.contentEquals(openedBank)&&parseGen1BankPayload(currentBank)?.let{sameGen1TransferRecord(it,source)}==true&&file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&BankTransferRecovery.matches(bankCopy,openedBank)){"The Bank record, destination identity or retained backup changed before cleanup."}
             bankDeleteAttempted=true
             require(bankFile.delete()&&!bankFile.exists()){"The Gen 1 Bank entry could not be removed after destination verification."}
-            require(file.readBytes().contentEquals(save)&&BankTransferRecovery.matches(bankCopy,openedBank)){"The verified Gen 5 destination changed after Bank cleanup."}
+            require(!bankFile.exists()&&bound()&&file.readBytes().contentEquals(save)&&
+                isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&
+                BankTransferRecovery.matches(bankCopy,openedBank)){
+                "The verified Gen 5 destination identity, removed Gen 1 Bank path or retained recovery snapshots changed after Bank cleanup."
+            }
             retainedRecovery=!BankTransferRecovery.cleanup(bankCopy,openedBank)
         }catch(e:Exception){
             val bankRestored=runCatching{
