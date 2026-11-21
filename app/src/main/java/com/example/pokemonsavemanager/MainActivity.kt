@@ -47699,9 +47699,9 @@ class MainActivity : Activity() {
                 "The destination, Bank record or retained recovery snapshots changed before cleanup."
             }
             bankDeleteAttempted=true;require(bankFile.delete()&&!bankFile.exists()){"The destination was written, but Bank cleanup could not be verified."}
-            require(bound()&&file.readBytes().contentEquals(written)&&isBackupKept(b)&&
+            require(!bankFile.exists()&&bound()&&file.readBytes().contentEquals(written)&&isBackupKept(b)&&
                 b.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){
-                "The verified destination identity or retained recovery snapshots changed after Bank cleanup."
+                "The verified Gen 2 destination identity, removed Gen 3 Bank path or retained recovery snapshots changed after Bank cleanup."
             }
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
                 listOf(bankCopy),listOf(bankBytes)
