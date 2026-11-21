@@ -47298,12 +47298,19 @@ class MainActivity : Activity() {
             val allBankRecoveryVerified =
                 bankRecovery.size == selected.size &&
                     verifiedBankRecovery.size == selected.size
-            if (saveRestored && bankRestored) {
-                bankRecovery.forEach { runCatching { it.delete() } }
+            val bankRecoveryClean = if (saveRestored && bankRestored) {
+                cleanupExactBankRecoverySnapshots(
+                    bankRecovery,
+                    selected.map { it.bankBytes }
+                )
+            } else {
+                false
             }
             val recovery = when {
-                saveRestored && bankRestored ->
+                saveRestored && bankRestored && bankRecoveryClean ->
                     "The original save and every removed Bank record were preserved or restored."
+                saveRestored && bankRestored ->
+                    "The original save and every removed Bank record were preserved or restored. One or more exact temporary PK3 Bank recovery snapshots changed or could not be removed safely and were retained for review."
                 bankRestored && retainedBackup ->
                     "Every Bank record was restored or kept. Destination restoration was not verified, but the exact retained Gen 3 destination backup verified."
                 bankRestored ->
