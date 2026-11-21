@@ -48670,10 +48670,10 @@ class MainActivity : Activity() {
             }
             deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 3 Bank entry could not be removed after destination verification."}
             require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&
-                currentSourceLabel==p.sourceLabel&&file.readBytes().contentEquals(save)&&
+                currentSourceLabel==p.sourceLabel&&!p.bankFile.exists()&&file.readBytes().contentEquals(save)&&
                 isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&
                 bankCopy.readBytes().contentEquals(p.bankBytes)){
-                "The verified Gen 7 destination or retained recovery files changed after Bank cleanup."
+                "The verified Gen 7 destination, removed Gen 3 Bank path or retained recovery files changed after Bank cleanup."
             }
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
                 listOf(bankCopy),listOf(p.bankBytes)
