@@ -187,16 +187,24 @@ internal fun cleanupExactBankRecoverySnapshots(
     return clean
 }
 
+internal data class SelectedGen3BankWithdrawalCompletion(
+    val message: String,
+    val recoveryClean: Boolean
+)
+
 internal fun finishSelectedGen3BankWithdrawal(
     recoveryFiles: List<File>,
     expected: List<ByteArray>,
     moved: Int,
     targetBoxName: String
-): String {
+): SelectedGen3BankWithdrawalCompletion {
     val recoveryClean=cleanupExactBankRecoverySnapshots(recoveryFiles, expected)
-    return "$moved Gen 3 Pokémon moved to $targetBoxName and verified" +
-        if(recoveryClean) "" else
-            "; a Bank recovery snapshot was retained for review"
+    return SelectedGen3BankWithdrawalCompletion(
+        "$moved Gen 3 Pokémon moved to $targetBoxName and verified" +
+            if(recoveryClean) "" else
+                "; a Bank recovery snapshot was retained for review",
+        recoveryClean
+    )
 }
 
 internal data class SelectedGen2BankWithdrawalCompletion(

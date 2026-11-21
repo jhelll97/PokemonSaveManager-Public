@@ -47246,18 +47246,22 @@ class MainActivity : Activity() {
                 exactGen3BankRecoverySnapshots(bankRecovery, refreshed)) {
                 "The verified Gen 3 destination, removed Bank batch or retained recovery snapshots changed after Bank cleanup."
             }
-            val withdrawalSuccess = finishSelectedGen3BankWithdrawal(
+            val withdrawalCompletion = finishSelectedGen3BankWithdrawal(
                 bankRecovery,
                 refreshed,
                 selected.size,
                 targetBoxName
+            )
+            requireSelectedNativeBankBatchPostCleanup(
+                3,destinationBound(),!withdrawalCompletion.recoveryClean,bankRecovery,
+                openedFile,work,backup!!,fresh,isBackupKept(backup!!),selected.map{it.bankFile}
             )
 
             selectedBankFiles.clear()
             bankMultiSelectMode = false
             Toast.makeText(
                 this,
-                withdrawalSuccess,
+                withdrawalCompletion.message,
                 Toast.LENGTH_LONG
             ).show()
             showGen3PokemonViewer("boxes", targetBox)
