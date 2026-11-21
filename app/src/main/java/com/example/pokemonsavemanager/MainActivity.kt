@@ -12432,12 +12432,16 @@ class MainActivity : Activity() {
                 reopened.species==source.species&&reopened.tid==source.tid&&reopened.sid==source.sid){
                 "The exact 136-byte PK5 did not persist after reopening."
             }
-            require(gen5BankWithdrawalIdentityBound(p)&&p.bankFile.readBytes().contentEquals(bank)&&file.readBytes().contentEquals(save)){
-                "The destination identity, verified save or Bank record changed before cleanup."
+            require(gen5BankWithdrawalIdentityBound(p)&&p.bankFile.readBytes().contentEquals(bank)&&file.readBytes().contentEquals(save)&&
+                isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
+                "The destination identity, verified save or retained recovery snapshots changed before cleanup."
             }
             bankDeleteAttempted=true
             require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 5 Bank record could not be removed after destination verification."}
-            require(gen5BankWithdrawalIdentityBound(p)&&!p.bankFile.exists()&&file.readBytes().contentEquals(save)){"The destination identity, verified save or removed Bank path changed after cleanup."}
+            require(gen5BankWithdrawalIdentityBound(p)&&!p.bankFile.exists()&&file.readBytes().contentEquals(save)&&
+                isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
+                "The destination identity, verified save, removed Bank path or retained recovery snapshots changed after cleanup."
+            }
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
                 listOf(bankCopy),listOf(p.bankBytes)
             )
