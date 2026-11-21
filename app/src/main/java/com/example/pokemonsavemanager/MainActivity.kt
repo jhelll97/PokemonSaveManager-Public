@@ -37565,6 +37565,7 @@ class MainActivity : Activity() {
         val file=p.destinationFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return
         var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
         var stagedDestination:ByteArray?=null
+        var retainedRecovery=false
         try{
             require(fresh.contentEquals(p.destination)&&generationForSize(fresh.size)==3&&gen3SaveValid(fresh)){"The Gen 3 destination changed or failed validation."}
             require(target in 0 until 420){"The destination slot is invalid."}
@@ -37616,7 +37617,9 @@ class MainActivity : Activity() {
             deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The PK5 Bank record could not be removed after destination verification."}
             require(file.readBytes().contentEquals(save)){"The verified destination changed after Bank cleanup."}
             require(recovery.readBytes().contentEquals(fresh)&&isBackupKept(recovery)){"The retained destination recovery backup changed after Bank cleanup."}
-            runCatching{bankCopy.delete()}
+            retainedRecovery=!cleanupExactBankRecoverySnapshots(
+                listOf(bankCopy),listOf(p.bankBytes)
+            )
         }catch(e:Exception){
             val bankRestored=runCatching{
                 if(deleteAttempted&&!p.bankFile.exists()){
@@ -37631,16 +37634,23 @@ class MainActivity : Activity() {
                 require(restored.contentEquals(fresh)&&generationForSize(restored.size)==3&&gen3SaveValid(restored)){"The restored Gen 3 destination did not verify."}
                 true
             }.getOrDefault(false)
-            if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
+            val bankRecoveryClean=if(bankRestored&&saveRestored){
+                bankRecovery?.let{
+                    cleanupExactBankRecoverySnapshots(listOf(it),listOf(p.bankBytes))
+                }?:true
+            }else false
             val recovery=when{
-                bankRestored&&saveRestored->"The exact Gen 3 destination and PK5 Bank record were restored or kept and verified."
+                bankRestored&&saveRestored&&bankRecoveryClean->"The exact Gen 3 destination and PK5 Bank record were restored or kept and verified."
+                bankRestored&&saveRestored->"The exact Gen 3 destination and PK5 Bank record were restored or kept and verified. The exact temporary Bank recovery snapshot changed or could not be removed safely and was retained for review."
                 bankRestored->"The PK5 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
                 saveRestored->"The exact Gen 3 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
                 else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
             }
             showDialog("Gen 5 → Gen 3 failed",(e.message?:"Unknown error")+"\n\n$recovery"+(backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+(bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery: ${it.name}"}?:""));return
         }
-        Toast.makeText(this,"PSE converted Gen 5 → Gen 3 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
+        val recoveryNotice=if(retainedRecovery)
+            "; exact temporary Bank recovery retained for review" else ""
+        Toast.makeText(this,"PSE converted Gen 5 → Gen 3 to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show()
         showBank()
     }
 
