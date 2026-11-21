@@ -577,6 +577,12 @@ internal fun executeSelectedStandardBankBatch(
         val bankRecoveryClean=cleanupExactBankRecoverySnapshots(
             bankRecoveries,sourceBytes
         )
+        require(bound()&&file.isFile&&file.readBytes().contentEquals(work)&&nativeValid(work)&&
+            backup.isFile&&backup.readBytes().contentEquals(original)&&backupKept(backup)&&
+            removed.size==sources.size&&removed.none{it.exists()}&&
+            (!bankRecoveryClean||bankRecoveries.none{it.exists()})){
+            "The verified destination, removed Bank batch or retained destination backup changed during recovery cleanup."
+        }
         return PseSelectedBankBatchResult(
             moved=sources.size,
             notice=if(bankRecoveryClean) null else
