@@ -427,9 +427,10 @@ class MainActivity : Activity() {
                 cleanupAttempted.add(item.bankFile.absolutePath);require(item.bankFile.delete()&&!item.bankFile.exists()){"A selected Gen 5 Bank record could not be removed after destination verification."}
             }
             require(bound()&&file.readBytes().contentEquals(work)&&recoveryValid()){"The verified Generation 5 destination or retained recovery data changed after Bank cleanup."}
-            retainedRecovery=!cleanupExactBankRecoverySnapshots(
-                recoveryCopies.map{it.second},recoveryCopies.map{it.first.bankBytes}
-            )
+            retainedRecovery=finishSelectedNativeBankBatchRecoveryCleanup(
+                5,recoveryCopies.map{it.second},recoveryCopies.map{it.first.bankBytes},
+                file,work,backup,original,isBackupKept(backup),refreshed.map{it.bankFile}
+            ){bound()}
             selectedBankFiles.clear();bankMultiSelectMode=false
             val recoveryNotice=if(retainedRecovery)
                 "; one or more exact temporary Bank recoveries retained for review" else ""
@@ -437,11 +438,10 @@ class MainActivity : Activity() {
         }catch(e:Exception){
             val bankRestored=selected.map{item->runCatching{
                 val copy=recoveryCopies.firstOrNull{it.first.bankFile.absolutePath==item.bankFile.absolutePath}?.second
-                if(!item.bankFile.exists()){
-                    require(cleanupAttempted.contains(item.bankFile.absolutePath)){"A Bank record disappeared before PSE attempted cleanup; its path was not overwritten."}
-                    require(copy!=null&&copy.readBytes().contentEquals(item.bankBytes)){"The exact PK5 recovery snapshot is unavailable."}
-                    require(item.bankFile.createNewFile()){"A Bank recovery path could not be reserved."};item.bankFile.writeBytes(copy.readBytes())
-                }
+                restoreExactMissingStandardBankRecord(
+                    item.bankFile,item.bankBytes,
+                    cleanupAttempted.contains(item.bankFile.absolutePath),copy
+                )
                 val restored=item.bankFile.readBytes();val parsed=if(restored.size==136)parsePk5(restored,false)else null
                 require(restored.contentEquals(item.bankBytes)&&parsed!=null&&parsed.checksumValid&&parsed.pid==item.source.pid&&parsed.species==item.source.species&&parsed.tid==item.source.tid&&parsed.sid==item.source.sid){"An exact Gen 5 Bank record could not be restored or verified."};true
             }.getOrDefault(false)}.all{it}

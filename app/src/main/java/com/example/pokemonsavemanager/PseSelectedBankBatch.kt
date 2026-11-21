@@ -426,6 +426,48 @@ internal fun finishSelectedGen1BankWithdrawal(
             "; a Bank recovery snapshot was retained for review"
 }
 
+internal fun finishSelectedNativeBankBatchRecoveryCleanup(
+    generation: Int,
+    recoveryFiles: List<File>,
+    expected: List<ByteArray>,
+    destination: File,
+    expectedDestination: ByteArray,
+    backup: File,
+    expectedBackup: ByteArray,
+    kept: Boolean,
+    sources: List<File>,
+    destinationBound: () -> Boolean
+): Boolean {
+    val recoveryClean=cleanupExactBankRecoverySnapshots(recoveryFiles, expected)
+    require(destinationBound() &&
+        destination.isFile && destination.readBytes().contentEquals(expectedDestination) &&
+        retainedBankBackupMatches(backup, expectedBackup, kept) &&
+        sources.size == expected.size && sources.none { it.exists() } &&
+        (!recoveryClean || recoveryFiles.none { it.exists() })) {
+        "The verified Generation $generation destination, removed Bank batch or retained destination backup changed during recovery cleanup."
+    }
+    return !recoveryClean
+}
+
+internal fun restoreExactMissingStandardBankRecord(
+    file: File,
+    expected: ByteArray,
+    cleanupAttempted: Boolean,
+    recovery: File?
+) {
+    if (file.exists()) return
+    require(cleanupAttempted) {
+        "A Bank record disappeared before PSE attempted cleanup; its path was not overwritten."
+    }
+    if (recovery?.exists() == true) {
+        require(recovery.isFile && recovery.readBytes().contentEquals(expected)) {
+            "An existing Bank recovery snapshot changed; it was retained for review."
+        }
+    }
+    require(file.createNewFile()) { "A Bank recovery path could not be reserved." }
+    file.writeBytes(expected)
+}
+
 internal fun cleanupExactSelectedGen3BankCopies(
     temporary: List<File>,
     finalized: List<File>,
