@@ -37624,8 +37624,12 @@ class MainActivity : Activity() {
                 "The source identity, PK5 Bank record or verified destination changed before cleanup."
             }
             deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The PK5 Bank record could not be removed after destination verification."}
-            require(file.readBytes().contentEquals(save)){"The verified destination changed after Bank cleanup."}
-            require(recovery.readBytes().contentEquals(fresh)&&isBackupKept(recovery)){"The retained destination recovery backup changed after Bank cleanup."}
+            require(!p.bankFile.exists()&&importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&
+                currentSourceLabel==p.sourceLabel&&file.readBytes().contentEquals(save)&&
+                recovery.readBytes().contentEquals(fresh)&&isBackupKept(recovery)&&
+                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                "The verified Gen 3 destination identity, removed Gen 5 Bank path or retained recovery snapshots changed after Bank cleanup."
+            }
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
                 listOf(bankCopy),listOf(p.bankBytes)
             )
