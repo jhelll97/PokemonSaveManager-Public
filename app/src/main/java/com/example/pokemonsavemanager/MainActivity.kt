@@ -54210,7 +54210,9 @@ class MainActivity : Activity() {
         var writeStarted=false
         var bankDeleteAttempted=false
         var safetyBackup:File?=null
+        var bankRecovery:File?=null
         var stagedDestination:ByteArray?=null
+        var retainedRecovery=false
         try{
             require(bound()){"The destination identity changed."}
             require(original.contentEquals(preparedDestination)){"The Gen 6 destination changed while the conversion was being prepared."}
@@ -54252,7 +54254,8 @@ class MainActivity : Activity() {
             recovery.writeBytes(original)
             require(recovery.readBytes().contentEquals(original)){"The exact Gen 6 recovery backup did not verify."}
             retainGenToGen6SafetyBackup(recovery,original)
-            require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&file.readBytes().contentEquals(original)&&bankFile.readBytes().contentEquals(openedBank)){"The destination, Bank record or retained recovery backup changed before writing."}
+            val bankCopy=BankTransferRecovery.create(bankDir(),openedBank,BankTransferRecovery.GEN1_TO_6);bankRecovery=bankCopy
+            require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&BankTransferRecovery.matches(bankCopy,openedBank)&&file.readBytes().contentEquals(original)&&bankFile.readBytes().contentEquals(openedBank)){"The destination, Bank record or retained recovery backup changed before writing."}
             stagedDestination=save.copyOf()
             writeStarted=true
             file.writeBytes(save)
@@ -54270,10 +54273,11 @@ class MainActivity : Activity() {
             ){"The exact converted PK6 did not persist after reopening."}
             require(gen6BoxChecksumValid(written)&&gen6BlockChecksumValid(written,20)&&gen6DexCaught(written,staged.species)){"The persisted Gen 6 save failed checksum or Pokédex verification."}
             val currentBank=bankFile.readBytes()
-            require(bound()&&currentBank.contentEquals(openedBank)&&parseGen1BankPayload(currentBank)?.let{sameGen1TransferRecord(it,source)}==true&&file.readBytes().contentEquals(save)&&isBackupKept(recovery)){"The Bank record, destination identity or retained backup changed before cleanup."}
+            require(bound()&&currentBank.contentEquals(openedBank)&&parseGen1BankPayload(currentBank)?.let{sameGen1TransferRecord(it,source)}==true&&file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&BankTransferRecovery.matches(bankCopy,openedBank)){"The Bank record, destination identity or retained backup changed before cleanup."}
             bankDeleteAttempted=true
             require(bankFile.delete()&&!bankFile.exists()){"The Gen 1 Bank entry could not be removed after destination verification."}
-            require(file.readBytes().contentEquals(save)){"The verified Gen 6 destination changed after Bank cleanup."}
+            require(file.readBytes().contentEquals(save)&&BankTransferRecovery.matches(bankCopy,openedBank)){"The verified Gen 6 destination changed after Bank cleanup."}
+            retainedRecovery=!BankTransferRecovery.cleanup(bankCopy,openedBank)
         }catch(e:Exception){
             val bankRestored=runCatching{
                 if(bankDeleteAttempted){
@@ -54288,16 +54292,17 @@ class MainActivity : Activity() {
                 require(restored.contentEquals(original)&&generationForSize(restored.size)==6&&gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)){"The restored Generation 6 destination did not verify."}
                 true
             }.getOrDefault(false)
-            val recovery=when{
-                bankRestored&&saveRestored->"The exact Gen 6 destination and Gen 1 Bank record were restored or kept and verified."
-                bankRestored->"The Gen 1 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
-                saveRestored->"The exact Gen 6 destination was restored, but Bank restoration was not verified. Keep the exact Gen 1 Bank payload for recovery."
-                else->"Automatic recovery could not be verified. Keep the retained destination backup and exact Gen 1 Bank payload for review."
-            }
-            showDialog("Gen 1 → Gen 6 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""))
+            val verifiedBankRecovery=BankTransferRecovery.matches(bankRecovery,openedBank)
+            val bankRecoveryClean=if(bankRestored&&saveRestored){
+                if(bankRecovery==null)true else if(verifiedBankRecovery)BankTransferRecovery.cleanup(bankRecovery,openedBank) else false
+            }else false
+            val recovery=BankTransferRecovery.failureMessage(BankTransferRecovery.GEN1_TO_6,bankRestored,saveRestored,bankRecovery!=null,verifiedBankRecovery,bankRecoveryClean)
+            val retainedBankRecovery=BankTransferRecovery.retainedPath(bankRecovery)
+            showDialog("Gen 1 → Gen 6 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:"")+retainedBankRecovery)
             return
         }
-        Toast.makeText(this,"PSE converted Gen 1 → Gen 6 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show()
+        val recoveryNotice=BankTransferRecovery.successNotice(retainedRecovery)
+        Toast.makeText(this,"PSE converted Gen 1 → Gen 6 to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show()
         showBank()
     }
 
