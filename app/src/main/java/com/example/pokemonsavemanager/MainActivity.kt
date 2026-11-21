@@ -36465,11 +36465,11 @@ class MainActivity : Activity() {
                 "The source identity, Gen 6 Bank record, verified Gen 4 destination or retained recovery snapshots changed before Bank cleanup."
             }
             deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 6 Bank record could not be removed after destination verification."}
-            require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&
+            require(!p.bankFile.exists()&&importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&
                 currentSourceLabel==p.sourceLabel&&file.readBytes().contentEquals(work)&&
                 recovery.readBytes().contentEquals(fresh)&&isBackupKept(recovery)&&
                 bankCopy.readBytes().contentEquals(p.bankBytes)){
-                "The verified Gen 4 destination or retained recovery snapshots changed after Bank cleanup."
+                "The verified Gen 4 destination identity, removed Gen 6 Bank path or retained recovery snapshots changed after Bank cleanup."
             }
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
                 listOf(bankCopy),listOf(p.bankBytes)
