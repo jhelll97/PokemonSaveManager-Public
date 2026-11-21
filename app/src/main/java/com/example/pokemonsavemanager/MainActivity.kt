@@ -11751,6 +11751,7 @@ class MainActivity : Activity() {
 
     private fun transferGen4BankToGen3(p:Gen4Gen3Prepared,target:Int){
         if(!gen4ToGen3StillBound(p))return showDialog("Gen 4 → Gen 3","The prepared snapshots changed. Reopen PSE Bank.");val file=p.destinationFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null;var stagedDestination:ByteArray?=null
+        var retainedRecovery=false
         try{
             require(fresh.contentEquals(p.destination)&&generationForSize(fresh.size)==3&&gen3SaveValid(fresh)){"The Gen 3 destination changed or failed validation."};require(target in 0 until 420){"The destination slot is invalid."};val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The PK4 Bank record changed."};val source=parsePk4(bank,false)?:error("The PK4 Bank record is invalid.");require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&source.tid==p.source.tid&&source.sid==p.source.sid){"The selected Pokémon changed."}
             val pk3=buildGen4ToGen3Pk3(bank,source,fresh,p.plan);val converted=parsePk3(pk3,0,false)?:error("The refreshed PK3 could not be parsed.");require(pk3.contentEquals(p.pk3)&&sameGen4ToGen3Pk3(converted,p.converted)){"The prepared conversion changed before writing."}
@@ -11767,7 +11768,9 @@ class MainActivity : Activity() {
             require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&p.bankFile.readBytes().contentEquals(p.bankBytes)&&file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(p.bankBytes)){"The source identity, PK4 Bank record, verified Gen 3 destination or retained recovery snapshots changed before cleanup."}
             deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The PK4 Bank record could not be removed after destination verification."}
             require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(p.bankBytes)){"The verified Gen 3 destination or retained recovery snapshots changed after Bank cleanup."}
-            runCatching{bankCopy.delete()}
+            retainedRecovery=!cleanupExactBankRecoverySnapshots(
+                listOf(bankCopy),listOf(p.bankBytes)
+            )
         }catch(e:Exception){
             val bankRestored=runCatching{
                 if(deleteAttempted&&!p.bankFile.exists()){
@@ -11784,9 +11787,14 @@ class MainActivity : Activity() {
                 require(restored.contentEquals(fresh)&&gen3SaveValid(restored)){"The restored Generation 3 destination did not verify."}
                 true
             }.getOrDefault(false)
-            if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
+            val bankRecoveryClean=if(bankRestored&&saveRestored){
+                bankRecovery?.let{
+                    cleanupExactBankRecoverySnapshots(listOf(it),listOf(p.bankBytes))
+                }?:true
+            }else false
             val recovery=when{
-                bankRestored&&saveRestored->"The exact Gen 3 destination and PK4 Bank record were restored or kept and verified."
+                bankRestored&&saveRestored&&bankRecoveryClean->"The exact Gen 3 destination and PK4 Bank record were restored or kept and verified."
+                bankRestored&&saveRestored->"The exact Gen 3 destination and PK4 Bank record were restored or kept and verified. The exact temporary Bank recovery snapshot changed or could not be removed safely and was retained for review."
                 bankRestored->"The PK4 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
                 saveRestored->"The exact Gen 3 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
                 else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
@@ -11795,7 +11803,9 @@ class MainActivity : Activity() {
                 (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
                 (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery: ${it.name}"}?:""));return
         }
-        Toast.makeText(this,"PSE converted Gen 4 → Gen 3 to Box ${target/30+1} • Slot ${target%30+1} and verified",Toast.LENGTH_LONG).show();showBank()
+        val recoveryNotice=if(retainedRecovery)
+            "; exact temporary Bank recovery retained for review" else ""
+        Toast.makeText(this,"PSE converted Gen 4 → Gen 3 to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
     }
 
     private data class Gen4Gen5Prepared(
