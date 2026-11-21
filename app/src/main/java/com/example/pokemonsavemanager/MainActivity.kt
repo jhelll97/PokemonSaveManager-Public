@@ -61604,6 +61604,18 @@ private data class Gen2ToGen5LegalisePlan(
                 retainedRecovery=!cleanupExactBankRecoverySnapshots(
                     listOf(bankCopy),listOf(openedBank)
                 )
+                requireNativeBankWithdrawalPostCleanup(
+                    generation=2,
+                    destinationBound=bound()&&importedFile?.absolutePath==file.absolutePath,
+                    retainedRecovery=retainedRecovery,
+                    recoveryFile=bankCopy,
+                    destination=file,
+                    expectedDestination=work,
+                    backup=backup,
+                    expectedBackup=fresh,
+                    kept=isBackupKept(backup),
+                    source=bankFile
+                )
             }catch(e:Exception){
                 val bankRestored=runCatching{
                     if(bankDeleteAttempted&&!bankFile.exists()){
