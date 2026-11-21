@@ -1178,12 +1178,16 @@ class MainActivity : Activity() {
                     }.getOrNull()
                 }
                 val allBankRecoveryVerified=bankRecovery.size==selected.size&&verifiedBankRecovery.size==selected.size
-                if(bankRestored&&destinationRestored)cleanupExactBankRecoverySnapshots(
-                    bankRecovery,selected.map{it.second}
-                )
+                val bankRecoveryClean=if(bankRestored&&destinationRestored){
+                    cleanupExactBankRecoverySnapshots(
+                        bankRecovery,selected.map{it.second}
+                    )
+                }else false
                 val recovery=when{
-                    bankRestored&&destinationRestored->
+                    bankRestored&&destinationRestored&&bankRecoveryClean->
                         "The exact Gen 1 destination and every selected Bank record were restored or kept and verified."
+                    bankRestored&&destinationRestored->
+                        "The exact Gen 1 destination and every selected Bank record were restored or kept and verified. One or more exact temporary Gen 1 Bank recovery snapshots changed or could not be removed safely and were retained for review."
                     bankRestored&&retainedBackup->
                         "Every selected Gen 1 Bank record was restored or kept. Destination restoration was not verified, but the exact retained destination backup verified."
                     bankRestored->
