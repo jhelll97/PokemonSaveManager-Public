@@ -12933,6 +12933,7 @@ class MainActivity : Activity() {
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
         var stagedDestination:ByteArray?=null
+        var retainedRecovery=false
         try{
             val fresh=file.readBytes()
             require(bound()&&fresh.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(fresh).first){"The destination save or source identity changed. Reopen PSE Bank."}
@@ -12974,7 +12975,9 @@ class MainActivity : Activity() {
                 b.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){
                 "The verified destination identity or retained recovery snapshots changed after Bank cleanup."
             }
-            runCatching{bankCopy.delete()}
+            retainedRecovery=!cleanupExactBankRecoverySnapshots(
+                listOf(bankCopy),listOf(bankBytes)
+            )
         }catch(e:Exception){
             val bankRestored=runCatching{
                 if(bankDeleteAttempted&&!bankFile.exists()){
@@ -13000,9 +13003,14 @@ class MainActivity : Activity() {
                     detectGen2Profile(restored)?.key==profileKey){"The restored Generation 2 destination did not verify."}
                 true
             }.getOrDefault(false)
-            if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
+            val bankRecoveryClean=if(bankRestored&&saveRestored){
+                bankRecovery?.let{
+                    cleanupExactBankRecoverySnapshots(listOf(it),listOf(bankBytes))
+                }?:true
+            }else false
             val recovery=when{
-                bankRestored&&saveRestored->"The exact Generation 2 destination and PK5 Bank record were restored or kept and verified."
+                bankRestored&&saveRestored&&bankRecoveryClean->"The exact Generation 2 destination and PK5 Bank record were restored or kept and verified."
+                bankRestored&&saveRestored->"The exact Generation 2 destination and PK5 Bank record were restored or kept and verified. The exact temporary Bank recovery snapshot changed or could not be removed safely and was retained for review."
                 bankRestored->"The PK5 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
                 saveRestored->"The exact Generation 2 destination was restored, but Bank restoration was not verified. Keep the Bank recovery snapshot for review."
                 else->"Automatic recovery could not be verified. Keep the retained destination backup and Bank recovery snapshot for review."
@@ -13011,7 +13019,9 @@ class MainActivity : Activity() {
                 (backup?.let{"\n\nRecovery backup: ${it.name}"}?:"")+
                 (bankRecovery?.takeIf{it.exists()}?.let{"\nBank recovery snapshot: ${it.name}"}?:""));return
         }
-        Toast.makeText(this,"PSE converted Gen 5 → Gen 2 in Box $targetBox and verified",Toast.LENGTH_LONG).show()
+        val recoveryNotice=if(retainedRecovery)
+            "; exact temporary Bank recovery retained for review" else ""
+        Toast.makeText(this,"PSE converted Gen 5 → Gen 2 in Box $targetBox and verified$recoveryNotice",Toast.LENGTH_LONG).show()
         showGen2PokemonViewer("boxes",targetBox)
     }
 
