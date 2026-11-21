@@ -11601,6 +11601,18 @@ class MainActivity : Activity() {
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
                 listOf(bankCopy),listOf(bankBytes)
             )
+            requireNativeBankWithdrawalPostCleanup(
+                generation=2,
+                destinationBound=bound()&&importedFile?.absolutePath==file.absolutePath,
+                retainedRecovery=retainedRecovery,
+                recoveryFile=bankCopy,
+                destination=file,
+                expectedDestination=written,
+                backup=b,
+                expectedBackup=fresh,
+                kept=isBackupKept(b),
+                source=bankFile
+            )
         }catch(e:Exception){
             val bankRestored=runCatching{
                 if(bankDeleteAttempted&&!bankFile.exists()){
