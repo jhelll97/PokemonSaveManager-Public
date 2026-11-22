@@ -13301,7 +13301,9 @@ class MainActivity : Activity() {
 
     private fun transferGen6BankWithdrawal(p:Gen6BankWithdrawalPrepared,target:Int){
         val file=p.destinationFile
-        if(!gen6BankWithdrawalStillBound(p)){showDialog("Gen 6 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
+        val destinationBinding=PseBankDestinationBinding.capture(file)
+        if(destinationBinding==null){showDialog("Gen 6 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
+        if(!gen6BankWithdrawalStillBound(p)||!destinationBinding.matches(p.destination,gen6BankWithdrawalIdentityBound(p))){showDialog("Gen 6 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
         val original=runCatching{file.readBytes()}.getOrNull()
             ?:return showDialog("Gen 6 Bank withdrawal","The destination save could not be read.")
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
@@ -13334,13 +13336,13 @@ class MainActivity : Activity() {
             retainGenToGen6SafetyBackup(recovery,original)
             val bankCopy=File.createTempFile("PSE_G6Withdraw_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
             bankCopy.writeBytes(bank);require(bankCopy.readBytes().contentEquals(bank)){"The exact PK6 Bank recovery snapshot did not verify."}
-            require(gen6BankWithdrawalIdentityBound(p)&&isBackupKept(recovery)&&file.readBytes().contentEquals(original)&&
+            require(destinationBinding.matches(original,gen6BankWithdrawalIdentityBound(p))&&isBackupKept(recovery)&&
                 p.bankFile.readBytes().contentEquals(bank)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
                 "The destination identity, retained backup or Bank snapshots changed before writing."
             }
             stagedDestination=save.copyOf()
             writeStarted=true;file.writeBytes(save)
-            val written=file.readBytes();require(written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){
+            val written=file.readBytes();require(destinationBinding.matches(save,gen6BankWithdrawalIdentityBound(p))&&written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){
                 "The persisted Generation 6 save differs from the reviewed write scope."
             }
             require(gen6BoxChecksumValid(written)&&gen6BlockChecksumValid(written,20)){"The persisted Generation 6 save failed native checksum verification."}
@@ -13349,13 +13351,13 @@ class MainActivity : Activity() {
                 reopened.species==source.species&&reopened.tid==source.tid&&reopened.sid==source.sid){
                 "The exact 232-byte PK6 did not persist after reopening."
             }
-            require(gen6BankWithdrawalIdentityBound(p)&&p.bankFile.readBytes().contentEquals(bank)&&file.readBytes().contentEquals(save)&&
+            require(destinationBinding.matches(save,gen6BankWithdrawalIdentityBound(p))&&p.bankFile.readBytes().contentEquals(bank)&&
                 isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
                 "The destination identity, verified save or retained recovery snapshots changed before cleanup."
             }
             bankDeleteAttempted=true
             require(p.bankFile.delete()&&!p.bankFile.exists()){ "The Gen 6 Bank record could not be removed after destination verification." }
-            require(gen6BankWithdrawalIdentityBound(p)&&!p.bankFile.exists()&&file.readBytes().contentEquals(save)&&
+            require(destinationBinding.matches(save,gen6BankWithdrawalIdentityBound(p))&&!p.bankFile.exists()&&
                 isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
                 "The destination identity, verified save or retained recovery snapshots changed after cleanup."
             }
@@ -13363,7 +13365,7 @@ class MainActivity : Activity() {
                 listOf(bankCopy),listOf(p.bankBytes)
             )
             requireNativeBankWithdrawalPostCleanup(
-                6,gen6BankWithdrawalIdentityBound(p),retainedRecovery,bankCopy,
+                6,destinationBinding.matches(save,gen6BankWithdrawalIdentityBound(p)),retainedRecovery,bankCopy,
                 file,save,recovery,original,isBackupKept(recovery),p.bankFile
             )
         }catch(e:Exception){
@@ -13379,7 +13381,8 @@ class MainActivity : Activity() {
             val destinationRestored=runCatching{
                 restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Generation 6 destination write began; unknown current bytes were left untouched.","The Generation 6 destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
-                restored.contentEquals(original)&&generationForSize(restored.size)==6&&
+                destinationBinding.matches(original,gen6BankWithdrawalIdentityBound(p))&&
+                    restored.contentEquals(original)&&generationForSize(restored.size)==6&&
                     gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)
             }.getOrDefault(false)
             val retainedBackup=backup?.let{saved->runCatching{
