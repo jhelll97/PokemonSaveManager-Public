@@ -40,6 +40,16 @@ internal fun restoreExactStagedDestination(
 }
 
 
+private fun releaseFailedBankRecoveryReservation(file: File, original: ByteArray) {
+    runCatching {
+        require(file.absoluteFile==file.canonicalFile)
+        require(file.isFile)
+        val current=file.readBytes()
+        require(current.size<original.size&&original.copyOf(current.size).contentEquals(current))
+        require(file.delete())
+    }
+}
+
 internal fun restoreExactBankRecords(
     files: List<File>,
     originals: List<ByteArray>,
@@ -78,7 +88,16 @@ internal fun restoreExactBankRecords(
                     recoveryIdentities.count { it==recoveryIdentity }==1&&
                     recovery.isFile&&recovery.readBytes().contentEquals(original)){"The exact one-to-one Bank recovery snapshot is unavailable."}
                 require(file.createNewFile()){"A Bank recovery path could not be reserved."}
-                file.writeBytes(original)
+                val writeFailure=runCatching { file.writeBytes(original) }.exceptionOrNull()
+                if(writeFailure!=null) {
+                    val exact=runCatching {
+                        file.isFile&&file.readBytes().contentEquals(original)
+                    }.getOrDefault(false)
+                    if(!exact) {
+                        releaseFailedBankRecoveryReservation(file, original)
+                        throw writeFailure
+                    }
+                }
             }
             file.isFile&&file.readBytes().contentEquals(original)
         }.getOrDefault(false)
