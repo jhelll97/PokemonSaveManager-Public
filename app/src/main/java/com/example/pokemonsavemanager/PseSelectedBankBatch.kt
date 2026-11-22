@@ -290,7 +290,7 @@ internal fun finishSelectedGen2BankWithdrawal(
         destination.isFile && destination.readBytes().contentEquals(expectedDestination) &&
         retainedBankBackupMatches(backup, expectedBackup, kept) &&
         removed.size == moved && exactBankPathsAbsent(removed.map { it.first }) &&
-        (!completion.recoveryClean || recoveryFiles.none { it.exists() })) {
+        (!completion.recoveryClean || exactBankPathsAbsent(recoveryFiles))) {
         "The verified Gen 2 destination, removed Bank batch or retained destination backup changed during recovery cleanup."
     }
     return completion.message
@@ -451,7 +451,7 @@ internal fun finishSelectedGen1BankWithdrawal(
         destination.isFile && destination.readBytes().contentEquals(expectedDestination) &&
         retainedBankBackupMatches(backup, expectedBackup, kept) &&
         sources.size == moved && exactBankPathsAbsent(sources) &&
-        (!recoveryClean || recoveryFiles.none { it.exists() })) {
+        (!recoveryClean || exactBankPathsAbsent(recoveryFiles))) {
         "The verified Gen 1 destination, removed Bank batch or retained destination backup changed during recovery cleanup."
     }
     return "$moved Gen 1 Pokémon moved to Box $targetBox and verified" +
@@ -571,7 +571,7 @@ internal fun requireSelectedNativeBankBatchPostCleanup(
         destination.isFile && destination.readBytes().contentEquals(expectedDestination) &&
         retainedBankBackupMatches(backup, expectedBackup, kept) &&
         exactBankPathsAbsent(sources) &&
-        (retainedRecovery || recoveryFiles.none { it.exists() })) {
+        (retainedRecovery || exactBankPathsAbsent(recoveryFiles))) {
         "The verified Generation $generation destination, removed Bank batch or retained destination backup changed during recovery cleanup."
     }
 }
@@ -842,7 +842,7 @@ internal fun executeSelectedStandardBankBatch(
         require(bound()&&file.isFile&&file.readBytes().contentEquals(work)&&nativeValid(work)&&
             backup.isFile&&backup.readBytes().contentEquals(original)&&backupKept(backup)&&
             removed.size==sources.size&&exactBankPathsAbsent(removed)&&
-            (!bankRecoveryClean||bankRecoveries.none{it.exists()})){
+            (!bankRecoveryClean||exactBankPathsAbsent(bankRecoveries))){
             "The verified destination, removed Bank batch or retained destination backup changed during recovery cleanup."
         }
         return PseSelectedBankBatchResult(
