@@ -910,9 +910,12 @@ internal fun executeSelectedStandardBankBatch(
         require(backup.readBytes().contentEquals(original)&&backupKept(backup)){"The exact kept destination recovery backup did not verify."}
         sourceBytes.forEachIndexed { index,raw ->
             val recovery=File.createTempFile("PSE_Selected_PK${generation}_BankRecovery_",".tmp",bankDirectory)
-            recovery.writeBytes(raw)
-            require(recovery.readBytes().contentEquals(raw)){"Bank recovery snapshot ${index+1} did not verify."}
             bankRecoveries.add(recovery)
+            require(recovery.absoluteFile==recovery.canonicalFile&&recovery.parentFile==bankDirectory){
+                "Bank recovery snapshot ${index+1} was not created at its canonical directory identity."
+            }
+            recovery.writeBytes(raw)
+            require(recovery.isFile&&recovery.readBytes().contentEquals(raw)){"Bank recovery snapshot ${index+1} did not verify."}
         }
         fun sourcesValid(): Boolean {
             if(sources.size!=sourceBytes.size)return false
