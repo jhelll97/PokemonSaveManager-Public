@@ -48816,10 +48816,12 @@ class MainActivity : Activity() {
     private fun withdrawGen3BankToSlot(bankFile:File,p:PokemonEntry,target:Int,openedBank:ByteArray,openedFile:File,openedUri:Uri?,openedLabel:String?,openedDestination:ByteArray){
         val file=openedFile
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val destinationBinding=PseBankDestinationBinding.capture(file)
+        if(destinationBinding==null)return showDialog("Gen 3 Bank withdrawal","The destination identity changed. Reopen PSE Bank.")
         val original=openedDestination.copyOf()
         val currentDestination=runCatching{file.readBytes()}.getOrNull()
             ?:return showDialog("Withdraw","The reviewed Gen 3 destination could not be reopened. Nothing was changed.")
-        if(!bound()||!currentDestination.contentEquals(original))
+        if(!destinationBinding.matches(original,bound())||!currentDestination.contentEquals(original))
             return showDialog("Withdraw","The reviewed Gen 3 destination changed while choosing a slot. Reopen the save and try again. Nothing was changed.")
         val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return showDialog("Withdraw","The PSE Bank folder could not be verified.")
         val selected=runCatching{bankFile.canonicalFile}.getOrNull()?:return showDialog("Withdraw","The selected Gen 3 Bank path could not be verified.")
@@ -48832,7 +48834,7 @@ class MainActivity : Activity() {
         var writeStarted=false;var deleteAttempted=false;var safetyBackup:File?=null;var bankRecovery:File?=null
         var stagedDestination:ByteArray?=null
         try{
-            require(bound()&&generationForSize(original.size)==3&&gen3SaveValid(original)){"A valid bound Gen 3 destination save is required."}
+            require(destinationBinding.matches(original,bound())&&generationForSize(original.size)==3&&gen3SaveValid(original)){"A valid bound Gen 3 destination save is required."}
             require(target in 0 until 420){"Invalid Gen 3 PC slot."}
             require(selected.readBytes().contentEquals(raw)){"The selected Gen 3 Bank record changed after destination selection."}
             val save=original.copyOf();val pc=gen3PcBuffer(save)?:error("Could not reconstruct Gen 3 PC storage.");val beforePc=pc.copyOf()
@@ -48847,23 +48849,23 @@ class MainActivity : Activity() {
             backup.writeBytes(original);require(backup.readBytes().contentEquals(original)){"The exact Gen 3 recovery backup did not verify."};retainGen2ToGen3SafetyBackup(backup,original)
             val bankCopy=File.createTempFile("PSE_G3Withdraw_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
             bankCopy.writeBytes(raw);require(bankCopy.readBytes().contentEquals(raw)){"The exact PK3 Bank recovery snapshot did not verify."}
-            require(bound()&&file.readBytes().contentEquals(original)&&selected.readBytes().contentEquals(raw)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The destination, Bank record or retained recovery snapshots changed before writing."}
+            require(destinationBinding.matches(original,bound())&&selected.readBytes().contentEquals(raw)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The destination, Bank record or retained recovery snapshots changed before writing."}
             stagedDestination=save.copyOf()
             writeStarted=true;file.writeBytes(save)
-            val verify=file.readBytes();require(verify.contentEquals(save)&&gen3SaveValid(verify)){"Written save failed byte or checksum verification."}
+            val verify=file.readBytes();require(destinationBinding.matches(save,bound())&&verify.contentEquals(save)&&gen3SaveValid(verify)){"Written save failed byte or checksum verification."}
             val vpc=gen3PcBuffer(verify)?:error("Could not re-read PC storage.")
             val actual=vpc.copyOfRange(off,off+80);val vp=parsePk3(actual,0,false)
             require(actual.contentEquals(raw)&&vp!=null&&vp.checksumValid&&vp.pid==source.pid&&vp.species==source.species&&vp.tid==source.tid&&vp.sid==source.sid){"Withdrawn PK3 did not verify after re-read."}
             require(vpc.indices.all{it in off until off+80||vpc[it]==beforePc[it]}){"Unrelated Gen 3 PC data changed after persistence."}
-            require(bound()&&file.readBytes().contentEquals(save)&&selected.readBytes().contentEquals(raw)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The verified destination or retained recovery snapshots changed before Bank cleanup."}
+            require(destinationBinding.matches(save,bound())&&selected.readBytes().contentEquals(raw)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The verified destination or retained recovery snapshots changed before Bank cleanup."}
             deleteAttempted=true;require(selected.delete()&&!selected.exists()){"The Gen 3 Bank entry could not be removed after destination verification."}
-            require(bound()&&file.readBytes().contentEquals(save)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The verified destination or retained recovery snapshots changed after Bank cleanup."}
+            require(destinationBinding.matches(save,bound())&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The verified destination or retained recovery snapshots changed after Bank cleanup."}
             val bankRecoveryClean=cleanupExactBankRecoverySnapshots(
                 listOf(bankCopy),listOf(raw)
             )
             val retainedRecovery=!bankRecoveryClean
             requireNativeBankWithdrawalPostCleanup(
-                3,bound(),retainedRecovery,bankCopy,
+                3,destinationBinding.matches(save,bound()),retainedRecovery,bankCopy,
                 file,save,backup,original,isBackupKept(backup),selected
             )
             val recoveryNotice=if(retainedRecovery)
@@ -48883,7 +48885,7 @@ class MainActivity : Activity() {
                     require(staged!=null&&found.contentEquals(staged)){"The Gen 3 destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery."}
                     file.writeBytes(original)
                 }
-                val restored=file.readBytes();restored.contentEquals(original)&&gen3SaveValid(restored)
+                val restored=file.readBytes();destinationBinding.matches(original,bound())&&restored.contentEquals(original)&&gen3SaveValid(restored)
             }.getOrDefault(false)
             val verifiedBankRecovery=bankRecovery?.let{copy->runCatching{
                 val recovered=copy.readBytes()
