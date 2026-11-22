@@ -278,10 +278,13 @@ internal class ExactBankRecoverySet {
         }
     }
 
-    fun matches(): Boolean = entries.all { (file,bytes) ->
-        runCatching {
-            file.isFile && file.readBytes().contentEquals(bytes)
-        }.getOrDefault(false)
+    fun matches(): Boolean {
+        val exactMatches=entries.map { (file,bytes) ->
+            runCatching {
+                file.isFile && file.readBytes().contentEquals(bytes)
+            }.getOrDefault(false)
+        }
+        return exactMatches.all { it }
     }
 
     fun cleanupExact(): Boolean {
