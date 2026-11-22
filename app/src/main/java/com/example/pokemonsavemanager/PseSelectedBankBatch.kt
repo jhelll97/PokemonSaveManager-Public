@@ -173,10 +173,27 @@ internal fun cleanupExactBankRecoverySnapshots(
 ): Boolean {
     if (files.size != expected.size) return false
     var clean=true
-    files.forEachIndexed { index,file ->
+    val references=LinkedHashMap<String,MutableList<Pair<File,ByteArray>>>()
+    files.indices.forEach { index ->
+        val identity=runCatching { files[index].canonicalPath }.getOrNull()
+        if(identity==null){
+            clean=false
+        }else{
+            references.getOrPut(identity){ArrayList()}.add(files[index] to expected[index])
+        }
+    }
+    references.values.forEach { snapshots ->
+        val(file,bytes)=snapshots.first()
+        val expectationsMatch=snapshots.map { (_,expectedBytes) ->
+            expectedBytes.contentEquals(bytes)
+        }.all { it }
+        if(!expectationsMatch){
+            clean=false
+            return@forEach
+        }
         val removed=runCatching {
             if(file.exists()){
-                require(file.isFile && file.readBytes().contentEquals(expected[index])){
+                require(file.isFile && file.readBytes().contentEquals(bytes)){
                     "A Bank recovery snapshot changed; it was retained for review."
                 }
                 require(file.delete()){
