@@ -392,6 +392,10 @@ class MainActivity : Activity() {
         var writeStarted=false;var safetyBackup:File?=null
         var stagedDestination:ByteArray?=null
         val recoveryCopies=ArrayList<Pair<Gen5BankBatchItem,File>>();val cleanupAttempted=HashSet<String>()
+        val recoveryBindings=HashMap<String,PseBankSourceBinding>()
+        fun recoveryCopiesMatch()=recoveryCopies.size==selected.size&&recoveryCopies.all{(item,copy)->
+            recoveryBindings[copy.absolutePath]?.matches(item.bankBytes,true)==true
+        }
         var retainedRecovery=false
         try{
             require(selected.isNotEmpty()&&selected.map{it.bankFile.absolutePath}.distinct().size==selected.size){"The prepared Gen 5 Bank selection is empty or contains a duplicate."}
@@ -418,11 +422,16 @@ class MainActivity : Activity() {
             require(gen5BoxChecksumValid(work,targetBox,profile)&&gen5ChecksumTableValid(work,profile)){"The staged Generation 5 destination failed native checksum verification."}
             val backup=File.createTempFile(backupGameName(file)+"_PreGen5BankBatch_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(original);require(backup.readBytes().contentEquals(original)){"The exact Generation 5 recovery backup did not verify."};retainGen6ToGen5SafetyBackup(backup,original)
+            val bankRoot=bankDir();require(bankRoot.absoluteFile==bankRoot.canonicalFile&&bankRoot.isDirectory){"The canonical PSE Bank recovery folder is unavailable."}
             refreshed.forEachIndexed{index,item->
-                val copy=File.createTempFile("PSE_G5Batch_${index+1}_BankRecovery_",".tmp",bankDir());copy.writeBytes(item.bankBytes)
-                require(copy.readBytes().contentEquals(item.bankBytes)){"A PK5 Bank recovery snapshot did not verify."};recoveryCopies.add(item to copy)
+                val copy=File.createTempFile("PSE_G5Batch_${index+1}_BankRecovery_",".tmp",bankRoot);recoveryCopies.add(item to copy)
+                require(copy.absoluteFile==copy.canonicalFile&&copy.parentFile==bankRoot){"A PK5 Bank recovery snapshot path could not be bound."}
+                val copyBinding=PseBankSourceBinding.capture(copy)?:error("A PK5 Bank recovery snapshot identity could not be captured.")
+                recoveryBindings[copy.absolutePath]=copyBinding
+                copy.writeBytes(item.bankBytes)
+                require(copyBinding.matches(item.bankBytes,true)){"A PK5 Bank recovery snapshot did not verify."}
             }
-            fun recoveryValid()=isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&recoveryCopies.size==refreshed.size&&recoveryCopies.all{(item,copy)->copy.readBytes().contentEquals(item.bankBytes)}
+            fun recoveryValid()=isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&recoveryCopiesMatch()
             require(destinationBinding.matches(original,bound())&&refreshed.all{it.sourceBinding.matches(it.bankBytes,true)}&&recoveryValid()){"The destination, Bank records or retained recovery data changed before writing."}
             stagedDestination=work.copyOf()
             writeStarted=true;file.writeBytes(work);val written=file.readBytes()
@@ -476,12 +485,12 @@ class MainActivity : Activity() {
             }.getOrDefault(false)}?:false
             val verifiedRecoveryCopies=recoveryCopies.filter{(item,copy)->runCatching{
                 val recovered=copy.readBytes();val parsed=if(recovered.size==136)parsePk5(recovered,false)else null
-                copy.isFile&&recovered.contentEquals(item.bankBytes)&&parsed!=null&&parsed.checksumValid&&
+                recoveryBindings[copy.absolutePath]?.matches(item.bankBytes,true)==true&&recovered.contentEquals(item.bankBytes)&&parsed!=null&&parsed.checksumValid&&
                     parsed.pid==item.source.pid&&parsed.species==item.source.species&&
                     parsed.tid==item.source.tid&&parsed.sid==item.source.sid
             }.getOrDefault(false)}
             val allRecoveryCopiesVerified=recoveryCopies.size==selected.size&&verifiedRecoveryCopies.size==selected.size
-            val recoveryCopiesClean=if(bankRestored&&destinationRestored){
+            val recoveryCopiesClean=if(bankRestored&&destinationRestored&&recoveryCopiesMatch()){
                 cleanupExactBankRecoverySnapshots(
                     recoveryCopies.map{it.second},recoveryCopies.map{it.first.bankBytes}
                 )
