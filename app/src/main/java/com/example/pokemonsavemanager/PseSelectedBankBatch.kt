@@ -41,11 +41,12 @@ internal fun restoreExactGen3BankPartyRecords(
             }
         }
     }
-    return selected.all { item ->
+    val restored=selected.map { item ->
         runCatching {
             item.bankFile.isFile && item.bankFile.readBytes().contentEquals(item.bankBytes)
         }.getOrDefault(false)
     }
+    return restored.all { it }
 }
 
 internal fun finishGen3BankPartyFailure(
