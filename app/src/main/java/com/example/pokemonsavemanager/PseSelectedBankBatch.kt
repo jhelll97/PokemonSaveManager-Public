@@ -354,9 +354,22 @@ internal class ExactBankRecoverySet {
         }
     }
 
+    private fun hasUniqueCanonicalIdentities(): Boolean {
+        val identities=entries.map { (file,_) ->
+            runCatching {
+                require(file.absoluteFile==file.canonicalFile)
+                file.canonicalPath
+            }.getOrNull()
+        }
+        return identities.none { it==null }&&
+            identities.filterNotNull().distinct().size==entries.size
+    }
+
     fun matches(): Boolean {
+        if(!hasUniqueCanonicalIdentities())return false
         val exactMatches=entries.map { (file,bytes) ->
             runCatching {
+                require(file.absoluteFile==file.canonicalFile)
                 file.isFile && file.readBytes().contentEquals(bytes)
             }.getOrDefault(false)
         }
@@ -364,10 +377,12 @@ internal class ExactBankRecoverySet {
     }
 
     fun cleanupExact(): Boolean {
+        if(!hasUniqueCanonicalIdentities())return false
         var clean=true
         entries.forEach { (file,bytes) ->
             if(!file.exists()) return@forEach
             val exact=runCatching {
+                require(file.absoluteFile==file.canonicalFile)
                 file.isFile && file.readBytes().contentEquals(bytes)
             }.getOrDefault(false)
             if(!exact) {
