@@ -152,6 +152,65 @@ internal fun restoreExactMissingGen3BankFile(
     file.isFile && file.readBytes().contentEquals(expected)
 }.getOrDefault(false)
 
+internal fun createExactBankRecoverySnapshots(
+    output: MutableList<File>,
+    directory: File,
+    expected: List<ByteArray>,
+    route: Int
+) {
+    expected.forEach { bytes ->
+        output.add(BankTransferRecovery.create(directory, bytes, route))
+    }
+    require(exactGen3BankRecoverySnapshots(output, expected)) {
+        "The exact Bank recovery snapshots did not verify."
+    }
+}
+
+internal fun restoreExactBankBatchRecords(
+    files: List<File>,
+    expected: List<ByteArray>,
+    cleanupAttemptedPaths: Set<String>,
+    recoveryFiles: List<File>
+): List<Boolean> = files.indices.map { index ->
+    runCatching {
+        val bytes=expected.getOrNull(index)
+            ?:error("An exact Bank source snapshot is unavailable.")
+        restoreExactMissingStandardBankRecord(
+            files[index],bytes,
+            cleanupAttemptedPaths.contains(files[index].absolutePath),
+            recoveryFiles.getOrNull(index)
+        )
+        files[index].isFile && files[index].readBytes().contentEquals(bytes)
+    }.getOrDefault(false)
+}
+
+internal fun gen1ToGen7BatchRecoveryMessage(
+    recoveryFiles: List<File>,
+    expected: List<ByteArray>,
+    banksRestored: Boolean,
+    destinationRestored: Boolean
+): String {
+    val recoveryClean=if(banksRestored&&destinationRestored)
+        cleanupExactBankRecoverySnapshots(recoveryFiles,expected)
+    else false
+    return when {
+        banksRestored&&destinationRestored&&recoveryClean ->
+            "The exact Gen 7 destination and every selected Gen 1 Bank record were restored or kept and verified."
+        banksRestored&&destinationRestored ->
+            "The exact Gen 7 destination and every selected Gen 1 Bank record were restored or kept and verified. One or more exact temporary Bank recovery snapshots were retained for review."
+        banksRestored ->
+            "Every selected Gen 1 Bank record was restored or kept, but destination recovery was not verified. Use the retained Gen 7 backup before editing again."
+        destinationRestored ->
+            "The exact Gen 7 destination was restored or kept, but one or more Gen 1 Bank records were not verified. Keep the exact Bank recovery snapshots for review."
+        else ->
+            "Automatic recovery could not be fully verified. Stop editing and keep the retained destination and Bank recovery data for review."
+    }
+}
+
+internal fun retainedExactBankRecoveryPaths(files: List<File>): String =
+    files.filter { it.exists() }
+        .joinToString("") { "\nBank recovery snapshot: ${it.name}" }
+
 internal fun exactGen3BankRecoverySnapshots(
     files: List<File>,
     expected: List<ByteArray>
