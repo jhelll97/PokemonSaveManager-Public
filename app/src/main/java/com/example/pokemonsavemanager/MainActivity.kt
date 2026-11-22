@@ -1345,7 +1345,9 @@ class MainActivity : Activity() {
         val openedFile=file;val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val fresh=runCatching{file.readBytes()}.getOrElse{showDialog("Gen 1 → Gen 7 multi-transfer failed","The fresh Gen 7 destination save could not be read. Nothing was changed.");return}
-        val removed=ArrayList<Pair<File,ByteArray>>();var writeStarted=false;var safetyBackup:File?=null;var stagedDestination:ByteArray?=null
+        val removed=ArrayList<Pair<File,ByteArray>>()
+        val bankRecoveryCopies=ArrayList<Pair<Gen1Gen7BatchPrepared,File>>()
+        var writeStarted=false;var safetyBackup:File?=null;var stagedDestination:ByteArray?=null;var retainedRecovery=false
         try{
             require(bound()){"The Gen 7 destination identity changed. Nothing was changed."}
             require(preparedBatch.isNotEmpty()){"No Gen 1 Bank entries were prepared."}
@@ -1401,7 +1403,14 @@ class MainActivity : Activity() {
             require(bound()&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination or a selected Bank record changed before backup. Nothing was written."}
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen1BatchToGen7_",".backup",backupsDir());safetyBackup=recovery
             recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The exact Gen 7 batch recovery backup did not verify."};retainGen1ToGen7SafetyBackup(recovery,fresh)
-            require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination, selected Bank records or retained recovery backup changed before writing."}
+            for(prepared in refreshed){
+                val copy=BankTransferRecovery.create(bankDir(),prepared.bankBytes,BankTransferRecovery.GEN1_TO_7)
+                bankRecoveryCopies.add(prepared to copy)
+            }
+            fun bankRecoveryValid()=bankRecoveryCopies.size==refreshed.size&&bankRecoveryCopies.all{(prepared,copy)->
+                BankTransferRecovery.matches(copy,prepared.bankBytes)
+            }
+            require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}&&bankRecoveryValid()){"The destination, selected Bank records or retained recovery data changed before writing."}
             stagedDestination=work.copyOf()
             writeStarted=true
             file.writeBytes(work)
@@ -1415,33 +1424,60 @@ class MainActivity : Activity() {
             val writtenChecksums=validateGen7CoreChecksums(written);require(writtenChecksums.first){writtenChecksums.second}
             require(pcStorageIsolated(written)){"Unrelated Gen 7 PC data changed after batch persistence."}
             for(prepared in refreshed){
-                require(bound()&&file.readBytes().contentEquals(work)&&isBackupKept(recovery)){"The verified destination identity, data or retained backup changed before Bank cleanup."}
+                val copy=bankRecoveryCopies.firstOrNull{it.first.bankFile.absolutePath==prepared.bankFile.absolutePath}?.second
+                require(bound()&&file.readBytes().contentEquals(work)&&isBackupKept(recovery)&&copy!=null&&BankTransferRecovery.matches(copy,prepared.bankBytes)){"The verified destination identity, data or retained recovery changed before Bank cleanup."}
                 val current=runCatching{prepared.bankFile.readBytes()}.getOrElse{error("A selected Gen 1 Bank record could not be re-read before cleanup.")}
                 require(current.contentEquals(prepared.bankBytes) && parseGen1BankPayload(current)?.let{sameGen1TransferRecord(it,prepared.source)}==true){"A selected Gen 1 Bank record changed before cleanup. The Gen 7 destination was restored."}
                 removed.add(prepared.bankFile to prepared.bankBytes)
                 require(prepared.bankFile.delete()&&!prepared.bankFile.exists()){"A Bank entry could not be removed after destination verification."}
             }
-            require(bound()&&file.readBytes().contentEquals(work)){"The verified Gen 7 destination changed after Bank cleanup."}
+            require(bound()&&file.readBytes().contentEquals(work)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&bankRecoveryValid()&&refreshed.all{!it.bankFile.exists()}){"The verified Gen 7 destination, removed Bank batch or retained recovery changed after Bank cleanup."}
+            retainedRecovery=!cleanupExactBankRecoverySnapshots(
+                bankRecoveryCopies.map{it.second},refreshed.map{it.bankBytes}
+            )
+            requireSelectedNativeBankBatchPostCleanup(
+                7,bound(),retainedRecovery,bankRecoveryCopies.map{it.second},
+                file,work,recovery,fresh,isBackupKept(recovery),refreshed.map{it.bankFile}
+            )
         }catch(e:Exception){
-            for((bankFile,bankBytes) in removed)runCatching{if(!bankFile.exists())require(bankFile.createNewFile()){"A Bank recovery path could not be reserved."};bankFile.writeBytes(bankBytes)}
-            val banksRestored=preparedBatch.all{prepared->runCatching{val bytes=prepared.bankFile.readBytes();bytes.contentEquals(prepared.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,prepared.source)}==true}.getOrDefault(false)}
+            val bankRestoreResults=preparedBatch.map{prepared->runCatching{
+                val copy=bankRecoveryCopies.firstOrNull{it.first.bankFile.absolutePath==prepared.bankFile.absolutePath}?.second
+                restoreExactMissingStandardBankRecord(
+                    prepared.bankFile,prepared.bankBytes,
+                    removed.any{it.first.absolutePath==prepared.bankFile.absolutePath},copy
+                )
+                val bytes=prepared.bankFile.readBytes()
+                require(bytes.contentEquals(prepared.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,prepared.source)}==true){"An exact Gen 1 Bank record could not be restored or verified."}
+                true
+            }.getOrDefault(false)}
+            val banksRestored=bankRestoreResults.all{it}
             val saveRestored=runCatching{
                 restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 7 destination write began; unknown current bytes were left untouched.","The Generation 7 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&validateGen7CoreChecksums(restored).first){"The restored Generation 7 destination did not verify."}
                 true
             }.getOrDefault(false)
+            val bankRecoveryClean=if(banksRestored&&saveRestored){
+                cleanupExactBankRecoverySnapshots(
+                    bankRecoveryCopies.map{it.second},preparedBatch.map{it.bankBytes}
+                )
+            }else false
             val recovery=when{
-                banksRestored&&saveRestored->"The exact Gen 7 destination and every selected Gen 1 Bank record were restored or kept and verified."
+                banksRestored&&saveRestored&&bankRecoveryClean->"The exact Gen 7 destination and every selected Gen 1 Bank record were restored or kept and verified."
+                banksRestored&&saveRestored->"The exact Gen 7 destination and every selected Gen 1 Bank record were restored or kept and verified. One or more exact temporary Bank recovery snapshots were retained for review."
                 banksRestored->"Every selected Gen 1 Bank record was restored or kept, but destination recovery was not verified. Use the retained Gen 7 backup before editing again."
-                saveRestored->"The exact Gen 7 destination was restored or kept, but one or more Gen 1 Bank records were not verified. Keep the remaining Bank records and recovery data for review."
-                else->"Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
+                saveRestored->"The exact Gen 7 destination was restored or kept, but one or more Gen 1 Bank records were not verified. Keep the exact Bank recovery snapshots for review."
+                else->"Automatic recovery could not be fully verified. Stop editing and keep the retained destination and Bank recovery data for review."
             }
-            showDialog("Gen 1 → Gen 7 multi-transfer failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""))
+            val retainedBankRecoveries=bankRecoveryCopies.map{it.second}.filter{it.exists()}
+                .joinToString(""){"\nBank recovery snapshot: ${it.name}"}
+            showDialog("Gen 1 → Gen 7 multi-transfer failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:"")+retainedBankRecoveries)
             return
         }
         selectedBankFiles.clear();bankMultiSelectMode=false
-        Toast.makeText(this,"${preparedBatch.size} Gen 1 Pokémon transferred to Gen 7 Box ${box+1} and verified",Toast.LENGTH_LONG).show()
+        val recoveryNotice=if(retainedRecovery)
+            "; one or more exact temporary Bank recoveries retained for review" else ""
+        Toast.makeText(this,"${preparedBatch.size} Gen 1 Pokémon transferred to Gen 7 Box ${box+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show()
         showPokemonViewer("boxes",box)
     }
 
