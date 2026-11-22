@@ -18,3 +18,5 @@ internal class PseBankDestinationBinding private constructor(
             file.isFile&&file.readBytes().contentEquals(expected)
     }.getOrDefault(false)
 }
+
+internal typealias PseBankSourceBinding=PseBankDestinationBinding

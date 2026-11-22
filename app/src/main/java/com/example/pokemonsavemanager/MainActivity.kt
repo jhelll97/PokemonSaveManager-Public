@@ -12005,7 +12005,10 @@ class MainActivity : Activity() {
             return showDialog("Gen 5 Bank withdrawal","The loaded destination is not a checksum-clean native Generation 5 save.")
         val root=runCatching{bankDir().canonicalFile}.getOrNull()
             ?:return showDialog("Gen 5 Bank withdrawal","The PSE Bank folder could not be verified.")
-        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+        val selected=runCatching{
+            require(bankFile.absoluteFile==bankFile.canonicalFile)
+            bankFile.canonicalFile
+        }.getOrNull()
             ?:return showDialog("Gen 5 Bank withdrawal","The selected Bank path could not be verified.")
         if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk5",true))
             return showDialog("Gen 5 Bank withdrawal","The selected record is outside the Generation 5 PSE Bank.")
@@ -12084,8 +12087,10 @@ class MainActivity : Activity() {
     private fun transferGen5BankWithdrawal(p:Gen5BankWithdrawalPrepared,target:Int){
         val file=p.destinationFile
         val destinationBinding=PseBankDestinationBinding.capture(file)
-        if(destinationBinding==null){showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
-        if(!gen5BankWithdrawalStillBound(p)||!destinationBinding.matches(p.destination,gen5BankWithdrawalIdentityBound(p))){showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
+        val sourceBinding=PseBankSourceBinding.capture(p.bankFile)
+        if(destinationBinding==null||sourceBinding==null){showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
+        if(!gen5BankWithdrawalStillBound(p)||!destinationBinding.matches(p.destination,gen5BankWithdrawalIdentityBound(p))||
+            !sourceBinding.matches(p.bankBytes,true)){showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
         val original=runCatching{file.readBytes()}.getOrNull()
             ?:return showDialog("Gen 5 Bank withdrawal","The destination save could not be read.")
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
@@ -12097,7 +12102,7 @@ class MainActivity : Activity() {
             require(gen5ChecksumTableValid(original,profile)&&(0 until 24).all{gen5BoxChecksumValid(original,it,profile)}){
                 "The destination box checksums or checksum table changed."
             }
-            val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The selected Gen 5 Bank record changed after review."}
+            val bank=p.bankFile.readBytes();require(sourceBinding.matches(p.bankBytes,true)&&bank.contentEquals(p.bankBytes)){"The selected Gen 5 Bank record changed after review."}
             val source=parsePk5(bank,false)?:error("The selected Bank record is not a native PK5.")
             require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&
                 source.tid==p.source.tid&&source.sid==p.source.sid){"The selected PK5 no longer matches the reviewed Pokémon."}
@@ -12122,7 +12127,7 @@ class MainActivity : Activity() {
             val bankCopy=File.createTempFile("PSE_G5Withdraw_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
             bankCopy.writeBytes(bank);require(bankCopy.readBytes().contentEquals(bank)){"The exact PK5 Bank recovery snapshot did not verify."}
             require(destinationBinding.matches(original,gen5BankWithdrawalIdentityBound(p))&&isBackupKept(recovery)&&
-                p.bankFile.readBytes().contentEquals(bank)&&bankCopy.readBytes().contentEquals(bank)){
+                sourceBinding.matches(bank,true)&&bankCopy.readBytes().contentEquals(bank)){
                 "The destination identity, retained backup or Bank snapshots changed before writing."
             }
             stagedDestination=save.copyOf()
@@ -12139,7 +12144,7 @@ class MainActivity : Activity() {
                 reopened.species==source.species&&reopened.tid==source.tid&&reopened.sid==source.sid){
                 "The exact 136-byte PK5 did not persist after reopening."
             }
-            require(destinationBinding.matches(save,gen5BankWithdrawalIdentityBound(p))&&p.bankFile.readBytes().contentEquals(bank)&&
+            require(destinationBinding.matches(save,gen5BankWithdrawalIdentityBound(p))&&sourceBinding.matches(bank,true)&&
                 isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
                 "The destination identity, verified save or retained recovery snapshots changed before cleanup."
             }
@@ -12163,7 +12168,7 @@ class MainActivity : Activity() {
                     p.bankFile.writeBytes(p.bankBytes)
                 }
                 val restored=p.bankFile.readBytes();val parsed=parsePk5(restored,false)
-                require(restored.contentEquals(p.bankBytes)&&parsed?.let{
+                require(sourceBinding.matches(p.bankBytes,true)&&restored.contentEquals(p.bankBytes)&&parsed?.let{
                     it.checksumValid&&it.pid==p.source.pid&&it.species==p.source.species&&
                         it.tid==p.source.tid&&it.sid==p.source.sid
                 }==true){"The original PK5 Bank record could not be verified exactly; no existing record was overwritten."}
