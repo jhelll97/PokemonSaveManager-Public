@@ -40,6 +40,19 @@ internal fun restoreExactBankRecords(
     cleanupStarted: Boolean
 ) {
     require(files.size==originals.size){"The selected Bank recovery set is incomplete."}
+    val identities=files.indices.map { index ->
+        runCatching {
+            require(files[index].absoluteFile==files[index].canonicalFile)
+            files[index].canonicalPath
+        }.getOrNull()
+    }
+    require(identities.all { it!=null }){"A selected Bank recovery path is unresolved or noncanonical."}
+    val grouped=files.indices.groupBy { identities[it]!! }
+    val consistent=grouped.values.map { indices ->
+        val expected=originals[indices.first()]
+        indices.map { originals[it].contentEquals(expected) }.all { it }
+    }
+    require(consistent.all { it }){"One physical Bank path was bound to conflicting reviewed payloads."}
     val restored=files.indices.map { index ->
         runCatching {
             val file=files[index]
@@ -47,8 +60,8 @@ internal fun restoreExactBankRecords(
             if(!file.exists()) {
                 require(cleanupStarted){"A Bank record disappeared before PSE attempted cleanup; its path was not overwritten."}
                 val recovery=recoveries.getOrNull(index)
-                require(recovery!=null&&recovery.isFile&&
-                    recovery.readBytes().contentEquals(original)){"The exact Bank recovery snapshot is unavailable."}
+                require(recovery!=null&&recovery.absoluteFile==recovery.canonicalFile&&
+                    recovery.isFile&&recovery.readBytes().contentEquals(original)){"The exact Bank recovery snapshot is unavailable."}
                 require(file.createNewFile()){"A Bank recovery path could not be reserved."}
                 file.writeBytes(original)
             }
