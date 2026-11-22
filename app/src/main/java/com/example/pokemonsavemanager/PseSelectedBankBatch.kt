@@ -217,6 +217,13 @@ internal fun exactGen3BankRecoverySnapshots(
     expected: List<ByteArray>
 ): Boolean {
     if (files.size != expected.size) return false
+    val identities=files.map { file ->
+        runCatching {
+            require(file.absoluteFile==file.canonicalFile)
+            file.canonicalPath
+        }.getOrNull()
+    }
+    if(identities.any { it==null }||identities.filterNotNull().distinct().size!=files.size)return false
     val verified=files.indices.map { index ->
         runCatching {
             files[index].isFile &&
