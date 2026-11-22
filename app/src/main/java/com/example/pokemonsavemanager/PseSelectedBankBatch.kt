@@ -34,6 +34,27 @@ internal fun restoreExactGen3BankPartyRecords(
     selected: List<Gen3BankBatchItem>,
     removed: List<Gen3BankBatchItem>
 ): Boolean {
+    val selectedIdentities=selected.map { item ->
+        runCatching {
+            require(item.bankFile.absoluteFile==item.bankFile.canonicalFile)
+            item.bankFile.canonicalPath
+        }.getOrNull()
+    }
+    val removedIdentities=removed.map { item ->
+        runCatching {
+            require(item.bankFile.absoluteFile==item.bankFile.canonicalFile)
+            item.bankFile.canonicalPath
+        }.getOrNull()
+    }
+    if(selectedIdentities.any { it==null }||removedIdentities.any { it==null })return false
+    if(selectedIdentities.filterNotNull().distinct().size!=selected.size||
+        removedIdentities.filterNotNull().distinct().size!=removed.size)return false
+    val selectedByIdentity=selected.indices.associateBy { selectedIdentities[it]!! }
+    val removedBound=removed.indices.map { index ->
+        val selectedIndex=selectedByIdentity[removedIdentities[index]!!]
+        selectedIndex!=null&&removed[index].bankBytes.contentEquals(selected[selectedIndex].bankBytes)
+    }.all { it }
+    if(!removedBound)return false
     removed.forEach { item ->
         runCatching {
             if(!item.bankFile.exists() && item.bankFile.createNewFile()) {
