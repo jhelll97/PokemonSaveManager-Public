@@ -991,7 +991,8 @@ internal fun executeSelectedStandardBankBatch(
         sources.forEachIndexed { index,source ->
             require(destinationMatches(work)&&nativeValid(work)&&
                 retainedBankBackupMatches(backup,original,backupKept(backup))&&recoveriesValid()&&
-                exactBankPathsAbsent(removed)&&source.readBytes().contentEquals(sourceBytes[index])){
+                exactBankPathsAbsent(removed)&&source.absoluteFile==source.canonicalFile&&source.isFile&&
+                source.readBytes().contentEquals(sourceBytes[index])){
                 "The verified destination, source record or retained recovery changed before Bank cleanup."
             }
             require(source.delete()&&!source.exists()){"A Bank record could not be removed after destination verification."}
