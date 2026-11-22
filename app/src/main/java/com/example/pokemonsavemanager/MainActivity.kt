@@ -61657,8 +61657,12 @@ private data class Gen2ToGen5LegalisePlan(
         val openedSource=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedSource&&currentSourceLabel==openedLabel
         if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog("Withdraw","The active save changed after the Bank entry opened. Reopen PSE Bank. Nothing was changed.");return}
-        val file=openedFile;val openedDestination=runCatching{file.readBytes()}.getOrNull()?:return;val openedProfile=detectGen2Profile(openedDestination)?:run{showDialog("Withdraw","Load a valid Gold, Silver or Crystal save first.");return}
+        val file=openedFile
+        val destinationBinding=PseBankDestinationBinding.capture(file)
+            ?:run{showDialog("Gen 2 Bank withdrawal","The destination identity changed. Reopen PSE Bank.");return}
+        val openedDestination=runCatching{file.readBytes()}.getOrNull()?:return;val openedProfile=detectGen2Profile(openedDestination)?:run{showDialog("Withdraw","Load a valid Gold, Silver or Crystal save first.");return}
         if(!gen2ChecksumValid(openedDestination,openedProfile)){showDialog("Withdraw","The Gen 2 destination checksum is invalid. Nothing was changed.");return}
+        if(!destinationBinding.matches(openedDestination,bound())){showDialog("Withdraw","The reviewed Gen 2 destination identity changed. Reopen PSE Bank. Nothing was changed.");return}
         val openedBank=runCatching{bankFile.readBytes()}.getOrNull()?:run{showDialog("Withdraw","The selected Gen 2 Bank record could not be read.");return};val opened=parseGen2BankPayload(openedBank)
         if(opened==null||!sameGen2BankRecord(opened,mon)){showDialog("Withdraw","The selected Gen 2 Bank record changed. Reopen PSE Bank and try again.");return}
         val targets=availableGen2BoxTargets(openedDestination);if(targets.isEmpty()){showDialog("Withdraw","No Gen 2 PC box has room.");return}
@@ -61674,7 +61678,7 @@ private data class Gen2ToGen5LegalisePlan(
             var stagedDestination:ByteArray?=null
             var retainedRecovery=false
             try{
-                require(bound()&&verifyGen2SaveIntegrity(fresh).first&&detectGen2Profile(fresh)?.key==openedProfile.key){"The captured Gen 2 destination identity, integrity or profile changed."}
+                require(destinationBinding.matches(openedDestination,bound())&&fresh.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(fresh).first&&detectGen2Profile(fresh)?.key==openedProfile.key){"The captured Gen 2 destination identity, integrity or profile changed."}
                 require(fresh.contentEquals(openedDestination)){"The Gen 2 destination changed after the box list opened."};val profile=detectGen2Profile(fresh)?:error("The fresh Gen 2 destination is invalid.");require(gen2ChecksumValid(fresh,profile)){"The fresh Gen 2 checksum is invalid."}
                 val currentBank=bankFile.readBytes();require(currentBank.contentEquals(openedBank)){"The selected Gen 2 Bank bytes changed before withdrawal."};val source=parseGen2BankPayload(currentBank)?:error("The selected Gen 2 Bank record is invalid.");require(sameGen2BankRecord(source,opened)){"The selected Gen 2 Pokémon changed before withdrawal."}
                 require(box in 1..14){"The selected Gen 2 destination box is invalid."};val location="Box $box";val before=gen2LocationPayloads(fresh,location,profile);require(before.size<20){"Box $box is now full."};val work=fresh.copyOf();val o=GEN2_BANK_HEADER_SIZE;val monRaw=currentBank.copyOfRange(o,o+32);val otRaw=currentBank.copyOfRange(o+32,o+43);val nickRaw=currentBank.copyOfRange(o+43,o+54);val slot=appendGen2BoxPokemon(work,box,monRaw,otRaw,nickRaw)
@@ -61688,20 +61692,20 @@ private data class Gen2ToGen5LegalisePlan(
                 val recoveredBank=bankCopy.readBytes()
                 require(bankCopy.isFile&&recoveredBank.contentEquals(openedBank)&&parseGen2BankPayload(recoveredBank)?.let{sameGen2BankRecord(it,opened)}==true){"The exact Gen 2 Bank recovery snapshot did not verify."}
                 require(bankFile.readBytes().contentEquals(openedBank)){"The selected Gen 2 Bank record changed during staging."}
-                require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(fresh)){"The active Gen 2 destination changed during staging. Nothing was written."}
+                require(destinationBinding.matches(fresh,bound())){"The active Gen 2 destination changed during staging. Nothing was written."}
                 require(bound()&&backup.readBytes().contentEquals(fresh)&&isBackupKept(backup)){"The source identity or retained recovery backup changed before withdrawal."}
                 require(bankCopy.isFile&&bankCopy.readBytes().contentEquals(openedBank)&&parseGen2BankPayload(bankCopy.readBytes())?.let{sameGen2BankRecord(it,opened)}==true){"The Bank recovery snapshot changed before withdrawal."}
                 stagedDestination=work.copyOf()
                 writeStarted=true
-                file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)){"The Gen 2 destination changed while withdrawal was written."};val writtenProfile=detectGen2Profile(written)?:error("The persisted Gen 2 save failed checksum verification.");require(gen2ChecksumValid(written,writtenProfile)){"The persisted Gen 2 checksum is invalid."};val afterPayloads=gen2LocationPayloads(written,location,writtenProfile);require(afterPayloads.size==stagedPayloads.size&&sameGen2PayloadList(afterPayloads,stagedPayloads)){"The persisted Gen 2 box records changed after staging."};val q=parseGen2Box(written,box).firstOrNull{it.slot==slot};require(q!=null&&sameGen2BankRecord(q,source)&&gen2BoxRawCore(written,box,slot).contentEquals(monRaw)){"The exact withdrawn Gen 2 Pokémon did not persist."};require(gen2PokedexOwnedSeen(written,writtenProfile,source.species)){"The withdrawn species was not registered Seen and Owned in Gen 2."}
-                require(bound()&&writtenProfile.key==openedProfile.key&&verifyGen2SaveIntegrity(written).first){"The complete persisted Gen 2 withdrawal or source identity did not verify."}
-                require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 2 destination changed before Bank cleanup."}
+                file.writeBytes(work);val written=file.readBytes();require(destinationBinding.matches(work,bound())&&written.contentEquals(work)){"The Gen 2 destination changed while withdrawal was written."};val writtenProfile=detectGen2Profile(written)?:error("The persisted Gen 2 save failed checksum verification.");require(gen2ChecksumValid(written,writtenProfile)){"The persisted Gen 2 checksum is invalid."};val afterPayloads=gen2LocationPayloads(written,location,writtenProfile);require(afterPayloads.size==stagedPayloads.size&&sameGen2PayloadList(afterPayloads,stagedPayloads)){"The persisted Gen 2 box records changed after staging."};val q=parseGen2Box(written,box).firstOrNull{it.slot==slot};require(q!=null&&sameGen2BankRecord(q,source)&&gen2BoxRawCore(written,box,slot).contentEquals(monRaw)){"The exact withdrawn Gen 2 Pokémon did not persist."};require(gen2PokedexOwnedSeen(written,writtenProfile,source.species)){"The withdrawn species was not registered Seen and Owned in Gen 2."}
+                require(destinationBinding.matches(work,bound())&&writtenProfile.key==openedProfile.key&&verifyGen2SaveIntegrity(written).first){"The complete persisted Gen 2 withdrawal or source identity did not verify."}
+                require(destinationBinding.matches(work,bound())){"The verified Gen 2 destination changed before Bank cleanup."}
                 require(bound()){"The source identity changed before Bank cleanup."}
                 require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 recovery backup changed before Bank cleanup."}
                 require(bankCopy.isFile&&bankCopy.readBytes().contentEquals(openedBank)&&parseGen2BankPayload(bankCopy.readBytes())?.let{sameGen2BankRecord(it,opened)}==true){"The Bank recovery snapshot changed before Bank cleanup."}
                 val cleanup=bankFile.readBytes();require(cleanup.contentEquals(openedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true){"The selected Gen 2 Bank record changed before cleanup."};bankDeleteAttempted=true;require(bankFile.delete()){"The Bank entry could not be removed after destination verification."};require(!bankFile.exists()){"The removed Bank entry still exists."}
-                require(!bankFile.exists()&&importedFile?.absolutePath==file.absolutePath&&bound()&&
-                    file.readBytes().contentEquals(work)&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&
+                require(!bankFile.exists()&&destinationBinding.matches(work,bound())&&
+                    isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&
                     bankCopy.isFile&&bankCopy.readBytes().contentEquals(openedBank)&&
                     parseGen2BankPayload(bankCopy.readBytes())?.let{sameGen2BankRecord(it,opened)}==true){
                     "The verified Gen 2 destination identity, removed Bank path or retained recovery snapshots changed after Bank cleanup."
@@ -61711,7 +61715,7 @@ private data class Gen2ToGen5LegalisePlan(
                 )
                 requireNativeBankWithdrawalPostCleanup(
                     generation=2,
-                    destinationBound=bound()&&importedFile?.absolutePath==file.absolutePath,
+                    destinationBound=destinationBinding.matches(work,bound()),
                     retainedRecovery=retainedRecovery,
                     recoveryFile=bankCopy,
                     destination=file,
@@ -61738,7 +61742,7 @@ private data class Gen2ToGen5LegalisePlan(
                         file.writeBytes(fresh)
                     }
                     val restored=file.readBytes();val restoredProfile=detectGen2Profile(restored)
-                    restored.contentEquals(fresh)&&restoredProfile?.key==openedProfile.key&&verifyGen2SaveIntegrity(restored).first
+                    destinationBinding.matches(fresh,bound())&&restored.contentEquals(fresh)&&restoredProfile?.key==openedProfile.key&&verifyGen2SaveIntegrity(restored).first
                 }.getOrDefault(false)
                 val retainedBackup=safetyBackup?.let{saved->runCatching{
                     saved.isFile&&saved.readBytes().contentEquals(fresh)&&isBackupKept(saved)
