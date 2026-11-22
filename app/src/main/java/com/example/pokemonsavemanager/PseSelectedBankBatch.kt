@@ -57,8 +57,24 @@ internal fun restoreExactGen3BankPartyRecords(
     if(!removedBound)return false
     removed.forEach { item ->
         runCatching {
-            if(!item.bankFile.exists() && item.bankFile.createNewFile()) {
-                item.bankFile.writeBytes(item.bankBytes)
+            if(!item.bankFile.exists()) {
+                require(item.bankFile.createNewFile())
+                val writeFailure=runCatching { item.bankFile.writeBytes(item.bankBytes) }.exceptionOrNull()
+                val exact=runCatching {
+                    item.bankFile.isFile&&item.bankFile.readBytes().contentEquals(item.bankBytes)
+                }.getOrDefault(false)
+                if(!exact&&writeFailure!=null) {
+                    val partial=runCatching {
+                        if(item.bankFile.isFile)item.bankFile.readBytes() else null
+                    }.getOrNull()
+                    if(partial!=null&&partial.size<item.bankBytes.size&&
+                        item.bankBytes.copyOf(partial.size).contentEquals(partial)) {
+                        runCatching {
+                            require(item.bankFile.absoluteFile==item.bankFile.canonicalFile)
+                            require(item.bankFile.delete()&&!item.bankFile.exists())
+                        }
+                    }
+                }
             }
         }
     }
