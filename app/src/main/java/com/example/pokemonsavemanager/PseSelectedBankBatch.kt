@@ -792,8 +792,17 @@ internal fun runSelectedStandardBankBatchReview(
                 return@setItems
             }
             val reviewedSources=try{
-                val root=bankDirectory().canonicalFile
-                val paths=chosen.map{it.canonicalFile}
+                val directory=bankDirectory()
+                require(directory.absoluteFile==directory.canonicalFile&&directory.isDirectory){
+                    "The Generation $generation PSE Bank directory is unresolved, noncanonical or unavailable."
+                }
+                val root=directory.canonicalFile
+                val paths=chosen.map{selected->
+                    require(selected.absoluteFile==selected.canonicalFile){
+                        "A selected Bank path is unresolved or noncanonical."
+                    }
+                    selected.canonicalFile
+                }
                 require(paths.distinct().size==paths.size){"The same Bank record was selected more than once."}
                 paths.map{selected->
                     require(selected.parentFile==root&&selected.isFile&&selected.extension.equals("pk$generation",true)){
@@ -869,8 +878,14 @@ internal fun executeSelectedStandardBankBatch(
             plannedSlots.distinct().size==plannedSlots.size&&plannedSlots.all{it in 0 until slotCount&&it/30==targetBox&&structurallyEmpty(original,it)}){
             "The reviewed destination slots changed or are no longer structurally empty."
         }
+        require(bankDirectory.absoluteFile==bankDirectory.canonicalFile&&bankDirectory.isDirectory){
+            "The Generation $generation PSE Bank directory is unresolved, noncanonical or unavailable."
+        }
         val root=bankDirectory.canonicalFile
         chosen.forEachIndexed { index,selected ->
+            require(selected.absoluteFile==selected.canonicalFile){
+                "A selected Bank path is unresolved or noncanonical."
+            }
             val exact=selected.canonicalFile
             require(exact.parentFile==root&&exact.isFile&&exact.extension.equals("pk$generation",true)){"A selected Bank record is outside the Generation $generation PSE Bank."}
             require(exact !in sources){"The same Bank record was selected more than once."}
