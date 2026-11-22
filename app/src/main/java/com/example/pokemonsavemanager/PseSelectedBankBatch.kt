@@ -188,6 +188,9 @@ internal fun restoreExactMissingGen3BankFile(
     file: File,
     expected: ByteArray
 ): Boolean = runCatching {
+    require(file.absoluteFile==file.canonicalFile) {
+        "The Gen 3 Bank recovery path is unresolved or noncanonical."
+    }
     if (!file.exists()) {
         require(file.createNewFile()) {
             "A Gen 3 Bank recovery path could not be reserved."
