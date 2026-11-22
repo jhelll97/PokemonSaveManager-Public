@@ -903,11 +903,17 @@ internal fun executeSelectedStandardBankBatch(
             val off=boxOffset+plannedSlots[index]*recordSize
             require(work.copyOfRange(off,off+recordSize).contentEquals(raw)&&recordValid(raw)){"A staged Bank Pokémon did not verify exactly."}
         }
+        require(backupsDirectory.absoluteFile==backupsDirectory.canonicalFile&&backupsDirectory.isDirectory){
+            "The destination backup directory is unresolved, noncanonical or unavailable."
+        }
         val backup=File.createTempFile(backupBaseName+"_PreSelectedBankMove_",".backup",backupsDirectory)
         safetyBackup=backup
+        require(backup.absoluteFile==backup.canonicalFile&&backup.parentFile==backupsDirectory){
+            "The destination recovery backup was not created at its canonical directory identity."
+        }
         backup.writeBytes(original)
         retainBackup(backup,original)
-        require(backup.readBytes().contentEquals(original)&&backupKept(backup)){"The exact kept destination recovery backup did not verify."}
+        require(retainedBankBackupMatches(backup,original,backupKept(backup))){"The exact kept destination recovery backup did not verify."}
         sourceBytes.forEachIndexed { index,raw ->
             val recovery=File.createTempFile("PSE_Selected_PK${generation}_BankRecovery_",".tmp",bankDirectory)
             bankRecoveries.add(recovery)
@@ -938,7 +944,7 @@ internal fun executeSelectedStandardBankBatch(
         fun sourcesValid(): Boolean = exactUniqueRecords(sources)
         fun recoveriesValid(): Boolean = exactUniqueRecords(bankRecoveries)
         require(bound()&&file.readBytes().contentEquals(original)&&sourcesValid()&&
-            backup.readBytes().contentEquals(original)&&backupKept(backup)&&recoveriesValid()){
+            retainedBankBackupMatches(backup,original,backupKept(backup))&&recoveriesValid()){
             "The destination, Bank records or retained recovery snapshots changed before writing."
         }
         stagedDestination=work.copyOf()
@@ -957,7 +963,7 @@ internal fun executeSelectedStandardBankBatch(
         cleanupAttempted=true
         sources.forEachIndexed { index,source ->
             require(bound()&&file.readBytes().contentEquals(work)&&nativeValid(work)&&
-                backup.readBytes().contentEquals(original)&&backupKept(backup)&&recoveriesValid()&&
+                retainedBankBackupMatches(backup,original,backupKept(backup))&&recoveriesValid()&&
                 exactBankPathsAbsent(removed)&&source.readBytes().contentEquals(sourceBytes[index])){
                 "The verified destination, source record or retained recovery changed before Bank cleanup."
             }
@@ -965,7 +971,7 @@ internal fun executeSelectedStandardBankBatch(
             removed.add(source)
         }
         require(bound()&&file.readBytes().contentEquals(work)&&nativeValid(work)&&
-            backup.readBytes().contentEquals(original)&&backupKept(backup)&&removed.size==sources.size&&
+            retainedBankBackupMatches(backup,original,backupKept(backup))&&removed.size==sources.size&&
             exactBankPathsAbsent(removed)&&recoveriesValid()){
             "The verified destination or retained recovery snapshots changed after Bank cleanup."
         }
@@ -973,7 +979,7 @@ internal fun executeSelectedStandardBankBatch(
             bankRecoveries,sourceBytes
         )
         require(bound()&&file.isFile&&file.readBytes().contentEquals(work)&&nativeValid(work)&&
-            backup.isFile&&backup.readBytes().contentEquals(original)&&backupKept(backup)&&
+            retainedBankBackupMatches(backup,original,backupKept(backup))&&
             removed.size==sources.size&&exactBankPathsAbsent(removed)&&
             (!bankRecoveryClean||exactBankPathsAbsent(bankRecoveries))){
             "The verified destination, removed Bank batch or retained destination backup changed during recovery cleanup."
