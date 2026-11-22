@@ -917,26 +917,26 @@ internal fun executeSelectedStandardBankBatch(
             recovery.writeBytes(raw)
             require(recovery.isFile&&recovery.readBytes().contentEquals(raw)){"Bank recovery snapshot ${index+1} did not verify."}
         }
-        fun sourcesValid(): Boolean {
-            if(sources.size!=sourceBytes.size)return false
-            val exactMatches=sources.indices.map { index ->
+        fun exactUniqueRecords(files: List<File>): Boolean {
+            if(files.size!=sourceBytes.size)return false
+            val identities=files.map { candidate ->
                 runCatching {
-                    sources[index].isFile&&
-                        sources[index].readBytes().contentEquals(sourceBytes[index])
+                    require(candidate.absoluteFile==candidate.canonicalFile)
+                    candidate.canonicalPath
+                }.getOrNull()
+            }
+            if(identities.any { it==null }||identities.filterNotNull().distinct().size!=files.size)return false
+            val exactMatches=files.indices.map { index ->
+                runCatching {
+                    files[index].absoluteFile==files[index].canonicalFile&&
+                        files[index].isFile&&
+                        files[index].readBytes().contentEquals(sourceBytes[index])
                 }.getOrDefault(false)
             }
             return exactMatches.all { it }
         }
-        fun recoveriesValid(): Boolean {
-            if(bankRecoveries.size!=sourceBytes.size)return false
-            val exactMatches=bankRecoveries.indices.map { index ->
-                runCatching {
-                    bankRecoveries[index].isFile&&
-                        bankRecoveries[index].readBytes().contentEquals(sourceBytes[index])
-                }.getOrDefault(false)
-            }
-            return exactMatches.all { it }
-        }
+        fun sourcesValid(): Boolean = exactUniqueRecords(sources)
+        fun recoveriesValid(): Boolean = exactUniqueRecords(bankRecoveries)
         require(bound()&&file.readBytes().contentEquals(original)&&sourcesValid()&&
             backup.readBytes().contentEquals(original)&&backupKept(backup)&&recoveriesValid()){
             "The destination, Bank records or retained recovery snapshots changed before writing."
