@@ -40,16 +40,20 @@ internal fun restoreExactBankRecords(
     cleanupStarted: Boolean
 ) {
     require(files.size==originals.size){"The selected Bank recovery set is incomplete."}
-    files.indices.forEach { index ->
-        val file=files[index]
-        val original=originals[index]
-        if(!file.exists()) {
-            require(cleanupStarted){"A Bank record disappeared before PSE attempted cleanup; its path was not overwritten."}
-            val recovery=recoveries.getOrNull(index)
-            require(recovery!=null&&recovery.readBytes().contentEquals(original)){"The exact Bank recovery snapshot is unavailable."}
-            require(file.createNewFile()){"A Bank recovery path could not be reserved."}
-            file.writeBytes(original)
-        }
-        require(file.readBytes().contentEquals(original)){"A Bank record could not be restored or verified exactly."}
+    val restored=files.indices.map { index ->
+        runCatching {
+            val file=files[index]
+            val original=originals[index]
+            if(!file.exists()) {
+                require(cleanupStarted){"A Bank record disappeared before PSE attempted cleanup; its path was not overwritten."}
+                val recovery=recoveries.getOrNull(index)
+                require(recovery!=null&&recovery.isFile&&
+                    recovery.readBytes().contentEquals(original)){"The exact Bank recovery snapshot is unavailable."}
+                require(file.createNewFile()){"A Bank recovery path could not be reserved."}
+                file.writeBytes(original)
+            }
+            file.isFile&&file.readBytes().contentEquals(original)
+        }.getOrDefault(false)
     }
+    require(restored.all { it }){"One or more Bank records could not be restored or verified exactly."}
 }
