@@ -40,6 +40,7 @@ internal object BankTransferRecovery {
     fun cleanup(snapshot: File?, expected: ByteArray): Boolean {
         if(snapshot==null)return true
         return runCatching{
+            require(snapshot.absoluteFile==snapshot.canonicalFile)
             if(!snapshot.exists()||!matches(snapshot,expected))false
             else snapshot.delete()&&!snapshot.exists()
         }.getOrDefault(false)
