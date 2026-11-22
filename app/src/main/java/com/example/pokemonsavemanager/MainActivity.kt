@@ -13232,7 +13232,10 @@ class MainActivity : Activity() {
             return showDialog("Gen 6 Bank withdrawal","The loaded destination is not a checksum-clean native Generation 6 save.")
         val root=runCatching{bankDir().canonicalFile}.getOrNull()
             ?:return showDialog("Gen 6 Bank withdrawal","The PSE Bank folder could not be verified.")
-        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+        val selected=runCatching{
+            require(bankFile.absoluteFile==bankFile.canonicalFile)
+            bankFile.canonicalFile
+        }.getOrNull()
             ?:return showDialog("Gen 6 Bank withdrawal","The selected Bank path could not be verified.")
         if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk6",true))
             return showDialog("Gen 6 Bank withdrawal","The selected record is outside the Generation 6 PSE Bank.")
@@ -13307,8 +13310,10 @@ class MainActivity : Activity() {
     private fun transferGen6BankWithdrawal(p:Gen6BankWithdrawalPrepared,target:Int){
         val file=p.destinationFile
         val destinationBinding=PseBankDestinationBinding.capture(file)
-        if(destinationBinding==null){showDialog("Gen 6 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
-        if(!gen6BankWithdrawalStillBound(p)||!destinationBinding.matches(p.destination,gen6BankWithdrawalIdentityBound(p))){showDialog("Gen 6 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
+        val sourceBinding=PseBankSourceBinding.capture(p.bankFile)
+        if(destinationBinding==null||sourceBinding==null){showDialog("Gen 6 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
+        if(!gen6BankWithdrawalStillBound(p)||!destinationBinding.matches(p.destination,gen6BankWithdrawalIdentityBound(p))||
+            !sourceBinding.matches(p.bankBytes,true)){showDialog("Gen 6 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
         val original=runCatching{file.readBytes()}.getOrNull()
             ?:return showDialog("Gen 6 Bank withdrawal","The destination save could not be read.")
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
@@ -13321,7 +13326,7 @@ class MainActivity : Activity() {
             require(target in 0 until info.second){"The selected Generation 6 slot is invalid."}
             val offset=info.first+target*PK6_STORED_SIZE
             require(gen6BankDestinationSlotIsStructurallyEmpty(original,info.first,info.second,info.third,target)){"The selected Generation 6 slot is no longer structurally empty. Existing slot data was not overwritten."}
-            val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The selected Gen 6 Bank record changed after review."}
+            val bank=p.bankFile.readBytes();require(sourceBinding.matches(p.bankBytes,true)&&bank.contentEquals(p.bankBytes)){"The selected Gen 6 Bank record changed after review."}
             val source=parsePk6(bank,0,PK6_STORED_SIZE,false,721)?:error("The selected Bank record is not a native PK6.")
             require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&
                 source.tid==p.source.tid&&source.sid==p.source.sid){"The selected PK6 no longer matches the reviewed Pokémon."}
@@ -13342,7 +13347,7 @@ class MainActivity : Activity() {
             val bankCopy=File.createTempFile("PSE_G6Withdraw_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
             bankCopy.writeBytes(bank);require(bankCopy.readBytes().contentEquals(bank)){"The exact PK6 Bank recovery snapshot did not verify."}
             require(destinationBinding.matches(original,gen6BankWithdrawalIdentityBound(p))&&isBackupKept(recovery)&&
-                p.bankFile.readBytes().contentEquals(bank)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
+                sourceBinding.matches(bank,true)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
                 "The destination identity, retained backup or Bank snapshots changed before writing."
             }
             stagedDestination=save.copyOf()
@@ -13356,7 +13361,7 @@ class MainActivity : Activity() {
                 reopened.species==source.species&&reopened.tid==source.tid&&reopened.sid==source.sid){
                 "The exact 232-byte PK6 did not persist after reopening."
             }
-            require(destinationBinding.matches(save,gen6BankWithdrawalIdentityBound(p))&&p.bankFile.readBytes().contentEquals(bank)&&
+            require(destinationBinding.matches(save,gen6BankWithdrawalIdentityBound(p))&&sourceBinding.matches(bank,true)&&
                 isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
                 "The destination identity, verified save or retained recovery snapshots changed before cleanup."
             }
@@ -13380,7 +13385,7 @@ class MainActivity : Activity() {
                     p.bankFile.writeBytes(p.bankBytes)
                 }
                 val restored=p.bankFile.readBytes();val parsed=parsePk6(restored,0,PK6_STORED_SIZE,false,721)
-                restored.contentEquals(p.bankBytes)&&parsed!=null&&parsed.checksumValid&&parsed.pid==p.source.pid&&
+                sourceBinding.matches(p.bankBytes,true)&&restored.contentEquals(p.bankBytes)&&parsed!=null&&parsed.checksumValid&&parsed.pid==p.source.pid&&
                     parsed.species==p.source.species&&parsed.tid==p.source.tid&&parsed.sid==p.source.sid
             }.getOrDefault(false)
             val destinationRestored=runCatching{
