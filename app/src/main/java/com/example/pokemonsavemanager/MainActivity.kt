@@ -12324,6 +12324,8 @@ class MainActivity : Activity() {
 
     private fun prepareGen5BankWithdrawal(bankFile:File,shown:PokemonEntry){
         val file=importedFile?:return showDialog("Gen 5 Bank withdrawal","Load a valid Black, White, Black 2 or White 2 destination save first.")
+        if(!runCatching{file.absoluteFile==file.canonicalFile&&file.isFile}.getOrDefault(false))
+            return showDialog("Gen 5 Bank withdrawal","The destination path is unresolved, noncanonical or unavailable. Reopen the save.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         val destination=runCatching{file.readBytes()}.getOrNull()
             ?:return showDialog("Gen 5 Bank withdrawal","The destination save could not be read.")
@@ -12412,7 +12414,17 @@ class MainActivity : Activity() {
 
     private fun transferGen5BankWithdrawal(p:Gen5BankWithdrawalPrepared,target:Int){
         val file=p.destinationFile
-        if(!gen5BankWithdrawalStillBound(p)){showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
+        val destinationIdentity=runCatching{
+            require(file.absoluteFile==file.canonicalFile&&file.isFile)
+            file.canonicalPath
+        }.getOrElse{
+            showDialog("Gen 5 Bank withdrawal","The destination path is unresolved, noncanonical or unavailable. Reopen PSE Bank.");return
+        }
+        fun destinationMatches(expected:ByteArray)=runCatching{
+            file.absoluteFile==file.canonicalFile&&file.canonicalPath==destinationIdentity&&file.isFile&&
+                gen5BankWithdrawalIdentityBound(p)&&file.readBytes().contentEquals(expected)
+        }.getOrDefault(false)
+        if(!gen5BankWithdrawalStillBound(p)||!destinationMatches(p.destination)){showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
         val original=runCatching{file.readBytes()}.getOrNull()
             ?:return showDialog("Gen 5 Bank withdrawal","The destination save could not be read.")
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
@@ -12448,13 +12460,13 @@ class MainActivity : Activity() {
             retainGen6ToGen5SafetyBackup(recovery,original)
             val bankCopy=File.createTempFile("PSE_G5Withdraw_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
             bankCopy.writeBytes(bank);require(bankCopy.readBytes().contentEquals(bank)){"The exact PK5 Bank recovery snapshot did not verify."}
-            require(gen5BankWithdrawalIdentityBound(p)&&isBackupKept(recovery)&&file.readBytes().contentEquals(original)&&
+            require(destinationMatches(original)&&isBackupKept(recovery)&&
                 p.bankFile.readBytes().contentEquals(bank)&&bankCopy.readBytes().contentEquals(bank)){
                 "The destination identity, retained backup or Bank snapshots changed before writing."
             }
             stagedDestination=save.copyOf()
             writeStarted=true;file.writeBytes(save)
-            val written=file.readBytes();require(written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){
+            val written=file.readBytes();require(destinationMatches(save)&&written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){
                 "The persisted Generation 5 save differs from the reviewed write scope."
             }
             val reopenedProfile=detectGen5Profile(written)?:error("The persisted Generation 5 save could not be reopened.")
@@ -12466,13 +12478,13 @@ class MainActivity : Activity() {
                 reopened.species==source.species&&reopened.tid==source.tid&&reopened.sid==source.sid){
                 "The exact 136-byte PK5 did not persist after reopening."
             }
-            require(gen5BankWithdrawalIdentityBound(p)&&p.bankFile.readBytes().contentEquals(bank)&&file.readBytes().contentEquals(save)&&
+            require(destinationMatches(save)&&p.bankFile.readBytes().contentEquals(bank)&&
                 isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
                 "The destination identity, verified save or retained recovery snapshots changed before cleanup."
             }
             bankDeleteAttempted=true
             require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 5 Bank record could not be removed after destination verification."}
-            require(gen5BankWithdrawalIdentityBound(p)&&!p.bankFile.exists()&&file.readBytes().contentEquals(save)&&
+            require(destinationMatches(save)&&!p.bankFile.exists()&&
                 isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
                 "The destination identity, verified save, removed Bank path or retained recovery snapshots changed after cleanup."
             }
@@ -12480,7 +12492,7 @@ class MainActivity : Activity() {
                 listOf(bankCopy),listOf(p.bankBytes)
             )
             requireNativeBankWithdrawalPostCleanup(
-                5,gen5BankWithdrawalIdentityBound(p),retainedRecovery,bankCopy,
+                5,destinationMatches(save),retainedRecovery,bankCopy,
                 file,save,recovery,original,isBackupKept(recovery),p.bankFile
             )
         }catch(e:Exception){
@@ -12497,7 +12509,10 @@ class MainActivity : Activity() {
             }.isSuccess
             val destinationRestored=runCatching{
                 restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Generation 5 destination write began; unknown current bytes were left untouched.","The Generation 5 destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery.")
-                val restored=file.readBytes();val profile=detectGen5Profile(restored)
+                val restored=file.readBytes();require(destinationMatches(original)){
+                    "The restored Generation 5 destination identity or bytes changed."
+                }
+                val profile=detectGen5Profile(restored)
                     ?:error("The restored Generation 5 layout is invalid.")
                 restored.contentEquals(original)&&gen5ChecksumTableValid(restored,profile)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,profile)}
             }.getOrDefault(false)
