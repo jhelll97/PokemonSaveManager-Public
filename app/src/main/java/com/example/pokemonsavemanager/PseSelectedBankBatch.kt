@@ -139,8 +139,18 @@ internal fun retainedBankBackupMatches(
 } ?: false
 
 internal fun exactBankPathsAbsent(paths: List<File>): Boolean {
+    val identities=paths.map { path ->
+        runCatching {
+            require(path.absoluteFile==path.canonicalFile)
+            path.canonicalPath
+        }.getOrNull()
+    }
+    if(identities.any { it==null }||identities.filterNotNull().distinct().size!=paths.size)return false
     val absent=paths.map { path ->
-        runCatching { !path.exists() }.getOrDefault(false)
+        runCatching {
+            require(path.absoluteFile==path.canonicalFile)
+            !path.exists()
+        }.getOrDefault(false)
     }
     return absent.all { it }
 }
