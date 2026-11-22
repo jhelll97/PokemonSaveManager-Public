@@ -1295,14 +1295,57 @@ class MainActivity : Activity() {
             .show()
     }
 
+    private fun gen1ToGen7PkMismatch(a:PokemonEntry,b:PokemonEntry):String?=when{
+        !a.checksumValid||!b.checksumValid->"PK7 checksum"
+        a.species!=b.species->"species"
+        a.nickname!=b.nickname->"nickname"
+        a.isNicknamed!=b.isNicknamed->"nickname flag"
+        a.level!=b.level->"level"
+        a.heldItem!=b.heldItem->"held item"
+        a.tid!=b.tid->"Trainer ID"
+        a.sid!=b.sid->"Secret ID"
+        a.experience!=b.experience->"experience"
+        a.ability!=b.ability->"ability"
+        a.abilityNumber!=b.abilityNumber->"ability slot"
+        a.pid!=b.pid->"PID"
+        a.nature!=b.nature->"nature"
+        a.gender!=b.gender->"gender"
+        a.form!=b.form->"form"
+        !a.evs.contentEquals(b.evs)->"EVs"
+        !a.moves.contentEquals(b.moves)->"moves"
+        !a.movePP.contentEquals(b.movePP)->"move PP"
+        !a.ivs.contentEquals(b.ivs)->"IVs"
+        a.isEgg!=b.isEgg->"Egg flag"
+        a.otName!=b.otName->"Original Trainer name"
+        a.friendship!=b.friendship->"friendship"
+        a.currentHandler!=b.currentHandler->"current handler"
+        a.pokerusDays!=b.pokerusDays||a.pokerusStrain!=b.pokerusStrain->"Pokérus"
+        a.shiny!=b.shiny->"shiny state"
+        a.language!=b.language->"language"
+        a.markingValue!=b.markingValue->"markings"
+        a.fatefulEncounter!=b.fatefulEncounter->"fateful encounter flag"
+        !a.relearnMoves.contentEquals(b.relearnMoves)->"relearn moves"
+        a.eggLocation!=b.eggLocation->"Egg location"
+        a.metLocation!=b.metLocation->"met location"
+        a.ball!=b.ball->"Poké Ball"
+        a.metLevel!=b.metLevel->"met level"
+        a.otGender!=b.otGender->"Original Trainer gender"
+        a.originGame!=b.originGame->"origin game"
+        a.country!=b.country->"country"
+        a.region!=b.region->"region"
+        a.consoleRegion!=b.consoleRegion->"console region"
+        a.eggYear!=b.eggYear||a.eggMonth!=b.eggMonth||a.eggDay!=b.eggDay->"Egg date"
+        a.metYear!=b.metYear||a.metMonth!=b.metMonth||a.metDay!=b.metDay->"met date"
+        a.hyperTrainFlags!=b.hyperTrainFlags->"Hyper Training flags"
+        else->null
+    }
+
     private fun transferSelectedGen1BankToGen7(preparedBatch:List<Gen1Gen7BatchPrepared>,preparedDestination:ByteArray,box:Int){
         val file=importedFile?:return
         val openedFile=file;val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val fresh=runCatching{file.readBytes()}.getOrElse{showDialog("Gen 1 → Gen 7 multi-transfer failed","The fresh Gen 7 destination save could not be read. Nothing was changed.");return}
-        val removed=HashSet<String>()
-        val bankRecoveryCopies=ArrayList<File>()
-        var writeStarted=false;var safetyBackup:File?=null;var stagedDestination:ByteArray?=null;var retainedRecovery=false
+        val removed=ArrayList<Pair<File,ByteArray>>();var writeStarted=false;var safetyBackup:File?=null;var stagedDestination:ByteArray?=null
         try{
             require(bound()){"The Gen 7 destination identity changed. Nothing was changed."}
             require(preparedBatch.isNotEmpty()){"No Gen 1 Bank entries were prepared."}
@@ -1358,10 +1401,7 @@ class MainActivity : Activity() {
             require(bound()&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination or a selected Bank record changed before backup. Nothing was written."}
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen1BatchToGen7_",".backup",backupsDir());safetyBackup=recovery
             recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The exact Gen 7 batch recovery backup did not verify."};retainGen1ToGen7SafetyBackup(recovery,fresh)
-            createExactBankRecoverySnapshots(
-                bankRecoveryCopies,bankDir(),refreshed.map{it.bankBytes},BankTransferRecovery.GEN1_TO_7
-            )
-            require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}&&exactGen3BankRecoverySnapshots(bankRecoveryCopies,refreshed.map{it.bankBytes})){"The destination, selected Bank records or retained recovery data changed before writing."}
+            require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination, selected Bank records or retained recovery backup changed before writing."}
             stagedDestination=work.copyOf()
             writeStarted=true
             file.writeBytes(work)
@@ -1374,43 +1414,34 @@ class MainActivity : Activity() {
             }
             val writtenChecksums=validateGen7CoreChecksums(written);require(writtenChecksums.first){writtenChecksums.second}
             require(pcStorageIsolated(written)){"Unrelated Gen 7 PC data changed after batch persistence."}
-            for((index,prepared) in refreshed.withIndex()){
-                val copy=bankRecoveryCopies.getOrNull(index)
-                require(bound()&&file.readBytes().contentEquals(work)&&isBackupKept(recovery)&&copy!=null&&BankTransferRecovery.matches(copy,prepared.bankBytes)){"The verified destination identity, data or retained recovery changed before Bank cleanup."}
+            for(prepared in refreshed){
+                require(bound()&&file.readBytes().contentEquals(work)&&isBackupKept(recovery)){"The verified destination identity, data or retained backup changed before Bank cleanup."}
                 val current=runCatching{prepared.bankFile.readBytes()}.getOrElse{error("A selected Gen 1 Bank record could not be re-read before cleanup.")}
                 require(current.contentEquals(prepared.bankBytes) && parseGen1BankPayload(current)?.let{sameGen1TransferRecord(it,prepared.source)}==true){"A selected Gen 1 Bank record changed before cleanup. The Gen 7 destination was restored."}
-                removed.add(prepared.bankFile.absolutePath)
+                removed.add(prepared.bankFile to prepared.bankBytes)
                 require(prepared.bankFile.delete()&&!prepared.bankFile.exists()){"A Bank entry could not be removed after destination verification."}
             }
-            require(bound()&&file.readBytes().contentEquals(work)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&exactGen3BankRecoverySnapshots(bankRecoveryCopies,refreshed.map{it.bankBytes})&&refreshed.all{!it.bankFile.exists()}){"The verified Gen 7 destination, removed Bank batch or retained recovery changed after Bank cleanup."}
-            retainedRecovery=!cleanupExactBankRecoverySnapshots(
-                bankRecoveryCopies,refreshed.map{it.bankBytes}
-            )
-            requireSelectedNativeBankBatchPostCleanup(
-                7,bound(),retainedRecovery,bankRecoveryCopies,
-                file,work,recovery,fresh,isBackupKept(recovery),refreshed.map{it.bankFile}
-            )
+            require(bound()&&file.readBytes().contentEquals(work)){"The verified Gen 7 destination changed after Bank cleanup."}
         }catch(e:Exception){
-            val banksRestored=restoreExactBankBatchRecords(
-                preparedBatch.map{it.bankFile},preparedBatch.map{it.bankBytes},
-                removed,bankRecoveryCopies
-            ).all{it}
+            for((bankFile,bankBytes) in removed)runCatching{if(!bankFile.exists())require(bankFile.createNewFile()){"A Bank recovery path could not be reserved."};bankFile.writeBytes(bankBytes)}
+            val banksRestored=preparedBatch.all{prepared->runCatching{val bytes=prepared.bankFile.readBytes();bytes.contentEquals(prepared.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,prepared.source)}==true}.getOrDefault(false)}
             val saveRestored=runCatching{
                 restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 7 destination write began; unknown current bytes were left untouched.","The Generation 7 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 require(restored.contentEquals(fresh)&&validateGen7CoreChecksums(restored).first){"The restored Generation 7 destination did not verify."}
                 true
             }.getOrDefault(false)
-            val recovery=gen1ToGen7BatchRecoveryMessage(
-                bankRecoveryCopies,preparedBatch.map{it.bankBytes},banksRestored,saveRestored
-            )
-            val retainedBankRecoveries=retainedExactBankRecoveryPaths(bankRecoveryCopies)
-            showDialog("Gen 1 → Gen 7 multi-transfer failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:"")+retainedBankRecoveries)
+            val recovery=when{
+                banksRestored&&saveRestored->"The exact Gen 7 destination and every selected Gen 1 Bank record were restored or kept and verified."
+                banksRestored->"Every selected Gen 1 Bank record was restored or kept, but destination recovery was not verified. Use the retained Gen 7 backup before editing again."
+                saveRestored->"The exact Gen 7 destination was restored or kept, but one or more Gen 1 Bank records were not verified. Keep the remaining Bank records and recovery data for review."
+                else->"Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
+            }
+            showDialog("Gen 1 → Gen 7 multi-transfer failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""))
             return
         }
         selectedBankFiles.clear();bankMultiSelectMode=false
-        val recoveryNotice=BankTransferRecovery.successNotice(retainedRecovery)
-        Toast.makeText(this,"${preparedBatch.size} Gen 1 Pokémon transferred to Gen 7 Box ${box+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show()
+        Toast.makeText(this,"${preparedBatch.size} Gen 1 Pokémon transferred to Gen 7 Box ${box+1} and verified",Toast.LENGTH_LONG).show()
         showPokemonViewer("boxes",box)
     }
 
