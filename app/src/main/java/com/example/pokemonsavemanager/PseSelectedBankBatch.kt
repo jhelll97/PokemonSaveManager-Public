@@ -747,6 +747,16 @@ internal fun executeSelectedStandardBankBatch(
             require(recovery.readBytes().contentEquals(raw)){"Bank recovery snapshot ${index+1} did not verify."}
             bankRecoveries.add(recovery)
         }
+        fun sourcesValid(): Boolean {
+            if(sources.size!=sourceBytes.size)return false
+            val exactMatches=sources.indices.map { index ->
+                runCatching {
+                    sources[index].isFile&&
+                        sources[index].readBytes().contentEquals(sourceBytes[index])
+                }.getOrDefault(false)
+            }
+            return exactMatches.all { it }
+        }
         fun recoveriesValid(): Boolean {
             if(bankRecoveries.size!=sourceBytes.size)return false
             val exactMatches=bankRecoveries.indices.map { index ->
@@ -757,9 +767,8 @@ internal fun executeSelectedStandardBankBatch(
             }
             return exactMatches.all { it }
         }
-        require(bound()&&file.readBytes().contentEquals(original)&&sources.indices.all {
-            sources[it].readBytes().contentEquals(sourceBytes[it])
-        }&&backup.readBytes().contentEquals(original)&&backupKept(backup)&&recoveriesValid()){
+        require(bound()&&file.readBytes().contentEquals(original)&&sourcesValid()&&
+            backup.readBytes().contentEquals(original)&&backupKept(backup)&&recoveriesValid()){
             "The destination, Bank records or retained recovery snapshots changed before writing."
         }
         stagedDestination=work.copyOf()
@@ -772,7 +781,7 @@ internal fun executeSelectedStandardBankBatch(
             val actual=verify.copyOfRange(off,off+recordSize)
             require(actual.contentEquals(raw)&&recordValid(actual)){"A moved Pokémon did not verify after persistence."}
         }
-        require(sources.indices.all{sources[it].readBytes().contentEquals(sourceBytes[it])}&&recoveriesValid()){
+        require(sourcesValid()&&recoveriesValid()){
             "A Bank record or retained recovery snapshot changed before cleanup."
         }
         cleanupAttempted=true
