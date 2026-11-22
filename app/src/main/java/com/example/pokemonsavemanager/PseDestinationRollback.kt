@@ -77,6 +77,9 @@ internal fun restoreExactBankRecords(
             recovery.canonicalPath
         }.getOrNull()
     }
+    require(recoveryIdentities.none { recoveryIdentity ->
+        recoveryIdentity!=null&&identities.contains(recoveryIdentity)
+    }){"A Bank recovery snapshot aliases a selected source path."}
     val restored=files.indices.map { index ->
         runCatching {
             val file=files[index]
