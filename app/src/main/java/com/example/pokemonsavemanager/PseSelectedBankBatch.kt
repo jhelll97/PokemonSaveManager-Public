@@ -961,6 +961,7 @@ internal fun executeSelectedStandardBankBatch(
             val exactMatches=files.indices.map { index ->
                 runCatching {
                     files[index].absoluteFile==files[index].canonicalFile&&
+                        files[index].canonicalPath==identities[index]&&
                         files[index].isFile&&
                         files[index].readBytes().contentEquals(sourceBytes[index])
                 }.getOrDefault(false)
