@@ -610,12 +610,26 @@ internal fun cleanupExactSelectedGen3BankCopies(
         if(index in expected.indices)candidates.add(file to expected[index])
         else if(file.exists())clean=false
     }
-    candidates.groupBy { it.first.absolutePath }.values.forEach { references ->
+    val paths=LinkedHashMap<String,MutableList<Pair<File,ByteArray>>>()
+    candidates.forEach { candidate ->
+        val identity=runCatching { candidate.first.canonicalPath }.getOrNull()
+        if(identity==null){
+            clean=false
+        }else{
+            paths.getOrPut(identity){ArrayList()}.add(candidate)
+        }
+    }
+    paths.values.forEach { references ->
         val(file,bytes)=references.first()
+        val canonicalReferences=references.map { (candidate,_) ->
+            runCatching {
+                candidate.absoluteFile==candidate.canonicalFile
+            }.getOrDefault(false)
+        }.all { it }
         val expectationsMatch=references.map { (_,expected) ->
             expected.contentEquals(bytes)
         }.all { it }
-        if(!expectationsMatch){
+        if(!canonicalReferences||!expectationsMatch){
             clean=false
             return@forEach
         }
