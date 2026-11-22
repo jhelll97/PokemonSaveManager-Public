@@ -866,6 +866,14 @@ internal fun executeSelectedStandardBankBatch(
     var cleanupAttempted=false
     var safetyBackup:File?=null
     var stagedDestination:ByteArray?=null
+    var destinationIdentity:String?=null
+    fun destinationMatches(expected:ByteArray):Boolean {
+        val identity=destinationIdentity?:return false
+        return runCatching {
+            file.absoluteFile==file.canonicalFile&&file.canonicalPath==identity&&file.isFile&&
+                bound()&&file.readBytes().contentEquals(expected)
+        }.getOrDefault(false)
+    }
     val sources=ArrayList<File>()
     val sourceBytes=ArrayList<ByteArray>()
     val bankRecoveries=ArrayList<File>()
@@ -873,6 +881,10 @@ internal fun executeSelectedStandardBankBatch(
     try {
         require(chosen.isNotEmpty()){"No Bank records are selected."}
         require(generation in 6..7&&nativeValid(original)){"The loaded save does not match this PSE Bank generation."}
+        require(file.absoluteFile==file.canonicalFile&&file.isFile){
+            "The Generation $generation destination path is unresolved, noncanonical or unavailable."
+        }
+        destinationIdentity=file.canonicalPath
         require(targetBox in 0 until (slotCount/30)){"The selected destination box is unavailable."}
         require(plannedSlots.size==chosen.size&&reviewedSources.size==chosen.size&&
             plannedSlots.distinct().size==plannedSlots.size&&plannedSlots.all{it in 0 until slotCount&&it/30==targetBox&&structurallyEmpty(original,it)}){
@@ -894,7 +906,7 @@ internal fun executeSelectedStandardBankBatch(
             sources.add(exact)
             sourceBytes.add(raw)
         }
-        require(bound()&&file.readBytes().contentEquals(original)){"The destination identity or bytes changed before staging."}
+        require(destinationMatches(original)){"The destination identity or bytes changed before staging."}
         val work=original.copyOf()
         sourceBytes.forEachIndexed { index,raw -> raw.copyInto(work,boxOffset+plannedSlots[index]*recordSize) }
         refreshDestination(work)
@@ -943,7 +955,7 @@ internal fun executeSelectedStandardBankBatch(
         }
         fun sourcesValid(): Boolean = exactUniqueRecords(sources)
         fun recoveriesValid(): Boolean = exactUniqueRecords(bankRecoveries)
-        require(bound()&&file.readBytes().contentEquals(original)&&sourcesValid()&&
+        require(destinationMatches(original)&&sourcesValid()&&
             retainedBankBackupMatches(backup,original,backupKept(backup))&&recoveriesValid()){
             "The destination, Bank records or retained recovery snapshots changed before writing."
         }
@@ -951,7 +963,7 @@ internal fun executeSelectedStandardBankBatch(
         writeStarted=true
         file.writeBytes(work)
         val verify=file.readBytes()
-        require(bound()&&verify.contentEquals(work)&&nativeValid(verify)){"The persisted destination or native checksums did not verify."}
+        require(destinationMatches(work)&&verify.contentEquals(work)&&nativeValid(verify)){"The persisted destination or native checksums did not verify."}
         sourceBytes.forEachIndexed { index,raw ->
             val off=boxOffset+plannedSlots[index]*recordSize
             val actual=verify.copyOfRange(off,off+recordSize)
@@ -962,7 +974,7 @@ internal fun executeSelectedStandardBankBatch(
         }
         cleanupAttempted=true
         sources.forEachIndexed { index,source ->
-            require(bound()&&file.readBytes().contentEquals(work)&&nativeValid(work)&&
+            require(destinationMatches(work)&&nativeValid(work)&&
                 retainedBankBackupMatches(backup,original,backupKept(backup))&&recoveriesValid()&&
                 exactBankPathsAbsent(removed)&&source.readBytes().contentEquals(sourceBytes[index])){
                 "The verified destination, source record or retained recovery changed before Bank cleanup."
@@ -970,7 +982,7 @@ internal fun executeSelectedStandardBankBatch(
             require(source.delete()&&!source.exists()){"A Bank record could not be removed after destination verification."}
             removed.add(source)
         }
-        require(bound()&&file.readBytes().contentEquals(work)&&nativeValid(work)&&
+        require(destinationMatches(work)&&nativeValid(work)&&
             retainedBankBackupMatches(backup,original,backupKept(backup))&&removed.size==sources.size&&
             exactBankPathsAbsent(removed)&&recoveriesValid()){
             "The verified destination or retained recovery snapshots changed after Bank cleanup."
@@ -978,7 +990,7 @@ internal fun executeSelectedStandardBankBatch(
         val bankRecoveryClean=cleanupExactBankRecoverySnapshots(
             bankRecoveries,sourceBytes
         )
-        require(bound()&&file.isFile&&file.readBytes().contentEquals(work)&&nativeValid(work)&&
+        require(destinationMatches(work)&&nativeValid(work)&&
             retainedBankBackupMatches(backup,original,backupKept(backup))&&
             removed.size==sources.size&&exactBankPathsAbsent(removed)&&
             (!bankRecoveryClean||exactBankPathsAbsent(bankRecoveries))){
@@ -1000,7 +1012,10 @@ internal fun executeSelectedStandardBankBatch(
                 "No Generation $generation destination write began; unknown current bytes were left untouched.",
                 "The Generation $generation destination no longer matches this batch's staged bytes; the retained backup was left for recovery."
             )
-            require(file.readBytes().let{it.contentEquals(original)&&nativeValid(it)}){"The exact destination could not be restored or verified."}
+            val restored=file.readBytes()
+            require(destinationMatches(original)&&restored.contentEquals(original)&&nativeValid(restored)){
+                "The exact destination could not be restored or verified at its reviewed identity."
+            }
             true
         }.getOrDefault(false)
         if(bankRestored&&destinationRestored) {
