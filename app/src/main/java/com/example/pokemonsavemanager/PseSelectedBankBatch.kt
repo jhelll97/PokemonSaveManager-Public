@@ -155,11 +155,15 @@ internal fun restoreExactMissingGen3BankFile(
 internal fun exactGen3BankRecoverySnapshots(
     files: List<File>,
     expected: List<ByteArray>
-): Boolean = files.size == expected.size && files.indices.all { index ->
-    runCatching {
-        files[index].isFile &&
-            files[index].readBytes().contentEquals(expected[index])
-    }.getOrDefault(false)
+): Boolean {
+    if (files.size != expected.size) return false
+    val verified=files.indices.map { index ->
+        runCatching {
+            files[index].isFile &&
+                files[index].readBytes().contentEquals(expected[index])
+        }.getOrDefault(false)
+    }
+    return verified.all { it }
 }
 
 internal fun cleanupExactBankRecoverySnapshots(
