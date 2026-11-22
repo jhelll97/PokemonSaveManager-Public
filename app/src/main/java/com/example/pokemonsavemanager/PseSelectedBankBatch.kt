@@ -994,7 +994,9 @@ internal fun executeSelectedStandardBankBatch(
             require(file.readBytes().let{it.contentEquals(original)&&nativeValid(it)}){"The exact destination could not be restored or verified."}
             true
         }.getOrDefault(false)
-        if(bankRestored&&destinationRestored)bankRecoveries.forEach{runCatching{it.delete()}}
+        if(bankRestored&&destinationRestored) {
+            cleanupExactBankRecoverySnapshots(bankRecoveries,sourceBytes)
+        }
         val recovery=when {
             bankRestored&&destinationRestored->"The exact destination and every Bank record were restored or kept and verified."
             bankRestored->"Every Bank record was restored or kept, but destination recovery was not verified. Use the retained destination backup before editing again."
