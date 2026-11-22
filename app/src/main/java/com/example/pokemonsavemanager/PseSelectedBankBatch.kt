@@ -184,10 +184,15 @@ internal fun cleanupExactBankRecoverySnapshots(
     }
     references.values.forEach { snapshots ->
         val(file,bytes)=snapshots.first()
+        val canonicalReferences=snapshots.map { (candidate,_) ->
+            runCatching {
+                candidate.absoluteFile==candidate.canonicalFile
+            }.getOrDefault(false)
+        }.all { it }
         val expectationsMatch=snapshots.map { (_,expectedBytes) ->
             expectedBytes.contentEquals(bytes)
         }.all { it }
-        if(!expectationsMatch){
+        if(!canonicalReferences||!expectationsMatch){
             clean=false
             return@forEach
         }
