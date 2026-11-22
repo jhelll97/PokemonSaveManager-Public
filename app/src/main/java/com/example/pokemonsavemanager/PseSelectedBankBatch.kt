@@ -238,30 +238,17 @@ internal fun cleanupExactBankRecoverySnapshots(
     expected: List<ByteArray>
 ): Boolean {
     if (files.size != expected.size) return false
-    var clean=true
-    val references=LinkedHashMap<String,MutableList<Pair<File,ByteArray>>>()
-    files.indices.forEach { index ->
-        val identity=runCatching { files[index].canonicalPath }.getOrNull()
-        if(identity==null){
-            clean=false
-        }else{
-            references.getOrPut(identity){ArrayList()}.add(files[index] to expected[index])
-        }
+    val identities=files.map { file ->
+        runCatching {
+            require(file.absoluteFile==file.canonicalFile)
+            file.canonicalPath
+        }.getOrNull()
     }
-    references.values.forEach { snapshots ->
-        val(file,bytes)=snapshots.first()
-        val canonicalReferences=snapshots.map { (candidate,_) ->
-            runCatching {
-                candidate.absoluteFile==candidate.canonicalFile
-            }.getOrDefault(false)
-        }.all { it }
-        val expectationsMatch=snapshots.map { (_,expectedBytes) ->
-            expectedBytes.contentEquals(bytes)
-        }.all { it }
-        if(!canonicalReferences||!expectationsMatch){
-            clean=false
-            return@forEach
-        }
+    if(identities.any { it==null }||identities.filterNotNull().distinct().size!=files.size)return false
+    var clean=true
+    files.indices.forEach { index ->
+        val file=files[index]
+        val bytes=expected[index]
         val removed=runCatching {
             if(file.exists()){
                 require(file.isFile && file.readBytes().contentEquals(bytes)){
