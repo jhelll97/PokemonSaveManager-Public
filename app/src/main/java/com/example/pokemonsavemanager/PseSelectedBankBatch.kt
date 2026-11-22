@@ -172,14 +172,14 @@ internal fun cleanupExactBankRecoverySnapshots(
         val removed=runCatching {
             if(file.exists()){
                 require(file.isFile && file.readBytes().contentEquals(expected[index])){
-                    "A Gen 3 Bank recovery snapshot changed; it was retained for review."
+                    "A Bank recovery snapshot changed; it was retained for review."
                 }
                 require(file.delete()){
-                    "An exact Gen 3 Bank recovery snapshot could not be removed."
+                    "An exact Bank recovery snapshot could not be removed."
                 }
             }
             require(!file.exists()){
-                "An exact Gen 3 Bank recovery snapshot still exists."
+                "An exact Bank recovery snapshot still exists."
             }
         }.isSuccess
         if(!removed)clean=false
