@@ -77,6 +77,8 @@ internal fun restoreExactBankRecords(
             recovery.canonicalPath
         }.getOrNull()
     }
+    val resolvedRecoveryIdentities=recoveryIdentities.filterNotNull()
+    require(resolvedRecoveryIdentities.distinct().size==resolvedRecoveryIdentities.size){"One physical Bank recovery snapshot was bound to more than one source."}
     require(recoveryIdentities.none { recoveryIdentity ->
         recoveryIdentity!=null&&identities.contains(recoveryIdentity)
     }){"A Bank recovery snapshot aliases a selected source path."}
