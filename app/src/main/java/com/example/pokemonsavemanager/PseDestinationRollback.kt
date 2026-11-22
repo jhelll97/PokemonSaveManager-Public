@@ -60,6 +60,12 @@ internal fun restoreExactBankRecords(
         indices.map { originals[it].contentEquals(expected) }.all { it }
     }
     require(consistent.all { it }){"One physical Bank path was bound to conflicting reviewed payloads."}
+    val recoveryIdentities=recoveries.map { recovery ->
+        runCatching {
+            require(recovery.absoluteFile==recovery.canonicalFile)
+            recovery.canonicalPath
+        }.getOrNull()
+    }
     val restored=files.indices.map { index ->
         runCatching {
             val file=files[index]
@@ -67,8 +73,10 @@ internal fun restoreExactBankRecords(
             if(!file.exists()) {
                 require(cleanupStarted){"A Bank record disappeared before PSE attempted cleanup; its path was not overwritten."}
                 val recovery=recoveries.getOrNull(index)
-                require(recovery!=null&&recovery.absoluteFile==recovery.canonicalFile&&
-                    recovery.isFile&&recovery.readBytes().contentEquals(original)){"The exact Bank recovery snapshot is unavailable."}
+                val recoveryIdentity=recoveryIdentities.getOrNull(index)
+                require(recovery!=null&&recoveryIdentity!=null&&
+                    recoveryIdentities.count { it==recoveryIdentity }==1&&
+                    recovery.isFile&&recovery.readBytes().contentEquals(original)){"The exact one-to-one Bank recovery snapshot is unavailable."}
                 require(file.createNewFile()){"A Bank recovery path could not be reserved."}
                 file.writeBytes(original)
             }
