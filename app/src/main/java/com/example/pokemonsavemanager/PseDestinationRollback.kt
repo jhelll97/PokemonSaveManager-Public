@@ -91,6 +91,8 @@ internal fun restoreExactBankRecords(
                 val recovery=recoveries.getOrNull(index)
                 val recoveryIdentity=recoveryIdentities.getOrNull(index)
                 require(recovery!=null&&recoveryIdentity!=null&&
+                    recovery.absoluteFile==recovery.canonicalFile&&
+                    recovery.canonicalPath==recoveryIdentity&&
                     recoveryIdentities.count { it==recoveryIdentity }==1&&
                     recovery.isFile&&recovery.readBytes().contentEquals(original)){"The exact one-to-one Bank recovery snapshot is unavailable."}
                 require(file.createNewFile()){"A Bank recovery path could not be reserved."}
@@ -105,7 +107,9 @@ internal fun restoreExactBankRecords(
                     }
                 }
             }
-            file.isFile&&file.readBytes().contentEquals(original)
+            file.absoluteFile==file.canonicalFile&&
+                file.canonicalPath==identities[index]&&
+                file.isFile&&file.readBytes().contentEquals(original)
         }.getOrDefault(false)
     }
     require(restored.all { it }){"One or more Bank records could not be restored or verified exactly."}
