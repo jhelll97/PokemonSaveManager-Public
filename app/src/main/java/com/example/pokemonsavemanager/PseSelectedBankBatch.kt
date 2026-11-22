@@ -100,6 +100,13 @@ internal fun retainedBankBackupMatches(
     }.getOrDefault(false)
 } ?: false
 
+internal fun exactBankPathsAbsent(paths: List<File>): Boolean {
+    val absent=paths.map { path ->
+        runCatching { !path.exists() }.getOrDefault(false)
+    }
+    return absent.all { it }
+}
+
 internal fun requireGen3PartyBatchBackup(
     backup: File,
     expected: ByteArray,
@@ -282,7 +289,7 @@ internal fun finishSelectedGen2BankWithdrawal(
     require(destinationBound &&
         destination.isFile && destination.readBytes().contentEquals(expectedDestination) &&
         retainedBankBackupMatches(backup, expectedBackup, kept) &&
-        removed.size == moved && removed.all { !it.first.exists() } &&
+        removed.size == moved && exactBankPathsAbsent(removed.map { it.first }) &&
         (!completion.recoveryClean || recoveryFiles.none { it.exists() })) {
         "The verified Gen 2 destination, removed Bank batch or retained destination backup changed during recovery cleanup."
     }
@@ -400,7 +407,7 @@ internal fun requireGen3BankPartyCleanupBoundary(
             "The Gen 3 party destination identity or exact staged bytes changed after Bank cleanup."
         }
     }
-    require(removed.all { !it.bankFile.exists() }) {
+    require(exactBankPathsAbsent(removed.map { it.bankFile })) {
         if(stage == 2) {
             "A previously removed Gen 3 Bank source reappeared before the next cleanup step."
         } else {
@@ -443,7 +450,7 @@ internal fun finishSelectedGen1BankWithdrawal(
     require(postCleanupIdentity() &&
         destination.isFile && destination.readBytes().contentEquals(expectedDestination) &&
         retainedBankBackupMatches(backup, expectedBackup, kept) &&
-        sources.size == moved && sources.none { it.exists() } &&
+        sources.size == moved && exactBankPathsAbsent(sources) &&
         (!recoveryClean || recoveryFiles.none { it.exists() })) {
         "The verified Gen 1 destination, removed Bank batch or retained destination backup changed during recovery cleanup."
     }
@@ -563,7 +570,7 @@ internal fun requireSelectedNativeBankBatchPostCleanup(
     require(destinationBound &&
         destination.isFile && destination.readBytes().contentEquals(expectedDestination) &&
         retainedBankBackupMatches(backup, expectedBackup, kept) &&
-        sources.none { it.exists() } &&
+        exactBankPathsAbsent(sources) &&
         (retainedRecovery || recoveryFiles.none { it.exists() })) {
         "The verified Generation $generation destination, removed Bank batch or retained destination backup changed during recovery cleanup."
     }
@@ -818,7 +825,7 @@ internal fun executeSelectedStandardBankBatch(
         sources.forEachIndexed { index,source ->
             require(bound()&&file.readBytes().contentEquals(work)&&nativeValid(work)&&
                 backup.readBytes().contentEquals(original)&&backupKept(backup)&&recoveriesValid()&&
-                removed.none{it.exists()}&&source.readBytes().contentEquals(sourceBytes[index])){
+                exactBankPathsAbsent(removed)&&source.readBytes().contentEquals(sourceBytes[index])){
                 "The verified destination, source record or retained recovery changed before Bank cleanup."
             }
             require(source.delete()&&!source.exists()){"A Bank record could not be removed after destination verification."}
@@ -826,7 +833,7 @@ internal fun executeSelectedStandardBankBatch(
         }
         require(bound()&&file.readBytes().contentEquals(work)&&nativeValid(work)&&
             backup.readBytes().contentEquals(original)&&backupKept(backup)&&removed.size==sources.size&&
-            removed.none{it.exists()}&&recoveriesValid()){
+            exactBankPathsAbsent(removed)&&recoveriesValid()){
             "The verified destination or retained recovery snapshots changed after Bank cleanup."
         }
         val bankRecoveryClean=cleanupExactBankRecoverySnapshots(
@@ -834,7 +841,7 @@ internal fun executeSelectedStandardBankBatch(
         )
         require(bound()&&file.isFile&&file.readBytes().contentEquals(work)&&nativeValid(work)&&
             backup.isFile&&backup.readBytes().contentEquals(original)&&backupKept(backup)&&
-            removed.size==sources.size&&removed.none{it.exists()}&&
+            removed.size==sources.size&&exactBankPathsAbsent(removed)&&
             (!bankRecoveryClean||bankRecoveries.none{it.exists()})){
             "The verified destination, removed Bank batch or retained destination backup changed during recovery cleanup."
         }
