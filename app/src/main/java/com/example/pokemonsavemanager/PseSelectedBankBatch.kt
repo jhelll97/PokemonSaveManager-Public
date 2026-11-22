@@ -585,6 +585,13 @@ internal fun restoreExactMissingStandardBankRecord(
     require(file.absoluteFile==file.canonicalFile) {
         "The Bank recovery path is unresolved or noncanonical."
     }
+    if (recovery?.exists() == true) {
+        require(recovery.absoluteFile==recovery.canonicalFile &&
+            recovery.canonicalFile!=file.canonicalFile &&
+            recovery.isFile && recovery.readBytes().contentEquals(expected)) {
+            "An existing Bank recovery snapshot aliases the source, is noncanonical or changed; it was retained for review."
+        }
+    }
     if (file.exists()) {
         require(file.isFile && file.readBytes().contentEquals(expected)) {
             "An existing Bank path no longer matches the reviewed record; it was not overwritten."
@@ -593,12 +600,6 @@ internal fun restoreExactMissingStandardBankRecord(
     }
     require(cleanupAttempted) {
         "A Bank record disappeared before PSE attempted cleanup; its path was not overwritten."
-    }
-    if (recovery?.exists() == true) {
-        require(recovery.absoluteFile==recovery.canonicalFile &&
-            recovery.isFile && recovery.readBytes().contentEquals(expected)) {
-            "An existing Bank recovery snapshot is noncanonical or changed; it was retained for review."
-        }
     }
     require(file.createNewFile()) { "A Bank recovery path could not be reserved." }
     val writeFailure=runCatching { file.writeBytes(expected) }.exceptionOrNull()
