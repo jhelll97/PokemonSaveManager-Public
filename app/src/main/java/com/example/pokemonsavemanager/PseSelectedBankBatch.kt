@@ -582,6 +582,9 @@ internal fun restoreExactMissingStandardBankRecord(
     cleanupAttempted: Boolean,
     recovery: File?
 ) {
+    require(file.absoluteFile==file.canonicalFile) {
+        "The Bank recovery path is unresolved or noncanonical."
+    }
     if (file.exists()) {
         require(file.isFile && file.readBytes().contentEquals(expected)) {
             "An existing Bank path no longer matches the reviewed record; it was not overwritten."
@@ -592,8 +595,9 @@ internal fun restoreExactMissingStandardBankRecord(
         "A Bank record disappeared before PSE attempted cleanup; its path was not overwritten."
     }
     if (recovery?.exists() == true) {
-        require(recovery.isFile && recovery.readBytes().contentEquals(expected)) {
-            "An existing Bank recovery snapshot changed; it was retained for review."
+        require(recovery.absoluteFile==recovery.canonicalFile &&
+            recovery.isFile && recovery.readBytes().contentEquals(expected)) {
+            "An existing Bank recovery snapshot is noncanonical or changed; it was retained for review."
         }
     }
     require(file.createNewFile()) { "A Bank recovery path could not be reserved." }
