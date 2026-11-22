@@ -56,7 +56,7 @@ internal fun restoreExactBankRecords(
     recoveries: List<File>,
     cleanupStarted: Boolean
 ) {
-    require(files.size==originals.size){"The selected Bank recovery set is incomplete."}
+    require(files.size==originals.size&&files.size==recoveries.size){"The selected Bank recovery set is incomplete."}
     val identities=files.indices.map { index ->
         runCatching {
             require(files[index].absoluteFile==files[index].canonicalFile)
@@ -70,6 +70,7 @@ internal fun restoreExactBankRecords(
         indices.map { originals[it].contentEquals(expected) }.all { it }
     }
     require(consistent.all { it }){"One physical Bank path was bound to conflicting reviewed payloads."}
+    require(grouped.values.all { it.size==1 }){"One physical Bank path was bound to more than one recovery snapshot."}
     val recoveryIdentities=recoveries.map { recovery ->
         runCatching {
             require(recovery.absoluteFile==recovery.canonicalFile)
