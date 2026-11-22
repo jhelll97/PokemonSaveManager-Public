@@ -195,7 +195,19 @@ internal fun restoreExactMissingGen3BankFile(
         require(file.createNewFile()) {
             "A Gen 3 Bank recovery path could not be reserved."
         }
-        file.writeBytes(expected)
+        val writeFailure=runCatching { file.writeBytes(expected) }.exceptionOrNull()
+        val exact=runCatching {
+            file.isFile&&file.readBytes().contentEquals(expected)
+        }.getOrDefault(false)
+        if(!exact&&writeFailure!=null) {
+            val partial=runCatching { if(file.isFile)file.readBytes() else null }.getOrNull()
+            if(partial!=null&&partial.size<expected.size&&expected.copyOf(partial.size).contentEquals(partial)) {
+                runCatching {
+                    require(file.absoluteFile==file.canonicalFile)
+                    require(file.delete()&&!file.exists())
+                }
+            }
+        }
     }
     file.isFile && file.readBytes().contentEquals(expected)
 }.getOrDefault(false)
