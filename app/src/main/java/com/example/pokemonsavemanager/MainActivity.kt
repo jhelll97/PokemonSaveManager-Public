@@ -68552,6 +68552,10 @@ private data class Gen2ToGen5LegalisePlan(
             val bankRecoveryClean=cleanupExactBankRecoverySnapshots(
                 listOf(recovery),listOf(raw)
             )
+            requireNativeBankWithdrawalPostCleanup(
+                currentGen,bound(),!bankRecoveryClean,recovery,
+                file,verifyData,backup,original,isBackupKept(backup),exactBankFile
+            )
             val box=target/30+1
             val slot=target%30+1
             val transferNote=if(bankGen!=currentGen) " (Gen $bankGen → Gen $currentGen)" else ""
