@@ -582,7 +582,12 @@ internal fun restoreExactMissingStandardBankRecord(
     cleanupAttempted: Boolean,
     recovery: File?
 ) {
-    if (file.exists()) return
+    if (file.exists()) {
+        require(file.isFile && file.readBytes().contentEquals(expected)) {
+            "An existing Bank path no longer matches the reviewed record; it was not overwritten."
+        }
+        return
+    }
     require(cleanupAttempted) {
         "A Bank record disappeared before PSE attempted cleanup; its path was not overwritten."
     }
