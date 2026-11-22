@@ -499,170 +499,6 @@ class MainActivity : Activity() {
             parsePk6(raw,0,PK6_STORED_SIZE,false,maxSpecies)==null
     }
 
-    private fun chooseSelectedGen6BankDestination(chosen:List<File>){
-        val file=importedFile?:return showDialog("Gen 6 Bank multi-withdrawal","Load a valid X, Y, Omega Ruby or Alpha Sapphire destination save first.")
-        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
-        if(chosen.isEmpty())return showDialog("Gen 6 Bank multi-withdrawal","Select one or more Gen 6 Bank Pokémon first.")
-        if(chosen.map{it.absolutePath}.distinct().size!=chosen.size)return showDialog("Gen 6 Bank multi-withdrawal","The selection contains the same Bank record more than once. Nothing was changed.")
-        val destination=runCatching{file.readBytes()}.getOrNull()?:return showDialog("Gen 6 Bank multi-withdrawal","The destination save could not be read. Nothing was changed.")
-        if(generationForSize(destination.size)!=6||!gen6BoxChecksumValid(destination)||!gen6BlockChecksumValid(destination,20))return showDialog("Gen 6 Bank multi-withdrawal","The loaded destination is not a checksum-clean native Generation 6 save. Nothing was changed.")
-        val info=boxStorageInfo(destination)?:return showDialog("Gen 6 Bank multi-withdrawal","PSE could not resolve native Generation 6 PC storage.")
-        val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return showDialog("Gen 6 Bank multi-withdrawal","The PSE Bank folder could not be verified.")
-        val selected=try{chosen.map{candidate->
-            val bankFile=candidate.canonicalFile
-            require(bankFile.parentFile==root&&bankFile.isFile&&bankFile.extension.equals("pk6",true)){"A selected record is outside the Generation 6 PSE Bank."}
-            val bytes=bankFile.readBytes();val source=if(bytes.size==PK6_STORED_SIZE)parsePk6(bytes,0,PK6_STORED_SIZE,false,721)else null
-            require(source!=null&&source.checksumValid){"A selected Gen 6 Bank record is not a checksum-valid native PK6."}
-            Gen6BankBatchItem(bankFile,bytes,source)
-        }}catch(e:Exception){return showDialog("Gen 6 Bank multi-withdrawal",(e.message?:"A selected Gen 6 Bank record could not be read.")+" Nothing was changed.")}
-        val targets=(0 until info.second/30).mapNotNull{box->
-            val slots=(0 until 30).filter{slot->gen6BankDestinationSlotIsStructurallyEmpty(destination,info.first,info.second,info.third,box*30+slot)}
-            if(slots.size>=selected.size)box to slots.take(selected.size) else null
-        }
-        if(targets.isEmpty())return showDialog("Gen 6 Bank multi-withdrawal","No Generation 6 PC box has ${selected.size} structurally empty slots for the complete selection. Existing or nonzero slot data was left unchanged; free capacity, reduce the selection, or load another valid save.")
-        var consumed=false
-        AlertDialog.Builder(this).setTitle("Move ${selected.size} Gen 6 Pokémon to which box?")
-            .setMessage("This is a PSE Bank withdrawal, not an official trade, Pokémon Bank transaction or provenance claim. No conversion or Legalise change is performed. PSE will copy each exact native 232-byte PK6 into the listed structurally empty slots in selection order, update only the native PC checksum, retain verified recovery data, reopen every destination record, then remove Bank records last.")
-            .setItems(targets.map{(box,slots)->"Box ${box+1} • Slots ${slots.joinToString(", "){(it+1).toString()}}"}.toTypedArray()){_,which->
-                if(consumed||which !in targets.indices){consumed=true;return@setItems};consumed=true
-                val(box,slots)=targets[which]
-                withdrawSelectedGen6BankPokemon(selected,destination,box,slots,file,openedUri,openedLabel)
-            }.setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
-    }
-
-    private fun withdrawSelectedGen6BankPokemon(selected:List<Gen6BankBatchItem>,openedDestination:ByteArray,targetBox:Int,targetSlots:List<Int>,file:File,openedUri:Uri?,openedLabel:String?){
-        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
-        var writeStarted=false;var safetyBackup:File?=null
-        var stagedDestination:ByteArray?=null
-        val recoveryCopies=ArrayList<Pair<Gen6BankBatchItem,File>>()
-        val cleanupAttempted=HashSet<String>()
-        var retainedRecovery=false
-        try{
-            require(selected.isNotEmpty()&&selected.map{it.bankFile.absolutePath}.distinct().size==selected.size){"The prepared Gen 6 Bank selection is empty or contains a duplicate."}
-            require(targetBox>=0&&targetSlots.size==selected.size&&targetSlots.distinct().size==targetSlots.size&&targetSlots.all{it in 0 until 30}){"The prepared Generation 6 destination slots are invalid."}
-            val original=file.readBytes();require(bound()&&original.contentEquals(openedDestination)&&generationForSize(original.size)==6){"The Generation 6 destination or source identity changed after slot selection."}
-            require(gen6BoxChecksumValid(original)&&gen6BlockChecksumValid(original,20)){"The Generation 6 destination no longer passes native checksum validation."}
-            val info=boxStorageInfo(original)?:error("PSE could not resolve native Generation 6 PC storage.")
-            require(targetBox in 0 until info.second/30){"The prepared Generation 6 destination box is invalid."}
-            val refreshed=selected.map{item->
-                val bytes=item.bankFile.readBytes();val source=if(bytes.size==PK6_STORED_SIZE)parsePk6(bytes,0,PK6_STORED_SIZE,false,721)else null
-                require(bytes.contentEquals(item.bankBytes)&&source!=null&&source.checksumValid&&source.pid==item.source.pid&&source.species==item.source.species&&source.tid==item.source.tid&&source.sid==item.source.sid){"A selected Gen 6 Bank record changed after destination review."}
-                Gen6BankBatchItem(item.bankFile,bytes,source)
-            }
-            val work=original.copyOf();val offsets=ArrayList<Int>();val allowed=HashSet<Int>()
-            for(i in refreshed.indices){
-                val global=targetBox*30+targetSlots[i];require(global in 0 until info.second){"A selected Generation 6 destination slot is invalid."}
-                val offset=info.first+global*PK6_STORED_SIZE;offsets.add(offset)
-                require(gen6BankDestinationSlotIsStructurallyEmpty(work,info.first,info.second,info.third,global)){"Box ${targetBox+1} • Slot ${targetSlots[i]+1} is no longer structurally empty. Existing slot data was not overwritten."}
-                refreshed[i].bankBytes.copyInto(work,offset);for(p in offset until offset+PK6_STORED_SIZE)allowed.add(p)
-                val raw=work.copyOfRange(offset,offset+PK6_STORED_SIZE);val staged=parsePk6(raw,0,PK6_STORED_SIZE,false,721)
-                require(raw.contentEquals(refreshed[i].bankBytes)&&staged!=null&&staged.checksumValid){"An exact selected PK6 did not stage in its destination slot."}
-            }
-            val boxBlock=if(work.size==SIZE_G6_XY)53 else 56;val checksum=gen6ChecksumOffset(work,boxBlock);allowed.add(checksum);allowed.add(checksum+1)
-            updateGen6BoxChecksum(work)
-            require(work.indices.all{it in allowed||work[it]==original[it]}){"The Gen 6 batch changed data outside the selected PK6 slots and native PC checksum."}
-            require(gen6BoxChecksumValid(work)&&gen6BlockChecksumValid(work,20)){"The staged Generation 6 destination failed native checksum verification."}
-            val backup=File.createTempFile(backupGameName(file)+"_PreGen6BankBatch_",".backup",backupsDir());safetyBackup=backup
-            backup.writeBytes(original);require(backup.readBytes().contentEquals(original)){"The exact Generation 6 recovery backup did not verify."};retainGenToGen6SafetyBackup(backup,original)
-            refreshed.forEachIndexed{index,item->
-                val copy=File.createTempFile("PSE_G6Batch_${index+1}_BankRecovery_",".tmp",bankDir());copy.writeBytes(item.bankBytes)
-                require(copy.readBytes().contentEquals(item.bankBytes)){"A PK6 Bank recovery snapshot did not verify."};recoveryCopies.add(item to copy)
-            }
-            fun recoveryValid()=isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&recoveryCopies.size==refreshed.size&&recoveryCopies.all{(item,copy)->copy.readBytes().contentEquals(item.bankBytes)}
-            require(bound()&&file.readBytes().contentEquals(original)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}&&recoveryValid()){ "The destination, Bank records or retained recovery data changed before writing." }
-            stagedDestination=work.copyOf()
-            writeStarted=true;file.writeBytes(work);val written=file.readBytes()
-            require(written.contentEquals(work)&&written.indices.all{it in allowed||written[it]==original[it]}){"The persisted Generation 6 save differs from the reviewed write scope."}
-            require(gen6BoxChecksumValid(written)&&gen6BlockChecksumValid(written,20)){"The persisted Generation 6 save failed native checksum verification."}
-            for(i in refreshed.indices){val actual=written.copyOfRange(offsets[i],offsets[i]+PK6_STORED_SIZE);val reopened=parsePk6(actual,0,PK6_STORED_SIZE,false,721);require(actual.contentEquals(refreshed[i].bankBytes)&&reopened!=null&&reopened.checksumValid){"An exact PK6 did not verify after destination reopen."}}
-            for(item in refreshed){
-                require(bound()&&file.readBytes().contentEquals(work)&&recoveryValid()){ "The verified Generation 6 destination or retained recovery data changed before Bank cleanup." }
-                val current=item.bankFile.readBytes();require(current.contentEquals(item.bankBytes)&&parsePk6(current,0,PK6_STORED_SIZE,false,721)?.checksumValid==true){"A selected Gen 6 Bank record changed before cleanup."}
-                cleanupAttempted.add(item.bankFile.absolutePath)
-                require(item.bankFile.delete()&&!item.bankFile.exists()){ "A selected Gen 6 Bank record could not be removed after destination verification." }
-            }
-            require(bound()&&file.readBytes().contentEquals(work)&&recoveryValid()){ "The verified Generation 6 destination or retained recovery data changed after Bank cleanup." }
-            retainedRecovery=!cleanupExactBankRecoverySnapshots(
-                recoveryCopies.map{it.second},recoveryCopies.map{it.first.bankBytes}
-            )
-            requireSelectedNativeBankBatchPostCleanup(
-                6,bound(),retainedRecovery,recoveryCopies.map{it.second},
-                file,work,backup,original,isBackupKept(backup),refreshed.map{it.bankFile}
-            )
-            selectedBankFiles.clear();bankMultiSelectMode=false
-            val recoveryNotice=if(retainedRecovery)
-                "; one or more exact temporary Bank recoveries retained for review" else ""
-            Toast.makeText(this,"Withdrew ${refreshed.size} exact Gen 6 PK6 records to Box ${targetBox+1} • Slots ${targetSlots.joinToString(", "){(it+1).toString()}} and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
-        }catch(e:Exception){
-            val bankRestored=selected.map{item->runCatching{
-                if(!item.bankFile.exists()){require(cleanupAttempted.contains(item.bankFile.absolutePath)){"A Gen 6 Bank record disappeared before PSE attempted cleanup; its path was not overwritten."};require(item.bankFile.createNewFile()){ "A Bank recovery path could not be reserved." };item.bankFile.writeBytes(item.bankBytes)}
-                val restored=item.bankFile.readBytes();val parsed=if(restored.size==PK6_STORED_SIZE)parsePk6(restored,0,PK6_STORED_SIZE,false,721)else null
-                require(restored.contentEquals(item.bankBytes)&&parsed!=null&&parsed.checksumValid&&parsed.pid==item.source.pid&&parsed.species==item.source.species&&parsed.tid==item.source.tid&&parsed.sid==item.source.sid){"An exact Gen 6 Bank record could not be restored or verified."};true
-            }.getOrDefault(false)}.all{it}
-            val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(openedDestination)){
-                    require(writeStarted){"No Generation 6 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 6 destination no longer matches this batch withdrawal's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(openedDestination)
-                }
-                val restored=file.readBytes();require(restored.contentEquals(openedDestination)&&generationForSize(restored.size)==6&&gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)){"The restored Generation 6 destination did not verify."};true
-            }.getOrDefault(false)
-            val retainedBackup=safetyBackup?.let{saved->runCatching{
-                saved.isFile&&isBackupKept(saved)&&saved.readBytes().contentEquals(openedDestination)
-            }.getOrDefault(false)}?:false
-            val verifiedRecoveryCopies=recoveryCopies.filter{(item,copy)->runCatching{
-                val recovered=copy.readBytes();val parsed=if(recovered.size==PK6_STORED_SIZE)parsePk6(recovered,0,PK6_STORED_SIZE,false,721)else null
-                copy.isFile&&recovered.contentEquals(item.bankBytes)&&parsed!=null&&parsed.checksumValid&&
-                    parsed.pid==item.source.pid&&parsed.species==item.source.species&&
-                    parsed.tid==item.source.tid&&parsed.sid==item.source.sid
-            }.getOrDefault(false)}
-            val allRecoveryCopiesVerified=recoveryCopies.size==selected.size&&verifiedRecoveryCopies.size==selected.size
-            val recoveryCopiesClean=if(bankRestored&&destinationRestored){
-                cleanupExactBankRecoverySnapshots(
-                    recoveryCopies.map{it.second},recoveryCopies.map{it.first.bankBytes}
-                )
-            }else false
-            val recovery=when{
-                bankRestored&&destinationRestored&&recoveryCopiesClean->
-                    "The exact Generation 6 destination and every selected PK6 Bank record were restored or kept and verified."
-                bankRestored&&destinationRestored->
-                    "The exact Generation 6 destination and every selected PK6 Bank record were restored or kept and verified. One or more exact temporary Bank recovery snapshots changed or could not be removed safely and were retained for review."
-                bankRestored&&retainedBackup->
-                    "Every selected PK6 Bank record was restored or kept. Destination restoration was not verified, but the exact retained destination backup verified."
-                bankRestored->
-                    "Every selected PK6 Bank record was restored or kept, but destination restoration and its retained backup were not verified. The current destination was left untouched."
-                destinationRestored&&allRecoveryCopiesVerified->
-                    "The exact Generation 6 destination was restored. Bank restoration was incomplete, but every exact PK6 recovery snapshot verified."
-                destinationRestored&&verifiedRecoveryCopies.isNotEmpty()->
-                    "The exact Generation 6 destination was restored. Bank restoration was incomplete; only ${verifiedRecoveryCopies.size} of ${selected.size} PK6 recovery snapshots verified."
-                destinationRestored->
-                    "The exact Generation 6 destination was restored, but Bank restoration and all PK6 recovery snapshots were not verified."
-                retainedBackup&&allRecoveryCopiesVerified->
-                    "Destination and Bank restoration were incomplete, but the exact retained destination backup and every PK6 recovery snapshot verified."
-                retainedBackup&&verifiedRecoveryCopies.isNotEmpty()->
-                    "Destination and Bank restoration were incomplete. The exact retained destination backup and ${verifiedRecoveryCopies.size} of ${selected.size} PK6 recovery snapshots verified."
-                retainedBackup->
-                    "Destination and Bank restoration were incomplete. The exact retained destination backup verified, but no PK6 recovery snapshot did."
-                allRecoveryCopiesVerified->
-                    "Destination and Bank restoration were incomplete. Every PK6 recovery snapshot verified, but the retained destination backup did not."
-                verifiedRecoveryCopies.isNotEmpty()->
-                    "Destination and Bank restoration were incomplete. Only ${verifiedRecoveryCopies.size} of ${selected.size} PK6 recovery snapshots verified; the retained destination backup did not."
-                else->
-                    "Automatic recovery and all retained recovery snapshots could not be verified. Keep the current destination and Bank files for review."
-            }
-            showDialog(
-                "Gen 6 Bank multi-withdrawal failed",
-                "${e.message?:"Unknown error"}\n\n$recovery"+
-                    (safetyBackup?.takeIf{retainedBackup}?.let{"\n\nVerified recovery backup: ${it.name}"}?:"")+
-                    (verifiedRecoveryCopies.filter{it.second.exists()}.takeIf{it.isNotEmpty()}?.joinToString(
-                        prefix="\nVerified Bank recovery snapshots: "
-                    ){it.second.name}?:"")
-            )
-        }
-    }
-
     private data class Gen7BankBatchItem(val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry)
 
     private fun gen7BankDestinationSlotIsStructurallyEmpty(
@@ -674,171 +510,6 @@ class MainActivity : Activity() {
         val raw=data.copyOfRange(offset,offset+PK6_STORED_SIZE)
         return raw.all{it==0.toByte()}&&
             parsePk6(raw,0,PK6_STORED_SIZE,false,maxSpecies)==null
-    }
-
-    private fun chooseSelectedGen7BankDestination(chosen:List<File>){
-        val file=importedFile?:return showDialog("Gen 7 Bank multi-withdrawal","Load a valid Sun, Moon, Ultra Sun or Ultra Moon destination save first.")
-        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
-        if(chosen.isEmpty())return showDialog("Gen 7 Bank multi-withdrawal","Select one or more Gen 7 Bank Pokémon first.")
-        if(chosen.map{it.absolutePath}.distinct().size!=chosen.size)return showDialog("Gen 7 Bank multi-withdrawal","The selection contains the same Bank record more than once. Nothing was changed.")
-        val destination=runCatching{file.readBytes()}.getOrNull()?:return showDialog("Gen 7 Bank multi-withdrawal","The destination save could not be read. Nothing was changed.")
-        if(generationForSize(destination.size)!=7||!validateGen7CoreChecksums(destination).first)return showDialog("Gen 7 Bank multi-withdrawal","The loaded destination is not a checksum-clean native Generation 7 save. Nothing was changed.")
-        val info=boxStorageInfo(destination)?:return showDialog("Gen 7 Bank multi-withdrawal","PSE could not resolve native Generation 7 PC storage.")
-        val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return showDialog("Gen 7 Bank multi-withdrawal","The PSE Bank folder could not be verified.")
-        val selected=try{chosen.map{candidate->
-            val bankFile=candidate.canonicalFile
-            require(bankFile.parentFile==root&&bankFile.isFile&&bankFile.extension.equals("pk7",true)){"A selected record is outside the Generation 7 PSE Bank."}
-            val bytes=bankFile.readBytes();val source=if(bytes.size==PK6_STORED_SIZE)parsePk6(bytes,0,PK6_STORED_SIZE,false,807)else null
-            require(source!=null&&source.checksumValid){"A selected Gen 7 Bank record is not a checksum-valid native PK7."}
-            Gen7BankBatchItem(bankFile,bytes,source)
-        }}catch(e:Exception){return showDialog("Gen 7 Bank multi-withdrawal",(e.message?:"A selected Gen 7 Bank record could not be read.")+" Nothing was changed.")}
-        val targets=(0 until info.second/30).mapNotNull{box->
-            val slots=(0 until 30).filter{slot->gen7BankDestinationSlotIsStructurallyEmpty(destination,info.first,info.second,info.third,box*30+slot)}
-            if(slots.size>=selected.size)box to slots.take(selected.size) else null
-        }
-        if(targets.isEmpty())return showDialog("Gen 7 Bank multi-withdrawal","No Generation 7 PC box has ${selected.size} structurally empty slots for the complete selection. Existing or nonzero slot data was left unchanged; free capacity, reduce the selection, or load another valid save.")
-        var consumed=false
-        AlertDialog.Builder(this).setTitle("Move ${selected.size} Gen 7 Pokémon to which box?")
-            .setMessage("This is a PSE Bank withdrawal, not an official trade, Pokémon Bank transaction or provenance claim. No conversion or Legalise change is performed. PSE will copy each exact native 232-byte PK7 into the listed structurally empty slots in selection order, update only the native PC checksum and required save signature, retain verified recovery data, reopen every destination record, then remove Bank records last.")
-            .setItems(targets.map{(box,slots)->"Box ${box+1} • Slots ${slots.joinToString(", "){(it+1).toString()}}"}.toTypedArray()){_,which->
-                if(consumed||which !in targets.indices){consumed=true;return@setItems};consumed=true
-                val(box,slots)=targets[which]
-                withdrawSelectedGen7BankPokemon(selected,destination,box,slots,file,openedUri,openedLabel)
-            }.setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
-    }
-
-    private fun withdrawSelectedGen7BankPokemon(selected:List<Gen7BankBatchItem>,openedDestination:ByteArray,targetBox:Int,targetSlots:List<Int>,file:File,openedUri:Uri?,openedLabel:String?){
-        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
-        var writeStarted=false;var safetyBackup:File?=null
-        var stagedDestination:ByteArray?=null
-        val recoveryCopies=ArrayList<Pair<Gen7BankBatchItem,File>>()
-        val cleanupAttempted=HashSet<String>()
-        var retainedRecovery=false
-        try{
-            require(selected.isNotEmpty()&&selected.map{it.bankFile.absolutePath}.distinct().size==selected.size){"The prepared Gen 7 Bank selection is empty or contains a duplicate."}
-            require(targetBox>=0&&targetSlots.size==selected.size&&targetSlots.distinct().size==targetSlots.size&&targetSlots.all{it in 0 until 30}){"The prepared Generation 7 destination slots are invalid."}
-            val original=file.readBytes();require(bound()&&original.contentEquals(openedDestination)&&generationForSize(original.size)==7){"The Generation 7 destination or source identity changed after slot selection."}
-            require(validateGen7CoreChecksums(original).first){"The Generation 7 destination no longer passes native checksum validation."}
-            val info=boxStorageInfo(original)?:error("PSE could not resolve native Generation 7 PC storage.")
-            require(targetBox in 0 until info.second/30){"The prepared Generation 7 destination box is invalid."}
-            val refreshed=selected.map{item->
-                val bytes=item.bankFile.readBytes();val source=if(bytes.size==PK6_STORED_SIZE)parsePk6(bytes,0,PK6_STORED_SIZE,false,807)else null
-                require(bytes.contentEquals(item.bankBytes)&&source!=null&&source.checksumValid&&source.pid==item.source.pid&&source.species==item.source.species&&source.tid==item.source.tid&&source.sid==item.source.sid){"A selected Gen 7 Bank record changed after destination review."}
-                Gen7BankBatchItem(item.bankFile,bytes,source)
-            }
-            val work=original.copyOf();val offsets=ArrayList<Int>();val allowed=HashSet<Int>()
-            for(i in refreshed.indices){
-                val global=targetBox*30+targetSlots[i];require(global in 0 until info.second){"A selected Generation 7 destination slot is invalid."}
-                val offset=info.first+global*PK6_STORED_SIZE;offsets.add(offset)
-                require(gen7BankDestinationSlotIsStructurallyEmpty(work,info.first,info.second,info.third,global)){"Box ${targetBox+1} • Slot ${targetSlots[i]+1} is no longer structurally empty. Existing slot data was not overwritten."}
-                refreshed[i].bankBytes.copyInto(work,offset);for(p in offset until offset+PK6_STORED_SIZE)allowed.add(p)
-                val raw=work.copyOfRange(offset,offset+PK6_STORED_SIZE);val staged=parsePk6(raw,0,PK6_STORED_SIZE,false,807)
-                require(raw.contentEquals(refreshed[i].bankBytes)&&staged!=null&&staged.checksumValid){"An exact selected PK7 did not stage in its destination slot."}
-            }
-            val checksum=gen7ChecksumOffset(work,14);allowed.add(checksum);allowed.add(checksum+1)
-            val signature=if(work.size==SIZE_G7_USUM)0x6C100 else 0x6BB00;for(i in signature until signature+0x80)allowed.add(i)
-            updateGen7BoxChecksum(work)
-            require(work.indices.all{it in allowed||work[it]==original[it]}){"The Gen 7 batch changed data outside the selected PK7 slots, native PC checksum and required save signature."}
-            require(validateGen7CoreChecksums(work).first){"The staged Generation 7 destination failed native checksum verification."}
-            val backup=File.createTempFile(backupGameName(file)+"_PreGen7BankBatch_",".backup",backupsDir());safetyBackup=backup
-            backup.writeBytes(original);require(backup.readBytes().contentEquals(original)){"The exact Generation 7 recovery backup did not verify."};retainGen2ToGen7SafetyBackup(backup,original)
-            refreshed.forEachIndexed{index,item->
-                val copy=File.createTempFile("PSE_G7Batch_${index+1}_BankRecovery_",".tmp",bankDir());copy.writeBytes(item.bankBytes)
-                require(copy.readBytes().contentEquals(item.bankBytes)){"A PK7 Bank recovery snapshot did not verify."};recoveryCopies.add(item to copy)
-            }
-            fun recoveryValid()=isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&recoveryCopies.size==refreshed.size&&recoveryCopies.all{(item,copy)->copy.readBytes().contentEquals(item.bankBytes)}
-            require(bound()&&file.readBytes().contentEquals(original)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}&&recoveryValid()){ "The destination, Bank records or retained recovery data changed before writing." }
-            stagedDestination=work.copyOf()
-            writeStarted=true;file.writeBytes(work);val written=file.readBytes()
-            require(written.contentEquals(work)&&written.indices.all{it in allowed||written[it]==original[it]}){"The persisted Generation 7 save differs from the reviewed write scope."}
-            require(validateGen7CoreChecksums(written).first){"The persisted Generation 7 save failed native checksum verification."}
-            for(i in refreshed.indices){val actual=written.copyOfRange(offsets[i],offsets[i]+PK6_STORED_SIZE);val reopened=parsePk6(actual,0,PK6_STORED_SIZE,false,807);require(actual.contentEquals(refreshed[i].bankBytes)&&reopened!=null&&reopened.checksumValid){"An exact PK7 did not verify after destination reopen."}}
-            for(item in refreshed){
-                require(bound()&&file.readBytes().contentEquals(work)&&recoveryValid()){ "The verified Generation 7 destination or retained recovery data changed before Bank cleanup." }
-                val current=item.bankFile.readBytes();require(current.contentEquals(item.bankBytes)&&parsePk6(current,0,PK6_STORED_SIZE,false,807)?.checksumValid==true){"A selected Gen 7 Bank record changed before cleanup."}
-                cleanupAttempted.add(item.bankFile.absolutePath)
-                require(item.bankFile.delete()&&!item.bankFile.exists()){ "A selected Gen 7 Bank record could not be removed after destination verification." }
-            }
-            require(bound()&&file.readBytes().contentEquals(work)&&recoveryValid()){ "The verified Generation 7 destination or retained recovery data changed after Bank cleanup." }
-            retainedRecovery=!cleanupExactBankRecoverySnapshots(
-                recoveryCopies.map{it.second},recoveryCopies.map{it.first.bankBytes}
-            )
-            requireSelectedNativeBankBatchPostCleanup(
-                7,bound(),retainedRecovery,recoveryCopies.map{it.second},
-                file,work,backup,original,isBackupKept(backup),refreshed.map{it.bankFile}
-            )
-            selectedBankFiles.clear();bankMultiSelectMode=false
-            val recoveryNotice=if(retainedRecovery)
-                "; one or more exact temporary Bank recoveries retained for review" else ""
-            Toast.makeText(this,"Withdrew ${refreshed.size} exact Gen 7 PK7 records to Box ${targetBox+1} • Slots ${targetSlots.joinToString(", "){(it+1).toString()}} and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
-        }catch(e:Exception){
-            val bankRestored=selected.map{item->runCatching{
-                if(!item.bankFile.exists()){require(cleanupAttempted.contains(item.bankFile.absolutePath)){"A Gen 7 Bank record disappeared before PSE attempted cleanup; its path was not overwritten."};require(item.bankFile.createNewFile()){ "A Bank recovery path could not be reserved." };item.bankFile.writeBytes(item.bankBytes)}
-                val restored=item.bankFile.readBytes();val parsed=if(restored.size==PK6_STORED_SIZE)parsePk6(restored,0,PK6_STORED_SIZE,false,807)else null
-                require(restored.contentEquals(item.bankBytes)&&parsed!=null&&parsed.checksumValid&&parsed.pid==item.source.pid&&parsed.species==item.source.species&&parsed.tid==item.source.tid&&parsed.sid==item.source.sid){"An exact Gen 7 Bank record could not be restored or verified."};true
-            }.getOrDefault(false)}.all{it}
-            val destinationRestored=runCatching{
-                val current=file.readBytes()
-                if(!current.contentEquals(openedDestination)){
-                    require(writeStarted){"No Generation 7 destination write began; unknown current bytes were left untouched."}
-                    val staged=stagedDestination
-                    require(staged!=null&&current.contentEquals(staged)){"The Generation 7 destination no longer matches this batch withdrawal's staged bytes; the retained backup was left for recovery."}
-                    file.writeBytes(openedDestination)
-                }
-                val restored=file.readBytes();require(restored.contentEquals(openedDestination)&&generationForSize(restored.size)==7&&validateGen7CoreChecksums(restored).first){"The restored Generation 7 destination did not verify."};true
-            }.getOrDefault(false)
-            val retainedBackup=safetyBackup?.let{saved->runCatching{
-                saved.isFile&&isBackupKept(saved)&&saved.readBytes().contentEquals(openedDestination)
-            }.getOrDefault(false)}?:false
-            val verifiedRecoveryCopies=recoveryCopies.filter{(item,copy)->runCatching{
-                val recovered=copy.readBytes();val parsed=if(recovered.size==PK6_STORED_SIZE)parsePk6(recovered,0,PK6_STORED_SIZE,false,807)else null
-                copy.isFile&&recovered.contentEquals(item.bankBytes)&&parsed!=null&&parsed.checksumValid&&
-                    parsed.pid==item.source.pid&&parsed.species==item.source.species&&
-                    parsed.tid==item.source.tid&&parsed.sid==item.source.sid
-            }.getOrDefault(false)}
-            val allRecoveryCopiesVerified=recoveryCopies.size==selected.size&&verifiedRecoveryCopies.size==selected.size
-            val recoveryCopiesClean=if(bankRestored&&destinationRestored){
-                cleanupExactBankRecoverySnapshots(
-                    recoveryCopies.map{it.second},recoveryCopies.map{it.first.bankBytes}
-                )
-            }else false
-            val recovery=when{
-                bankRestored&&destinationRestored&&recoveryCopiesClean->
-                    "The exact Generation 7 destination and every selected PK7 Bank record were restored or kept and verified."
-                bankRestored&&destinationRestored->
-                    "The exact Generation 7 destination and every selected PK7 Bank record were restored or kept and verified. One or more exact temporary Bank recovery snapshots changed or could not be removed safely and were retained for review."
-                bankRestored&&retainedBackup->
-                    "Every selected PK7 Bank record was restored or kept. Destination restoration was not verified, but the exact retained destination backup verified."
-                bankRestored->
-                    "Every selected PK7 Bank record was restored or kept, but destination restoration and its retained backup were not verified. The current destination was left untouched."
-                destinationRestored&&allRecoveryCopiesVerified->
-                    "The exact Generation 7 destination was restored. Bank restoration was incomplete, but every exact PK7 recovery snapshot verified."
-                destinationRestored&&verifiedRecoveryCopies.isNotEmpty()->
-                    "The exact Generation 7 destination was restored. Bank restoration was incomplete; only ${verifiedRecoveryCopies.size} of ${selected.size} PK7 recovery snapshots verified."
-                destinationRestored->
-                    "The exact Generation 7 destination was restored, but Bank restoration and all PK7 recovery snapshots were not verified."
-                retainedBackup&&allRecoveryCopiesVerified->
-                    "Destination and Bank restoration were incomplete, but the exact retained destination backup and every PK7 recovery snapshot verified."
-                retainedBackup&&verifiedRecoveryCopies.isNotEmpty()->
-                    "Destination and Bank restoration were incomplete. The exact retained destination backup and ${verifiedRecoveryCopies.size} of ${selected.size} PK7 recovery snapshots verified."
-                retainedBackup->
-                    "Destination and Bank restoration were incomplete. The exact retained destination backup verified, but no PK7 recovery snapshot did."
-                allRecoveryCopiesVerified->
-                    "Destination and Bank restoration were incomplete. Every PK7 recovery snapshot verified, but the retained destination backup did not."
-                verifiedRecoveryCopies.isNotEmpty()->
-                    "Destination and Bank restoration were incomplete. Only ${verifiedRecoveryCopies.size} of ${selected.size} PK7 recovery snapshots verified; the retained destination backup did not."
-                else->
-                    "Automatic recovery and all retained recovery snapshots could not be verified. Keep the current destination and Bank files for review."
-            }
-            showDialog(
-                "Gen 7 Bank multi-withdrawal failed",
-                "${e.message?:"Unknown error"}\n\n$recovery"+
-                    (safetyBackup?.takeIf{retainedBackup}?.let{"\n\nVerified recovery backup: ${it.name}"}?:"")+
-                    (verifiedRecoveryCopies.filter{it.second.exists()}.takeIf{it.isNotEmpty()}?.joinToString(
-                        prefix="\nVerified Bank recovery snapshots: "
-                    ){it.second.name}?:"")
-            )
-        }
     }
 
     private fun chooseSelectedStandardBankDestination(chosen:List<File>,generation:Int){
@@ -12324,8 +11995,6 @@ class MainActivity : Activity() {
 
     private fun prepareGen5BankWithdrawal(bankFile:File,shown:PokemonEntry){
         val file=importedFile?:return showDialog("Gen 5 Bank withdrawal","Load a valid Black, White, Black 2 or White 2 destination save first.")
-        if(!runCatching{file.absoluteFile==file.canonicalFile&&file.isFile}.getOrDefault(false))
-            return showDialog("Gen 5 Bank withdrawal","The destination path is unresolved, noncanonical or unavailable. Reopen the save.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         val destination=runCatching{file.readBytes()}.getOrNull()
             ?:return showDialog("Gen 5 Bank withdrawal","The destination save could not be read.")
@@ -12414,17 +12083,9 @@ class MainActivity : Activity() {
 
     private fun transferGen5BankWithdrawal(p:Gen5BankWithdrawalPrepared,target:Int){
         val file=p.destinationFile
-        val destinationIdentity=runCatching{
-            require(file.absoluteFile==file.canonicalFile&&file.isFile)
-            file.canonicalPath
-        }.getOrElse{
-            showDialog("Gen 5 Bank withdrawal","The destination path is unresolved, noncanonical or unavailable. Reopen PSE Bank.");return
-        }
-        fun destinationMatches(expected:ByteArray)=runCatching{
-            file.absoluteFile==file.canonicalFile&&file.canonicalPath==destinationIdentity&&file.isFile&&
-                gen5BankWithdrawalIdentityBound(p)&&file.readBytes().contentEquals(expected)
-        }.getOrDefault(false)
-        if(!gen5BankWithdrawalStillBound(p)||!destinationMatches(p.destination)){showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
+        val destinationBinding=PseBankDestinationBinding.capture(file)
+        if(destinationBinding==null){showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
+        if(!gen5BankWithdrawalStillBound(p)||!destinationBinding.matches(p.destination,gen5BankWithdrawalIdentityBound(p))){showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
         val original=runCatching{file.readBytes()}.getOrNull()
             ?:return showDialog("Gen 5 Bank withdrawal","The destination save could not be read.")
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
@@ -12460,13 +12121,13 @@ class MainActivity : Activity() {
             retainGen6ToGen5SafetyBackup(recovery,original)
             val bankCopy=File.createTempFile("PSE_G5Withdraw_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
             bankCopy.writeBytes(bank);require(bankCopy.readBytes().contentEquals(bank)){"The exact PK5 Bank recovery snapshot did not verify."}
-            require(destinationMatches(original)&&isBackupKept(recovery)&&
+            require(destinationBinding.matches(original,gen5BankWithdrawalIdentityBound(p))&&isBackupKept(recovery)&&
                 p.bankFile.readBytes().contentEquals(bank)&&bankCopy.readBytes().contentEquals(bank)){
                 "The destination identity, retained backup or Bank snapshots changed before writing."
             }
             stagedDestination=save.copyOf()
             writeStarted=true;file.writeBytes(save)
-            val written=file.readBytes();require(destinationMatches(save)&&written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){
+            val written=file.readBytes();require(destinationBinding.matches(save,gen5BankWithdrawalIdentityBound(p))&&written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){
                 "The persisted Generation 5 save differs from the reviewed write scope."
             }
             val reopenedProfile=detectGen5Profile(written)?:error("The persisted Generation 5 save could not be reopened.")
@@ -12478,13 +12139,13 @@ class MainActivity : Activity() {
                 reopened.species==source.species&&reopened.tid==source.tid&&reopened.sid==source.sid){
                 "The exact 136-byte PK5 did not persist after reopening."
             }
-            require(destinationMatches(save)&&p.bankFile.readBytes().contentEquals(bank)&&
+            require(destinationBinding.matches(save,gen5BankWithdrawalIdentityBound(p))&&p.bankFile.readBytes().contentEquals(bank)&&
                 isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
                 "The destination identity, verified save or retained recovery snapshots changed before cleanup."
             }
             bankDeleteAttempted=true
             require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 5 Bank record could not be removed after destination verification."}
-            require(destinationMatches(save)&&!p.bankFile.exists()&&
+            require(destinationBinding.matches(save,gen5BankWithdrawalIdentityBound(p))&&!p.bankFile.exists()&&
                 isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(bank)){
                 "The destination identity, verified save, removed Bank path or retained recovery snapshots changed after cleanup."
             }
@@ -12492,7 +12153,7 @@ class MainActivity : Activity() {
                 listOf(bankCopy),listOf(p.bankBytes)
             )
             requireNativeBankWithdrawalPostCleanup(
-                5,destinationMatches(save),retainedRecovery,bankCopy,
+                5,destinationBinding.matches(save,gen5BankWithdrawalIdentityBound(p)),retainedRecovery,bankCopy,
                 file,save,recovery,original,isBackupKept(recovery),p.bankFile
             )
         }catch(e:Exception){
@@ -12509,8 +12170,8 @@ class MainActivity : Activity() {
             }.isSuccess
             val destinationRestored=runCatching{
                 restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Generation 5 destination write began; unknown current bytes were left untouched.","The Generation 5 destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery.")
-                val restored=file.readBytes();require(destinationMatches(original)){
-                    "The restored Generation 5 destination identity or bytes changed."
+                val restored=file.readBytes();require(destinationBinding.matches(original,gen5BankWithdrawalIdentityBound(p))){
+                    "The restored Generation 5 destination did not verify."
                 }
                 val profile=detectGen5Profile(restored)
                     ?:error("The restored Generation 5 layout is invalid.")
