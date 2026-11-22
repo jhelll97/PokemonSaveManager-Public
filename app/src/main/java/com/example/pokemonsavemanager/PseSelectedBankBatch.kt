@@ -597,7 +597,20 @@ internal fun restoreExactMissingStandardBankRecord(
         }
     }
     require(file.createNewFile()) { "A Bank recovery path could not be reserved." }
-    file.writeBytes(expected)
+    val writeFailure=runCatching { file.writeBytes(expected) }.exceptionOrNull()
+    val restored=runCatching {
+        file.isFile && file.readBytes().contentEquals(expected)
+    }.getOrDefault(false)
+    if (!restored && writeFailure!=null) {
+        val partial=runCatching { if(file.isFile) file.readBytes() else null }.getOrNull()
+        if(partial!=null&&partial.size<expected.size&&expected.copyOf(partial.size).contentEquals(partial)) {
+            runCatching {
+                require(file.absoluteFile==file.canonicalFile)
+                require(file.delete()&&!file.exists())
+            }
+        }
+    }
+    require(restored) { "The restored Bank record did not reopen byte-for-byte." }
 }
 
 internal fun cleanupExactSelectedGen3BankCopies(
