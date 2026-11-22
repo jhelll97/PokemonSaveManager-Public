@@ -27,9 +27,23 @@ internal object BankTransferRecovery {
             else->error("Unsupported Bank recovery route.")
         }
         val copy=File.createTempFile(prefix,".tmp",directory)
-        copy.writeBytes(expected)
-        require(matches(copy,expected)){failure}
-        return copy
+        try {
+            copy.writeBytes(expected)
+            require(matches(copy,expected)){failure}
+            return copy
+        } catch(error:Exception) {
+            if(matches(copy,expected))return copy
+            val partial=runCatching { if(copy.isFile)copy.readBytes() else null }.getOrNull()
+            if(partial!=null&&partial.size<expected.size&&expected.copyOf(partial.size).contentEquals(partial)) {
+                runCatching {
+                    require(copy.absoluteFile==copy.canonicalFile)
+                    require(copy.delete()&&!copy.exists())
+                }
+            }
+            val retained=if(runCatching { copy.exists() }.getOrDefault(false))
+                " Retained Bank recovery snapshot: ${copy.name}." else ""
+            throw IllegalStateException((error.message?:failure)+retained,error)
+        }
     }
 
     fun matches(snapshot: File?, expected: ByteArray): Boolean =
