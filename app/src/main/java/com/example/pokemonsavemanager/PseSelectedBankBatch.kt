@@ -581,10 +581,18 @@ internal fun cleanupExactSelectedGen3BankCopies(
         if(index in expected.indices)candidates.add(file to expected[index])
         else if(file.exists())clean=false
     }
-    candidates.distinctBy{it.first.absolutePath}.forEach { (file,bytes) ->
+    candidates.groupBy { it.first.absolutePath }.values.forEach { references ->
+        val(file,bytes)=references.first()
+        val expectationsMatch=references.map { (_,expected) ->
+            expected.contentEquals(bytes)
+        }.all { it }
+        if(!expectationsMatch){
+            clean=false
+            return@forEach
+        }
         val removed=runCatching {
             if(file.exists()){
-                require(file.readBytes().contentEquals(bytes)){"A staged Gen 3 Bank copy changed; it was retained for review."}
+                require(file.isFile&&file.readBytes().contentEquals(bytes)){"A staged Gen 3 Bank copy changed; it was retained for review."}
                 require(file.delete()){"An exact staged Gen 3 Bank copy could not be removed."}
             }
             require(!file.exists()){"An exact staged Gen 3 Bank copy still exists."}
