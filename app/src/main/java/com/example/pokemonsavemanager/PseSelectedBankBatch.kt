@@ -346,8 +346,14 @@ internal class ExactBankRecoverySet {
     private val entries=ArrayList<Pair<File,ByteArray>>()
 
     fun capture(bytes: ByteArray, directory: File) {
+        require(directory.absoluteFile==directory.canonicalFile&&directory.isDirectory) {
+            "The Gen 3 Bank recovery directory is unresolved, noncanonical or unavailable."
+        }
         val file=File.createTempFile("PSE_G3_BankPartyRecovery_", ".tmp", directory)
         entries.add(file to bytes.copyOf())
+        require(file.absoluteFile==file.canonicalFile&&file.parentFile==directory) {
+            "A Gen 3 Bank recovery snapshot was not created at its canonical directory identity."
+        }
         file.writeBytes(bytes)
         require(file.isFile && file.readBytes().contentEquals(bytes)) {
             "A Bank recovery snapshot did not verify."
