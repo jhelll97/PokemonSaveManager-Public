@@ -62951,6 +62951,7 @@ private data class Gen2ToGen5LegalisePlan(
             val box=targets[which].first
             val fresh=runCatching{file.readBytes()}.getOrElse{showDialog("Withdraw failed","The fresh Gen 1 save could not be read. Nothing was changed.");return@setItems}
             var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null;var bankRecovery:File?=null
+            var bankRecoveryBinding:PseBankSourceBinding?=null
             var stagedDestination:ByteArray?=null
             try {
                 require(destinationBinding.matches(openedDestination,bound())&&fresh.contentEquals(openedDestination)){"The Gen 1 destination or its source identity changed after the box list opened."}
@@ -62971,9 +62972,13 @@ private data class Gen2ToGen5LegalisePlan(
                 val stagedAdded=staged.firstOrNull{it.slot==slot};require(stagedAdded!=null && sameGen1TransferRecord(stagedAdded,parsed)){"The staged withdrawn Pokémon did not preserve every supported field."}
                 val backup=File.createTempFile(backupGameName(file)+"_PreGen1BankWithdraw_",".backup",backupsDir());safetyBackup=backup
                 backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The exact Gen 1 recovery backup did not verify."};retainGen2ToGen1SafetyBackup(backup,fresh)
-                val bankCopy=File.createTempFile("PSE_G1Withdraw_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
-                bankCopy.writeBytes(raw);require(exactBank(bankCopy.readBytes())){"The exact Gen 1 Bank recovery snapshot did not verify."}
-                require(destinationBinding.matches(fresh,bound())&&sourceBinding.matches(openedRaw,true)&&exactBank(selected.readBytes())&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&exactBank(bankCopy.readBytes())){"The destination, Bank record or retained recovery snapshots changed before writing."}
+                require(bankRoot.absoluteFile==bankRoot.canonicalFile&&bankRoot.isDirectory){"The canonical PSE Bank recovery folder is unavailable."}
+                val bankCopy=File.createTempFile("PSE_G1Withdraw_BankRecovery_",".tmp",bankRoot);bankRecovery=bankCopy
+                require(bankCopy.absoluteFile==bankCopy.canonicalFile&&bankCopy.parentFile==bankRoot){"The Gen 1 Bank recovery snapshot path could not be bound."}
+                val bankCopyBinding=PseBankSourceBinding.capture(bankCopy)?:error("The Gen 1 Bank recovery snapshot identity could not be captured.")
+                bankRecoveryBinding=bankCopyBinding
+                bankCopy.writeBytes(raw);require(bankCopyBinding.matches(raw,true)&&exactBank(bankCopy.readBytes())){"The exact Gen 1 Bank recovery snapshot did not verify."}
+                require(destinationBinding.matches(fresh,bound())&&sourceBinding.matches(openedRaw,true)&&exactBank(selected.readBytes())&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&bankCopyBinding.matches(raw,true)&&exactBank(bankCopy.readBytes())){"The destination, Bank record or retained recovery snapshots changed before writing."}
                 stagedDestination=d.copyOf()
                 writeStarted=true;file.writeBytes(d)
                 val written=file.readBytes();require(destinationBinding.matches(d,bound())&&written.contentEquals(d)){"The destination save changed while the Gen 1 Bank withdrawal was being written."};val post=verifyGen1WriteState(written,box);require(post.first){post.second}
@@ -62981,15 +62986,18 @@ private data class Gen2ToGen5LegalisePlan(
                 require(after.size==before.size+1 && after.take(before.size).zip(before).all{(a,b)->sameGen1TransferRecord(a,b)}){"An existing destination Pokémon changed after Bank withdrawal persistence."}
                 val q=after.firstOrNull{it.slot==slot};require(q!=null && sameGen1TransferRecord(q,parsed)){"The withdrawn Pokémon did not verify after re-reading the save."}
                 val bit2=dex-1;val mask2=1 shl(bit2%8);require((written[0x25A3+bit2/8].toInt() and mask2)!=0&&(written[0x25B6+bit2/8].toInt() and mask2)!=0){"Withdrawn Pokémon did not register Seen + Caught after the save was re-read."}
-                require(destinationBinding.matches(d,bound())&&sourceBinding.matches(openedRaw,true)&&exactBank(selected.readBytes())&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&exactBank(bankCopy.readBytes())){"The verified destination or retained recovery snapshots changed before Bank cleanup."}
+                require(destinationBinding.matches(d,bound())&&sourceBinding.matches(openedRaw,true)&&exactBank(selected.readBytes())&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&bankCopyBinding.matches(raw,true)&&exactBank(bankCopy.readBytes())){"The verified destination or retained recovery snapshots changed before Bank cleanup."}
                 bankDeleteAttempted=true;require(selected.delete()&&!selected.exists()){"The Gen 1 Bank entry could not be removed after destination verification."}
                 require(!selected.exists()&&destinationBinding.matches(d,bound())&&isBackupKept(backup)&&
-                    backup.readBytes().contentEquals(fresh)&&exactBank(bankCopy.readBytes())){
+                    backup.readBytes().contentEquals(fresh)&&bankCopyBinding.matches(raw,true)&&exactBank(bankCopy.readBytes())){
                     "The verified destination, removed Gen 1 Bank path or retained recovery snapshots changed after Bank cleanup."
                 }
-                val bankRecoveryClean=cleanupExactBankRecoverySnapshots(
+                val bankRecoveryClean=bankCopyBinding.matches(raw,true)&&cleanupExactBankRecoverySnapshots(
                     listOf(bankCopy),listOf(raw)
                 )
+                require(if(bankRecoveryClean)!bankCopy.exists() else bankCopyBinding.matches(raw,true)){
+                    "The Gen 1 Bank recovery snapshot identity changed during recovery cleanup."
+                }
                 requireNativeBankWithdrawalPostCleanup(
                     generation=1,
                     destinationBound=destinationBinding.matches(d,bound()),
@@ -63020,11 +63028,11 @@ private data class Gen2ToGen5LegalisePlan(
                     val restored=file.readBytes();require(destinationBinding.matches(fresh,bound())&&restored.contentEquals(fresh)){"The restored Gen 1 destination bytes did not verify."};require(verifyGen1SaveIntegrity(restored).first){"The restored Gen 1 destination integrity did not verify."};true
                 }.getOrDefault(false)
                 val verifiedBankRecovery=bankRecovery?.let{copy->runCatching{
-                    copy.isFile&&exactBank(copy.readBytes())
+                    bankRecoveryBinding?.matches(openedRaw,true)==true&&exactBank(copy.readBytes())
                 }.getOrDefault(false)}?:false
                 val bankRecoveryClean=if(bankRestored&&destinationRestored){
                     bankRecovery?.let{
-                        cleanupExactBankRecoverySnapshots(listOf(it),listOf(openedRaw))
+                        bankRecoveryBinding?.matches(openedRaw,true)==true&&cleanupExactBankRecoverySnapshots(listOf(it),listOf(openedRaw))
                     }?:true
                 }else false
                 val retainedBackup=safetyBackup?.let{saved->runCatching{
