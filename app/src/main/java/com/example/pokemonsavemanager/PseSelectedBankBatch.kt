@@ -765,8 +765,22 @@ internal fun runSelectedStandardBankBatchReview(
     showFailure: (String,String) -> Unit,
     onSuccess: (Int,Int) -> Unit
 ) {
+    val reviewedIdentity=runCatching {
+        require(file.absoluteFile==file.canonicalFile&&file.isFile)
+        file.canonicalPath
+    }.getOrNull()?:return showFailure(
+        "Move selected",
+        "The destination path is unresolved, noncanonical or unavailable. Reopen PSE Bank. Nothing was changed."
+    )
+    fun destinationIdentityBound()=runCatching {
+        file.absoluteFile==file.canonicalFile&&file.canonicalPath==reviewedIdentity&&file.isFile&&bound()
+    }.getOrDefault(false)
     val reviewedDestination=runCatching{file.readBytes()}.getOrNull()
         ?:return showFailure("Move selected","The destination save could not be reviewed. Nothing was changed.")
+    if(!destinationIdentityBound())return showFailure(
+        "Move selected",
+        "The destination identity changed before review. Reopen PSE Bank. Nothing was changed."
+    )
     val info=storageInfo(reviewedDestination)
         ?:return showFailure("Move selected","PSE could not resolve this save's PC storage. Nothing was changed.")
     val(boxOffset,slotCount,maxSpecies)=info
@@ -780,7 +794,7 @@ internal fun runSelectedStandardBankBatchReview(
     android.app.AlertDialog.Builder(activity).setTitle("Move ${chosen.size} Pokémon to which box?")
         .setItems(labels){_,which->
             val current=runCatching{file.readBytes()}.getOrNull()
-            if(current==null||!bound()||!current.contentEquals(reviewedDestination)){
+            if(current==null||!destinationIdentityBound()||!current.contentEquals(reviewedDestination)){
                 showFailure("Move selected","The reviewed destination identity or bytes changed. Reopen PSE Bank. Nothing was changed.")
                 return@setItems
             }
@@ -821,7 +835,7 @@ internal fun runSelectedStandardBankBatchReview(
                 .setMessage("Generation $generation PSE withdrawal\n\nDestination slots: $destinations\n\nThe exact selected Bank bytes and destination save are bound to this review. No conversion or Legalise change occurs. This is not an official trade, Pokémon Bank or HOME transfer, legality certification, or verified provenance. Cancel leaves every file unchanged.")
                 .setPositiveButton("Move and verify"){_,_->
                     val original=runCatching{file.readBytes()}.getOrNull()
-                    if(original==null||!bound()||!original.contentEquals(reviewedDestination)){
+                    if(original==null||!destinationIdentityBound()||!original.contentEquals(reviewedDestination)){
                         showFailure("Move selected","The reviewed destination identity or bytes changed. Reopen PSE Bank. Nothing was changed.")
                         return@setPositiveButton
                     }
