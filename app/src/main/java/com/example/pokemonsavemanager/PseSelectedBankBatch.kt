@@ -133,7 +133,8 @@ internal fun retainedBankBackupMatches(
     kept: Boolean
 ): Boolean = backup?.let { file ->
     runCatching {
-        file.isFile && kept && file.readBytes().contentEquals(expected)
+        file.absoluteFile==file.canonicalFile &&
+            file.isFile && kept && file.readBytes().contentEquals(expected)
     }.getOrDefault(false)
 } ?: false
 
