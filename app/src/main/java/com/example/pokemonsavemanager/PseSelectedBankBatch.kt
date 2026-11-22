@@ -743,8 +743,15 @@ internal fun executeSelectedStandardBankBatch(
             require(recovery.readBytes().contentEquals(raw)){"Bank recovery snapshot ${index+1} did not verify."}
             bankRecoveries.add(recovery)
         }
-        fun recoveriesValid()=bankRecoveries.size==sourceBytes.size&&bankRecoveries.indices.all {
-            bankRecoveries[it].readBytes().contentEquals(sourceBytes[it])
+        fun recoveriesValid(): Boolean {
+            if(bankRecoveries.size!=sourceBytes.size)return false
+            val exactMatches=bankRecoveries.indices.map { index ->
+                runCatching {
+                    bankRecoveries[index].isFile&&
+                        bankRecoveries[index].readBytes().contentEquals(sourceBytes[index])
+                }.getOrDefault(false)
+            }
+            return exactMatches.all { it }
         }
         require(bound()&&file.readBytes().contentEquals(original)&&sources.indices.all {
             sources[it].readBytes().contentEquals(sourceBytes[it])
