@@ -67643,8 +67643,14 @@ private data class Gen2ToGen5LegalisePlan(
                     if(batchDestination==null||importedFile?.absolutePath!=batchDestination.absolutePath||currentSourceUri!=batchDestinationUri||currentSourceLabel!=batchDestinationLabel){showDialog("Gen 5 Bank multi-withdrawal","The destination identity changed since this Bank selection opened. Reopen PSE Bank. Nothing was changed.");return@setOnClickListener}
                     chooseSelectedGen5BankDestination(chosen)
                 }
-                else if(bankViewGeneration==6 && importedFile?.let{generationForSize(it.length().toInt())}==6)chooseSelectedGen6BankDestination(chosen)
-                else if(bankViewGeneration==7 && importedFile?.let{generationForSize(it.length().toInt())}==7)chooseSelectedGen7BankDestination(chosen)
+                else if(bankViewGeneration==6 && importedFile?.let{generationForSize(it.length().toInt())}==6){
+                    if(batchDestination==null||importedFile?.absolutePath!=batchDestination.absolutePath||currentSourceUri!=batchDestinationUri||currentSourceLabel!=batchDestinationLabel){showDialog("Gen 6 Bank multi-withdrawal","The destination identity changed since this Bank selection opened. Reopen PSE Bank. Nothing was changed.");return@setOnClickListener}
+                    chooseSelectedStandardBankDestination(chosen,6)
+                }
+                else if(bankViewGeneration==7 && importedFile?.let{generationForSize(it.length().toInt())}==7){
+                    if(batchDestination==null||importedFile?.absolutePath!=batchDestination.absolutePath||currentSourceUri!=batchDestinationUri||currentSourceLabel!=batchDestinationLabel){showDialog("Gen 7 Bank multi-withdrawal","The destination identity changed since this Bank selection opened. Reopen PSE Bank. Nothing was changed.");return@setOnClickListener}
+                    chooseSelectedStandardBankDestination(chosen,7)
+                }
                 else showDialog("Move selected","Load a matching supported save for this Bank generation before moving the selected Pokémon together.")
             }},LinearLayout.LayoutParams(0,dp(48),1f))
         }
