@@ -38198,6 +38198,7 @@ class MainActivity : Activity() {
         if(destinationBinding==null||sourceBinding==null){showDialog("Gen 4 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.");return}
         val original=try{file.readBytes()}catch(e:Exception){showDialog("Withdraw",e.message?:"Could not read save");return}
         var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null;var bankRecovery:File?=null
+        var bankRecoveryBinding:PseBankSourceBinding?=null
         var stagedDestination:ByteArray?=null
         var retainedRecovery=false
         try{
@@ -38213,18 +38214,22 @@ class MainActivity : Activity() {
             val after=gen4Validation(save,profile);if(!after.generalChecksum || !after.storageChecksum || after.badPk4!=0)throw IllegalStateException("Gen 4 checksum verification failed")
             val backup=File.createTempFile(backupGameName(file)+"_PreGen4BankWithdraw_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(original);require(backup.readBytes().contentEquals(original)){"The exact Gen 4 recovery backup did not verify."};retainGen2ToGen4SafetyBackup(backup,original)
-            val bankCopy=File.createTempFile("PSE_G4Withdraw_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
-            bankCopy.writeBytes(raw);require(bankCopy.readBytes().contentEquals(raw)){"The exact PK4 Bank recovery snapshot did not verify."}
-            require(destinationBinding.matches(original,bound())&&sourceBinding.matches(raw,true)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The destination, Bank record or retained recovery snapshots changed before writing."}
+            val bankRoot=bankDir();require(bankRoot.absoluteFile==bankRoot.canonicalFile&&bankRoot.isDirectory){"The canonical PSE Bank recovery folder is unavailable."}
+            val bankCopy=File.createTempFile("PSE_G4Withdraw_BankRecovery_",".tmp",bankRoot);bankRecovery=bankCopy
+            require(bankCopy.absoluteFile==bankCopy.canonicalFile&&bankCopy.parentFile==bankRoot){"The PK4 Bank recovery snapshot path could not be bound."}
+            val bankCopyBinding=PseBankSourceBinding.capture(bankCopy)?:error("The PK4 Bank recovery snapshot identity could not be captured.")
+            bankRecoveryBinding=bankCopyBinding
+            bankCopy.writeBytes(raw);require(bankCopyBinding.matches(raw,true)){"The exact PK4 Bank recovery snapshot did not verify."}
+            require(destinationBinding.matches(original,bound())&&sourceBinding.matches(raw,true)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopyBinding.matches(raw,true)){"The destination, Bank record or retained recovery snapshots changed before writing."}
             stagedDestination=save.copyOf()
             writeStarted=true;file.writeBytes(save);val verify=file.readBytes();val vp=detectGen4Profile(verify)?:throw IllegalStateException("Written save layout could not be re-read");val vv=gen4Validation(verify,vp)
             if(!destinationBinding.matches(save,bound())||!vv.generalChecksum || !vv.storageChecksum || vv.badPk4!=0)throw IllegalStateException("Written Gen 4 save failed verification")
             val vo=gen4BoxSlotOffset(verify,vp,target);val actual=verify.copyOfRange(vo,vo+136);val mon=parsePk4(actual,false)
             if(!actual.contentEquals(raw)||mon==null||!mon.checksumValid||mon.pid!=source.pid||mon.species!=source.species||mon.tid!=source.tid||mon.sid!=source.sid)throw IllegalStateException("Withdrawn PK4 did not verify after re-read")
-            require(destinationBinding.matches(save,bound())&&sourceBinding.matches(raw,true)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){"The verified destination or retained recovery snapshots changed before Bank cleanup."}
+            require(destinationBinding.matches(save,bound())&&sourceBinding.matches(raw,true)&&isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&bankCopyBinding.matches(raw,true)){"The verified destination or retained recovery snapshots changed before Bank cleanup."}
             bankDeleteAttempted=true;require(bankFile.delete()&&!bankFile.exists()){"The destination verified, but the Bank entry could not be removed"}
             require(!bankFile.exists()&&destinationBinding.matches(save,bound())&&isBackupKept(backup)&&
-                backup.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(raw)){
+                backup.readBytes().contentEquals(original)&&bankCopyBinding.matches(raw,true)){
                 "The verified destination, removed Gen 4 Bank path or retained recovery snapshots changed after Bank cleanup."
             }
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
@@ -38253,12 +38258,12 @@ class MainActivity : Activity() {
             }.getOrDefault(false)}?:false
             val bankRecoveryVerified=bankRecovery?.let{saved->runCatching{
                 val recovered=saved.readBytes();val parsed=if(recovered.size==136)parsePk4(recovered,false)else null
-                saved.isFile&&recovered.contentEquals(openedBank)&&parsed!=null&&parsed.checksumValid&&
+                bankRecoveryBinding?.matches(openedBank,true)==true&&recovered.contentEquals(openedBank)&&parsed!=null&&parsed.checksumValid&&
                     parsed.pid==p.pid&&parsed.species==p.species&&parsed.tid==p.tid&&parsed.sid==p.sid
             }.getOrDefault(false)}?:false
             val bankRecoveryClean=if(bankRestored&&destinationRestored){
                 bankRecovery?.let{
-                    cleanupExactBankRecoverySnapshots(listOf(it),listOf(openedBank))
+                    bankRecoveryBinding?.matches(openedBank,true)==true&&cleanupExactBankRecoverySnapshots(listOf(it),listOf(openedBank))
                 }?:true
             }else false
             val recovery=when{
