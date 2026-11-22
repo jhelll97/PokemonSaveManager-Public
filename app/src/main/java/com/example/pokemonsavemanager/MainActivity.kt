@@ -13327,6 +13327,7 @@ class MainActivity : Activity() {
         val original=runCatching{file.readBytes()}.getOrNull()
             ?:return showDialog("Gen 6 Bank withdrawal","The destination save could not be read.")
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
+        var backupBinding:PseBankDestinationBinding?=null
         var bankRecoveryBinding:PseBankSourceBinding?=null
         var stagedDestination:ByteArray?=null
         var retainedRecovery=false
@@ -13352,8 +13353,12 @@ class MainActivity : Activity() {
             updateGen6BoxChecksum(save)
             require(save.indices.all{it in allowed||save[it]==original[it]}){"The staged withdrawal changed data outside the selected PK6 and native PC checksum."}
             require(gen6BoxChecksumValid(save)&&gen6BlockChecksumValid(save,20)){"The staged Generation 6 save failed native checksum verification."}
-            val recovery=File.createTempFile(backupGameName(file)+"_PreGen6BankWithdraw_",".backup",backupsDir());backup=recovery
-            recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)){"The Generation 6 recovery backup did not verify."}
+            val backupRoot=backupsDir();require(backupRoot.absoluteFile==backupRoot.canonicalFile&&backupRoot.isDirectory){"The canonical destination backup folder is unavailable."}
+            val recovery=File.createTempFile(backupGameName(file)+"_PreGen6BankWithdraw_",".backup",backupRoot);backup=recovery
+            require(recovery.absoluteFile==recovery.canonicalFile&&recovery.parentFile==backupRoot){"The Generation 6 recovery backup path could not be bound."}
+            val recoveryBinding=PseBankDestinationBinding.capture(recovery)?:error("The Generation 6 recovery backup identity could not be captured.")
+            backupBinding=recoveryBinding
+            recovery.writeBytes(original);require(recoveryBinding.matches(original,true)){"The Generation 6 recovery backup did not verify."}
             retainGenToGen6SafetyBackup(recovery,original)
             val bankRoot=bankDir();require(bankRoot.absoluteFile==bankRoot.canonicalFile&&bankRoot.isDirectory){"The canonical PSE Bank recovery folder is unavailable."}
             val bankCopy=File.createTempFile("PSE_G6Withdraw_BankRecovery_",".tmp",bankRoot);bankRecovery=bankCopy
@@ -13361,8 +13366,8 @@ class MainActivity : Activity() {
             val bankCopyBinding=PseBankSourceBinding.capture(bankCopy)?:error("The PK6 Bank recovery snapshot identity could not be captured.")
             bankRecoveryBinding=bankCopyBinding
             bankCopy.writeBytes(bank);require(bankCopyBinding.matches(bank,true)){"The exact PK6 Bank recovery snapshot did not verify."}
-            require(destinationBinding.matches(original,gen6BankWithdrawalIdentityBound(p))&&isBackupKept(recovery)&&
-                sourceBinding.matches(bank,true)&&recovery.readBytes().contentEquals(original)&&bankCopyBinding.matches(bank,true)){
+            require(destinationBinding.matches(original,gen6BankWithdrawalIdentityBound(p))&&recoveryBinding.matches(original,isBackupKept(recovery))&&
+                sourceBinding.matches(bank,true)&&bankCopyBinding.matches(bank,true)){
                 "The destination identity, retained backup or Bank snapshots changed before writing."
             }
             stagedDestination=save.copyOf()
@@ -13377,13 +13382,13 @@ class MainActivity : Activity() {
                 "The exact 232-byte PK6 did not persist after reopening."
             }
             require(destinationBinding.matches(save,gen6BankWithdrawalIdentityBound(p))&&sourceBinding.matches(bank,true)&&
-                isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&bankCopyBinding.matches(bank,true)){
+                recoveryBinding.matches(original,isBackupKept(recovery))&&bankCopyBinding.matches(bank,true)){
                 "The destination identity, verified save or retained recovery snapshots changed before cleanup."
             }
             bankDeleteAttempted=true
             require(p.bankFile.delete()&&!p.bankFile.exists()){ "The Gen 6 Bank record could not be removed after destination verification." }
             require(destinationBinding.matches(save,gen6BankWithdrawalIdentityBound(p))&&!p.bankFile.exists()&&
-                isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&bankCopyBinding.matches(bank,true)){
+                recoveryBinding.matches(original,isBackupKept(recovery))&&bankCopyBinding.matches(bank,true)){
                 "The destination identity, verified save or retained recovery snapshots changed after cleanup."
             }
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
@@ -13391,7 +13396,7 @@ class MainActivity : Activity() {
             )
             requireNativeBankWithdrawalPostCleanup(
                 6,destinationBinding.matches(save,gen6BankWithdrawalIdentityBound(p)),retainedRecovery,bankCopy,
-                file,save,recovery,original,isBackupKept(recovery),p.bankFile
+                file,save,recovery,original,recoveryBinding.matches(original,isBackupKept(recovery)),p.bankFile
             )
         }catch(e:Exception){
             val bankRestored=runCatching{
@@ -13411,7 +13416,7 @@ class MainActivity : Activity() {
                     gen6BoxChecksumValid(restored)&&gen6BlockChecksumValid(restored,20)
             }.getOrDefault(false)
             val retainedBackup=backup?.let{saved->runCatching{
-                saved.isFile&&isBackupKept(saved)&&saved.readBytes().contentEquals(original)
+                backupBinding?.matches(original,isBackupKept(saved))==true
             }.getOrDefault(false)}?:false
             val bankRecoveryVerified=bankRecovery?.let{saved->runCatching{
                 val recovered=saved.readBytes();val parsed=parsePk6(recovered,0,PK6_STORED_SIZE,false,721)
