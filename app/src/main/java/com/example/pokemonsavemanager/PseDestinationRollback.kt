@@ -25,11 +25,18 @@ internal fun restoreExactStagedDestination(
     writeNotStartedMessage: String,
     stagedMismatchMessage: String
 ) {
-    val current=file.readBytes()
+    val destination=runCatching { file.canonicalFile }.getOrElse {
+        throw IllegalStateException("The destination path could not be resolved for rollback.")
+    }
+    require(destination.isFile){"The destination file is unavailable for rollback."}
+    val current=destination.readBytes()
     if(current.contentEquals(original))return
     require(writeStarted){writeNotStartedMessage}
     require(staged!=null&&current.contentEquals(staged)){stagedMismatchMessage}
-    file.writeBytes(original)
+    destination.writeBytes(original)
+    require(destination.isFile&&destination.readBytes().contentEquals(original)){
+        "The destination rollback write did not reopen byte-for-byte."
+    }
 }
 
 
