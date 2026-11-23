@@ -47681,7 +47681,7 @@ class MainActivity : Activity() {
     )
 
     private data class Gen3Gen4Prepared(
-        val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry,val destination:ByteArray,
+        val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry,val sourceBinding:PseBankSourceBinding,val destination:ByteArray,
         val plan:Gen3ToGen4Plan,val pk4:ByteArray,val converted:PokemonEntry,
         val destinationFile:File,val sourceUri:Uri?,val sourceLabel:String?
     )
@@ -47937,6 +47937,8 @@ class MainActivity : Activity() {
             ?:return showDialog("Gen 3 → Gen 4","The selected Bank path could not be verified.")
         if(canonical.parentFile!=root||!canonical.isFile||!canonical.extension.equals("pk3",true))
             return showDialog("Gen 3 → Gen 4","The selected record is outside the Generation 3 PSE Bank.")
+        val sourceBinding=PseBankSourceBinding.capture(canonical)
+            ?:return showDialog("Gen 3 → Gen 4","The selected Bank identity could not be captured.")
         val bank=runCatching{canonical.readBytes()}.getOrNull()
             ?:return showDialog("Gen 3 → Gen 4","The selected Bank record could not be read.")
         val source=(if(bank.size==80)parsePk3(bank,0,false)else null)
@@ -47950,7 +47952,10 @@ class MainActivity : Activity() {
         if(needsPidLegalise&&!legalisePid){
             AlertDialog.Builder(this).setTitle("Legalise Gen 3 ability PID")
                 .setMessage("The saved PK3 ability flag conflicts with PID parity. PSE can keep the recorded ability slot by changing the PID while preserving nature, gender and shiny state. The PID is identity data, so review the proposed value before writing. Cancel leaves the Bank record and destination unchanged.")
-                .setNegativeButton("Cancel",null).setPositiveButton("Legalise PID"){_,_->prepareGen3ToGen4Transfer(bankFile,shown,true)}.show()
+                .setNegativeButton("Cancel",null).setPositiveButton("Legalise PID"){_,_->
+                    if(!sourceBinding.matches(bank,true))showDialog("Gen 3 → Gen 4","The selected Bank identity changed after Legalise review. Nothing was changed.")
+                    else prepareGen3ToGen4Transfer(bankFile,shown,true)
+                }.show()
             return
         }
         gen3ToGen4PreflightRejection(source,legalisePid)?.let{
@@ -47961,7 +47966,7 @@ class MainActivity : Activity() {
         if(!validGen2ToGen4Destination(destination))
             return showDialog("Gen 3 → Gen 4","The Gen 4 destination did not pass whole-save validation.")
         fun snapshotsMatch()=bound()&&runCatching{
-            file.readBytes().contentEquals(destination)&&canonical.readBytes().contentEquals(bank)
+            file.readBytes().contentEquals(destination)&&sourceBinding.matches(bank,true)
         }.getOrDefault(false)
         val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 3 → Gen 4")
             .setMessage("Resolving the exact Generation 4 ability slot and preparing a verified native PK4…")
@@ -47977,7 +47982,7 @@ class MainActivity : Activity() {
                 return@loadGen3ToGen4MetaAsync showDialog("Gen 3 → Gen 4",e.message?:"The PK4 conversion could not be prepared.")
             }
             val converted=parsePk4(pk4,false)?:return@loadGen3ToGen4MetaAsync showDialog("Gen 3 → Gen 4","The prepared PK4 could not be verified.")
-            val prepared=Gen3Gen4Prepared(canonical,bank,source,destination,plan,pk4,converted,file,openedUri,openedLabel)
+            val prepared=Gen3Gen4Prepared(canonical,bank,source,sourceBinding,destination,plan,pk4,converted,file,openedUri,openedLabel)
             val oldMet=if(source.metLocation==0)"none" else "#${source.metLocation}"
             val pidSummary=if(plan.pidLegalised)"PID after explicit ability-parity Legalise" else "PID"
             val originTitle=gen3CompatibleOriginTitle(source.originGame)?:return@loadGen3ToGen4MetaAsync showDialog("Gen 3 → Gen 4 blocked","The source origin is no longer a documented native Generation 3 title. Nothing was changed.")
@@ -48206,7 +48211,7 @@ class MainActivity : Activity() {
     private fun preparedGen3ToGen4StillBound(p:Gen3Gen4Prepared):Boolean=
         importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&
             currentSourceLabel==p.sourceLabel&&runCatching{
-                p.destinationFile.readBytes().contentEquals(p.destination)&&p.bankFile.readBytes().contentEquals(p.bankBytes)
+                p.destinationFile.readBytes().contentEquals(p.destination)&&p.sourceBinding.matches(p.bankBytes,true)
             }.getOrDefault(false)
 
     private fun chooseGen3ToGen4Destination(p:Gen3Gen4Prepared){
@@ -48252,6 +48257,7 @@ class MainActivity : Activity() {
             val profile=detectGen4Profile(fresh)?:error("The destination is no longer a valid Gen 4 save.")
             val before=gen4Validation(fresh,profile)
             require(before.generalChecksum&&before.storageChecksum&&before.badPk4==0){"The fresh Gen 4 destination failed validation."}
+            require(p.sourceBinding.matches(p.bankBytes,true)){"The selected Gen 3 Bank identity changed after review."}
             val bank=p.bankFile.readBytes()
             require(bank.contentEquals(p.bankBytes)){"The selected Gen 3 Bank bytes changed after review."}
             val source=(if(bank.size==80)parsePk3(bank,0,false)else null)
@@ -48287,8 +48293,8 @@ class MainActivity : Activity() {
             val stagedValidation=gen4Validation(work,profile)
             require(stagedValidation.generalChecksum&&stagedValidation.storageChecksum&&stagedValidation.badPk4==0&&
                 gen1ToGen4DexRegistered(work,profile,staged.species)){"The staged Gen 4 save, PK4 or Pokédex failed verification."}
-            require(bound()&&file.readBytes().contentEquals(fresh)&&p.bankFile.readBytes().contentEquals(p.bankBytes)){
-                "The destination or Bank record changed during staging."
+            require(bound()&&file.readBytes().contentEquals(fresh)&&p.sourceBinding.matches(p.bankBytes,true)){
+                "The destination or Bank identity changed during staging."
             }
             val backup=File.createTempFile(backupGameName(file)+"_PreGen3ToGen4Transfer_",".backup",backupsDir())
             safetyBackup=backup;backup.writeBytes(fresh)
@@ -48298,9 +48304,9 @@ class MainActivity : Activity() {
             bankRecovery=recovery;recovery.writeBytes(p.bankBytes)
             require(recovery.readBytes().contentEquals(p.bankBytes)){"The Bank recovery snapshot did not verify."}
             require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&
-                file.readBytes().contentEquals(fresh)&&p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                file.readBytes().contentEquals(fresh)&&p.sourceBinding.matches(p.bankBytes,true)&&
                 recovery.readBytes().contentEquals(p.bankBytes)){
-                "The destination, Bank record or retained recovery snapshots changed before writing."
+                "The destination, Bank identity or retained recovery snapshots changed before writing."
             }
             stagedDestination=work.copyOf();writeStarted=true;file.writeBytes(work)
             val written=file.readBytes()
@@ -48324,7 +48330,7 @@ class MainActivity : Activity() {
                 recovery.readBytes().contentEquals(p.bankBytes)){
                 "The verified destination or retained recovery snapshots changed before Bank cleanup."
             }
-            require(p.bankFile.readBytes().contentEquals(p.bankBytes)){"The Gen 3 Bank record changed before cleanup."}
+            require(p.sourceBinding.matches(p.bankBytes,true)){"The Gen 3 Bank identity changed before cleanup."}
             bankDeleteAttempted=true;require(p.bankFile.delete()){"The Gen 3 Bank record could not be removed after destination verification."}
             require(!p.bankFile.exists()&&bound()&&file.readBytes().contentEquals(work)&&
                 isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&
@@ -48353,7 +48359,7 @@ class MainActivity : Activity() {
                     p.bankFile.writeBytes(p.bankBytes)
                 }
                 val restored=p.bankFile.readBytes();val parsed=if(restored.size==80)parsePk3(restored,0,false)else null
-                require(restored.contentEquals(p.bankBytes)&&parsed!=null&&parsed.checksumValid&&
+                require(p.sourceBinding.matches(p.bankBytes,true)&&restored.contentEquals(p.bankBytes)&&parsed!=null&&parsed.checksumValid&&
                     parsed.pid==p.source.pid&&parsed.species==p.source.species&&parsed.tid==p.source.tid&&parsed.sid==p.source.sid){"The Gen 3 Bank record could not be restored exactly."}
             }.isSuccess
             val saveRestored=runCatching{
