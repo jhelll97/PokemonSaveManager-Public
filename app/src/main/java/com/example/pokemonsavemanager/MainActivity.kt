@@ -814,6 +814,10 @@ class MainActivity : Activity() {
         val destinationIntegrity=verifyGen1SaveIntegrity(initial)
         if(!destinationIntegrity.first){showDialog("Move selected",destinationIntegrity.second+" Nothing was changed.");return}
         if(!bound()){showDialog("Move selected","The loaded Gen 1 save identity changed. Reopen the Bank selection. Nothing was changed.");return}
+        val destinationBinding=PseBankDestinationBinding.capture(file)
+        if(destinationBinding==null||!destinationBinding.matches(initial,bound())){
+            showDialog("Move selected","The Gen 1 destination identity changed after review. Reopen the Bank selection. Nothing was changed.");return
+        }
         val selected=try{chosen.map{bankFile->val bytes=bankFile.readBytes();val source=parseGen1BankPayload(bytes)?:error("A selected Gen 1 Bank record is invalid.");Triple(bankFile,bytes,source)}}catch(e:Exception){showDialog("Move selected",e.message?:"A selected Gen 1 Bank record could not be read.");return}
         val targets=availableGen1BoxTargets(initial).filter{it.second>=selected.size}
         if(targets.isEmpty()){showDialog("Move selected","No single writable Gen 1 box has room for all ${selected.size} selected Pokémon. Nothing was changed.");return}
@@ -821,14 +825,14 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this).setTitle("Move ${selected.size} Pokémon to which box?").setItems(targets.map{(b,e)->"Box $b • $e empty"}.toTypedArray()){_,which->
             if(consumed||which !in targets.indices){consumed=true;showDialog("Move selected","This destination choice was already handled or is invalid. Reopen the Bank selection. Nothing was changed.");return@setItems}
             consumed=true
-            if(!bound()){showDialog("Move selected","The loaded Gen 1 save identity changed after the box list opened. Reopen the Bank selection. Nothing was changed.");return@setItems}
+            if(!destinationBinding.matches(initial,bound())){showDialog("Move selected","The loaded Gen 1 save identity changed after the box list opened. Reopen the Bank selection. Nothing was changed.");return@setItems}
             val box=targets[which].first
             val fresh=runCatching{file.readBytes()}.getOrNull()?:return@setItems
             var writeStarted=false;var activeWriteAttempted=false;var safetyBackup:File?=null
             var stagedDestination:ByteArray?=null
             val bankRecovery=ArrayList<File>();val cleanupAttempted=HashSet<String>()
             try {
-                require(bound()&&fresh.contentEquals(initial)){"The Gen 1 destination or its source identity changed after the box list opened."}
+                require(destinationBinding.matches(initial,bound())&&fresh.contentEquals(initial)){"The Gen 1 destination or its source identity changed after the box list opened."}
                 val freshIntegrity=verifyGen1SaveIntegrity(fresh);require(freshIntegrity.first){freshIntegrity.second}
                 require(fresh.size==SIZE_G1&&hasValidGen1MainChecksum(fresh)){"The fresh Gen 1 save is invalid."}
                 require(activeMatches(fresh)){"The active Gen 1 game save changed before batch withdrawal. Nothing was overwritten."}
@@ -867,11 +871,11 @@ class MainActivity : Activity() {
                     val recovery=File.createTempFile("PSE_G1BatchWithdraw_${index+1}_",".tmp",bankDir());bankRecovery.add(recovery)
                     recovery.writeBytes(item.second);val recovered=recovery.readBytes();require(recovered.contentEquals(item.second)&&parseGen1BankPayload(recovered)?.let{sameGen1TransferRecord(it,item.third)}==true){"A Gen 1 Bank recovery snapshot did not verify."}
                 }
-                require(bound()&&file.readBytes().contentEquals(fresh)&&activeMatches(fresh)&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The destination identity or retained backup changed before batch withdrawal."}
+                require(destinationBinding.matches(fresh,bound())&&activeMatches(fresh)&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The destination identity or retained backup changed before batch withdrawal."}
                 require(refreshed.indices.all{index->val item=refreshed[index];item.first.readBytes().contentEquals(item.second)&&bankRecovery[index].readBytes().contentEquals(item.second)}){"A selected Bank record or recovery snapshot changed before batch withdrawal."}
                 stagedDestination=work.copyOf()
                 writeStarted=true;file.writeBytes(work)
-                val written=file.readBytes();require(written.contentEquals(work)){"The working save changed while it was being written."}
+                val written=file.readBytes();require(destinationBinding.matches(work,bound())&&written.contentEquals(work)){"The working save changed while it was being written."}
                 val post=verifyGen1WriteState(written,box);require(post.first){post.second}
                 val persisted=parseGen1Box(written,box).pokemon.sortedBy{it.slot}
                 require(persisted.size==staged.size&&persisted.indices.all{sameGen1TransferRecord(persisted[it],staged[it])}){"The destination box changed after persistence."}
@@ -885,17 +889,20 @@ class MainActivity : Activity() {
                 }
                 for((index,item) in refreshed.withIndex()){
                     val(bankFile,bankBytes,parsed)=item
-                    require(bound()&&file.readBytes().contentEquals(work)&&activeMatches(work)){"The verified Gen 1 destination changed before Bank cleanup."}
+                    require(destinationBinding.matches(work,bound())&&activeMatches(work)){"The verified Gen 1 destination changed before Bank cleanup."}
                     require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&bankRecovery[index].readBytes().contentEquals(bankBytes)){"A retained Gen 1 recovery copy changed before Bank cleanup."}
                     val cleanup=bankFile.readBytes();require(cleanup.contentEquals(bankBytes) && parseGen1BankPayload(cleanup)?.let{sameGen1TransferRecord(it,parsed)}==true){"A selected Bank record changed before cleanup. The destination save was restored."}
                     cleanupAttempted.add(bankFile.absolutePath);require(bankFile.delete()&&!bankFile.exists()){ "A Bank record could not be removed after the save verified." }
                 }
-                require(bound()&&file.readBytes().contentEquals(work)&&activeMatches(work)){"The verified Gen 1 destination changed after Bank cleanup."}
+                require(destinationBinding.matches(work,bound())&&activeMatches(work)){"The verified Gen 1 destination changed after Bank cleanup."}
                 require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&refreshed.indices.all{bankRecovery[it].readBytes().contentEquals(refreshed[it].second)}){"A retained Gen 1 recovery copy changed after Bank cleanup."}
                 val completionMessage=finishSelectedGen1BankWithdrawal(
                     bankRecovery,refreshed.map{it.second},refreshed.size,box,
                     file,work,backup,fresh,isBackupKept(backup),refreshed.map{it.first}
-                ){bound()&&activeMatches(work)}
+                ){destinationBinding.matches(work,bound())&&activeMatches(work)}
+                require(destinationBinding.matches(work,bound())&&activeMatches(work)){
+                    "The verified Gen 1 destination identity changed during recovery cleanup."
+                }
                 updateSourceBaseline(analysis.sha256,analysis.trainer?.exactGame?:analysis.family,written.size.toLong())
                 selectedBankFiles.clear();bankMultiSelectMode=false
                 Toast.makeText(this,completionMessage,Toast.LENGTH_LONG).show();showBank()
@@ -912,11 +919,12 @@ class MainActivity : Activity() {
                 val destinationRestored=runCatching{
                     val staged=stagedDestination
                     val found=file.readBytes()
+                    require(destinationBinding.matches(found,bound())){"The Gen 1 destination identity changed during recovery; the current file was left untouched."}
                     if(writeStarted&&!found.contentEquals(fresh)){
                         require(staged!=null&&found.contentEquals(staged)){"The Gen 1 working save no longer matches this batch's staged bytes; the retained backup was left for recovery."}
                         file.writeBytes(fresh)
                     }
-                    val restored=file.readBytes();require(restored.contentEquals(fresh)&&verifyGen1SaveIntegrity(restored).first){"The restored Gen 1 working save did not verify."}
+                    val restored=file.readBytes();require(destinationBinding.matches(fresh,bound())&&restored.contentEquals(fresh)&&verifyGen1SaveIntegrity(restored).first){"The restored Gen 1 working save did not verify."}
                     if(activeWriteAttempted&&openedSource!=null&&!activeMatches(fresh)){
                         val activeNow=contentResolver.openInputStream(openedSource)?.use{it.readBytes()}?:error("The active Gen 1 save could not be reopened for recovery.")
                         require(staged!=null&&activeNow.contentEquals(staged)){"The active Gen 1 save no longer matches this batch's staged bytes; it was left untouched."}
