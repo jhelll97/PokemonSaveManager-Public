@@ -38,6 +38,32 @@ internal fun loadBoundGen1BankBatch(
     }
 }
 
+internal fun sameGen1ToGen5BatchPk5(
+    a: MainActivity.PokemonEntry,
+    b: MainActivity.PokemonEntry
+): Boolean =
+    a.checksumValid && b.checksumValid &&
+        a.pid == b.pid &&
+        a.species == b.species &&
+        a.tid == b.tid &&
+        a.sid == b.sid &&
+        a.nickname == b.nickname &&
+        a.otName == b.otName &&
+        a.experience == b.experience &&
+        a.ability == b.ability &&
+        a.abilityNumber == b.abilityNumber &&
+        a.nature == b.nature &&
+        a.gender == b.gender &&
+        a.shiny == b.shiny &&
+        a.originGame == b.originGame &&
+        a.ball == b.ball &&
+        a.metLevel == b.metLevel &&
+        a.language == b.language &&
+        a.moves.contentEquals(b.moves) &&
+        a.movePP.contentEquals(b.movePP) &&
+        a.evs.contentEquals(b.evs) &&
+        a.ivs.contentEquals(b.ivs)
+
 internal fun gen1ToGen7PkMismatch(
     a: MainActivity.PokemonEntry,
     b: MainActivity.PokemonEntry

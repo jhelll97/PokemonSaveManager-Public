@@ -53882,14 +53882,13 @@ class MainActivity : Activity() {
             val profile=detectGen5Profile(fresh)?:error("The destination is no longer a valid Gen 5 save.")
             require(box in 0..23){"Invalid Gen 5 destination box."}
             require(gen5ChecksumTableValid(fresh,profile)&&(0 until 24).all{gen5BoxChecksumValid(fresh,it,profile)}){"The fresh Gen 5 destination failed storage validation."}
-            fun samePk5(a:PokemonEntry,b:PokemonEntry)=a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.otName==b.otName&&a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&a.gender==b.gender&&a.shiny==b.shiny&&a.originGame==b.originGame&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.language==b.language&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)
             val refreshed=prepared.map{item->
                 val bytes=item.bankFile.readBytes();require(item.sourceBinding.matches(item.bankBytes,true)&&bytes.contentEquals(item.bankBytes)){"A selected Bank identity or record changed after preparation."}
                 val source=parseGen1BankPayload(bytes)?:error("A selected Bank record is invalid.")
                 require(sameGen1TransferRecord(source,item.source)){"A selected Bank record no longer matches its prepared source."}
                 val pk5=buildGen1ToGen5Pk5(bytes,source,fresh,item.meta)
                 val q=parsePk5(pk5,false)?:error("A refreshed PK5 could not be parsed.")
-                require(pk5.contentEquals(item.pk5)&&samePk5(q,item.converted)&&gen5Pk5PpUps(pk5).contentEquals(source.movePpUps)){"A prepared conversion or PP-Up value changed before confirmation."}
+                require(pk5.contentEquals(item.pk5)&&sameGen1ToGen5BatchPk5(q,item.converted)&&gen5Pk5PpUps(pk5).contentEquals(source.movePpUps)){"A prepared conversion or PP-Up value changed before confirmation."}
                 Gen1Gen5BatchPrepared(item.bankFile,bytes,source,item.sourceBinding,item.meta,pk5,q)
             }
             val empty=(0 until 30).filter{slot->gen5DestinationSlotIsStructurallyEmpty(fresh,box*30+slot)}
@@ -53900,7 +53899,7 @@ class MainActivity : Activity() {
                 require(gen5DestinationSlotIsStructurallyEmpty(work,target)){"A destination slot is no longer structurally empty. Nonzero records were left unchanged."}
                 item.pk5.copyInto(work,off);for(x in off until off+136)allowed.add(x)
                 val stagedBytes=work.copyOfRange(off,off+136);val staged=parsePk5(stagedBytes,false)?:error("A staged PK5 could not be parsed.")
-                require(stagedBytes.contentEquals(item.pk5)&&samePk5(staged,item.converted)&&gen5Pk5PpUps(stagedBytes).contentEquals(item.source.movePpUps)){"A staged PK5 did not preserve every supported converted field and PP-Up value."}
+                require(stagedBytes.contentEquals(item.pk5)&&sameGen1ToGen5BatchPk5(staged,item.converted)&&gen5Pk5PpUps(stagedBytes).contentEquals(item.source.movePpUps)){"A staged PK5 did not preserve every supported converted field and PP-Up value."}
                 expected.add(Triple(target,item.pk5,staged))
             }
             val(_,dexLocal,dexMirror)=gen5PokedexBlock(profile);allowed.add(dexLocal);allowed.add(dexLocal+1);allowed.add(dexMirror);allowed.add(dexMirror+1)
@@ -53929,7 +53928,7 @@ class MainActivity : Activity() {
             for((target,bytes,staged) in expected){
                 val off=0x00400+(target/30)*0x1000+(target%30)*136;val actual=written.copyOfRange(off,off+136)
                 val q=parsePk5(actual,false)?:error("A persisted PK5 could not be parsed.")
-                require(actual.contentEquals(bytes)&&samePk5(q,staged)&&gen5Pk5PpUps(actual).contentEquals(gen5Pk5PpUps(bytes))&&gen1ToGen5DexRegistered(written,wp,q)){"A persisted PK5, PP-Up value or Pokédex registration did not verify."}
+                require(actual.contentEquals(bytes)&&sameGen1ToGen5BatchPk5(q,staged)&&gen5Pk5PpUps(actual).contentEquals(gen5Pk5PpUps(bytes))&&gen1ToGen5DexRegistered(written,wp,q)){"A persisted PK5, PP-Up value or Pokédex registration did not verify."}
             }
             for(item in refreshed){
                 require(destinationBinding.matches(work,bound())&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&sourceRecovery.matches()&&exactBankPathsAbsent(removed.map{it.first})){"The verified destination identity, data, removed paths or retained recovery changed before Bank cleanup."}
