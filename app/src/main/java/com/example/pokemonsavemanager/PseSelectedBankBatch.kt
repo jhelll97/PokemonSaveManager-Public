@@ -719,6 +719,150 @@ internal fun gen5DestinationSlotIsStructurallyEmptyBytes(
     return raw.all { it==0.toByte() }&&parse(raw)==null
 }
 
+internal data class BuiltGen1ToGen6Pk6(
+    val encrypted:ByteArray,
+    val dex:Int,
+    val shiny:Boolean,
+    val nature:Int,
+    val gender:Int,
+    val evs:IntArray,
+    val ivs:IntArray,
+    val nickname:String,
+    val customNickname:Boolean,
+    val language:Int,
+    val metYear:Int,
+    val metMonth:Int,
+    val metDay:Int,
+    val trainerName:String
+)
+
+internal fun buildGen1ToGen6Pk6Bytes(
+    bankBytes:ByteArray,
+    source:MainActivity.Gen1Pokemon,
+    expectedBankSize:Int,
+    destinationSize:Int,
+    xySize:Int,
+    orasSize:Int,
+    trainerGameId:Int,
+    trainerName:String,
+    trainerGender:String,
+    baseFriendship:Int,
+    abilityId:Int,
+    genderRate:Int,
+    dex:Int,
+    storedSize:Int,
+    defaultName:String,
+    destinationLanguage:Int,
+    shinyFromDvs:(IntArray)->Boolean,
+    forceShinyState:(Long,Int,Boolean)->Long,
+    writeString:(ByteArray,Int,Int,String)->Unit,
+    updateChecksum:(ByteArray)->Unit,
+    encrypt:(ByteArray)->ByteArray
+):BuiltGen1ToGen6Pk6 {
+    require(bankBytes.size==expectedBankSize){"The preserved Gen 1 Bank record has an unexpected size."}
+    require(destinationSize==xySize||destinationSize==orasSize){"A valid Generation 6 destination save is required."}
+    require(trainerGameId in 24..27){"PSE could not identify the loaded Generation 6 title."}
+    require(source.moves.all { it in 0..165 }){"A Gen 1 move could not be represented in Generation 6."}
+    require(source.movePpUps.all { it in 0..3 }){"The Gen 1 PP-Up values could not be represented safely."}
+    require((0..3).all { i->source.moves[i]!=0||(source.movePP[i]==0&&source.movePpUps[i]==0) }){"An empty Gen 1 move slot contains PP or PP-Up data that cannot be preserved."}
+    val out=ByteArray(storedSize)
+    var ec=((source.tid.toLong() shl 16) xor source.experience xor dex.toLong() xor 0x47503136L) and 0xFFFFFFFFL
+    if(ec==0L)ec=1L
+    writeGen1ToGen4U32(out,0,ec)
+    writeGen1ToGen4U16(out,0x08,dex)
+    writeGen1ToGen4U16(out,0x0C,source.tid)
+    writeGen1ToGen4U16(out,0x0E,0)
+    writeGen1ToGen4U32(out,0x10,source.experience)
+    out[0x14]=abilityId.toByte()
+    out[0x15]=1
+    val shiny=shinyFromDvs(source.dvs)
+    val pid=forceShinyState((ec xor 0xA5A55A5AL) and 0xFFFFFFFFL,source.tid,shiny)
+    writeGen1ToGen4U32(out,0x18,pid)
+    val nature=(source.experience%25L).toInt()
+    out[0x1C]=nature.toByte()
+    val gender=gen1ToGen5GenderForRate(source,genderRate)
+    out[0x1D]=((gender and 3) shl 1).toByte()
+    val evs=intArrayOf(
+        (source.statExp[0]/257).coerceIn(0,252),
+        (source.statExp[1]/257).coerceIn(0,252),
+        (source.statExp[2]/257).coerceIn(0,252),
+        (source.statExp[3]/257).coerceIn(0,252),
+        (source.statExp[4]/257).coerceIn(0,252),
+        (source.statExp[4]/257).coerceIn(0,252)
+    )
+    var total=evs.sum()
+    while(total>510) {
+        val index=evs.indices.maxByOrNull { evs[it] }?:0
+        if(evs[index]==0)break
+        evs[index]--
+        total--
+    }
+    for(i in 0..5)out[0x1E+i]=evs[i].toByte()
+    val custom=source.nickname.isNotBlank()&&!source.nickname.equals(defaultName,true)
+    val nickname=if(custom)source.nickname else defaultName
+    writeString(out,0x40,26,nickname)
+    for(i in 0..3) {
+        writeGen1ToGen4U16(out,0x5A+i*2,source.moves[i])
+        out[0x62+i]=source.movePP[i].coerceIn(0,63).toByte()
+        out[0x66+i]=source.movePpUps[i].toByte()
+    }
+    val ivs=intArrayOf(source.dvs[0],source.dvs[1],source.dvs[2],source.dvs[3],source.dvs[4],source.dvs[4]).map { (it*2).coerceIn(0,31) }.toIntArray()
+    var ivWord=0L
+    for(i in 0..5)ivWord=ivWord or ((ivs[i].toLong() and 31L) shl(i*5))
+    if(custom)ivWord=ivWord or 0x80000000L
+    writeGen1ToGen4U32(out,0x74,ivWord)
+    writeString(out,0x78,26,trainerName)
+    out[0x92]=if(trainerGender.equals("Female",true))1 else 0
+    out[0x93]=1
+    out[0xA2]=baseFriendship.toByte()
+    writeString(out,0xB0,26,source.otName)
+    out[0xCA]=baseFriendship.toByte()
+    val calendar=java.util.Calendar.getInstance()
+    val metYear=(calendar.get(java.util.Calendar.YEAR)-2000).coerceIn(0,255)
+    val metMonth=calendar.get(java.util.Calendar.MONTH)+1
+    val metDay=calendar.get(java.util.Calendar.DAY_OF_MONTH)
+    out[0xD4]=metYear.toByte()
+    out[0xD5]=metMonth.toByte()
+    out[0xD6]=metDay.toByte()
+    writeGen1ToGen4U16(out,0xD8,0)
+    writeGen1ToGen4U16(out,0xDA,30013)
+    out[0xDC]=4
+    out[0xDD]=source.level.coerceIn(1,100).toByte()
+    out[0xDF]=35
+    val language=if(destinationLanguage in setOf(1,2,3,4,5,7,8))destinationLanguage else 2
+    out[0xE3]=language.toByte()
+    updateChecksum(out)
+    return BuiltGen1ToGen6Pk6(encrypt(out),dex,shiny,nature,gender,evs,ivs,nickname,custom,language,metYear,metMonth,metDay,trainerName)
+}
+
+internal fun verifyGen1ToGen6Pk6Bytes(
+    built:BuiltGen1ToGen6Pk6,
+    source:MainActivity.Gen1Pokemon,
+    converted:MainActivity.PokemonEntry?,
+    baseFriendship:Int,
+    abilityId:Int,
+    handlerName:String,
+    ppUps:IntArray
+):ByteArray {
+    val pokemon=converted?:error("The converted PK6 could not be parsed.")
+    require(
+        pokemon.checksumValid&&pokemon.species==built.dex&&pokemon.tid==source.tid&&pokemon.sid==0&&
+            pokemon.nickname==built.nickname&&pokemon.isNicknamed==built.customNickname&&pokemon.otName==source.otName&&
+            pokemon.experience==source.experience&&pokemon.ability==abilityId&&pokemon.abilityNumber==1&&
+            pokemon.gender==built.gender&&pokemon.nature==built.nature&&pokemon.shiny==built.shiny&&
+            pokemon.friendship==baseFriendship&&pokemon.language==built.language&&pokemon.heldItem==0&&
+            pokemon.ball==4&&pokemon.originGame==35&&pokemon.metLocation==30013&&
+            pokemon.metLevel==source.level.coerceIn(1,100)&&pokemon.metYear==built.metYear&&
+            pokemon.metMonth==built.metMonth&&pokemon.metDay==built.metDay&&pokemon.currentHandler==1&&
+            handlerName==built.trainerName&&pokemon.moves.contentEquals(source.moves)&&
+            pokemon.movePP.contentEquals(source.movePP)&&ppUps.contentEquals(source.movePpUps)&&
+            pokemon.evs.contentEquals(built.evs)&&pokemon.ivs.contentEquals(built.ivs)&&pokemon.eggLocation==0&&
+            !pokemon.isEgg&&pokemon.relearnMoves.all { it==0 }&&pokemon.country==0&&pokemon.region==0&&
+            pokemon.consoleRegion==0
+    ){"The converted PK6 failed identity or converted-field verification."}
+    return built.encrypted
+}
+
 internal fun requireExactGen3BankPartySource(
     item: Gen3BankBatchItem,
     root: File,
