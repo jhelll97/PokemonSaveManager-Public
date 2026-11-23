@@ -46796,65 +46796,9 @@ class MainActivity : Activity() {
         require(destinationSave.size==SIZE_G7_SM || destinationSave.size==SIZE_G7_USUM){"A Generation 7 destination save is required."}
         gen3ToGen7PreflightRejection(p)?.let{error(it)}
         require(trainer.gender=="Male"||trainer.gender=="Female"){"The destination trainer gender is ${trainer.gender}; native PK7 handler metadata cannot be guessed."}
-        val pk=ByteArray(PK6_STORED_SIZE)
-        writeU32LE(pk,0x00,randomU32(java.security.SecureRandom()))
-        writeU16LE(pk,0x04,0); writeU16LE(pk,0x08,p.species); writeU16LE(pk,0x0A,0)
-        writeU16LE(pk,0x0C,p.tid); writeU16LE(pk,0x0E,p.sid); writeU32LE(pk,0x10,p.experience)
-        pk[0x14]=meta.abilityId.toByte(); pk[0x15]=p.abilityNumber.coerceIn(1,2).toByte(); writeU16LE(pk,0x16,0)
-        val pid=forceGen7ShinyState(p.pid,p.tid,p.sid,p.shiny); writeU32LE(pk,0x18,pid); pk[0x1C]=p.nature.coerceIn(0,24).toByte()
-        pk[0x1D]=((gen3TransferGender(p,meta.genderRate) and 3) shl 1).toByte()
-        for(i in 0 until 6)pk[0x1E+i]=p.evs.getOrElse(i){0}.coerceIn(0,255).toByte()
-        pk[0x2B]=(((p.pokerusStrain and 0xF) shl 4) or (p.pokerusDays and 0xF)).toByte()
-        val custom=p.nickname.isNotBlank() && !p.nickname.equals(meta.speciesName,true)
-        writeGen6String(pk,0x40,26,if(p.nickname.isBlank())meta.speciesName else p.nickname)
         val ups=gen3MovePpUps(raw)
-        require(ups.all{it in 0..3}&&(0..3).all{p.moves[it]!=0||ups[it]==0}){
-            "The source PP-Up data cannot be preserved exactly."
-        }
-        for(i in 0..3){
-            val move=p.moves.getOrElse(i){0}
-            writeU16LE(pk,0x5A+i*2,move)
-            pk[0x62+i]=if(move==0)0 else (p.movePP.getOrElse(i){0} and 0x3F).coerceIn(0,63).toByte()
-            pk[0x66+i]=if(move==0)0 else ups[i].toByte()
-        }
-        var iv32=0L
-        for(i in 0..5)iv32=iv32 or ((p.ivs.getOrElse(i){0}.toLong() and 31L) shl (i*5))
-        if(custom)iv32=iv32 or 0x80000000L
-        writeU32LE(pk,0x74,iv32)
-        writeGen6String(pk,0x78,26,trainer.trainerName); pk[0x92]=if(trainer.gender.equals("Female",true))1 else 0; pk[0x93]=1; pk[0xA2]=meta.baseFriendship.toByte()
-        writeGen6String(pk,0xB0,26,p.otName); pk[0xCA]=p.friendship.coerceIn(0,255).toByte()
-        val cal=java.util.Calendar.getInstance(); pk[0xD4]=(cal.get(java.util.Calendar.YEAR)-2000).coerceIn(0,255).toByte(); pk[0xD5]=(cal.get(java.util.Calendar.MONTH)+1).toByte(); pk[0xD6]=cal.get(java.util.Calendar.DAY_OF_MONTH).toByte()
-        writeU16LE(pk,0xD8,0); writeU16LE(pk,0xDA,30001)
-        pk[0xDC]=p.ball.toByte(); pk[0xDD]=(p.metLevel and 0x7F).toByte(); pk[0xDE]=0
-        pk[0xDF]=p.originGame.toByte(); pk[0xE0]=0; pk[0xE1]=0; pk[0xE2]=0
-        pk[0xE3]=p.language.toByte()
-        updatePk6Checksum(pk); val enc=encryptPk6(pk)
-        val q=parsePk6(enc,0,PK6_STORED_SIZE,false,807)?:error("The converted PK7 could not be parsed.")
-        val expectedNickname=if(p.nickname.isBlank())meta.speciesName else p.nickname
-        val expectedMoves=IntArray(4){p.moves.getOrElse(it){0}}
-        val expectedMovePp=IntArray(4){i->val move=expectedMoves[i];if(move==0)0 else (p.movePP.getOrElse(i){0} and 0x3F).coerceIn(0,63)}
-        val expectedEvs=IntArray(6){p.evs.getOrElse(it){0}.coerceIn(0,255)}
-        val expectedIvs=IntArray(6){(p.ivs.getOrElse(it){0}) and 31}
-        val expectedGender=gen3TransferGender(p,meta.genderRate)
-        val verifiedRaw=decryptPk6IfNeeded(enc)
-        val rawMetadataValid=(verifiedRaw[0x93].toInt() and 0xFF)==1 &&
-            (verifiedRaw[0xA2].toInt() and 0xFF)==meta.baseFriendship &&
-            (verifiedRaw[0xCA].toInt() and 0xFF)==p.friendship.coerceIn(0,255) &&
-            (0..3).all{i->(verifiedRaw[0x66+i].toInt() and 3)==if(expectedMoves[i]==0)0 else ups[i]}
-        require(q.checksumValid && q.species==p.species && q.tid==p.tid && q.sid==p.sid && q.shiny==p.shiny &&
-            q.experience==p.experience && q.ability==meta.abilityId && q.abilityNumber==p.abilityNumber.coerceIn(1,2) &&
-            q.pid==pid && q.nature==p.nature.coerceIn(0,24) && q.gender==expectedGender &&
-            q.nickname==expectedNickname && q.isNicknamed==custom && q.otName==p.otName &&
-            gen6Pk6HandlerName(enc)==trainer.trainerName &&
-            q.evs.contentEquals(expectedEvs) && q.moves.contentEquals(expectedMoves) && q.movePP.contentEquals(expectedMovePp) &&
-            q.ivs.contentEquals(expectedIvs) && q.currentHandler==1 && q.friendship==meta.baseFriendship &&
-            q.pokerusDays==(p.pokerusDays and 0xF) && q.pokerusStrain==(p.pokerusStrain and 0xF) && !q.isEgg &&
-            q.heldItem==0 && q.eggLocation==0 && q.metLocation==30001 && q.ball==p.ball &&
-            q.metLevel==p.metLevel && q.originGame==p.originGame &&
-            q.language==p.language && rawMetadataValid){
-            "The converted PK7 failed round-trip verification."
-        }
-        return enc
+        val built=buildGen3ToGen7Pk7Bytes(p,trainer.trainerName,trainer.gender,meta.speciesName,meta.baseFriendship,meta.genderRate,meta.abilityId,ups,PK6_STORED_SIZE,{randomU32(it)},{pid,tid,sid,shiny->forceGen7ShinyState(pid,tid,sid,shiny)},{pokemon,rate->gen3TransferGender(pokemon,rate)},{data,offset,length,text->writeGen6String(data,offset,length,text)},{updatePk6Checksum(it)},{encryptPk6(it)})
+        return verifyGen3ToGen7Pk7Bytes(built,p,parsePk6(built.encrypted,0,PK6_STORED_SIZE,false,807),gen6Pk6HandlerName(built.encrypted),decryptPk6IfNeeded(built.encrypted),ups)
     }
 
     private fun gen3BankDestinationSlotIsStructurallyEmpty(

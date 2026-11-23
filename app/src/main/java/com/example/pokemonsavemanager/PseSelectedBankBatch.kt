@@ -719,6 +719,128 @@ internal fun gen5DestinationSlotIsStructurallyEmptyBytes(
     return raw.all { it==0.toByte() }&&parse(raw)==null
 }
 
+internal data class BuiltGen3ToGen7Pk7(
+    val encrypted:ByteArray,
+    val pid:Long,
+    val customNickname:Boolean,
+    val expectedNickname:String,
+    val expectedMoves:IntArray,
+    val expectedMovePp:IntArray,
+    val expectedEvs:IntArray,
+    val expectedIvs:IntArray,
+    val expectedGender:Int,
+    val trainerName:String,
+    val baseFriendship:Int,
+    val abilityId:Int
+)
+
+internal fun buildGen3ToGen7Pk7Bytes(
+    source:MainActivity.PokemonEntry,
+    trainerName:String,
+    trainerGender:String,
+    speciesName:String,
+    baseFriendship:Int,
+    genderRate:Int,
+    abilityId:Int,
+    ppUps:IntArray,
+    storedSize:Int,
+    randomU32:(java.security.SecureRandom)->Long,
+    forceShinyState:(Long,Int,Int,Boolean)->Long,
+    transferGender:(MainActivity.PokemonEntry,Int)->Int,
+    writeString:(ByteArray,Int,Int,String)->Unit,
+    updateChecksum:(ByteArray)->Unit,
+    encrypt:(ByteArray)->ByteArray
+):BuiltGen3ToGen7Pk7 {
+    require(ppUps.all { it in 0..3 }&&(0..3).all { source.moves[it]!=0||ppUps[it]==0 }){
+        "The source PP-Up data cannot be preserved exactly."
+    }
+    val pk=ByteArray(storedSize)
+    writeGen1ToGen4U32(pk,0x00,randomU32(java.security.SecureRandom()))
+    writeGen1ToGen4U16(pk,0x04,0)
+    writeGen1ToGen4U16(pk,0x08,source.species)
+    writeGen1ToGen4U16(pk,0x0A,0)
+    writeGen1ToGen4U16(pk,0x0C,source.tid)
+    writeGen1ToGen4U16(pk,0x0E,source.sid)
+    writeGen1ToGen4U32(pk,0x10,source.experience)
+    pk[0x14]=abilityId.toByte()
+    pk[0x15]=source.abilityNumber.coerceIn(1,2).toByte()
+    writeGen1ToGen4U16(pk,0x16,0)
+    val pid=forceShinyState(source.pid,source.tid,source.sid,source.shiny)
+    writeGen1ToGen4U32(pk,0x18,pid)
+    pk[0x1C]=source.nature.coerceIn(0,24).toByte()
+    val expectedGender=transferGender(source,genderRate)
+    pk[0x1D]=((expectedGender and 3) shl 1).toByte()
+    val expectedEvs=IntArray(6){source.evs.getOrElse(it){0}.coerceIn(0,255)}
+    for(i in 0 until 6)pk[0x1E+i]=expectedEvs[i].toByte()
+    pk[0x2B]=(((source.pokerusStrain and 0xF) shl 4) or (source.pokerusDays and 0xF)).toByte()
+    val custom=source.nickname.isNotBlank()&&!source.nickname.equals(speciesName,true)
+    val expectedNickname=if(source.nickname.isBlank())speciesName else source.nickname
+    writeString(pk,0x40,26,expectedNickname)
+    val expectedMoves=IntArray(4){source.moves.getOrElse(it){0}}
+    val expectedMovePp=IntArray(4){i->val move=expectedMoves[i];if(move==0)0 else (source.movePP.getOrElse(i){0} and 0x3F).coerceIn(0,63)}
+    for(i in 0..3) {
+        val move=expectedMoves[i]
+        writeGen1ToGen4U16(pk,0x5A+i*2,move)
+        pk[0x62+i]=expectedMovePp[i].toByte()
+        pk[0x66+i]=if(move==0)0 else ppUps[i].toByte()
+    }
+    val expectedIvs=IntArray(6){source.ivs.getOrElse(it){0} and 31}
+    var ivWord=0L
+    for(i in 0..5)ivWord=ivWord or ((expectedIvs[i].toLong() and 31L) shl(i*5))
+    if(custom)ivWord=ivWord or 0x80000000L
+    writeGen1ToGen4U32(pk,0x74,ivWord)
+    writeString(pk,0x78,26,trainerName)
+    pk[0x92]=if(trainerGender.equals("Female",true))1 else 0
+    pk[0x93]=1
+    pk[0xA2]=baseFriendship.toByte()
+    writeString(pk,0xB0,26,source.otName)
+    pk[0xCA]=source.friendship.coerceIn(0,255).toByte()
+    val calendar=java.util.Calendar.getInstance()
+    pk[0xD4]=(calendar.get(java.util.Calendar.YEAR)-2000).coerceIn(0,255).toByte()
+    pk[0xD5]=(calendar.get(java.util.Calendar.MONTH)+1).toByte()
+    pk[0xD6]=calendar.get(java.util.Calendar.DAY_OF_MONTH).toByte()
+    writeGen1ToGen4U16(pk,0xD8,0)
+    writeGen1ToGen4U16(pk,0xDA,30001)
+    pk[0xDC]=source.ball.toByte()
+    pk[0xDD]=(source.metLevel and 0x7F).toByte()
+    pk[0xDE]=0
+    pk[0xDF]=source.originGame.toByte()
+    pk[0xE0]=0
+    pk[0xE1]=0
+    pk[0xE2]=0
+    pk[0xE3]=source.language.toByte()
+    updateChecksum(pk)
+    return BuiltGen3ToGen7Pk7(encrypt(pk),pid,custom,expectedNickname,expectedMoves,expectedMovePp,expectedEvs,expectedIvs,expectedGender,trainerName,baseFriendship,abilityId)
+}
+
+internal fun verifyGen3ToGen7Pk7Bytes(
+    built:BuiltGen3ToGen7Pk7,
+    source:MainActivity.PokemonEntry,
+    converted:MainActivity.PokemonEntry?,
+    handlerName:String,
+    verifiedRaw:ByteArray,
+    ppUps:IntArray
+):ByteArray {
+    val pokemon=converted?:error("The converted PK7 could not be parsed.")
+    val rawMetadataValid=(verifiedRaw[0x93].toInt() and 0xFF)==1&&
+        (verifiedRaw[0xA2].toInt() and 0xFF)==built.baseFriendship&&
+        (verifiedRaw[0xCA].toInt() and 0xFF)==source.friendship.coerceIn(0,255)&&
+        (0..3).all { i->(verifiedRaw[0x66+i].toInt() and 3)==if(built.expectedMoves[i]==0)0 else ppUps[i] }
+    require(pokemon.checksumValid&&pokemon.species==source.species&&pokemon.tid==source.tid&&pokemon.sid==source.sid&&pokemon.shiny==source.shiny&&
+        pokemon.experience==source.experience&&pokemon.ability==built.abilityId&&pokemon.abilityNumber==source.abilityNumber.coerceIn(1,2)&&
+        pokemon.pid==built.pid&&pokemon.nature==source.nature.coerceIn(0,24)&&pokemon.gender==built.expectedGender&&
+        pokemon.nickname==built.expectedNickname&&pokemon.isNicknamed==built.customNickname&&pokemon.otName==source.otName&&
+        handlerName==built.trainerName&&pokemon.evs.contentEquals(built.expectedEvs)&&pokemon.moves.contentEquals(built.expectedMoves)&&
+        pokemon.movePP.contentEquals(built.expectedMovePp)&&pokemon.ivs.contentEquals(built.expectedIvs)&&pokemon.currentHandler==1&&
+        pokemon.friendship==built.baseFriendship&&pokemon.pokerusDays==(source.pokerusDays and 0xF)&&
+        pokemon.pokerusStrain==(source.pokerusStrain and 0xF)&&!pokemon.isEgg&&pokemon.heldItem==0&&pokemon.eggLocation==0&&
+        pokemon.metLocation==30001&&pokemon.ball==source.ball&&pokemon.metLevel==source.metLevel&&pokemon.originGame==source.originGame&&
+        pokemon.language==source.language&&rawMetadataValid){
+        "The converted PK7 failed round-trip verification."
+    }
+    return built.encrypted
+}
+
 internal fun gen2ForwardBuiltPkMismatchBytes(
     pokemon:MainActivity.PokemonEntry,
     source:MainActivity.Gen2Pokemon,
