@@ -38089,6 +38089,10 @@ class MainActivity : Activity() {
         var stagedDestination:ByteArray?=null
         val recoveryCopies=ArrayList<Pair<Gen4BankBatchItem,File>>()
         val cleanupAttempted=HashSet<String>()
+        val recoveryBindings=HashMap<String,PseBankSourceBinding>()
+        fun recoveryCopiesMatch()=recoveryCopies.size==selected.size&&recoveryCopies.all{(item,copy)->
+            recoveryBindings[copy.absolutePath]?.matches(item.bankBytes,true)==true
+        }
         var retainedRecovery=false
         try{
             require(selected.isNotEmpty()&&selected.map{it.bankFile.absolutePath}.distinct().size==selected.size){"The prepared Gen 4 Bank selection is empty or contains a duplicate."}
@@ -38116,11 +38120,16 @@ class MainActivity : Activity() {
             val stagedValidation=gen4Validation(work,profile);require(stagedValidation.generalChecksum&&stagedValidation.storageChecksum&&stagedValidation.badPk4==0){"The staged Gen 4 destination failed validation."}
             val backup=File.createTempFile(backupGameName(file)+"_PreGen4BankBatch_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(original);require(backup.readBytes().contentEquals(original)){"The exact Gen 4 recovery backup did not verify."};retainGen2ToGen4SafetyBackup(backup,original)
+            val bankRoot=bankDir();require(bankRoot.absoluteFile==bankRoot.canonicalFile&&bankRoot.isDirectory){"The canonical PSE Bank recovery folder is unavailable."}
             refreshed.forEachIndexed{index,item->
-                val copy=File.createTempFile("PSE_G4Batch_${index+1}_BankRecovery_",".tmp",bankDir());copy.writeBytes(item.bankBytes)
-                require(copy.readBytes().contentEquals(item.bankBytes)){"A Gen 4 Bank recovery snapshot did not verify."};recoveryCopies.add(item to copy)
+                val copy=File.createTempFile("PSE_G4Batch_${index+1}_BankRecovery_",".tmp",bankRoot);recoveryCopies.add(item to copy)
+                require(copy.absoluteFile==copy.canonicalFile&&copy.parentFile==bankRoot){"A PK4 Bank recovery snapshot path could not be bound."}
+                val copyBinding=PseBankSourceBinding.capture(copy)?:error("A PK4 Bank recovery snapshot identity could not be captured.")
+                recoveryBindings[copy.absolutePath]=copyBinding
+                copy.writeBytes(item.bankBytes)
+                require(copyBinding.matches(item.bankBytes,true)){"A PK4 Bank recovery snapshot did not verify."}
             }
-            fun recoveryValid()=isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&recoveryCopies.size==refreshed.size&&recoveryCopies.all{(item,copy)->copy.readBytes().contentEquals(item.bankBytes)}
+            fun recoveryValid()=isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&recoveryCopiesMatch()
             require(destinationBinding.matches(original,bound())&&refreshed.all{it.sourceBinding.matches(it.bankBytes,true)}&&recoveryValid()){"The destination, Bank records or retained recovery data changed before writing."}
             stagedDestination=work.copyOf()
             writeStarted=true;file.writeBytes(work);val written=file.readBytes();require(destinationBinding.matches(work,bound())&&written.contentEquals(work)){"The persisted Gen 4 destination differs from the staged transaction."}
@@ -38148,7 +38157,11 @@ class MainActivity : Activity() {
             Toast.makeText(this,"Withdrawn ${refreshed.size} Gen 4 Pokémon to Box ${targetBox+1} • Slots ${targetSlots.joinToString(", "){(it+1).toString()}} and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
         }catch(e:Exception){
             val bankRestored=selected.map{item->runCatching{
-                if(!item.bankFile.exists()){require(cleanupAttempted.contains(item.bankFile.absolutePath)){"A Gen 4 Bank record disappeared before PSE attempted cleanup; its path was not overwritten."};require(item.bankFile.createNewFile()){"A Bank recovery path could not be reserved."};item.bankFile.writeBytes(item.bankBytes)}
+                val copy=recoveryCopies.firstOrNull{it.first.bankFile.absolutePath==item.bankFile.absolutePath}?.second
+                restoreExactMissingStandardBankRecord(
+                    item.bankFile,item.bankBytes,
+                    cleanupAttempted.contains(item.bankFile.absolutePath),copy
+                )
                 val restored=item.bankFile.readBytes();val parsed=if(restored.size==136)parsePk4(restored,false)else null
                 require(item.sourceBinding.matches(item.bankBytes,true)&&restored.contentEquals(item.bankBytes)&&parsed!=null&&parsed.checksumValid&&parsed.pid==item.source.pid&&parsed.species==item.source.species&&parsed.tid==item.source.tid&&parsed.sid==item.source.sid){"An exact Gen 4 Bank record could not be restored or verified."};true
             }.getOrDefault(false)}.all{it}
@@ -38169,12 +38182,12 @@ class MainActivity : Activity() {
             }.getOrDefault(false)}?:false
             val verifiedRecoveryCopies=recoveryCopies.filter{(item,copy)->runCatching{
                 val recovered=copy.readBytes();val parsed=if(recovered.size==136)parsePk4(recovered,false)else null
-                copy.isFile&&recovered.contentEquals(item.bankBytes)&&parsed!=null&&parsed.checksumValid&&
+                recoveryBindings[copy.absolutePath]?.matches(item.bankBytes,true)==true&&recovered.contentEquals(item.bankBytes)&&parsed!=null&&parsed.checksumValid&&
                     parsed.pid==item.source.pid&&parsed.species==item.source.species&&
                     parsed.tid==item.source.tid&&parsed.sid==item.source.sid
             }.getOrDefault(false)}
             val allRecoveryCopiesVerified=recoveryCopies.size==selected.size&&verifiedRecoveryCopies.size==selected.size
-            val recoveryCopiesClean=if(bankRestored&&destinationRestored){
+            val recoveryCopiesClean=if(bankRestored&&destinationRestored&&recoveryCopiesMatch()){
                 cleanupExactBankRecoverySnapshots(
                     recoveryCopies.map{it.second},recoveryCopies.map{it.first.bankBytes}
                 )
