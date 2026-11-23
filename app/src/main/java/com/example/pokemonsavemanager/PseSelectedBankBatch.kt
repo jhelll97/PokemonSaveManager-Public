@@ -1065,6 +1065,38 @@ internal fun gen1ToGen2BatchDisclosure(records:List<Gen1ToGen2BatchDisclosure>):
     append("This is a PSE native-format conversion. It does not claim an official trade, verified Time Capsule history, encounter legality, legality certification or verified provenance. Choose one destination Box for the complete ordered batch, or Cancel to leave both sides unchanged.")
 }
 
+internal data class Gen1ToGen7BatchDisclosure(
+    val name:String,
+    val dex:Int,
+    val sourceLevel:Int,
+    val sourceExperience:Int,
+    val sourceMoves:IntArray,
+    val sourcePp:IntArray,
+    val ppUps:IntArray,
+    val sourceStatExp:IntArray,
+    val catchRate:Int,
+    val converted:MainActivity.PokemonEntry,
+    val encryptionConstant:Long,
+    val handler:String
+)
+
+internal fun gen1ToGen7BatchDisclosure(records:List<Gen1ToGen7BatchDisclosure>):String=buildString {
+    append("Exact disclosed native PK7 conversion effects for every selected record\n")
+    append("No in-memory move Legalise changes are applied in this batch. A record needing move changes is blocked and must use the cancellable individual Legalise review.\n")
+    records.forEachIndexed{index,record->
+        val q=record.converted
+        append("\n${index+1}. ${record.name} → Gen 7 Pokédex #${record.dex}\n")
+        for(slot in 0..3)append("• Move slot ${slot+1}: #${record.sourceMoves.getOrElse(slot){0}} • source PP ${record.sourcePp.getOrElse(slot){0}} → Gen 7 PP ${q.movePP.getOrElse(slot){0}} • PP Ups ${record.ppUps.getOrElse(slot){0}}\n")
+        append("• Level ${record.sourceLevel}; EXP ${record.sourceExperience} → ${q.experience}; Stat Exp ${record.sourceStatExp.joinToString("/")} → EVs ${q.evs.joinToString("/")}; friendship → ${q.friendship}.\n")
+        append("• Shiny ${q.shiny}; EC ${"%08X".format(record.encryptionConstant)}; PID ${"%08X".format(q.pid)}; SID 0; nature #${q.nature}; gender #${q.gender}; ability #${q.ability}, slot ${q.abilityNumber}.\n")
+        append("• IVs ${q.ivs.joinToString("/")} with ${if(q.species==151)5 else 3} guaranteed flawless values; fateful encounter ${q.fatefulEncounter}.\n")
+        append("• Current handler “${record.handler}”; language #${q.language}; held item 0; Ball #${q.ball}; met level ${q.metLevel}; met location #${q.metLocation}; origin #${q.originGame}; date ${q.metYear+2000}-${q.metMonth}-${q.metDay}.\n")
+        append("• Gen 1 catch-rate byte ${record.catchRate}, source current PP, exact source version, egg/geographic/relearn/ribbon/marking/Pokérus/Hyper Training fields and data without native PK7 representation are reset, omitted or left empty. OT gender defaults to male because Gen 1 does not encode it.\n")
+    }
+    append("\nSpecies, nickname, original OT, TID, level, move IDs, PP Ups and shiny state are retained. The original Gen 1 save remains unchanged. Exact Bank bytes remain until every ordered native PK7 slot, Pokédex registration, Gen 7 checksum and destination reopen verifies. PSE retains destination and per-record Bank recovery snapshots and restores both sides independently on failure.\n\n")
+    append("This is a PSE native-format conversion. It does not claim an official trade or migration, encounter legality, legality certification or verified provenance. Choose one destination Box for the complete ordered batch, or Cancel to leave both sides unchanged.")
+}
+
 internal fun createGen1ToGen4BatchRecovery(
     expected:List<ByteArray>,
     directory:File

@@ -1083,7 +1083,7 @@ class MainActivity : Activity() {
             }
         }catch(e:Exception){showDialog("Gen 1 → Gen 7 multi-transfer",e.message?:"A selected Bank record could not be read.");return}
         val trainer=parseTrainerGen7(saveData,saveData.size)?:run{showDialog("Gen 1 → Gen 7 multi-transfer","PSE could not read the destination Gen 7 trainer data.");return}
-        val loading=AlertDialog.Builder(this).setTitle("Prepare ${chosen.size} Gen 1 → Gen 7 transfers").setMessage("Checking every preserved Gen 1 record and preparing verified Bank-style PK7 conversions…").setCancelable(false).create()
+        val loading=AlertDialog.Builder(this).setTitle("Prepare ${chosen.size} Gen 1 → Gen 7 conversions").setMessage("Checking every preserved Gen 1 record and preparing native PK7 conversions…").setCancelable(false).create()
         loading.show()
         val prepared=ArrayList<Gen1Gen7BatchPrepared>()
         fun stop(message:String){if(loading.isShowing)loading.dismiss();showDialog("Gen 1 → Gen 7 multi-transfer",message)}
@@ -1129,12 +1129,24 @@ class MainActivity : Activity() {
         }
         if(targets.isEmpty()){showDialog("Gen 1 → Gen 7 multi-transfer","No single Gen 7 PC box has enough structurally empty slots for the complete prepared batch. Nonzero destination records were left unchanged.");return}
         val labels=targets.map{"Box ${it.first+1} • ${it.second} structurally empty slots"}.toTypedArray()
-        var selectedTarget=0
-        AlertDialog.Builder(this).setTitle("Transfer ${prepared.size} Gen 1 Pokémon → Gen 7")
-            .setMessage("Every selected record is legal for the supported transfer path and has a verified PK7 conversion. The complete batch will use structurally empty slots; nonzero destination records remain unchanged. It will be staged, registered in the Pokédex, persisted and re-read before any Gen 1 Bank entry is removed.")
-            .setSingleChoiceItems(labels,selectedTarget){_,which->selectedTarget=which}
+        val disclosure=gen1ToGen7BatchDisclosure(prepared.map{item->val p=item.source;val q=item.converted;Gen1ToGen7BatchDisclosure(p.nickname.ifBlank{gen1SpeciesNameFromInternal(p.species)},requireNotNull(gen1DexFromInternalIndex(p.species)),p.level,p.experience,p.moves,p.movePP,p.movePpUps,p.statExp,item.bankBytes[GEN1_BANK_HEADER_SIZE+7].toInt() and 0xFF,q,readU32LE(decryptPk6IfNeeded(item.pk7),0),gen6Pk6HandlerName(item.pk7))})
+        fun showDestinationPicker(){
+            var selectedTarget=0
+            var consumed=false
+            AlertDialog.Builder(this).setTitle("Choose Gen 7 destination")
+                .setSingleChoiceItems(labels,selectedTarget){_,which->selectedTarget=which}
+                .setNegativeButton("Cancel",null)
+                .setPositiveButton("Convert"){_,_->
+                    if(consumed||selectedTarget !in targets.indices){showDialog("Gen 1 → Gen 7 multi-transfer","This destination choice was already handled or is invalid. Reopen the Bank selection. Nothing was changed.");return@setPositiveButton}
+                    consumed=true
+                    transferSelectedGen1BankToGen7(prepared,preparedDestination,targets[selectedTarget].first)
+                }
+                .show()
+        }
+        AlertDialog.Builder(this).setTitle("PSE Convert ${prepared.size} Gen 1 Pokémon → Gen 7")
+            .setMessage(disclosure)
             .setNegativeButton("Cancel",null)
-            .setPositiveButton("Transfer"){_,_->transferSelectedGen1BankToGen7(prepared,preparedDestination,targets[selectedTarget].first)}
+            .setPositiveButton("Choose destination"){_,_->showDestinationPicker()}
             .show()
     }
 
