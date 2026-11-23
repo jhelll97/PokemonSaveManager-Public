@@ -852,7 +852,14 @@ class MainActivity : Activity() {
             val fresh=runCatching{file.readBytes()}.getOrNull()?:return@setItems
             var writeStarted=false;var activeWriteAttempted=false;var safetyBackup:File?=null
             var stagedDestination:ByteArray?=null
-            val bankRecovery=ArrayList<File>();val cleanupAttempted=HashSet<String>()
+            val bankRecovery=ArrayList<File>()
+            val bankRecoveryBindings=HashMap<String,PseBankSourceBinding>()
+            val cleanupAttempted=HashSet<String>()
+            fun recoverySnapshotsMatch(expected:List<Gen1BankBatchItem>):Boolean=
+                bankRecovery.size==expected.size&&bankRecovery.indices.all{index->
+                    bankRecoveryBindings[bankRecovery[index].absolutePath]
+                        ?.matches(expected[index].bankBytes,true)==true
+                }
             try {
                 require(destinationBinding.matches(initial,bound())&&fresh.contentEquals(initial)){"The Gen 1 destination or its source identity changed after the box list opened."}
                 val freshIntegrity=verifyGen1SaveIntegrity(fresh);require(freshIntegrity.first){freshIntegrity.second}
@@ -896,11 +903,17 @@ class MainActivity : Activity() {
                 val backup=File.createTempFile(backupGameName(file)+"_PreGen1BankBatchWithdraw_",".backup",backupsDir());safetyBackup=backup
                 backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The exact Gen 1 batch recovery backup did not verify."};retainGen2ToGen1SafetyBackup(backup,fresh)
                 for((index,item) in refreshed.withIndex()){
-                    val recovery=File.createTempFile("PSE_G1BatchWithdraw_${index+1}_",".tmp",bankDir());bankRecovery.add(recovery)
-                    recovery.writeBytes(item.bankBytes);val recovered=recovery.readBytes();require(recovered.contentEquals(item.bankBytes)&&parseGen1BankPayload(recovered)?.let{sameGen1TransferRecord(it,item.source)}==true){"A Gen 1 Bank recovery snapshot did not verify."}
+                    val recovery=File.createTempFile("PSE_G1BatchWithdraw_${index+1}_",".tmp",bankRoot);bankRecovery.add(recovery)
+                    require(recovery.absoluteFile==recovery.canonicalFile&&recovery.parentFile==bankRoot){"A Gen 1 Bank recovery snapshot path could not be bound."}
+                    val recoveryBinding=PseBankSourceBinding.capture(recovery)
+                        ?:error("A Gen 1 Bank recovery snapshot identity could not be captured.")
+                    bankRecoveryBindings[recovery.absolutePath]=recoveryBinding
+                    recovery.writeBytes(item.bankBytes)
+                    val recovered=recovery.readBytes()
+                    require(recoveryBinding.matches(item.bankBytes,true)&&recovered.contentEquals(item.bankBytes)&&parseGen1BankPayload(recovered)?.let{sameGen1TransferRecord(it,item.source)}==true){"A Gen 1 Bank recovery snapshot did not verify."}
                 }
                 require(destinationBinding.matches(fresh,bound())&&activeMatches(fresh)&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The destination identity or retained backup changed before batch withdrawal."}
-                require(refreshed.indices.all{index->val item=refreshed[index];item.sourceBinding.matches(item.bankBytes,true)&&bankRecovery[index].readBytes().contentEquals(item.bankBytes)}){"A selected Bank record or recovery snapshot changed before batch withdrawal."}
+                require(recoverySnapshotsMatch(refreshed)&&refreshed.indices.all{index->val item=refreshed[index];item.sourceBinding.matches(item.bankBytes,true)&&bankRecovery[index].readBytes().contentEquals(item.bankBytes)&&parseGen1BankPayload(bankRecovery[index].readBytes())?.let{sameGen1TransferRecord(it,item.source)}==true}){"A selected Bank record or recovery snapshot changed before batch withdrawal."}
                 stagedDestination=work.copyOf()
                 writeStarted=true;file.writeBytes(work)
                 val written=file.readBytes();require(destinationBinding.matches(work,bound())&&written.contentEquals(work)){"The working save changed while it was being written."}
@@ -918,12 +931,13 @@ class MainActivity : Activity() {
                 for((index,item) in refreshed.withIndex()){
                     val bankFile=item.bankFile;val bankBytes=item.bankBytes;val parsed=item.source
                     require(destinationBinding.matches(work,bound())&&activeMatches(work)){"The verified Gen 1 destination changed before Bank cleanup."}
-                    require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&bankRecovery[index].readBytes().contentEquals(bankBytes)){"A retained Gen 1 recovery copy changed before Bank cleanup."}
+                    val recoveryBytes=bankRecovery[index].readBytes()
+                    require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&bankRecoveryBindings[bankRecovery[index].absolutePath]?.matches(bankBytes,true)==true&&recoveryBytes.contentEquals(bankBytes)&&parseGen1BankPayload(recoveryBytes)?.let{sameGen1TransferRecord(it,parsed)}==true){"A retained Gen 1 recovery copy changed before Bank cleanup."}
                     val cleanup=bankFile.readBytes();require(item.sourceBinding.matches(bankBytes,true)&&cleanup.contentEquals(bankBytes) && parseGen1BankPayload(cleanup)?.let{sameGen1TransferRecord(it,parsed)}==true){"A selected Bank record changed before cleanup. The destination save was restored."}
                     cleanupAttempted.add(bankFile.absolutePath);require(bankFile.delete()&&!bankFile.exists()){ "A Bank record could not be removed after the save verified." }
                 }
                 require(destinationBinding.matches(work,bound())&&activeMatches(work)){"The verified Gen 1 destination changed after Bank cleanup."}
-                require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&refreshed.indices.all{bankRecovery[it].readBytes().contentEquals(refreshed[it].bankBytes)}){"A retained Gen 1 recovery copy changed after Bank cleanup."}
+                require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&recoverySnapshotsMatch(refreshed)&&refreshed.indices.all{index->val recovered=bankRecovery[index].readBytes();recovered.contentEquals(refreshed[index].bankBytes)&&parseGen1BankPayload(recovered)?.let{sameGen1TransferRecord(it,refreshed[index].source)}==true}){"A retained Gen 1 recovery copy changed after Bank cleanup."}
                 val completionMessage=finishSelectedGen1BankWithdrawal(
                     bankRecovery,refreshed.map{it.bankBytes},refreshed.size,box,
                     file,work,backup,fresh,isBackupKept(backup),refreshed.map{it.bankFile}
@@ -931,6 +945,11 @@ class MainActivity : Activity() {
                 require(destinationBinding.matches(work,bound())&&activeMatches(work)){
                     "The verified Gen 1 destination identity changed during recovery cleanup."
                 }
+                require(bankRecovery.indices.all{index->
+                    !bankRecovery[index].exists()||
+                        bankRecoveryBindings[bankRecovery[index].absolutePath]
+                            ?.matches(refreshed[index].bankBytes,true)==true
+                }){"A retained Gen 1 Bank recovery snapshot identity changed during cleanup."}
                 updateSourceBaseline(analysis.sha256,analysis.trainer?.exactGame?:analysis.family,written.size.toLong())
                 selectedBankFiles.clear();bankMultiSelectMode=false
                 Toast.makeText(this,completionMessage,Toast.LENGTH_LONG).show();showBank()
@@ -968,11 +987,11 @@ class MainActivity : Activity() {
                     val item=selected.getOrNull(index)?:return@mapIndexedNotNull null
                     runCatching{
                         val recovered=copy.readBytes()
-                        if(copy.isFile&&recovered.contentEquals(item.bankBytes)&&parseGen1BankPayload(recovered)?.let{sameGen1TransferRecord(it,item.source)}==true)copy else null
+                        if(bankRecoveryBindings[copy.absolutePath]?.matches(item.bankBytes,true)==true&&copy.isFile&&recovered.contentEquals(item.bankBytes)&&parseGen1BankPayload(recovered)?.let{sameGen1TransferRecord(it,item.source)}==true)copy else null
                     }.getOrNull()
                 }
                 val allBankRecoveryVerified=bankRecovery.size==selected.size&&verifiedBankRecovery.size==selected.size
-                val bankRecoveryClean=if(bankRestored&&destinationRestored){
+                val bankRecoveryClean=if(bankRestored&&destinationRestored&&recoverySnapshotsMatch(selected)){
                     cleanupExactBankRecoverySnapshots(
                         bankRecovery,selected.map{it.bankBytes}
                     )
