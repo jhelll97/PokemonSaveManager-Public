@@ -53803,33 +53803,16 @@ class MainActivity : Activity() {
         }
     }
     private fun buildGen1ToGen4Pk4(bankBytes:ByteArray,p:Gen1Pokemon,destination:ByteArray,meta:Gen1ToGen4Meta):ByteArray{
-        require(bankBytes.size==GEN1_BANK_FILE_SIZE){"The preserved Gen 1 Bank record has an unexpected size."}
-        require(p.movePpUps.all{it in 0..3}){"The Gen 1 PP-Up values could not be represented safely."}
-        require((0..3).all{i->p.moves[i]!=0||(p.movePP[i]==0&&p.movePpUps[i]==0)}){"An empty Gen 1 move slot contains PP or PP-Up data that cannot be preserved."}
         val profile=detectGen4Profile(destination)?:error("A valid Generation 4 destination save is required.")
         val dex=gen1DexFromInternalIndex(p.species)?:error("The Gen 1 species could not be mapped to the National Pokédex.")
-        val out=ByteArray(136);val sid=0;val nature=(p.experience%25L).toInt()
+        val nature=(p.experience%25L).toInt()
         val shiny=p.dvs[2]==10&&p.dvs[3]==10&&p.dvs[4]==10&&p.dvs[1] in setOf(2,3,6,7,10,11,14,15)
         val seed=((p.tid.toLong() shl 16) or (p.experience and 0xFFFFL)) and 0xFFFFFFFFL
-        val pid=gen4PidForNatureShiny(seed,p.tid,sid,nature,shiny)
-        writeU32LE(out,0,pid);writeU16LE(out,0x08,dex);writeU16LE(out,0x0A,0);writeU16LE(out,0x0C,p.tid);writeU16LE(out,0x0E,sid);writeU32LE(out,0x10,p.experience)
-        out[0x14]=meta.baseFriendship.toByte();out[0x15]=meta.abilityId.toByte();out[0x17]=2
-        val ev=intArrayOf((p.statExp[0]/257).coerceIn(0,255),(p.statExp[1]/257).coerceIn(0,255),(p.statExp[2]/257).coerceIn(0,255),(p.statExp[3]/257).coerceIn(0,255),(p.statExp[4]/257).coerceIn(0,255),(p.statExp[4]/257).coerceIn(0,255))
-        var total=ev.sum();while(total>510){val i=ev.indices.maxByOrNull{ev[it]}?:0;if(ev[i]==0)break;ev[i]--;total--}
-        for(i in 0..5)out[0x18+i]=ev[i].toByte()
-        for(i in 0..3){
-            writeU16LE(out,0x28+i*2,p.moves[i].coerceIn(0,467))
-            out[0x30+i]=p.movePP[i].coerceIn(0,63).toByte()
-            out[0x34+i]=p.movePpUps[i].toByte()
-        }
-        val iv=intArrayOf(p.dvs[0],p.dvs[1],p.dvs[2],p.dvs[3],p.dvs[4],p.dvs[4]).map{(it*2).coerceIn(0,31)}.toIntArray()
-        var ivw=0L;for(i in 0..5)ivw=ivw or ((iv[i].toLong() and 31L) shl(i*5));writeU32LE(out,0x38,ivw)
+        val pid=gen4PidForNatureShiny(seed,p.tid,0,nature,shiny)
         val nickname=p.nickname.ifBlank{GEN1_NATIONAL_NAMES.getOrElse(dex-1){"Pokemon"}}
         val originGame=when(profile.family){"Platinum"->12;"HeartGold / SoulSilver"->7;else->10}
-        writeGen4String(out,0x48,22,nickname);out[0x5F]=originGame.toByte();writeGen4String(out,0x68,16,p.otName);out[0x83]=4;out[0x84]=p.level.coerceIn(1,100).toByte()
-        val encrypted=encryptPk4(out);val q=parsePk4(encrypted,false)?:error("The converted PK4 could not be parsed.")
-        require(q.checksumValid&&q.species==dex&&q.tid==p.tid&&q.sid==0&&q.nickname==nickname&&q.otName==p.otName&&q.experience==p.experience&&q.nature==nature&&q.shiny==shiny&&q.ability==meta.abilityId&&q.friendship==meta.baseFriendship&&q.language==2&&q.heldItem==0&&q.ball==4&&q.metLevel==p.level.coerceIn(1,100)&&q.originGame==originGame&&q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(p.movePP)&&gen4Pk4PpUps(encrypted).contentEquals(p.movePpUps)&&q.evs.contentEquals(ev)&&q.ivs.contentEquals(iv)){"The converted PK4 failed identity or converted-field verification."}
-        return encrypted
+        val built=buildGen1ToGen4Pk4Bytes(bankBytes,p,GEN1_BANK_FILE_SIZE,meta.baseFriendship,meta.abilityId,dex,pid,nickname,originGame,{data,offset,length,text->writeGen4String(data,offset,length,text)},{encryptPk4(it)})
+        return verifyGen1ToGen4Pk4Bytes(built,p,parsePk4(built.encrypted,false),dex,meta.baseFriendship,meta.abilityId,gen4Pk4PpUps(built.encrypted))
     }
     private fun gen4PokedexBase(p:Gen4Profile):Int=when(p.family){"Diamond / Pearl"->0x12DC;"Platinum"->0x1328;"HeartGold / SoulSilver"->0x15FC;else->error("Unsupported Gen 4 Pokédex layout")}
     private fun registerGen1ToGen4Pokedex(save:ByteArray,p:Gen4Profile,dex:Int){
