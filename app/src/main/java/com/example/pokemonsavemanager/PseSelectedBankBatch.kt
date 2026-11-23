@@ -719,6 +719,147 @@ internal fun gen5DestinationSlotIsStructurallyEmptyBytes(
     return raw.all { it==0.toByte() }&&parse(raw)==null
 }
 
+internal fun gen2ForwardBuiltPkMismatchBytes(
+    pokemon:MainActivity.PokemonEntry,
+    source:MainActivity.Gen2Pokemon,
+    expectedName:String,
+    customNickname:Boolean,
+    abilityId:Int,
+    abilityNumber:Int,
+    pid:Long,
+    nature:Int,
+    gender:Int,
+    evs:IntArray,
+    expectedPpUps:IntArray,
+    ivs:IntArray,
+    language:Int,
+    fateful:Boolean,
+    originGame:Int,
+    actualPpUps:IntArray,
+    actualHandlerName:String,
+    expectedHandlerName:String
+):String?=when {
+    !pokemon.checksumValid->"checksum"
+    pokemon.species!=source.species->"species"
+    pokemon.nickname!=expectedName->"nickname"
+    pokemon.isNicknamed!=customNickname->"nickname flag"
+    pokemon.level!=source.level->"level"
+    pokemon.heldItem!=0->"held item"
+    pokemon.tid!=source.tid->"Trainer ID"
+    pokemon.sid!=0->"Secret ID"
+    pokemon.experience!=source.experience->"experience"
+    pokemon.ability!=abilityId->"ability"
+    pokemon.abilityNumber!=abilityNumber->"ability slot"
+    pokemon.pid!=pid->"PID"
+    pokemon.nature!=nature->"nature"
+    pokemon.gender!=gender->"gender"
+    pokemon.form!=0->"form"
+    !pokemon.evs.contentEquals(evs)->"EVs"
+    !pokemon.moves.contentEquals(source.moves)->"moves"
+    !pokemon.movePP.contentEquals(source.movePP)->"move PP"
+    !actualPpUps.contentEquals(expectedPpUps)->"PP-Up data"
+    !pokemon.ivs.contentEquals(ivs)->"IVs"
+    pokemon.isEgg->"Egg flag"
+    pokemon.otName!=source.otName->"Original Trainer name"
+    pokemon.friendship!=source.happiness->"friendship"
+    pokemon.currentHandler!=1->"current handler"
+    actualHandlerName!=expectedHandlerName->"current handler name"
+    pokemon.pokerusDays!=(source.pokerus and 0xF)||pokemon.pokerusStrain!=((source.pokerus ushr 4) and 0xF)->"Pokérus"
+    pokemon.shiny!=source.shiny->"shiny state"
+    pokemon.language!=language->"language"
+    pokemon.markingValue!=0->"markings"
+    pokemon.fatefulEncounter!=fateful->"fateful encounter flag"
+    pokemon.relearnMoves.any { it!=0 }->"relearn moves"
+    pokemon.eggLocation!=0->"Egg location"
+    pokemon.metLocation!=30017->"met location"
+    pokemon.ball!=4->"Poké Ball"
+    pokemon.metLevel!=source.level.coerceIn(1,100)->"met level"
+    pokemon.otGender!=0->"Original Trainer gender"
+    pokemon.originGame!=originGame->"origin game"
+    pokemon.country!=0->"country"
+    pokemon.region!=0->"region"
+    pokemon.consoleRegion!=0->"console region"
+    pokemon.eggYear!=0||pokemon.eggMonth!=0||pokemon.eggDay!=0->"Egg date"
+    pokemon.metYear!=0||pokemon.metMonth!=0||pokemon.metDay!=0->"met date"
+    pokemon.hyperTrainFlags!=0->"Hyper Training flags"
+    else->null
+}
+
+internal data class BuiltGen2ToGen7Pk7(
+    val encrypted:ByteArray,
+    val pid:Long,
+    val language:Int,
+    val fateful:Boolean
+)
+
+internal fun buildGen2ToGen7Pk7Bytes(
+    source:MainActivity.Gen2Pokemon,
+    trainerName:String,
+    trainerGender:String,
+    transferMeta:MainActivity.Gen1ToGen7TransferMeta,
+    nature:Int,
+    gender:Int,
+    originGame:Int,
+    ppUps:IntArray,
+    evs:IntArray,
+    ivs:IntArray,
+    expectedName:String,
+    customNickname:Boolean,
+    storedSize:Int,
+    destinationLanguage:Int,
+    forceShinyState:(Long,Int,Boolean)->Long,
+    writeString:(ByteArray,Int,Int,String)->Unit,
+    updateChecksum:(ByteArray)->Unit,
+    encrypt:(ByteArray)->ByteArray
+):BuiltGen2ToGen7Pk7 {
+    val pk=ByteArray(storedSize)
+    var ec=((source.tid.toLong() shl 16) xor source.experience xor (source.species.toLong() shl 8) xor source.caughtData.toLong() xor 0x47503237L) and 0xFFFFFFFFL
+    if(ec==0L)ec=1L
+    writeGen1ToGen4U32(pk,0x00,ec)
+    writeGen1ToGen4U16(pk,0x04,0)
+    writeGen1ToGen4U16(pk,0x08,source.species)
+    writeGen1ToGen4U16(pk,0x0A,0)
+    writeGen1ToGen4U16(pk,0x0C,source.tid)
+    writeGen1ToGen4U16(pk,0x0E,0)
+    writeGen1ToGen4U32(pk,0x10,source.experience)
+    pk[0x14]=transferMeta.abilityId.toByte()
+    pk[0x15]=transferMeta.abilityNumber.toByte()
+    writeGen1ToGen4U16(pk,0x16,0)
+    val pid=forceShinyState((ec xor 0xA5A55A5AL) and 0xFFFFFFFFL,source.tid,source.shiny)
+    writeGen1ToGen4U32(pk,0x18,pid)
+    pk[0x1C]=nature.toByte()
+    val fateful=source.species==251
+    pk[0x1D]=(((gender and 3) shl 1) or (if(fateful)1 else 0)).toByte()
+    for(i in 0..5)pk[0x1E+i]=evs[i].toByte()
+    pk[0x2B]=source.pokerus.toByte()
+    writeString(pk,0x40,26,expectedName)
+    for(i in 0..3) {
+        val move=source.moves[i]
+        writeGen1ToGen4U16(pk,0x5A+i*2,move)
+        pk[0x62+i]=if(move==0)0 else source.movePP[i].coerceIn(0,63).toByte()
+        pk[0x66+i]=if(move==0)0 else ppUps[i].toByte()
+    }
+    var ivWord=0L
+    for(i in 0..5)ivWord=ivWord or ((ivs[i].toLong() and 31L) shl(i*5))
+    if(customNickname)ivWord=ivWord or 0x80000000L
+    writeGen1ToGen4U32(pk,0x74,ivWord)
+    writeString(pk,0x78,26,trainerName)
+    pk[0x92]=if(trainerGender.equals("Female",true))1 else 0
+    pk[0x93]=1
+    pk[0xA2]=source.happiness.toByte()
+    writeString(pk,0xB0,26,source.otName)
+    pk[0xCA]=source.happiness.toByte()
+    writeGen1ToGen4U16(pk,0xD8,0)
+    writeGen1ToGen4U16(pk,0xDA,30017)
+    pk[0xDC]=4
+    pk[0xDD]=(source.level.coerceIn(1,100) and 0x7F).toByte()
+    pk[0xDF]=originGame.toByte()
+    val language=destinationLanguage.coerceIn(1,10)
+    pk[0xE3]=language.toByte()
+    updateChecksum(pk)
+    return BuiltGen2ToGen7Pk7(encrypt(pk),pid,language,fateful)
+}
+
 internal data class BuiltGen1ToGen7Pk7(
     val encrypted:ByteArray,
     val dex:Int,
