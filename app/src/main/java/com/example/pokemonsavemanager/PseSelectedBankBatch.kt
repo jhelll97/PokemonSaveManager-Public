@@ -814,6 +814,56 @@ internal class ExactBankRecoverySet(private val prefix:String="PSE_G3_BankPartyR
         entries.map { it.first }.filter { it.exists() }.joinToString(", ") { it.name }
 }
 
+internal fun createGen1ToGen3BatchRecovery(
+    expected:List<ByteArray>,
+    directory:File
+):ExactBankRecoverySet {
+    val recovery=ExactBankRecoverySet("PSE_G1ToG3_BatchRecovery_")
+    expected.forEach{recovery.capture(it,directory)}
+    require(recovery.matches()) { "The exact Gen 1 Bank recovery set did not verify." }
+    return recovery
+}
+
+internal fun sameGen1ToGen3BatchPk3(
+    a:MainActivity.PokemonEntry,
+    b:MainActivity.PokemonEntry
+):Boolean=
+    a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&
+        a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.otName==b.otName&&
+        a.experience==b.experience&&a.nature==b.nature&&a.shiny==b.shiny&&
+        a.originGame==b.originGame&&a.ball==b.ball&&a.metLevel==b.metLevel&&
+        a.language==b.language&&a.heldItem==b.heldItem&&a.friendship==b.friendship&&
+        a.isEgg==b.isEgg&&a.moves.contentEquals(b.moves)&&
+        a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&
+        a.ivs.contentEquals(b.ivs)
+
+internal fun requireGen1ToGen3BatchRecoveryBoundary(
+    destinationAndSourcesMatch:Boolean,
+    backupMatches:Boolean,
+    recovery:ExactBankRecoverySet,
+    removed:List<Pair<File,ByteArray>>,
+    expectedRemoved:Int,
+    stage:Int
+) {
+    require(destinationAndSourcesMatch&&backupMatches&&recovery.matches()&&
+        removed.size==expectedRemoved&&exactBankPathsAbsent(removed.map{it.first})) {
+        when(stage) {
+            0->"The destination, selected Bank records or retained recovery backup changed before writing."
+            1->"The verified destination identity, retained backup, removed paths or Bank recovery set changed before cleanup."
+            else->"The verified Gen 3 destination, retained backup, removed Bank batch or Bank recovery set changed after cleanup."
+        }
+    }
+}
+
+internal fun gen1ToGen3BatchRecoveryFailureNotice(recovery:ExactBankRecoverySet?):String {
+    val names=recovery?.retainedNames().orEmpty()
+    return if(names.isEmpty())"" else "\n\nBank recovery snapshots: "+names
+}
+
+internal fun finishGen1ToGen3BatchRecovery(recovery:ExactBankRecoverySet?):String=
+    if(recovery==null||recovery.cleanupExact())"" else
+        "; one or more exact Bank recoveries retained for review"
+
 internal fun createGen1ToGen4BatchRecovery(
     expected:List<ByteArray>,
     directory:File
