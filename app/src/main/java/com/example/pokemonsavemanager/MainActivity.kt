@@ -38089,6 +38089,7 @@ class MainActivity : Activity() {
         var stagedDestination:ByteArray?=null
         val recoveryCopies=ArrayList<Pair<Gen4BankBatchItem,File>>()
         val cleanupAttempted=HashSet<String>()
+        val removedSources=ArrayList<File>()
         val recoveryBindings=HashMap<String,PseBankSourceBinding>()
         fun recoveryCopiesMatch()=recoveryCopies.size==selected.size&&recoveryCopies.all{(item,copy)->
             recoveryBindings[copy.absolutePath]?.matches(item.bankBytes,true)==true
@@ -38143,11 +38144,14 @@ class MainActivity : Activity() {
             for(i in refreshed.indices){val actual=written.copyOfRange(offsets[i],offsets[i]+136);val mon=parsePk4(actual,false);require(actual.contentEquals(refreshed[i].bankBytes)&&mon!=null&&mon.checksumValid){"An exact PK4 did not verify after destination reopen."}}
             for(item in refreshed){
                 require(destinationBinding.matches(work,bound())&&recoveryValid()){"The verified Gen 4 destination or retained recovery data changed before Bank cleanup."}
+                require(exactBankPathsAbsent(removedSources)){"An earlier removed Gen 4 Bank path reappeared before the next cleanup step."}
                 val current=item.bankFile.readBytes();require(item.sourceBinding.matches(item.bankBytes,true)&&current.contentEquals(item.bankBytes)&&parsePk4(current,false)?.checksumValid==true){"A selected Gen 4 Bank record changed before cleanup."}
                 cleanupAttempted.add(item.bankFile.absolutePath)
                 require(item.bankFile.delete()&&!item.bankFile.exists()){"A selected Gen 4 Bank record could not be removed after destination verification."}
+                removedSources.add(item.bankFile)
+                require(exactBankPathsAbsent(removedSources)){"A removed Gen 4 Bank path did not remain absent after cleanup."}
             }
-            require(destinationBinding.matches(work,bound())&&recoveryValid()){"The verified Gen 4 destination or retained recovery data changed after Bank cleanup."}
+            require(removedSources.size==refreshed.size&&exactBankPathsAbsent(removedSources)&&destinationBinding.matches(work,bound())&&recoveryValid()){"The verified Gen 4 destination, removed Bank paths or retained recovery data changed after Bank cleanup."}
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
                 recoveryCopies.map{it.second},recoveryCopies.map{it.first.bankBytes}
             )
