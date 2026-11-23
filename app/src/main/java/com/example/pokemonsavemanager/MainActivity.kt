@@ -795,13 +795,6 @@ class MainActivity : Activity() {
     }
 
 
-    private data class Gen1BankBatchItem(
-        val bankFile:File,
-        val bankBytes:ByteArray,
-        val source:Gen1Pokemon,
-        val sourceBinding:PseBankSourceBinding
-    )
-
     private fun moveSelectedGen1BankPokemon(chosen:List<File>) {
         val file=importedFile?:return;val openedSource=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedSource&&currentSourceLabel==openedLabel
@@ -53571,7 +53564,7 @@ class MainActivity : Activity() {
         val profile=detectGen4Profile(destination)?:return showDialog("Gen 1 → Gen 4 multi-transfer","Load a valid Generation 4 save first.")
         val validation=gen4Validation(destination,profile);if(!validation.generalChecksum||!validation.storageChecksum||validation.badPk4!=0)return showDialog("Gen 1 → Gen 4 multi-transfer","The Gen 4 destination did not pass whole-save validation.")
         if((0 until 18).none{box->(0 until 30).count{slot->gen4DestinationSlotIsStructurallyEmpty(destination,profile,box*30+slot)}>=chosen.size})return showDialog("Gen 1 → Gen 4 multi-transfer","No single Gen 4 PC box has enough structurally empty slots for all ${chosen.size} selected Pokémon. Nonzero records were left unchanged.")
-        val selected=try{val root=bankDir();require(root.absoluteFile==root.canonicalFile&&root.isDirectory);chosen.map{bankFile->require(bankFile.absoluteFile==bankFile.canonicalFile&&bankFile.parentFile==root&&bankFile.isFile&&bankFile.extension.equals("pse1",true));val sourceBinding=requireNotNull(PseBankSourceBinding.capture(bankFile));val bankBytes=bankFile.readBytes();require(sourceBinding.matches(bankBytes,true));val source=parseGen1BankPayload(bankBytes)?:error("A selected Gen 1 Bank record is invalid.");Gen1BankBatchItem(bankFile,bankBytes,source,sourceBinding)}.also{items->require(items.map{it.bankFile.canonicalPath}.distinct().size==items.size)}}catch(e:Exception){return showDialog("Gen 1 → Gen 4 multi-transfer",e.message?:"A selected Bank record could not be read.")}
+        val selected=try{loadBoundGen1BankBatch(chosen,bankDir(),::parseGen1BankPayload)}catch(e:Exception){return showDialog("Gen 1 → Gen 4 multi-transfer",e.message?:"A selected Bank record could not be read.")}
         val prepared=ArrayList<Gen1Gen4BatchPrepared>()
         fun stop(message:String){showDialog("Gen 1 → Gen 4 multi-transfer",message)}
         fun next(index:Int){
@@ -53863,7 +53856,7 @@ class MainActivity : Activity() {
         val file=importedFile?:return;if(chosen.isEmpty())return showDialog("Gen 1 → Gen 5 multi-transfer","Select one or more Gen 1 Bank Pokémon first.");if(chosen.map{it.absolutePath}.distinct().size!=chosen.size)return showDialog("Gen 1 → Gen 5 multi-transfer","The selection contains the same Bank entry more than once. Nothing was changed.")
         val destination=runCatching{file.readBytes()}.getOrNull()?:return;val profile=detectGen5Profile(destination)?:return showDialog("Gen 1 → Gen 5 multi-transfer","Load a valid Generation 5 save first.");if(!gen5ChecksumTableValid(destination,profile)||(0 until 24).any{!gen5BoxChecksumValid(destination,it,profile)})return showDialog("Gen 1 → Gen 5 multi-transfer","The destination failed storage/checksum-table validation.")
         val hasCapacity=(0 until 24).any{box->(0 until 30).count{slot->gen5DestinationSlotIsStructurallyEmpty(destination,box*30+slot)}>=chosen.size};if(!hasCapacity)return showDialog("Gen 1 → Gen 5 multi-transfer","No single Gen 5 PC box has enough structurally empty slots for all ${chosen.size} selected Pokémon. Nonzero records were left unchanged.")
-        val selected=try{val root=bankDir();require(root.absoluteFile==root.canonicalFile&&root.isDirectory);chosen.map{bank->require(bank.absoluteFile==bank.canonicalFile&&bank.parentFile==root&&bank.isFile&&bank.extension.equals("pse1",true));val sourceBinding=requireNotNull(PseBankSourceBinding.capture(bank));val bytes=bank.readBytes();require(sourceBinding.matches(bytes,true));val source=parseGen1BankPayload(bytes)?:error("A selected Gen 1 Bank record is invalid.");Gen1BankBatchItem(bank,bytes,source,sourceBinding)}.also{items->require(items.map{it.bankFile.canonicalPath}.distinct().size==items.size)}}catch(e:Exception){return showDialog("Gen 1 → Gen 5 multi-transfer",e.message?:"A selected Bank record could not be read.")};val prepared=ArrayList<Gen1Gen5BatchPrepared>()
+        val selected=try{loadBoundGen1BankBatch(chosen,bankDir(),::parseGen1BankPayload)}catch(e:Exception){return showDialog("Gen 1 → Gen 5 multi-transfer",e.message?:"A selected Bank record could not be read.")};val prepared=ArrayList<Gen1Gen5BatchPrepared>()
         fun stop(message:String){showDialog("Gen 1 → Gen 5 multi-transfer",message)};fun next(index:Int){if(index>=selected.size){if(!selected.all{it.sourceBinding.matches(it.bankBytes,true)})return stop("A selected Bank identity changed during preparation. Nothing was changed.");chooseSelectedGen1BankToGen5Destination(prepared,destination);return};val item=selected[index];val bank=item.bankFile;val bytes=item.bankBytes;val source=item.source;val dex=gen1DexFromInternalIndex(source.species)?:return stop("A selected species could not be mapped.");loadGen1ToGen5MetaAsync(dex){meta->if(!item.sourceBinding.matches(item.bankBytes,true))return@loadGen1ToGen5MetaAsync stop("A selected Bank identity changed during preparation. Nothing was changed.");if(meta==null)return@loadGen1ToGen5MetaAsync stop("PSE could not resolve Generation 5 conversion data. Every Bank record was kept.");val pk5=try{buildGen1ToGen5Pk5(bytes,source,destination,meta)}catch(e:Exception){return@loadGen1ToGen5MetaAsync stop(e.message?:"A selected Pokémon could not be converted.")};val converted=parsePk5(pk5,false)?:return@loadGen1ToGen5MetaAsync stop("A prepared PK5 could not be verified.");prepared.add(Gen1Gen5BatchPrepared(bank,bytes,source,item.sourceBinding,meta,pk5,converted));next(index+1)}};next(0)
     }
     private fun chooseSelectedGen1BankToGen5Destination(prepared:List<Gen1Gen5BatchPrepared>,preparedDestination:ByteArray){

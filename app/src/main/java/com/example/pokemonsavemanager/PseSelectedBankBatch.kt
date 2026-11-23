@@ -8,6 +8,36 @@ import java.security.MessageDigest
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 
+internal data class Gen1BankBatchItem(
+    val bankFile: File,
+    val bankBytes: ByteArray,
+    val source: MainActivity.Gen1Pokemon,
+    val sourceBinding: PseBankSourceBinding
+)
+
+internal fun loadBoundGen1BankBatch(
+    chosen: List<File>,
+    bankRoot: File,
+    parse: (ByteArray) -> MainActivity.Gen1Pokemon?
+): List<Gen1BankBatchItem> {
+    require(bankRoot.absoluteFile == bankRoot.canonicalFile && bankRoot.isDirectory)
+    return chosen.map { bankFile ->
+        require(
+            bankFile.absoluteFile == bankFile.canonicalFile &&
+                bankFile.parentFile == bankRoot &&
+                bankFile.isFile &&
+                bankFile.extension.equals("pse1", true)
+        )
+        val sourceBinding = requireNotNull(PseBankSourceBinding.capture(bankFile))
+        val bankBytes = bankFile.readBytes()
+        require(sourceBinding.matches(bankBytes, true))
+        val source = parse(bankBytes) ?: error("A selected Gen 1 Bank record is invalid.")
+        Gen1BankBatchItem(bankFile, bankBytes, source, sourceBinding)
+    }.also { items ->
+        require(items.map { it.bankFile.canonicalPath }.distinct().size == items.size)
+    }
+}
+
 internal fun gen1ToGen7PkMismatch(
     a: MainActivity.PokemonEntry,
     b: MainActivity.PokemonEntry
