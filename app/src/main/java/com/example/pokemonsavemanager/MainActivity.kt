@@ -47097,13 +47097,19 @@ class MainActivity : Activity() {
                 currentSourceUri == openedSourceUri &&
                 currentSourceLabel == openedSourceLabel
 
+        val destinationBinding=PseBankDestinationBinding.capture(openedFile)
+        if(destinationBinding==null||!destinationBinding.matches(openedDestination,destinationBound())){
+            showDialog("Gen 3 Bank multi-withdrawal","The destination identity changed after review. Reopen PSE Bank. Nothing was changed.")
+            return
+        }
+
         val removed = ArrayList<Pair<File, ByteArray>>()
         var writeStarted = false
         var stagedDestination: ByteArray? = null
         var backup: File? = null
         val bankRecovery = ArrayList<File>()
         try {
-            require(destinationBound()) {
+            require(destinationBinding.matches(openedDestination,destinationBound())) {
                 "The loaded destination identity changed after box selection."
             }
             require(selected.isNotEmpty() &&
@@ -47111,7 +47117,8 @@ class MainActivity : Activity() {
                 "The prepared Gen 3 Bank selection is empty or contains duplicates."
             }
             val fresh = openedFile.readBytes()
-            require(fresh.contentEquals(openedDestination) && gen3SaveValid(fresh)) {
+            require(destinationBinding.matches(openedDestination,destinationBound()) &&
+                fresh.contentEquals(openedDestination) && gen3SaveValid(fresh)) {
                 "The Gen 3 destination changed or failed validation after box selection."
             }
             require(targetBox in 0 until Gen3SaveState.BOX_COUNT) {
@@ -47236,7 +47243,7 @@ class MainActivity : Activity() {
                     "A Gen 3 Bank recovery snapshot did not verify."
                 }
             }
-            require(destinationBound() &&
+            require(destinationBinding.matches(fresh,destinationBound()) &&
                 isBackupKept(backup!!) &&
                 backup!!.readBytes().contentEquals(fresh) &&
                 openedFile.readBytes().contentEquals(fresh) &&
@@ -47255,7 +47262,8 @@ class MainActivity : Activity() {
             writeStarted = true
             openedFile.writeBytes(work)
             val persisted = openedFile.readBytes()
-            require(persisted.contentEquals(work) && gen3SaveValid(persisted)) {
+            require(destinationBinding.matches(work,destinationBound()) &&
+                persisted.contentEquals(work) && gen3SaveValid(persisted)) {
                 "The persisted Gen 3 save failed byte or checksum verification."
             }
             val persistedPc = gen3PcBuffer(persisted)
@@ -47275,7 +47283,8 @@ class MainActivity : Activity() {
                     exactGen3BankRecoverySnapshots(bankRecovery, refreshed)) {
                     "An earlier Gen 3 Bank removal or recovery snapshot changed during cleanup."
                 }
-                require(destinationBound() && openedFile.readBytes().contentEquals(work)) {
+                require(destinationBinding.matches(work,destinationBound()) &&
+                    openedFile.readBytes().contentEquals(work)) {
                     "The verified Gen 3 destination changed before Bank cleanup."
                 }
                 require(isBackupKept(backup!!) && backup!!.readBytes().contentEquals(fresh)) {
@@ -47307,7 +47316,8 @@ class MainActivity : Activity() {
             }
             require(removed.size == selected.size &&
                 removed.all { !it.first.exists() } &&
-                destinationBound() && openedFile.readBytes().contentEquals(work) &&
+                destinationBinding.matches(work,destinationBound()) &&
+                openedFile.readBytes().contentEquals(work) &&
                 isBackupKept(backup!!) && backup!!.readBytes().contentEquals(fresh) &&
                 exactGen3BankRecoverySnapshots(bankRecovery, refreshed)) {
                 "The verified Gen 3 destination, removed Bank batch or retained recovery snapshots changed after Bank cleanup."
@@ -47319,7 +47329,7 @@ class MainActivity : Activity() {
                 targetBoxName
             )
             requireSelectedNativeBankBatchPostCleanup(
-                3,destinationBound(),!withdrawalCompletion.recoveryClean,bankRecovery,
+                3,destinationBinding.matches(work,destinationBound()),!withdrawalCompletion.recoveryClean,bankRecovery,
                 openedFile,work,backup!!,fresh,isBackupKept(backup!!),selected.map{it.bankFile}
             )
 
@@ -47344,13 +47354,17 @@ class MainActivity : Activity() {
             }
             val saveRestored = runCatching {
                 val current = openedFile.readBytes()
+                require(destinationBinding.matches(current,destinationBound())) {
+                    "The Gen 3 destination identity changed during recovery; the current file was left untouched."
+                }
                 when {
                     current.contentEquals(openedDestination) ->
-                        gen3SaveValid(current)
+                        destinationBinding.matches(openedDestination,destinationBound())&&gen3SaveValid(current)
                     writeStarted && stagedDestination?.let { current.contentEquals(it) } == true -> {
                         openedFile.writeBytes(openedDestination)
                         val restored = openedFile.readBytes()
-                        restored.contentEquals(openedDestination) && gen3SaveValid(restored)
+                        destinationBinding.matches(openedDestination,destinationBound())&&
+                            restored.contentEquals(openedDestination) && gen3SaveValid(restored)
                     }
                     else -> false
                 }
