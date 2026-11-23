@@ -12767,10 +12767,15 @@ class MainActivity : Activity() {
         val sourceGeneration:Int,val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry,
         val destination:ByteArray,val trainer:TrainerData,val pk6:ByteArray,
         val converted:PokemonEntry,val destinationFile:File,
-        val sourceUri:Uri?,val sourceLabel:String?,val gen4Meta:Gen3ToGen4Meta?=null
+        val sourceUri:Uri?,val sourceLabel:String?,val gen4Meta:Gen3ToGen4Meta?=null,
+        val sourceBinding:PseBankSourceBinding?=null
     )
 
     private fun genToGen6Title(p:Gen5Gen6Prepared)="Gen ${p.sourceGeneration} → Gen 6"
+
+    private fun genToGen6BankStillBound(p:Gen5Gen6Prepared):Boolean=
+        p.sourceBinding?.matches(p.bankBytes,true)
+            ?:runCatching{p.bankFile.readBytes().contentEquals(p.bankBytes)}.getOrDefault(false)
 
     private fun gen5ToGen6FormSupported(species:Int,form:Int):Boolean=when(species){
         201->form in 0..27
@@ -12895,7 +12900,7 @@ class MainActivity : Activity() {
     }
 
     private fun gen5ToGen6StillBound(p:Gen5Gen6Prepared):Boolean=
-        importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&runCatching{p.destinationFile.readBytes().contentEquals(p.destination)&&p.bankFile.readBytes().contentEquals(p.bankBytes)}.getOrDefault(false)
+        importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&runCatching{p.destinationFile.readBytes().contentEquals(p.destination)&&genToGen6BankStillBound(p)}.getOrDefault(false)
 
     private fun chooseGen5ToGen6Destination(p:Gen5Gen6Prepared){
         val title=genToGen6Title(p)
@@ -12952,6 +12957,7 @@ class MainActivity : Activity() {
         try{
             require(original.contentEquals(p.destination)&&(original.size==SIZE_G6_XY||original.size==SIZE_G6_ORAS)){"The prepared Gen 6 destination changed."};require(gen6BoxChecksumValid(original)&&gen6BlockChecksumValid(original,20)){"The destination storage or Pokédex checksum changed."}
             val info=boxStorageInfo(original)?:error("PSE could not resolve native Gen 6 PC storage.");require(target in 0 until info.second){"The selected Gen 6 slot is invalid."};val offset=info.first+target*PK6_STORED_SIZE;require(gen6DestinationSlotIsStructurallyEmpty(original,info.first,info.second,info.third,target)){"The selected Gen 6 slot is no longer structurally empty. Nonzero records were left unchanged."}
+            require(genToGen6BankStillBound(p)){"The Gen ${p.sourceGeneration} Bank identity changed."}
             val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The Gen ${p.sourceGeneration} Bank record changed."}
             val sourcePpUps:IntArray
             val pk6=when(p.sourceGeneration){
@@ -13007,7 +13013,7 @@ class MainActivity : Activity() {
             require(actual.contentEquals(pk6)&&reopened!=null&&sameGen5ToGen6Pk6(reopened,p.converted)&&
                 gen6Pk6PpUps(actual).contentEquals(sourcePpUps)){"The exact converted PK6 did not persist after reopening."}
             require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&
-                currentSourceLabel==p.sourceLabel&&p.bankFile.readBytes().contentEquals(p.bankBytes)&&
+                currentSourceLabel==p.sourceLabel&&genToGen6BankStillBound(p)&&
                 file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&
                 bankCopy.readBytes().contentEquals(p.bankBytes)){
                 "The Bank record, destination identity or retained recovery snapshots changed before cleanup."
@@ -13042,7 +13048,7 @@ class MainActivity : Activity() {
                     p.bankFile.writeBytes(p.bankBytes)
                 }
                 val restored=p.bankFile.readBytes()
-                restored.contentEquals(p.bankBytes)&&when(p.sourceGeneration){
+                genToGen6BankStillBound(p)&&restored.contentEquals(p.bankBytes)&&when(p.sourceGeneration){
                     3->parsePk3(restored,0,false)?.let{it.checksumValid&&it.pid==p.source.pid&&
                         it.species==p.source.species&&it.tid==p.source.tid&&it.sid==p.source.sid}==true
                     4->parsePk4(restored,false)?.let{it.checksumValid&&sameGen4ToGen5Pk5(it,p.source)}==true
@@ -48128,6 +48134,8 @@ class MainActivity : Activity() {
             ?:return showDialog("Gen 3 → Gen 6","The selected Bank path could not be verified.")
         if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk3",true))
             return showDialog("Gen 3 → Gen 6","The selected record is outside the Generation 3 PSE Bank.")
+        val sourceBinding=PseBankSourceBinding.capture(selected)
+            ?:return showDialog("Gen 3 → Gen 6","The selected Bank identity could not be captured.")
         val bank=runCatching{selected.readBytes()}.getOrNull()
             ?:return showDialog("Gen 3 → Gen 6","The selected Bank record could not be read.")
         val source=if(bank.size==80)parsePk3(bank,0,false)else null
@@ -48139,7 +48147,10 @@ class MainActivity : Activity() {
             AlertDialog.Builder(this).setTitle("Legalise Gen 3 ability PID")
                 .setMessage("The saved PK3 ability flag conflicts with PID parity. PSE can preserve the recorded ability slot, nature, gender and shiny state by changing the PID. The final native PK6 PID is shown for review before writing.")
                 .setNegativeButton("Cancel",null)
-                .setPositiveButton("Legalise PID"){_,_->prepareGen3ToGen6Transfer(bankFile,shown,true)}.show()
+                .setPositiveButton("Legalise PID"){_,_->
+                    if(!sourceBinding.matches(bank,true))showDialog("Gen 3 → Gen 6","The selected Bank identity changed after Legalise review. Nothing was changed.")
+                    else prepareGen3ToGen6Transfer(bankFile,shown,true)
+                }.show()
             return
         }
         gen3ToGen4PreflightRejection(source,legalisePid)?.let{
@@ -48160,7 +48171,7 @@ class MainActivity : Activity() {
         if(trainer.gender!="Male"&&trainer.gender!="Female")
             return showDialog("Gen 3 → Gen 6 blocked","The destination trainer gender is ${trainer.gender}. PSE will not guess the native PK6 handling-trainer gender.\n\nThe Bank record and destination were left unchanged.")
         fun snapshotsMatch()=bound()&&runCatching{
-            file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)
+            file.readBytes().contentEquals(destination)&&sourceBinding.matches(bank,true)
         }.getOrDefault(false)
         val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 3 → Gen 6")
             .setMessage("Resolving exact Generation 5 and Generation 6 ability mappings and preparing a verified native PK6…")
@@ -48202,7 +48213,8 @@ class MainActivity : Activity() {
                 val prepared=Gen5Gen6Prepared(
                     sourceGeneration=3,bankFile=selected,bankBytes=bank,source=source,
                     destination=destination,trainer=trainer,pk6=pk6,converted=converted,
-                    destinationFile=file,sourceUri=openedUri,sourceLabel=openedLabel
+                    destinationFile=file,sourceUri=openedUri,sourceLabel=openedLabel,
+                    sourceBinding=sourceBinding
                 )
                 val oldPid="%08X".format(source.pid);val newPid="%08X".format(converted.pid)
                 val pidNote=if(source.pid==converted.pid)"PID remains $oldPid." else
