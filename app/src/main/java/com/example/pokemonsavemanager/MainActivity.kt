@@ -1130,24 +1130,7 @@ class MainActivity : Activity() {
         if(targets.isEmpty()){showDialog("Gen 1 → Gen 7 multi-transfer","No single Gen 7 PC box has enough structurally empty slots for the complete prepared batch. Nonzero destination records were left unchanged.");return}
         val labels=targets.map{"Box ${it.first+1} • ${it.second} structurally empty slots"}.toTypedArray()
         val disclosure=gen1ToGen7BatchDisclosure(prepared.map{item->val p=item.source;val q=item.converted;Gen1ToGen7BatchDisclosure(p.nickname.ifBlank{gen1SpeciesNameFromInternal(p.species)},requireNotNull(gen1DexFromInternalIndex(p.species)),p.level,p.experience,p.moves,p.movePP,p.movePpUps,p.statExp,item.bankBytes[GEN1_BANK_HEADER_SIZE+7].toInt() and 0xFF,q,readU32LE(decryptPk6IfNeeded(item.pk7),0),gen6Pk6HandlerName(item.pk7))})
-        fun showDestinationPicker(){
-            var selectedTarget=0
-            var consumed=false
-            AlertDialog.Builder(this).setTitle("Choose Gen 7 destination")
-                .setSingleChoiceItems(labels,selectedTarget){_,which->selectedTarget=which}
-                .setNegativeButton("Cancel",null)
-                .setPositiveButton("Convert"){_,_->
-                    if(consumed||selectedTarget !in targets.indices){showDialog("Gen 1 → Gen 7 multi-transfer","This destination choice was already handled or is invalid. Reopen the Bank selection. Nothing was changed.");return@setPositiveButton}
-                    consumed=true
-                    transferSelectedGen1BankToGen7(prepared,preparedDestination,targets[selectedTarget].first)
-                }
-                .show()
-        }
-        AlertDialog.Builder(this).setTitle("PSE Convert ${prepared.size} Gen 1 Pokémon → Gen 7")
-            .setMessage(disclosure)
-            .setNegativeButton("Cancel",null)
-            .setPositiveButton("Choose destination"){_,_->showDestinationPicker()}
-            .show()
+        showGen1ToGen7BatchDisclosureAndDestination(this,prepared.size,disclosure,labels){selectedTarget->transferSelectedGen1BankToGen7(prepared,preparedDestination,targets[selectedTarget].first)}
     }
 
     private fun transferSelectedGen1BankToGen7(preparedBatch:List<Gen1Gen7BatchPrepared>,preparedDestination:ByteArray,box:Int){

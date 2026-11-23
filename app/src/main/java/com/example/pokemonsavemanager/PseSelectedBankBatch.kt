@@ -1,5 +1,7 @@
 package com.example.pokemonsavemanager
 
+import android.app.Activity
+import android.app.AlertDialog
 import java.io.File
 import java.math.BigInteger
 import java.security.MessageDigest
@@ -1095,6 +1097,31 @@ internal fun gen1ToGen7BatchDisclosure(records:List<Gen1ToGen7BatchDisclosure>):
     }
     append("\nSpecies, nickname, original OT, TID, level, move IDs, PP Ups and shiny state are retained. The original Gen 1 save remains unchanged. Exact Bank bytes remain until every ordered native PK7 slot, Pokédex registration, Gen 7 checksum and destination reopen verifies. PSE retains destination and per-record Bank recovery snapshots and restores both sides independently on failure.\n\n")
     append("This is a PSE native-format conversion. It does not claim an official trade or migration, encounter legality, legality certification or verified provenance. Choose one destination Box for the complete ordered batch, or Cancel to leave both sides unchanged.")
+}
+
+internal fun showGen1ToGen7BatchDisclosureAndDestination(
+    activity:Activity,
+    count:Int,
+    disclosure:String,
+    labels:Array<String>,
+    onConvert:(Int)->Unit
+) {
+    fun showDestinationPicker(){
+        var selectedTarget=0
+        var consumed=false
+        AlertDialog.Builder(activity).setTitle("Choose Gen 7 destination")
+            .setSingleChoiceItems(labels,selectedTarget){_,which->selectedTarget=which}
+            .setNegativeButton("Cancel",null)
+            .setPositiveButton("Convert"){_,_->
+                if(!consumed&&selectedTarget in labels.indices){consumed=true;onConvert(selectedTarget)}
+            }
+            .show()
+    }
+    AlertDialog.Builder(activity).setTitle("PSE Convert $count Gen 1 Pokémon → Gen 7")
+        .setMessage(disclosure)
+        .setNegativeButton("Cancel",null)
+        .setPositiveButton("Choose destination"){_,_->showDestinationPicker()}
+        .show()
 }
 
 internal fun createGen1ToGen4BatchRecovery(
