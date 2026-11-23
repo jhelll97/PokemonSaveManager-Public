@@ -38085,7 +38085,7 @@ class MainActivity : Activity() {
         if(destinationBinding==null||!destinationBinding.matches(openedDestination,bound())){
             showDialog("Gen 4 Bank multi-withdrawal","The destination identity changed after review. Reopen PSE Bank. Nothing was changed.");return
         }
-        var writeStarted=false;var safetyBackup:File?=null
+        var writeStarted=false;var safetyBackup:File?=null;var backupBinding:PseBankDestinationBinding?=null
         var stagedDestination:ByteArray?=null
         val recoveryCopies=ArrayList<Pair<Gen4BankBatchItem,File>>()
         val cleanupAttempted=HashSet<String>()
@@ -38118,8 +38118,12 @@ class MainActivity : Activity() {
             updateGen4BlockChecksum(work,storageStart,profile.storageSize,profile);allowed.add(storageStart+profile.storageSize-2);allowed.add(storageStart+profile.storageSize-1)
             require(work.indices.all{it in allowed||work[it]==original[it]}){"The Gen 4 batch changed bytes outside the selected PK4 slots and active storage checksum."}
             val stagedValidation=gen4Validation(work,profile);require(stagedValidation.generalChecksum&&stagedValidation.storageChecksum&&stagedValidation.badPk4==0){"The staged Gen 4 destination failed validation."}
-            val backup=File.createTempFile(backupGameName(file)+"_PreGen4BankBatch_",".backup",backupsDir());safetyBackup=backup
-            backup.writeBytes(original);require(backup.readBytes().contentEquals(original)){"The exact Gen 4 recovery backup did not verify."};retainGen2ToGen4SafetyBackup(backup,original)
+            val backupRoot=backupsDir();require(backupRoot.absoluteFile==backupRoot.canonicalFile&&backupRoot.isDirectory){"The canonical destination backup folder is unavailable."}
+            val backup=File.createTempFile(backupGameName(file)+"_PreGen4BankBatch_",".backup",backupRoot);safetyBackup=backup
+            require(backup.absoluteFile==backup.canonicalFile&&backup.parentFile==backupRoot){"The Gen 4 recovery backup path could not be bound."}
+            val retainedBinding=PseBankDestinationBinding.capture(backup)?:error("The Gen 4 recovery backup identity could not be captured.")
+            backupBinding=retainedBinding
+            backup.writeBytes(original);require(retainedBinding.matches(original,true)){"The exact Gen 4 recovery backup did not verify."};retainGen2ToGen4SafetyBackup(backup,original)
             val bankRoot=bankDir();require(bankRoot.absoluteFile==bankRoot.canonicalFile&&bankRoot.isDirectory){"The canonical PSE Bank recovery folder is unavailable."}
             refreshed.forEachIndexed{index,item->
                 val copy=File.createTempFile("PSE_G4Batch_${index+1}_BankRecovery_",".tmp",bankRoot);recoveryCopies.add(item to copy)
@@ -38129,7 +38133,7 @@ class MainActivity : Activity() {
                 copy.writeBytes(item.bankBytes)
                 require(copyBinding.matches(item.bankBytes,true)){"A PK4 Bank recovery snapshot did not verify."}
             }
-            fun recoveryValid()=isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&recoveryCopiesMatch()
+            fun recoveryValid()=retainedBinding.matches(original,isBackupKept(backup))&&recoveryCopiesMatch()
             require(destinationBinding.matches(original,bound())&&refreshed.all{it.sourceBinding.matches(it.bankBytes,true)}&&recoveryValid()){"The destination, Bank records or retained recovery data changed before writing."}
             stagedDestination=work.copyOf()
             writeStarted=true;file.writeBytes(work);val written=file.readBytes();require(destinationBinding.matches(work,bound())&&written.contentEquals(work)){"The persisted Gen 4 destination differs from the staged transaction."}
@@ -38149,7 +38153,7 @@ class MainActivity : Activity() {
             )
             requireSelectedNativeBankBatchPostCleanup(
                 4,destinationBinding.matches(work,bound()),retainedRecovery,recoveryCopies.map{it.second},
-                file,work,backup,original,isBackupKept(backup),refreshed.map{it.bankFile}
+                file,work,backup,original,retainedBinding.matches(original,isBackupKept(backup)),refreshed.map{it.bankFile}
             )
             selectedBankFiles.clear();bankMultiSelectMode=false
             val recoveryNotice=if(retainedRecovery)
@@ -38178,7 +38182,7 @@ class MainActivity : Activity() {
                 require(destinationBinding.matches(openedDestination,bound())&&restored.contentEquals(openedDestination)&&profile==openedProfile&&validation.generalChecksum&&validation.storageChecksum&&validation.badPk4==0){"The restored Gen 4 destination did not verify."};true
             }.getOrDefault(false)
             val retainedBackup=safetyBackup?.let{saved->runCatching{
-                saved.isFile&&isBackupKept(saved)&&saved.readBytes().contentEquals(openedDestination)
+                backupBinding?.matches(openedDestination,isBackupKept(saved))==true
             }.getOrDefault(false)}?:false
             val verifiedRecoveryCopies=recoveryCopies.filter{(item,copy)->runCatching{
                 val recovered=copy.readBytes();val parsed=if(recovered.size==136)parsePk4(recovered,false)else null
