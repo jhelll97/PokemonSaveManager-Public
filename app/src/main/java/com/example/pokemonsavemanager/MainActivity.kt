@@ -54215,7 +54215,8 @@ class MainActivity : Activity() {
         val openedFile=file;val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val fresh=runCatching{file.readBytes()}.getOrNull()?:return
-        val removed=ArrayList<Pair<File,ByteArray>>();var writeStarted=false;var safetyBackup:File?=null;var stagedDestination:ByteArray?=null
+        val removed=ArrayList<Pair<File,ByteArray>>();val cleanupAttempted=HashSet<String>()
+        var writeStarted=false;var safetyBackup:File?=null;var stagedDestination:ByteArray?=null;var bankRecovery:ExactBankRecoverySet?=null
         try{
             require(bound()){"The Gen 6 destination identity changed. Nothing was changed."}
             require(prepared.isNotEmpty()){"No Gen 1 Bank entries were prepared."}
@@ -54261,7 +54262,8 @@ class MainActivity : Activity() {
             require(bound()&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination or a selected Bank record changed before backup. Nothing was written."}
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen1BatchToGen6_",".backup",backupsDir());safetyBackup=recovery
             recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The exact Gen 6 batch recovery backup did not verify."};retainGenToGen6SafetyBackup(recovery,fresh)
-            require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination, selected Bank records or retained recovery backup changed before writing."}
+            val sourceRecovery=ExactBankRecoverySet("PSE_G1ToG6_BatchRecovery_");for(item in refreshed)sourceRecovery.capture(item.bankBytes,bankDir());require(sourceRecovery.matches()){ "The exact Gen 1 Bank recovery set did not verify." };bankRecovery=sourceRecovery
+            require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&sourceRecovery.matches()&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination, selected Bank records or retained recovery backup changed before writing."}
             stagedDestination=work.copyOf();writeStarted=true;file.writeBytes(work)
             val written=file.readBytes();require(written.contentEquals(work)){"The destination changed while the batch was written."}
             require(gen6BoxChecksumValid(written)&&gen6BlockChecksumValid(written,20)){"The persisted Gen 6 save failed checksum validation."}
@@ -54272,13 +54274,14 @@ class MainActivity : Activity() {
                 require(actual.contentEquals(bytes)&&samePk6(q,staged)&&gen6Pk6PpUps(actual).contentEquals(gen6Pk6PpUps(bytes))&&gen6DexCaught(written,q.species)){"A persisted PK6, PP-Up value or Pokédex registration did not verify."}
             }
             for(item in refreshed){
-                require(bound()&&file.readBytes().contentEquals(work)&&isBackupKept(recovery)){"The verified destination identity, data or retained backup changed before Bank cleanup."}
+                require(bound()&&file.readBytes().contentEquals(work)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&sourceRecovery.matches()&&exactBankPathsAbsent(removed.map{it.first})){"The verified destination identity, data, removed paths or retained recovery changed before Bank cleanup."}
                 val current=item.bankFile.readBytes();require(current.contentEquals(item.bankBytes)&&parseGen1BankPayload(current)?.let{sameGen1TransferRecord(it,item.source)}==true){"A Bank record changed before cleanup; the destination was restored."}
-                removed.add(item.bankFile to item.bankBytes);require(item.bankFile.delete()&&!item.bankFile.exists()){"A Bank record could not be removed after destination verification."}
+                cleanupAttempted.add(item.bankFile.absolutePath);require(item.bankFile.delete()&&!item.bankFile.exists()){"A Bank record could not be removed after destination verification."};removed.add(item.bankFile to item.bankBytes)
+                require(sourceRecovery.matches()&&exactBankPathsAbsent(removed.map{it.first})){"A removed Gen 1 Bank path or retained recovery changed during cleanup."}
             }
-            require(bound()&&file.readBytes().contentEquals(work)){"The verified Gen 6 destination changed after Bank cleanup."}
+            require(bound()&&file.readBytes().contentEquals(work)&&removed.size==refreshed.size&&exactBankPathsAbsent(removed.map{it.first})&&sourceRecovery.matches()){ "The verified Gen 6 destination, removed Bank batch or retained recovery changed after cleanup." }
         }catch(e:Exception){
-            for((bank,bytes) in removed)runCatching{if(!bank.exists())require(bank.createNewFile()){"A Bank recovery path could not be reserved."};bank.writeBytes(bytes)}
+            for(item in prepared)runCatching{restoreExactMissingStandardBankRecord(item.bankFile,item.bankBytes,cleanupAttempted.contains(item.bankFile.absolutePath),null)}
             val banksRestored=prepared.all{item->runCatching{val bytes=item.bankFile.readBytes();bytes.contentEquals(item.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,item.source)}==true}.getOrDefault(false)}
             val saveRestored=runCatching{
                 restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 6 destination write began; unknown current bytes were left untouched.","The Generation 6 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery.")
@@ -54292,10 +54295,12 @@ class MainActivity : Activity() {
                 saveRestored->"The exact Gen 6 destination was restored, but one or more Bank records were not verified. Keep every exact Gen 1 Bank recovery payload."
                 else->"Automatic recovery could not be verified. Keep the retained destination backup and every exact Gen 1 Bank recovery payload for review."
             }
-            showDialog("Gen 1 → Gen 6 multi-transfer failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""));return
+            val retainedBankNames=bankRecovery?.retainedNames().orEmpty();val retainedBankNotice=if(retainedBankNames.isBlank())"" else "\n\nBank recovery snapshots: $retainedBankNames"
+            showDialog("Gen 1 → Gen 6 multi-transfer failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:"")+retainedBankNotice);return
         }
+        val recoveryNotice=if(bankRecovery==null||bankRecovery?.cleanupExact()==true)"" else "; one or more exact Bank recoveries retained for review"
         selectedBankFiles.clear();bankMultiSelectMode=false
-        Toast.makeText(this,"Transferred ${prepared.size} Gen 1 Pokémon → Gen 6 and verified",Toast.LENGTH_LONG).show();showBank()
+        Toast.makeText(this,"Transferred ${prepared.size} Gen 1 Pokémon → Gen 6 and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
     }
 
     // PSE conversion only: Nintendo never provided a direct Generation I/II -> III migration path.
