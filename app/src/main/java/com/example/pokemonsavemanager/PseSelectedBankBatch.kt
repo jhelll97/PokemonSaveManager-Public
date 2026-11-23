@@ -64,6 +64,62 @@ internal fun sameGen1ToGen5BatchPk5(
         a.evs.contentEquals(b.evs) &&
         a.ivs.contentEquals(b.ivs)
 
+internal fun sameGen4ToGen5Pk5(a:MainActivity.PokemonEntry,b:MainActivity.PokemonEntry):Boolean=
+        a.checksumValid&&b.checksumValid&&!a.isEgg&&!b.isEgg&&a.pid==b.pid&&a.species==b.species&&
+            a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.isNicknamed==b.isNicknamed&&
+            a.otName==b.otName&&a.experience==b.experience&&a.ability==b.ability&&
+            a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&a.gender==b.gender&&a.form==b.form&&
+            a.fatefulEncounter==b.fatefulEncounter&&a.shiny==b.shiny&&a.heldItem==b.heldItem&&
+            a.friendship==b.friendship&&a.markingValue==b.markingValue&&a.language==b.language&&
+            a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&
+            a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)&&a.ball==b.ball&&
+            a.metLevel==b.metLevel&&a.otGender==b.otGender&&a.originGame==b.originGame&&
+            a.metYear==b.metYear&&a.metMonth==b.metMonth&&a.metDay==b.metDay
+
+internal fun sameGen5ToGen6Pk6(a:MainActivity.PokemonEntry,b:MainActivity.PokemonEntry):Boolean=
+        a.checksumValid&&b.checksumValid&&!a.isEgg&&!b.isEgg&&a.species==b.species&&a.pid==b.pid&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.isNicknamed==b.isNicknamed&&a.otName==b.otName&&a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&a.gender==b.gender&&a.form==b.form&&a.shiny==b.shiny&&a.fatefulEncounter==b.fatefulEncounter&&a.heldItem==b.heldItem&&a.friendship==b.friendship&&a.currentHandler==b.currentHandler&&a.markingValue==b.markingValue&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.relearnMoves.contentEquals(b.relearnMoves)&&a.eggLocation==b.eggLocation&&a.metLocation==b.metLocation&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.otGender==b.otGender&&a.originGame==b.originGame&&a.language==b.language&&a.eggYear==b.eggYear&&a.eggMonth==b.eggMonth&&a.eggDay==b.eggDay&&a.metYear==b.metYear&&a.metMonth==b.metMonth&&a.metDay==b.metDay
+
+internal fun sameGen6ToGen5Pk5(a:MainActivity.PokemonEntry,b:MainActivity.PokemonEntry):Boolean=
+        a.checksumValid&&b.checksumValid&&!a.isEgg&&!b.isEgg&&a.species==b.species&&a.pid==b.pid&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.isNicknamed==b.isNicknamed&&a.otName==b.otName&&a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&a.gender==b.gender&&a.form==b.form&&a.shiny==b.shiny&&a.fatefulEncounter==b.fatefulEncounter&&a.heldItem==b.heldItem&&a.friendship==b.friendship&&a.markingValue==b.markingValue&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.eggLocation==b.eggLocation&&a.metLocation==b.metLocation&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.otGender==b.otGender&&a.originGame==b.originGame&&a.language==b.language&&a.eggYear==b.eggYear&&a.eggMonth==b.eggMonth&&a.eggDay==b.eggDay&&a.metYear==b.metYear&&a.metMonth==b.metMonth&&a.metDay==b.metDay
+
+internal fun sameGen6ToGen7Pk7(a:MainActivity.PokemonEntry,b:MainActivity.PokemonEntry):Boolean=
+        a.checksumValid&&b.checksumValid&&!a.isEgg&&!b.isEgg&&a.species==b.species&&a.nickname==b.nickname&&a.isNicknamed==b.isNicknamed&&a.heldItem==b.heldItem&&a.tid==b.tid&&a.sid==b.sid&&a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.pid==b.pid&&a.nature==b.nature&&a.gender==b.gender&&a.form==b.form&&a.evs.contentEquals(b.evs)&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.ivs.contentEquals(b.ivs)&&a.otName==b.otName&&a.friendship==b.friendship&&a.currentHandler==b.currentHandler&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.shiny==b.shiny&&a.language==b.language&&a.fatefulEncounter==b.fatefulEncounter&&a.relearnMoves.contentEquals(b.relearnMoves)&&a.eggLocation==b.eggLocation&&a.metLocation==b.metLocation&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.otGender==b.otGender&&a.originGame==b.originGame&&a.country==b.country&&a.region==b.region&&a.consoleRegion==b.consoleRegion&&a.eggYear==b.eggYear&&a.eggMonth==b.eggMonth&&a.eggDay==b.eggDay&&a.metYear==b.metYear&&a.metMonth==b.metMonth&&a.metDay==b.metDay&&a.hyperTrainFlags==b.hyperTrainFlags
+
+internal fun sameGen5ToGen4Pk4(a:MainActivity.PokemonEntry,b:MainActivity.PokemonEntry):Boolean=
+        a.checksumValid&&b.checksumValid&&!a.isEgg&&!b.isEgg&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&
+            a.nickname==b.nickname&&a.isNicknamed==b.isNicknamed&&a.otName==b.otName&&a.experience==b.experience&&
+            a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&a.gender==b.gender&&a.form==b.form&&
+            a.fatefulEncounter==b.fatefulEncounter&&a.shiny==b.shiny&&a.heldItem==b.heldItem&&a.friendship==b.friendship&&
+            a.markingValue==b.markingValue&&a.language==b.language&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&
+            a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&
+            a.eggLocation==b.eggLocation&&a.metLocation==b.metLocation&&a.ball==b.ball&&a.metLevel==b.metLevel&&
+            a.otGender==b.otGender&&a.originGame==b.originGame&&a.eggYear==b.eggYear&&a.eggMonth==b.eggMonth&&a.eggDay==b.eggDay&&
+            a.metYear==b.metYear&&a.metMonth==b.metMonth&&a.metDay==b.metDay
+
+internal fun sameGen3ToGen4Pk4(a:MainActivity.PokemonEntry,b:MainActivity.PokemonEntry):Boolean=
+        a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&
+            a.nickname==b.nickname&&a.isNicknamed==b.isNicknamed&&a.otName==b.otName&&
+            a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&
+            a.nature==b.nature&&a.gender==b.gender&&a.shiny==b.shiny&&a.heldItem==b.heldItem&&
+            a.friendship==b.friendship&&a.language==b.language&&a.markingValue==b.markingValue&&
+            a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.isEgg==b.isEgg&&
+            a.eggLocation==b.eggLocation&&a.metLocation==b.metLocation&&a.ball==b.ball&&
+            a.metLevel==b.metLevel&&a.otGender==b.otGender&&a.originGame==b.originGame&&
+            a.metYear==b.metYear&&a.metMonth==b.metMonth&&a.metDay==b.metDay&&
+            a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&
+            a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)
+
+internal fun sameGen2ToGen4Pk4(a:MainActivity.PokemonEntry,b:MainActivity.PokemonEntry):Boolean =
+        a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.otName==b.otName&&a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&a.gender==b.gender&&a.shiny==b.shiny&&a.originGame==b.originGame&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.language==b.language&&a.heldItem==b.heldItem&&a.friendship==b.friendship&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&!a.isEgg&&!b.isEgg&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)
+
+internal fun sameGen2ToGen5Pk5(a:MainActivity.PokemonEntry,b:MainActivity.PokemonEntry):Boolean =
+        a.checksumValid&&b.checksumValid&&!a.isEgg&&!b.isEgg&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.otName==b.otName&&a.experience==b.experience&&a.heldItem==b.heldItem&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.gender==b.gender&&a.nature==b.nature&&a.shiny==b.shiny&&a.friendship==b.friendship&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.otGender==b.otGender&&a.originGame==b.originGame&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.ivs.contentEquals(b.ivs)&&a.evs.contentEquals(b.evs)
+
+internal fun sameGen1ToGen6BatchPk6(
+    a: MainActivity.PokemonEntry,
+    b: MainActivity.PokemonEntry
+): Boolean =a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.isNicknamed==b.isNicknamed&&a.otName==b.otName&&a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&a.gender==b.gender&&a.shiny==b.shiny&&a.originGame==b.originGame&&a.metLocation==b.metLocation&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.language==b.language&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)
+
 internal fun gen1ToGen7PkMismatch(
     a: MainActivity.PokemonEntry,
     b: MainActivity.PokemonEntry

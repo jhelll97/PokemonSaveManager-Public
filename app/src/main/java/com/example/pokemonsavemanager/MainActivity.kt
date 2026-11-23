@@ -11483,18 +11483,6 @@ class MainActivity : Activity() {
         return encrypted
     }
 
-    private fun sameGen4ToGen5Pk5(a:PokemonEntry,b:PokemonEntry):Boolean=
-        a.checksumValid&&b.checksumValid&&!a.isEgg&&!b.isEgg&&a.pid==b.pid&&a.species==b.species&&
-            a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.isNicknamed==b.isNicknamed&&
-            a.otName==b.otName&&a.experience==b.experience&&a.ability==b.ability&&
-            a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&a.gender==b.gender&&a.form==b.form&&
-            a.fatefulEncounter==b.fatefulEncounter&&a.shiny==b.shiny&&a.heldItem==b.heldItem&&
-            a.friendship==b.friendship&&a.markingValue==b.markingValue&&a.language==b.language&&
-            a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&
-            a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)&&a.ball==b.ball&&
-            a.metLevel==b.metLevel&&a.otGender==b.otGender&&a.originGame==b.originGame&&
-            a.metYear==b.metYear&&a.metMonth==b.metMonth&&a.metDay==b.metDay
-
     private fun prepareGen4ToGen5Transfer(bankFile:File,shown:PokemonEntry){
         val file=importedFile?:return showDialog("Gen 4 → Gen 5","Load a valid Generation 5 destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
@@ -12855,9 +12843,6 @@ class MainActivity : Activity() {
         require(q.checksumValid&&!q.isEgg&&q.species==p.species&&q.pid==pid&&q.tid==p.tid&&q.sid==p.sid&&q.nickname==p.nickname&&q.isNicknamed==p.isNicknamed&&q.otName==p.otName&&q.experience==p.experience&&q.ability==p.ability&&q.abilityNumber==p.abilityNumber&&q.nature==p.nature&&q.gender==p.gender&&q.form==p.form&&q.shiny==p.shiny&&q.fatefulEncounter==p.fatefulEncounter&&q.heldItem==0&&q.friendship==p.friendship&&q.currentHandler==1&&gen6Pk6HandlerName(encrypted)==trainer.trainerName&&q.markingValue==gen5ToGen6Markings(p.markingValue)&&q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(p.movePP)&&gen6Pk6PpUps(encrypted).contentEquals(ups)&&q.evs.contentEquals(p.evs)&&q.ivs.contentEquals(p.ivs)&&q.pokerusDays==p.pokerusDays&&q.pokerusStrain==p.pokerusStrain&&q.relearnMoves.all{it==0}&&q.eggLocation==0&&q.metLocation==30001&&q.ball==p.ball&&q.metLevel==p.metLevel&&q.otGender==p.otGender&&q.originGame==p.originGame&&q.language==p.language&&q.eggYear==p.eggYear&&q.eggMonth==p.eggMonth&&q.eggDay==p.eggDay&&q.metYear==p.metYear&&q.metMonth==p.metMonth&&q.metDay==p.metDay){"The converted PK6 did not preserve every reviewed field."}
         return encrypted
     }
-
-    private fun sameGen5ToGen6Pk6(a:PokemonEntry,b:PokemonEntry):Boolean=
-        a.checksumValid&&b.checksumValid&&!a.isEgg&&!b.isEgg&&a.species==b.species&&a.pid==b.pid&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.isNicknamed==b.isNicknamed&&a.otName==b.otName&&a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&a.gender==b.gender&&a.form==b.form&&a.shiny==b.shiny&&a.fatefulEncounter==b.fatefulEncounter&&a.heldItem==b.heldItem&&a.friendship==b.friendship&&a.currentHandler==b.currentHandler&&a.markingValue==b.markingValue&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.relearnMoves.contentEquals(b.relearnMoves)&&a.eggLocation==b.eggLocation&&a.metLocation==b.metLocation&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.otGender==b.otGender&&a.originGame==b.originGame&&a.language==b.language&&a.eggYear==b.eggYear&&a.eggMonth==b.eggMonth&&a.eggDay==b.eggDay&&a.metYear==b.metYear&&a.metMonth==b.metMonth&&a.metDay==b.metDay
 
     private fun prepareGen5ToGen6Transfer(bankFile:File,shown:PokemonEntry){
         val file=importedFile?:return showDialog("Gen 5 → Gen 6","Load a valid Generation 6 destination save first.")
@@ -36374,9 +36359,6 @@ class MainActivity : Activity() {
         return encrypted
     }
 
-    private fun sameGen6ToGen5Pk5(a:PokemonEntry,b:PokemonEntry):Boolean=
-        a.checksumValid&&b.checksumValid&&!a.isEgg&&!b.isEgg&&a.species==b.species&&a.pid==b.pid&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.isNicknamed==b.isNicknamed&&a.otName==b.otName&&a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&a.gender==b.gender&&a.form==b.form&&a.shiny==b.shiny&&a.fatefulEncounter==b.fatefulEncounter&&a.heldItem==b.heldItem&&a.friendship==b.friendship&&a.markingValue==b.markingValue&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.eggLocation==b.eggLocation&&a.metLocation==b.metLocation&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.otGender==b.otGender&&a.originGame==b.originGame&&a.language==b.language&&a.eggYear==b.eggYear&&a.eggMonth==b.eggMonth&&a.eggDay==b.eggDay&&a.metYear==b.metYear&&a.metMonth==b.metMonth&&a.metDay==b.metDay
-
     private fun gen6ToGen5OmittedMetadata(raw:ByteArray,p:PokemonEntry):String{
         val d=decryptPk6IfNeeded(raw)
         fun hex(start:Int,end:Int)=d.copyOfRange(start,end).joinToString(" "){"%02X".format(it.toInt() and 0xFF)}
@@ -36586,9 +36568,6 @@ class MainActivity : Activity() {
         !gen5ToGen6DateValid(p.eggYear,p.eggMonth,p.eggDay)->"The Egg date is invalid."
         else->null
     }
-
-    private fun sameGen6ToGen7Pk7(a:PokemonEntry,b:PokemonEntry):Boolean=
-        a.checksumValid&&b.checksumValid&&!a.isEgg&&!b.isEgg&&a.species==b.species&&a.nickname==b.nickname&&a.isNicknamed==b.isNicknamed&&a.heldItem==b.heldItem&&a.tid==b.tid&&a.sid==b.sid&&a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.pid==b.pid&&a.nature==b.nature&&a.gender==b.gender&&a.form==b.form&&a.evs.contentEquals(b.evs)&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.ivs.contentEquals(b.ivs)&&a.otName==b.otName&&a.friendship==b.friendship&&a.currentHandler==b.currentHandler&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.shiny==b.shiny&&a.language==b.language&&a.fatefulEncounter==b.fatefulEncounter&&a.relearnMoves.contentEquals(b.relearnMoves)&&a.eggLocation==b.eggLocation&&a.metLocation==b.metLocation&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.otGender==b.otGender&&a.originGame==b.originGame&&a.country==b.country&&a.region==b.region&&a.consoleRegion==b.consoleRegion&&a.eggYear==b.eggYear&&a.eggMonth==b.eggMonth&&a.eggDay==b.eggDay&&a.metYear==b.metYear&&a.metMonth==b.metMonth&&a.metDay==b.metDay&&a.hyperTrainFlags==b.hyperTrainFlags
 
     private fun buildGen6ToGen7Pk7(raw:ByteArray,p:PokemonEntry,originGame:Int=p.originGame):ByteArray{
         require(raw.size==PK6_STORED_SIZE){"The preserved Gen 6 Bank record has an unexpected size."};gen6ToGen7PreflightRejection(p,raw,originGame)?.let{error(it)}
@@ -37568,17 +37547,6 @@ class MainActivity : Activity() {
         }
         return encrypted
     }
-
-    private fun sameGen5ToGen4Pk4(a:PokemonEntry,b:PokemonEntry):Boolean=
-        a.checksumValid&&b.checksumValid&&!a.isEgg&&!b.isEgg&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&
-            a.nickname==b.nickname&&a.isNicknamed==b.isNicknamed&&a.otName==b.otName&&a.experience==b.experience&&
-            a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&a.gender==b.gender&&a.form==b.form&&
-            a.fatefulEncounter==b.fatefulEncounter&&a.shiny==b.shiny&&a.heldItem==b.heldItem&&a.friendship==b.friendship&&
-            a.markingValue==b.markingValue&&a.language==b.language&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&
-            a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&
-            a.eggLocation==b.eggLocation&&a.metLocation==b.metLocation&&a.ball==b.ball&&a.metLevel==b.metLevel&&
-            a.otGender==b.otGender&&a.originGame==b.originGame&&a.eggYear==b.eggYear&&a.eggMonth==b.eggMonth&&a.eggDay==b.eggDay&&
-            a.metYear==b.metYear&&a.metMonth==b.metMonth&&a.metDay==b.metDay
 
     private fun prepareGen5ToGen4Transfer(bankFile:File,shown:PokemonEntry,requestedOriginGame:Int?=null){
         val file=importedFile?:return showDialog("Gen 5 → Gen 4","Load a valid Generation 4 destination save first.")
@@ -47941,19 +47909,6 @@ class MainActivity : Activity() {
         return encrypted
     }
 
-    private fun sameGen3ToGen4Pk4(a:PokemonEntry,b:PokemonEntry):Boolean=
-        a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&
-            a.nickname==b.nickname&&a.isNicknamed==b.isNicknamed&&a.otName==b.otName&&
-            a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&
-            a.nature==b.nature&&a.gender==b.gender&&a.shiny==b.shiny&&a.heldItem==b.heldItem&&
-            a.friendship==b.friendship&&a.language==b.language&&a.markingValue==b.markingValue&&
-            a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.isEgg==b.isEgg&&
-            a.eggLocation==b.eggLocation&&a.metLocation==b.metLocation&&a.ball==b.ball&&
-            a.metLevel==b.metLevel&&a.otGender==b.otGender&&a.originGame==b.originGame&&
-            a.metYear==b.metYear&&a.metMonth==b.metMonth&&a.metDay==b.metDay&&
-            a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&
-            a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)
-
     private fun prepareGen3ToGen4Transfer(bankFile:File,shown:PokemonEntry,legalisePid:Boolean=false){
         val file=importedFile?:return showDialog("Gen 3 → Gen 4","Load a valid Generation 4 destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
@@ -54173,14 +54128,13 @@ class MainActivity : Activity() {
             val info=boxStorageInfo(fresh)?:error("PSE could not resolve Gen 6 PC storage.")
             require(box in 0 until info.second/30){"Invalid Gen 6 destination box."}
             val trainer=analyzeSave(file).trainer?:error("PSE could not re-read the destination trainer.")
-            fun samePk6(a:PokemonEntry,b:PokemonEntry)=a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.isNicknamed==b.isNicknamed&&a.otName==b.otName&&a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&a.gender==b.gender&&a.shiny==b.shiny&&a.originGame==b.originGame&&a.metLocation==b.metLocation&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.language==b.language&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)
             val refreshed=prepared.map{item->
                 val bytes=item.bankFile.readBytes();require(bytes.contentEquals(item.bankBytes)){"A selected Bank record changed after preparation."}
                 val source=parseGen1BankPayload(bytes)?:error("A selected Gen 1 Bank record is invalid.")
                 require(sameGen1TransferRecord(source,item.source)){"A selected Bank record no longer matches its prepared source."}
                 val pk6=buildGen1ToGen6Pk6(bytes,source,fresh,trainer,item.meta)
                 val q=parsePk6(pk6,0,PK6_STORED_SIZE,false,721)?:error("A refreshed PK6 could not be parsed.")
-                require(pk6.contentEquals(item.pk6)&&samePk6(q,item.converted)&&gen6Pk6PpUps(pk6).contentEquals(source.movePpUps)){"A prepared conversion or PP-Up value changed before confirmation."}
+                require(pk6.contentEquals(item.pk6)&&sameGen1ToGen6BatchPk6(q,item.converted)&&gen6Pk6PpUps(pk6).contentEquals(source.movePpUps)){"A prepared conversion or PP-Up value changed before confirmation."}
                 Gen1Gen6BatchPrepared(item.bankFile,bytes,source,item.meta,pk6,q)
             }
             val empty=(0 until 30).filter{slot->gen6DestinationSlotIsStructurallyEmpty(fresh,info.first,info.second,info.third,box*30+slot)}
@@ -54192,7 +54146,7 @@ class MainActivity : Activity() {
                 item.pk6.copyInto(work,off);for(x in off until off+PK6_STORED_SIZE)allowed.add(x)
                 val stagedBytes=work.copyOfRange(off,off+PK6_STORED_SIZE)
                 val staged=parsePk6(stagedBytes,0,PK6_STORED_SIZE,false,721)?:error("A staged PK6 could not be parsed.")
-                require(stagedBytes.contentEquals(item.pk6)&&samePk6(staged,item.converted)&&gen6Pk6PpUps(stagedBytes).contentEquals(item.source.movePpUps)){"A staged PK6 did not preserve every supported converted field and PP-Up value."}
+                require(stagedBytes.contentEquals(item.pk6)&&sameGen1ToGen6BatchPk6(staged,item.converted)&&gen6Pk6PpUps(stagedBytes).contentEquals(item.source.movePpUps)){"A staged PK6 did not preserve every supported converted field and PP-Up value."}
                 expected.add(Triple(target,item.pk6,staged))
             }
             for((_,_,mon) in expected){
@@ -54217,7 +54171,7 @@ class MainActivity : Activity() {
             for((target,bytes,staged) in expected){
                 val off=info.first+target*PK6_STORED_SIZE;val actual=written.copyOfRange(off,off+PK6_STORED_SIZE)
                 val q=parsePk6(actual,0,PK6_STORED_SIZE,false,721)?:error("A persisted PK6 could not be parsed.")
-                require(actual.contentEquals(bytes)&&samePk6(q,staged)&&gen6Pk6PpUps(actual).contentEquals(gen6Pk6PpUps(bytes))&&gen6DexCaught(written,q.species)){"A persisted PK6, PP-Up value or Pokédex registration did not verify."}
+                require(actual.contentEquals(bytes)&&sameGen1ToGen6BatchPk6(q,staged)&&gen6Pk6PpUps(actual).contentEquals(gen6Pk6PpUps(bytes))&&gen6DexCaught(written,q.species)){"A persisted PK6, PP-Up value or Pokédex registration did not verify."}
             }
             for(item in refreshed){
                 require(bound()&&file.readBytes().contentEquals(work)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&sourceRecovery.matches()&&exactBankPathsAbsent(removed.map{it.first})){"The verified destination identity, data, removed paths or retained recovery changed before Bank cleanup."}
@@ -59699,9 +59653,6 @@ class MainActivity : Activity() {
         error("PSE could not create a deterministic Gen 4 PID preserving nature, gender and shiny state.")
     }
 
-    private fun sameGen2ToGen4Pk4(a:PokemonEntry,b:PokemonEntry):Boolean =
-        a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.otName==b.otName&&a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&a.gender==b.gender&&a.shiny==b.shiny&&a.originGame==b.originGame&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.language==b.language&&a.heldItem==b.heldItem&&a.friendship==b.friendship&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&!a.isEgg&&!b.isEgg&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)
-
     private fun buildGen2ToGen4Pk4(bankBytes:ByteArray,p:Gen2Pokemon,destination:ByteArray,meta:Gen1ToGen5Meta,plan:Gen2ToGen4LegalisePlan):ByteArray {
         require(bankBytes.size==GEN2_BANK_FILE_SIZE){"The preserved Gen 2 Bank record has an unexpected size."};val profile=detectGen4Profile(destination)?:error("A valid Generation 4 destination save is required.");gen2ToGen4Rejection(p,plan,meta)?.let{error(it)}
         val ppUps=gen2BankToGen4PpUps(bankBytes)
@@ -60093,9 +60044,6 @@ private data class Gen2ToGen5LegalisePlan(
         require(q.checksumValid&&!q.isEgg&&q.species==p.species&&q.tid==p.tid&&q.sid==0&&q.nickname==nickname&&q.otName==p.otName&&q.experience==p.experience&&q.heldItem==0&&q.ability==meta.abilityId&&q.abilityNumber==1&&q.gender==plan.gender&&q.nature==plan.nature&&q.shiny==plan.shiny&&q.friendship==plan.happiness&&q.pokerusDays+((q.pokerusStrain shl 4))==plan.pokerus&&q.ball==4&&q.metLevel==p.level&&q.otGender==otGender&&q.originGame==(if(profile.sequel)22 else 20)&&q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(p.movePP)&&gen5Pk5PpUps(encrypted).contentEquals(ppUps)&&q.ivs.contentEquals(ivs)&&q.evs.contentEquals(ev)){"The converted PK5 failed identity or preserved-state verification."}
         return encrypted
     }
-
-    private fun sameGen2ToGen5Pk5(a:PokemonEntry,b:PokemonEntry):Boolean =
-        a.checksumValid&&b.checksumValid&&!a.isEgg&&!b.isEgg&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.otName==b.otName&&a.experience==b.experience&&a.heldItem==b.heldItem&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.gender==b.gender&&a.nature==b.nature&&a.shiny==b.shiny&&a.friendship==b.friendship&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.otGender==b.otGender&&a.originGame==b.originGame&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.ivs.contentEquals(b.ivs)&&a.evs.contentEquals(b.evs)
 
     private data class Gen2Gen5SingleBinding(val uri:Uri?,val label:String?,val destination:ByteArray,val bank:ByteArray)
     private data class Gen2Gen5Prepared(
