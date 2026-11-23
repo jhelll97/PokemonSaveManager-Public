@@ -855,6 +855,40 @@ internal fun requireGen1ToGen3BatchRecoveryBoundary(
     }
 }
 
+internal fun gen1ToGen3BatchDexesRegistered(
+    data:ByteArray,
+    dexes:List<Int>,
+    map:IntArray?,
+    game:String
+):Boolean {
+    if(map==null)return false
+    val s0=map[0];val s1=map[1]
+    if(s0<0||s1<0)return false
+    val frlg=game.contains("FireRed")||game.contains("LeafGreen")
+    val emerald=game.contains("Emerald")
+    val seen2Rel=when{frlg->0x5F8;emerald->0x988;else->0x938}
+    val seen3LargeRel=when{frlg->0x3A18;emerald->0x3B24;else->0x3A8C}
+    val seen3SectionId=1+seen3LargeRel/3968
+    val seen3Rel=seen3LargeRel%3968
+    val sSeen3=map[seen3SectionId]
+    if(sSeen3<0)return false
+    return dexes.distinct().all{dex->
+        val bit=dex-1;val mask=1 shl(bit and 7);val byte=bit/8
+        intArrayOf(s0+0x28+byte,s0+0x5C+byte,s1+seen2Rel+byte,sSeen3+seen3Rel+byte)
+            .all{it in data.indices&&(data[it].toInt() and mask)!=0}
+    }
+}
+
+internal fun gen1ToGen3BatchRecoveryMessage(
+    banksRestored:Boolean,
+    saveRestored:Boolean
+):String=when {
+    banksRestored&&saveRestored->"The exact Gen 3 destination and every selected Gen 1 Bank record were restored or kept and verified."
+    banksRestored->"Every selected Gen 1 Bank record was restored or kept, but destination recovery was not verified. Use the retained Gen 3 backup before editing again."
+    saveRestored->"The exact Gen 3 destination was restored or kept, but one or more Gen 1 Bank records were not verified. Keep the remaining Bank records and recovery data for review."
+    else->"Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
+}
+
 internal fun gen1ToGen3BatchRecoveryFailureNotice(recovery:ExactBankRecoverySet?):String {
     val names=recovery?.retainedNames().orEmpty()
     return if(names.isEmpty())"" else "\n\nBank recovery snapshots: "+names

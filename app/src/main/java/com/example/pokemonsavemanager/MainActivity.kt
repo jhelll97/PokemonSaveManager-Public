@@ -1723,14 +1723,7 @@ class MainActivity : Activity() {
             }
             val changed=expected.flatMap{(target,bytes,_)->val off=4+target*80;(off until off+bytes.size).toList()}.toHashSet()
             require(pc.indices.all{it in changed||pc[it]==beforePc[it]}){"Unrelated Gen 3 PC data changed during batch staging."}
-            fun dexesRegistered(data:ByteArray,dexes:List<Int>):Boolean{
-                val map=gen3ActiveSectionMap(data)?:return false;val s0=map[0];val s1=map[1]
-                if(s0<0||s1<0)return false
-                val game=detectGen3GameFromData(data,currentSourceLabel?:importedFile?.name.orEmpty());val frlg=game.contains("FireRed")||game.contains("LeafGreen");val emerald=game.contains("Emerald")
-                val seen2Rel=when{frlg->0x5F8;emerald->0x988;else->0x938};val seen3LargeRel=when{frlg->0x3A18;emerald->0x3B24;else->0x3A8C};val seen3SectionId=1+seen3LargeRel/3968;val seen3Rel=seen3LargeRel%3968;val sSeen3=map[seen3SectionId]
-                if(sSeen3<0)return false
-                return dexes.distinct().all{dex->val bit=dex-1;val mask=1 shl(bit and 7);val byte=bit/8;intArrayOf(s0+0x28+byte,s0+0x5C+byte,s1+seen2Rel+byte,sSeen3+seen3Rel+byte).all{it in data.indices&&(data[it].toInt() and mask)!=0}}
-            }
+            fun dexesRegistered(data:ByteArray,dexes:List<Int>)=gen1ToGen3BatchDexesRegistered(data,dexes,gen3ActiveSectionMap(data),detectGen3GameFromData(data,currentSourceLabel?:importedFile?.name.orEmpty()))
             val dexes=expected.map{it.third.species}
             writeSelectedGen1ToGen3PcAndDexFrozen(save,pc,dexes)
             require(gen3SaveValid(save)){"Gen 3 checksum verification failed"}
@@ -1763,12 +1756,7 @@ class MainActivity : Activity() {
                 require(restored.contentEquals(fresh)&&generationForSize(restored.size)==3&&gen3SaveValid(restored)){"The restored Generation 3 destination did not verify."}
                 true
             }.getOrDefault(false)
-            val recovery=when{
-                banksRestored&&saveRestored->"The exact Gen 3 destination and every selected Gen 1 Bank record were restored or kept and verified."
-                banksRestored->"Every selected Gen 1 Bank record was restored or kept, but destination recovery was not verified. Use the retained Gen 3 backup before editing again."
-                saveRestored->"The exact Gen 3 destination was restored or kept, but one or more Gen 1 Bank records were not verified. Keep the remaining Bank records and recovery data for review."
-                else->"Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
-            }
+            val recovery=gen1ToGen3BatchRecoveryMessage(banksRestored,saveRestored)
             showDialog("Gen 1 → Gen 3 multi-conversion failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:"")+gen1ToGen3BatchRecoveryFailureNotice(bankRecovery))
             return
         }
