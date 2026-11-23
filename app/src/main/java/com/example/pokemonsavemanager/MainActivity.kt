@@ -855,7 +855,7 @@ class MainActivity : Activity() {
             var stagedDestination:ByteArray?=null
             val bankRecovery=ArrayList<File>()
             val bankRecoveryBindings=HashMap<String,PseBankSourceBinding>()
-            val cleanupAttempted=HashSet<String>()
+            val removed=ArrayList<Pair<File,ByteArray>>()
             fun recoverySnapshotsMatch(expected:List<Gen1BankBatchItem>):Boolean=
                 bankRecovery.size==expected.size&&bankRecovery.indices.all{index->
                     bankRecoveryBindings[bankRecovery[index].absolutePath]
@@ -936,11 +936,22 @@ class MainActivity : Activity() {
                 }
                 for((index,item) in refreshed.withIndex()){
                     val bankFile=item.bankFile;val bankBytes=item.bankBytes;val parsed=item.source
+                    require(exactBankPathsAbsent(removed.map{it.first})){
+                        "An earlier removed Gen 1 Bank path reappeared before the next cleanup step."
+                    }
                     require(destinationBinding.matches(work,bound())&&activeMatches(work)){"The verified Gen 1 destination changed before Bank cleanup."}
                     val recoveryBytes=bankRecovery[index].readBytes()
                     require(retainedBinding.matches(fresh,isBackupKept(backup))&&bankRecoveryBindings[bankRecovery[index].absolutePath]?.matches(bankBytes,true)==true&&recoveryBytes.contentEquals(bankBytes)&&parseGen1BankPayload(recoveryBytes)?.let{sameGen1TransferRecord(it,parsed)}==true){"A retained Gen 1 recovery copy changed before Bank cleanup."}
                     val cleanup=bankFile.readBytes();require(item.sourceBinding.matches(bankBytes,true)&&cleanup.contentEquals(bankBytes) && parseGen1BankPayload(cleanup)?.let{sameGen1TransferRecord(it,parsed)}==true){"A selected Bank record changed before cleanup. The destination save was restored."}
-                    cleanupAttempted.add(bankFile.absolutePath);require(bankFile.delete()&&!bankFile.exists()){ "A Bank record could not be removed after the save verified." }
+                    val deleted=bankFile.delete()
+                    require(deleted&&!bankFile.exists()){ "A Bank record could not be removed after the save verified." }
+                    removed.add(bankFile to bankBytes)
+                    require(exactBankPathsAbsent(removed.map{it.first})){
+                        "A removed Gen 1 Bank path did not remain absent after cleanup."
+                    }
+                }
+                require(removed.size==refreshed.size&&exactBankPathsAbsent(removed.map{it.first})){
+                    "The verified Gen 1 removed Bank batch changed after cleanup."
                 }
                 require(destinationBinding.matches(work,bound())&&activeMatches(work)){"The verified Gen 1 destination changed after Bank cleanup."}
                 require(retainedBinding.matches(fresh,isBackupKept(backup))&&recoverySnapshotsMatch(refreshed)&&refreshed.indices.all{index->val recovered=bankRecovery[index].readBytes();recovered.contentEquals(refreshed[index].bankBytes)&&parseGen1BankPayload(recovered)?.let{sameGen1TransferRecord(it,refreshed[index].source)}==true}){"A retained Gen 1 recovery copy changed after Bank cleanup."}
@@ -964,9 +975,10 @@ class MainActivity : Activity() {
                 var bankRestored=true
                 for(item in selected){
                     val bankFile=item.bankFile;val bankBytes=item.bankBytes;val source=item.source
+                    val attempted=removed.any{it.first.absolutePath==bankFile.absolutePath}
                     val recovered=runCatching{
                         if(bankFile.exists())require(bankFile.readBytes().contentEquals(bankBytes)){"An existing Bank recovery path changed; it was not overwritten."}
-                        else{require(cleanupAttempted.contains(bankFile.absolutePath)){"A Gen 1 Bank record disappeared before PSE attempted cleanup; its path was not overwritten."};require(bankFile.createNewFile()){ "A Bank recovery path could not be reserved." };bankFile.writeBytes(bankBytes)}
+                        else{require(attempted){"A Gen 1 Bank record disappeared before PSE verified its cleanup; its path was not overwritten."};require(bankFile.createNewFile()){ "A Bank recovery path could not be reserved." };bankFile.writeBytes(bankBytes)}
                         val restored=bankFile.readBytes();require(item.sourceBinding.matches(bankBytes,true)&&restored.contentEquals(bankBytes)&&parseGen1BankPayload(restored)?.let{sameGen1TransferRecord(it,source)}==true){"A restored Gen 1 Bank record did not verify."};true
                     }.getOrDefault(false)
                     bankRestored=recovered&&bankRestored
