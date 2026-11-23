@@ -392,6 +392,7 @@ class MainActivity : Activity() {
         var writeStarted=false;var safetyBackup:File?=null;var backupBinding:PseBankDestinationBinding?=null
         var stagedDestination:ByteArray?=null
         val recoveryCopies=ArrayList<Pair<Gen5BankBatchItem,File>>();val cleanupAttempted=HashSet<String>()
+        val removedSources=ArrayList<File>()
         val recoveryBindings=HashMap<String,PseBankSourceBinding>()
         fun recoveryCopiesMatch()=recoveryCopies.size==selected.size&&recoveryCopies.all{(item,copy)->
             recoveryBindings[copy.absolutePath]?.matches(item.bankBytes,true)==true
@@ -445,11 +446,14 @@ class MainActivity : Activity() {
             for(i in refreshed.indices){val actual=written.copyOfRange(offsets[i],offsets[i]+136);val reopened=parsePk5(actual,false);val source=refreshed[i].source;require(actual.contentEquals(refreshed[i].bankBytes)&&reopened!=null&&reopened.checksumValid&&reopened.pid==source.pid&&reopened.species==source.species&&reopened.tid==source.tid&&reopened.sid==source.sid){"An exact PK5 did not verify after destination reopen."}}
             for(item in refreshed){
                 require(destinationBinding.matches(work,bound())&&recoveryValid()){"The verified Generation 5 destination or retained recovery data changed before Bank cleanup."}
+                require(exactBankPathsAbsent(removedSources)){"An earlier removed Gen 5 Bank path reappeared before the next cleanup step."}
                 val current=item.bankFile.readBytes();val parsed=if(current.size==136)parsePk5(current,false)else null
                 require(item.sourceBinding.matches(item.bankBytes,true)&&current.contentEquals(item.bankBytes)&&parsed!=null&&parsed.checksumValid){"A selected Gen 5 Bank record changed before cleanup."}
                 cleanupAttempted.add(item.bankFile.absolutePath);require(item.bankFile.delete()&&!item.bankFile.exists()){"A selected Gen 5 Bank record could not be removed after destination verification."}
+                removedSources.add(item.bankFile)
+                require(exactBankPathsAbsent(removedSources)){"A removed Gen 5 Bank path did not remain absent after cleanup."}
             }
-            require(destinationBinding.matches(work,bound())&&recoveryValid()){"The verified Generation 5 destination or retained recovery data changed after Bank cleanup."}
+            require(removedSources.size==refreshed.size&&exactBankPathsAbsent(removedSources)&&destinationBinding.matches(work,bound())&&recoveryValid()){"The verified Generation 5 destination, removed Bank paths or retained recovery data changed after Bank cleanup."}
             retainedRecovery=finishSelectedNativeBankBatchRecoveryCleanup(
                 recoveryCopies.map{it.second},recoveryCopies.map{it.first.bankBytes}
             )
