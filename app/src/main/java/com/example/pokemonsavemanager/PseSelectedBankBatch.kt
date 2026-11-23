@@ -1041,6 +1041,30 @@ internal fun finishGen1ToGen2BatchRecovery(recovery:ExactBankRecoverySet?):Strin
     if(recovery==null||recovery.cleanupExact())"" else
         "; one or more exact Bank recoveries retained for review"
 
+internal data class Gen1ToGen2BatchDisclosure(
+    val name:String,
+    val dex:Int,
+    val heldItem:Int,
+    val moves:IntArray,
+    val pp:IntArray,
+    val ppUps:IntArray
+)
+
+internal fun gen1ToGen2BatchDisclosure(records:List<Gen1ToGen2BatchDisclosure>):String=buildString {
+    append("Exact disclosed conversion effects for every selected record\n")
+    records.forEachIndexed{index,record->
+        append("\n${index+1}. ${record.name} → Gen 2 Pokédex #${record.dex}\n")
+        append("• Gen 1 catch-rate byte ${record.heldItem} becomes Gen 2 held-item ID ${record.heldItem}.\n")
+        for(slot in 0..3){
+            val move=record.moves.getOrElse(slot){0};val pp=record.pp.getOrElse(slot){0};val ups=record.ppUps.getOrElse(slot){0}
+            append(if(move==0)"• Move slot ${slot+1}: move #0 (empty) • PP $pp • PP Ups $ups\n" else "• Move slot ${slot+1}: move #$move • PP $pp • PP Ups $ups\n")
+        }
+    }
+    append("\nNickname, OT, TID, level, EXP, Stat Exp and DVs are retained. Gen 2 friendship becomes 70; Pokérus and caught-data become 0 because Generation 1 stores none of those fields.\n")
+    append("The original Gen 1 save remains unchanged. Exact Bank bytes remain until every reviewed native Gen 2 box record, Seen/Owned flag and primary checksum persists and reopens successfully. PSE retains destination and per-record Bank recovery snapshots and restores both sides independently on failure.\n\n")
+    append("This is a PSE native-format conversion. It does not claim an official trade, verified Time Capsule history, encounter legality, legality certification or verified provenance. Choose one destination Box for the complete ordered batch, or Cancel to leave both sides unchanged.")
+}
+
 internal fun createGen1ToGen4BatchRecovery(
     expected:List<ByteArray>,
     directory:File

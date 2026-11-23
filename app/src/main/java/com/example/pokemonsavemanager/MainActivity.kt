@@ -1736,16 +1736,24 @@ class MainActivity : Activity() {
         val targets=availableGen2BoxTargets(data).filter{it.second>=chosen.size}
         if(targets.isEmpty()){showDialog("Transfer to Gen 2","No single Gen 2 PC box has room for all ${chosen.size} selected Pokémon. Nothing was changed.");return}
         val labels=targets.map{gen2BoxDestinationLabel(it.first,it.second,file,profile,currentSourceUri,data)}.toTypedArray()
-        var selectedTarget = 0
-        var consumed=false
-        AlertDialog.Builder(this).setTitle("Transfer ${chosen.size} Gen 1 Pokémon to ${profile.displayName}")
-            .setSingleChoiceItems(labels,selectedTarget){_,which->selectedTarget=which}
+        val disclosure=gen1ToGen2BatchDisclosure(parsed.map{item->val p=item.source;Gen1ToGen2BatchDisclosure(p.nickname.ifBlank{gen1SpeciesNameFromInternal(p.species)},requireNotNull(gen1DexFromInternalIndex(p.species)),item.bankBytes[GEN1_BANK_HEADER_SIZE+7].toInt() and 0xFF,p.moves,p.movePP,p.movePpUps)})
+        fun showDestinationPicker(){
+            var selectedTarget = 0
+            var consumed=false
+            AlertDialog.Builder(this).setTitle("Choose ${profile.displayName} destination")
+                .setSingleChoiceItems(labels,selectedTarget){_,which->selectedTarget=which}
+                .setNegativeButton("Cancel",null)
+                .setPositiveButton("Convert"){_,_->
+                    if(consumed||selectedTarget !in targets.indices){showDialog("Transfer to Gen 2","This batch destination choice was already handled or is invalid. Reopen the Bank selection. Nothing was changed.");return@setPositiveButton}
+                    consumed=true
+                    transferSelectedGen1BankToGen2(parsed,targets[selectedTarget].first,file,data,openedSource,openedLabel,profile.key)
+                }
+                .show()
+        }
+        AlertDialog.Builder(this).setTitle("PSE Convert ${chosen.size} Gen 1 Pokémon to ${profile.displayName}")
+            .setMessage(disclosure)
             .setNegativeButton("Cancel",null)
-            .setPositiveButton("Transfer"){_,_->
-                if(consumed||selectedTarget !in targets.indices){showDialog("Transfer to Gen 2","This batch destination choice was already handled or is invalid. Reopen the Bank selection. Nothing was changed.");return@setPositiveButton}
-                consumed=true
-                transferSelectedGen1BankToGen2(parsed,targets[selectedTarget].first,file,data,openedSource,openedLabel,profile.key)
-            }
+            .setPositiveButton("Choose destination"){_,_->showDestinationPicker()}
             .show()
     }
 
