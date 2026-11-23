@@ -1192,6 +1192,38 @@ internal fun gen1ToGen4BatchDisclosure(records:List<Gen1ToGen4BatchDisclosure>):
 internal fun showGen1ToGen4BatchDisclosureAndDestination(activity:Activity,count:Int,disclosure:String,labels:Array<String>,onConvert:(Int)->Unit)=
     showBankBatchDisclosureAndDestination(activity,"PSE Convert $count Gen 1 Pokémon → Gen 4","Choose Gen 4 destination",disclosure,labels,onConvert)
 
+internal data class Gen1ToGen5BatchDisclosure(
+    val name:String,
+    val dex:Int,
+    val sourceLevel:Int,
+    val sourceExperience:Long,
+    val sourceMoves:IntArray,
+    val sourcePp:IntArray,
+    val ppUps:IntArray,
+    val sourceStatExp:IntArray,
+    val catchRate:Int,
+    val converted:MainActivity.PokemonEntry
+)
+
+internal fun gen1ToGen5BatchDisclosure(records:List<Gen1ToGen5BatchDisclosure>):String=buildString {
+    append("Exact disclosed native PK5 conversion effects for every selected record\n")
+    append("No in-memory move Legalise edits are applied in this batch. Every material native-format change is shown below.\n")
+    records.forEachIndexed{index,record->
+        val q=record.converted
+        append("\n${index+1}. ${record.name} → Gen 5 Pokédex #${record.dex}\n")
+        for(slot in 0..3)append("• Move slot ${slot+1}: #${record.sourceMoves.getOrElse(slot){0}} • PP ${record.sourcePp.getOrElse(slot){0}} • PP Ups ${record.ppUps.getOrElse(slot){0}}\n")
+        append("• Level ${record.sourceLevel}; EXP ${record.sourceExperience}; shiny ${q.shiny}; PID ${"%08X".format(q.pid)} carries nature #${q.nature} and gender #${q.gender}; SID becomes 0.\n")
+        append("• DVs become IVs ${q.ivs.joinToString("/")}; Special supplies both special IVs. Stat Exp ${record.sourceStatExp.joinToString("/")} becomes EVs ${q.evs.joinToString("/")} (total ${q.evs.sum()}) after the Gen 5 cap.\n")
+        append("• Destination-valid ability #${q.ability}, slot ${q.abilityNumber}; base friendship ${q.friendship}; language #${q.language}; held item ${q.heldItem}; Ball #${q.ball}; met level ${q.metLevel}; destination-compatible origin #${q.originGame}.\n")
+        append("• Gen 1 catch-rate byte ${record.catchRate}, met and egg dates and locations, and fields without native PK5 representation are omitted or empty.\n")
+    }
+    append("\nSpecies, nickname, OT, TID, EXP, level, move IDs, current PP, PP Ups and reviewed shiny state are retained. The original Gen 1 save remains unchanged. Exact Bank bytes remain until every ordered native PK5 slot, Pokédex registration, box and checksum-table validation and destination reopen verifies. PSE retains destination and per-record Bank recovery snapshots and restores both sides independently on failure.\n\n")
+    append("Nintendo provided no direct Gen 1 to Gen 5 route. This is a PSE native-format conversion and does not claim an official trade or migration, encounter legality, legality certification or verified provenance. Choose one destination Box for the complete ordered batch, or Cancel to leave both sides unchanged.")
+}
+
+internal fun showGen1ToGen5BatchDisclosureAndDestination(activity:Activity,count:Int,disclosure:String,labels:Array<String>,onConvert:(Int)->Unit)=
+    showBankBatchDisclosureAndDestination(activity,"PSE Convert $count Gen 1 Pokémon → Gen 5","Choose Gen 5 destination",disclosure,labels,onConvert)
+
 internal fun createGen1ToGen4BatchRecovery(
     expected:List<ByteArray>,
     directory:File
