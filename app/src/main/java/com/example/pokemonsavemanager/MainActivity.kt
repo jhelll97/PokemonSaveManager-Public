@@ -1694,7 +1694,7 @@ class MainActivity : Activity() {
         val file=importedFile?:return;val openedFile=file;val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val fresh=runCatching{file.readBytes()}.getOrElse{showDialog("Gen 1 → Gen 3 multi-conversion failed","The fresh destination save could not be read. Nothing was changed.");return}
-        val removed=ArrayList<Pair<File,ByteArray>>();var writeStarted=false;var safetyBackup:File?=null;var stagedDestination:ByteArray?=null
+        val removed=ArrayList<Pair<File,ByteArray>>();val cleanupAttempted=HashSet<String>();var writeStarted=false;var safetyBackup:File?=null;var stagedDestination:ByteArray?=null;var bankRecovery:ExactBankRecoverySet?=null
         try{
             require(bound()){"The Gen 3 destination identity changed. Nothing was changed."}
             require(chosen.isNotEmpty()){"No Gen 1 Bank entries were selected."}
@@ -1739,7 +1739,8 @@ class MainActivity : Activity() {
             require(bound()&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination or a selected Bank record changed before backup. Nothing was written."}
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen1BatchToGen3_",".backup",backupsDir());safetyBackup=recovery
             recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The exact Gen 3 batch recovery backup did not verify."};retainGen2ToGen3SafetyBackup(recovery,fresh)
-            require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination, selected Bank records or retained recovery backup changed before writing."}
+            val sourceRecovery=ExactBankRecoverySet("PSE_G1ToG3_BatchRecovery_");for(item in refreshed)sourceRecovery.capture(item.bankBytes,bankDir());require(sourceRecovery.matches()){ "The exact Gen 1 Bank recovery set did not verify." };bankRecovery=sourceRecovery
+            require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&sourceRecovery.matches()&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination, selected Bank records or retained recovery backup changed before writing."}
             stagedDestination=save.copyOf();writeStarted=true;file.writeBytes(save)
             val verify=file.readBytes();require(verify.contentEquals(save)){"The Gen 3 destination changed while the multi-conversion was being written."};require(gen3SaveValid(verify)){"Written Gen 3 save failed checksum verification"}
             require(dexesRegistered(verify,dexes)){"The persisted Gen 3 Pokédex mirrors did not verify for the complete batch."}
@@ -1747,16 +1748,16 @@ class MainActivity : Activity() {
             for((target,bytes,staged) in expected){val off=4+target*80;val actual=vpc.copyOfRange(off,off+80);val q=parsePk3(actual,0,false);require(actual.contentEquals(bytes)&&q!=null&&samePk3(q,staged)&&gen3MovePpUps(actual).contentEquals(gen3MovePpUps(bytes))){"A persisted PK3 or PP-Up value did not preserve every supported converted field."}}
             require(vpc.indices.all{it in changed||vpc[it]==beforePc[it]}){"Unrelated Gen 3 PC data changed after batch persistence."}
             for(item in refreshed){
-                require(bound()&&file.readBytes().contentEquals(save)&&isBackupKept(recovery)){"The verified destination identity, data or retained backup changed before Bank cleanup."}
+                require(bound()&&file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&sourceRecovery.matches()&&exactBankPathsAbsent(removed.map{it.first})){"The verified destination identity, retained backup, removed paths or Bank recovery set changed before cleanup."}
                 val current=runCatching{item.bankFile.readBytes()}.getOrElse{error("A selected Gen 1 Bank record could not be re-read before cleanup.")}
                 require(current.contentEquals(item.bankBytes)&&parseGen1BankPayload(current)?.let{sameGen1TransferRecord(it,item.source)}==true){"A selected Gen 1 Bank record changed before cleanup. The Gen 3 destination was restored."}
-                removed.add(item.bankFile to item.bankBytes)
+                cleanupAttempted.add(item.bankFile.absolutePath)
                 require(item.bankFile.delete()&&!item.bankFile.exists()){"A Bank entry could not be removed after destination verification."}
+                removed.add(item.bankFile to item.bankBytes);require(sourceRecovery.matches()&&exactBankPathsAbsent(removed.map{it.first})){"A removed Gen 1 Bank path or retained recovery changed during cleanup."}
             }
-            require(bound()&&file.readBytes().contentEquals(save)){"The verified Gen 3 destination changed after Bank cleanup."}
+            require(bound()&&file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&removed.size==refreshed.size&&exactBankPathsAbsent(removed.map{it.first})&&sourceRecovery.matches()){ "The verified Gen 3 destination, retained backup, removed Bank batch or Bank recovery set changed after cleanup." }
         }catch(e:Exception){
-            for((bankFile,bankBytes) in removed)runCatching{if(!bankFile.exists())require(bankFile.createNewFile()){"A Bank recovery path could not be reserved."};bankFile.writeBytes(bankBytes)}
-            val banksRestored=chosen.all{item->runCatching{val bytes=item.bankFile.readBytes();bytes.contentEquals(item.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,item.source)}==true}.getOrDefault(false)}
+            val banksRestored=chosen.all{item->runCatching{restoreExactMissingStandardBankRecord(item.bankFile,item.bankBytes,cleanupAttempted.contains(item.bankFile.absolutePath),null);val bytes=item.bankFile.readBytes();bytes.contentEquals(item.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,item.source)}==true}.getOrDefault(false)}
             val saveRestored=runCatching{
                 restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 3 destination write began; unknown current bytes were left untouched.","The Generation 3 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
@@ -1769,11 +1770,13 @@ class MainActivity : Activity() {
                 saveRestored->"The exact Gen 3 destination was restored or kept, but one or more Gen 1 Bank records were not verified. Keep the remaining Bank records and recovery data for review."
                 else->"Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
             }
-            showDialog("Gen 1 → Gen 3 multi-conversion failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""))
+            val retainedBankNames=bankRecovery?.retainedNames().orEmpty();val retainedBankNotice=if(retainedBankNames.isBlank())"" else "\n\nBank recovery snapshots: $retainedBankNames"
+            showDialog("Gen 1 → Gen 3 multi-conversion failed","${e.message?:"Unknown error"}\n\n$recovery"+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:"")+retainedBankNotice)
             return
         }
+        val recoveryNotice=if(bankRecovery==null||bankRecovery?.cleanupExact()==true)"" else "; one or more exact Bank recoveries retained for review"
         selectedBankFiles.clear();bankMultiSelectMode=false
-        Toast.makeText(this,"${chosen.size} Gen 1 Pokémon converted to Gen 3 Box ${box+1} and verified",Toast.LENGTH_LONG).show()
+        Toast.makeText(this,"${chosen.size} Gen 1 Pokémon converted to Gen 3 Box ${box+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show()
         showGen3PokemonViewer("boxes",box)
     }
 
