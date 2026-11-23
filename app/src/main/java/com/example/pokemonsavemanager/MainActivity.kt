@@ -38039,7 +38039,10 @@ class MainActivity : Activity() {
         }.setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
     }
 
-    private data class Gen4BankBatchItem(val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry)
+    private data class Gen4BankBatchItem(
+        val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry,
+        val sourceBinding:PseBankSourceBinding
+    )
 
     private fun chooseSelectedGen4BankDestination(chosen:List<File>){
         val file=importedFile?:return showDialog("Gen 4 Bank multi-withdrawal","Import a Gen 4 destination save first.")
@@ -38050,11 +38053,16 @@ class MainActivity : Activity() {
         val profile=detectGen4Profile(destination)?:return showDialog("Gen 4 Bank multi-withdrawal","Load a valid Gen 4 destination save. Nothing was changed.")
         val validation=gen4Validation(destination,profile)
         if(!validation.generalChecksum||!validation.storageChecksum||validation.badPk4!=0)return showDialog("Gen 4 Bank multi-withdrawal","The Gen 4 destination did not pass checksum and PK4 validation. Nothing was changed.")
-        val selected=try{chosen.map{bankFile->
-            require(bankFile.isFile){"A selected Gen 4 Bank record no longer exists."}
+        val root=bankDir()
+        if(runCatching{root.absoluteFile!=root.canonicalFile||!root.isDirectory}.getOrDefault(true))return showDialog("Gen 4 Bank multi-withdrawal","The PSE Bank folder could not be verified.")
+        val selected=try{chosen.map{candidate->
+            require(candidate.absoluteFile==candidate.canonicalFile){"A selected Gen 4 Bank record path is not canonical."}
+            val bankFile=candidate
+            require(bankFile.parentFile==root&&bankFile.isFile&&bankFile.extension.equals("pk4",true)){"A selected Gen 4 Bank record is outside the canonical Generation 4 PSE Bank."}
+            val sourceBinding=PseBankSourceBinding.capture(bankFile)?:error("A selected Gen 4 Bank record identity could not be captured.")
             val bytes=bankFile.readBytes();val source=if(bytes.size==136)parsePk4(bytes,false)else null
-            require(source!=null&&source.checksumValid){"A selected Gen 4 Bank record is not a checksum-valid native PK4."}
-            Gen4BankBatchItem(bankFile,bytes,source)
+            require(sourceBinding.matches(bytes,true)&&source!=null&&source.checksumValid){"A selected Gen 4 Bank record is not a checksum-valid native PK4."}
+            Gen4BankBatchItem(bankFile,bytes,source,sourceBinding)
         }}catch(e:Exception){return showDialog("Gen 4 Bank multi-withdrawal",(e.message?:"A selected Gen 4 Bank record could not be read.")+" Nothing was changed.")}
         val targets=(0 until 18).mapNotNull{box->
             val slots=(0 until 30).filter{slot->val off=gen4BoxSlotOffset(destination,profile,box*30+slot);val raw=destination.copyOfRange(off,off+136);parsePk4(raw,false)==null&&raw.all{it==0.toByte()}}
@@ -38091,8 +38099,8 @@ class MainActivity : Activity() {
             val before=gen4Validation(original,profile);require(before.generalChecksum&&before.storageChecksum&&before.badPk4==0){"The Gen 4 destination no longer passes validation."}
             val refreshed=selected.map{item->
                 val bytes=item.bankFile.readBytes();val source=if(bytes.size==136)parsePk4(bytes,false)else null
-                require(bytes.contentEquals(item.bankBytes)&&source!=null&&source.checksumValid&&source.pid==item.source.pid&&source.species==item.source.species&&source.tid==item.source.tid&&source.sid==item.source.sid){"A selected Gen 4 Bank record changed after destination review."}
-                Gen4BankBatchItem(item.bankFile,bytes,source)
+                require(item.sourceBinding.matches(item.bankBytes,true)&&bytes.contentEquals(item.bankBytes)&&source!=null&&source.checksumValid&&source.pid==item.source.pid&&source.species==item.source.species&&source.tid==item.source.tid&&source.sid==item.source.sid){"A selected Gen 4 Bank record changed after destination review."}
+                Gen4BankBatchItem(item.bankFile,bytes,source,item.sourceBinding)
             }
             val work=original.copyOf();val offsets=ArrayList<Int>();val allowed=HashSet<Int>()
             for(i in refreshed.indices){
@@ -38113,7 +38121,7 @@ class MainActivity : Activity() {
                 require(copy.readBytes().contentEquals(item.bankBytes)){"A Gen 4 Bank recovery snapshot did not verify."};recoveryCopies.add(item to copy)
             }
             fun recoveryValid()=isBackupKept(backup)&&backup.readBytes().contentEquals(original)&&recoveryCopies.size==refreshed.size&&recoveryCopies.all{(item,copy)->copy.readBytes().contentEquals(item.bankBytes)}
-            require(destinationBinding.matches(original,bound())&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}&&recoveryValid()){"The destination, Bank records or retained recovery data changed before writing."}
+            require(destinationBinding.matches(original,bound())&&refreshed.all{it.sourceBinding.matches(it.bankBytes,true)}&&recoveryValid()){"The destination, Bank records or retained recovery data changed before writing."}
             stagedDestination=work.copyOf()
             writeStarted=true;file.writeBytes(work);val written=file.readBytes();require(destinationBinding.matches(work,bound())&&written.contentEquals(work)){"The persisted Gen 4 destination differs from the staged transaction."}
             val writtenProfile=detectGen4Profile(written)?:error("The written Gen 4 destination layout could not be reopened.");val writtenValidation=gen4Validation(written,writtenProfile)
@@ -38122,7 +38130,7 @@ class MainActivity : Activity() {
             for(i in refreshed.indices){val actual=written.copyOfRange(offsets[i],offsets[i]+136);val mon=parsePk4(actual,false);require(actual.contentEquals(refreshed[i].bankBytes)&&mon!=null&&mon.checksumValid){"An exact PK4 did not verify after destination reopen."}}
             for(item in refreshed){
                 require(destinationBinding.matches(work,bound())&&recoveryValid()){"The verified Gen 4 destination or retained recovery data changed before Bank cleanup."}
-                val current=item.bankFile.readBytes();require(current.contentEquals(item.bankBytes)&&parsePk4(current,false)?.checksumValid==true){"A selected Gen 4 Bank record changed before cleanup."}
+                val current=item.bankFile.readBytes();require(item.sourceBinding.matches(item.bankBytes,true)&&current.contentEquals(item.bankBytes)&&parsePk4(current,false)?.checksumValid==true){"A selected Gen 4 Bank record changed before cleanup."}
                 cleanupAttempted.add(item.bankFile.absolutePath)
                 require(item.bankFile.delete()&&!item.bankFile.exists()){"A selected Gen 4 Bank record could not be removed after destination verification."}
             }
@@ -38142,7 +38150,7 @@ class MainActivity : Activity() {
             val bankRestored=selected.map{item->runCatching{
                 if(!item.bankFile.exists()){require(cleanupAttempted.contains(item.bankFile.absolutePath)){"A Gen 4 Bank record disappeared before PSE attempted cleanup; its path was not overwritten."};require(item.bankFile.createNewFile()){"A Bank recovery path could not be reserved."};item.bankFile.writeBytes(item.bankBytes)}
                 val restored=item.bankFile.readBytes();val parsed=if(restored.size==136)parsePk4(restored,false)else null
-                require(restored.contentEquals(item.bankBytes)&&parsed!=null&&parsed.checksumValid&&parsed.pid==item.source.pid&&parsed.species==item.source.species&&parsed.tid==item.source.tid&&parsed.sid==item.source.sid){"An exact Gen 4 Bank record could not be restored or verified."};true
+                require(item.sourceBinding.matches(item.bankBytes,true)&&restored.contentEquals(item.bankBytes)&&parsed!=null&&parsed.checksumValid&&parsed.pid==item.source.pid&&parsed.species==item.source.species&&parsed.tid==item.source.tid&&parsed.sid==item.source.sid){"An exact Gen 4 Bank record could not be restored or verified."};true
             }.getOrDefault(false)}.all{it}
             val destinationRestored=runCatching{
                 val current=file.readBytes()
