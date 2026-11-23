@@ -38,6 +38,36 @@ internal fun loadBoundGen1BankBatch(
     }
 }
 
+internal data class Gen2BankBatchItem(
+    val bankFile: File,
+    val bankBytes: ByteArray,
+    val source: MainActivity.Gen2Pokemon,
+    val sourceBinding: PseBankSourceBinding
+)
+
+internal fun loadBoundGen2BankBatch(
+    chosen: List<File>,
+    bankRoot: File,
+    parse: (ByteArray) -> MainActivity.Gen2Pokemon?
+): List<Gen2BankBatchItem> {
+    require(bankRoot.absoluteFile == bankRoot.canonicalFile && bankRoot.isDirectory)
+    return chosen.map { bankFile ->
+        require(
+            bankFile.absoluteFile == bankFile.canonicalFile &&
+                bankFile.parentFile == bankRoot &&
+                bankFile.isFile &&
+                bankFile.extension.equals("pse2", true)
+        )
+        val sourceBinding = requireNotNull(PseBankSourceBinding.capture(bankFile))
+        val bankBytes = bankFile.readBytes()
+        require(sourceBinding.matches(bankBytes, true))
+        val source = parse(bankBytes) ?: error("A selected Gen 2 Bank record is invalid.")
+        Gen2BankBatchItem(bankFile, bankBytes, source, sourceBinding)
+    }.also { items ->
+        require(items.map { it.bankFile.canonicalPath }.distinct().size == items.size)
+    }
+}
+
 internal fun sameGen1ToGen5BatchPk5(
     a: MainActivity.PokemonEntry,
     b: MainActivity.PokemonEntry
