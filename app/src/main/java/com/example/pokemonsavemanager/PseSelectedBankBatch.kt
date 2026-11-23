@@ -642,6 +642,13 @@ private fun writeGen1ToGen5U16(data:ByteArray,offset:Int,value:Int) {
     data[offset+1]=((value ushr 8) and 0xFF).toByte()
 }
 
+internal fun gen5PokedexBlock(profile:MainActivity.Gen5Profile):Triple<Int,Int,Int> {
+    val length=if(profile.sequel)0x04DC else 0x04D4
+    val local=profile.pokedexOffset+length+2
+    val mirror=if(profile.sequel)0x25F6C else 0x23F6E
+    return Triple(length,local,mirror)
+}
+
 internal fun registerGen1ToGen5Pokedex(
     save:ByteArray,
     profile:MainActivity.Gen5Profile,
