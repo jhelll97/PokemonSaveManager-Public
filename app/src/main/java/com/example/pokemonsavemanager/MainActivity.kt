@@ -48437,14 +48437,14 @@ class MainActivity : Activity() {
         val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry,
         val destination:ByteArray,val trainer:TrainerData,val meta:Gen3ToGen7TransferMeta,
         val pk7:ByteArray,val converted:PokemonEntry,val destinationFile:File,
-        val sourceUri:Uri?,val sourceLabel:String?
+        val sourceUri:Uri?,val sourceLabel:String?,val sourceBinding:PseBankSourceBinding
     )
 
     private fun gen3ToGen7StillBound(p:Gen3Gen7Prepared):Boolean=
         importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&
             currentSourceLabel==p.sourceLabel&&runCatching{
                 p.destinationFile.readBytes().contentEquals(p.destination)&&
-                    p.bankFile.readBytes().contentEquals(p.bankBytes)
+                    p.sourceBinding.matches(p.bankBytes,true)
             }.getOrDefault(false)
 
     private fun prepareGen3ForwardTransfer(bankFile:File,shown:PokemonEntry){
@@ -48453,10 +48453,15 @@ class MainActivity : Activity() {
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val root=runCatching{bankDir().canonicalFile}.getOrNull()
             ?:return showDialog("Gen 3 → Gen 7","The PSE Bank path could not be verified.")
-        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+        val selected=runCatching{
+            require(bankFile.absoluteFile==bankFile.canonicalFile)
+            bankFile.canonicalFile
+        }.getOrNull()
             ?:return showDialog("Gen 3 → Gen 7","The selected Bank path could not be verified.")
         if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk3",true))
             return showDialog("Gen 3 → Gen 7","The selected record is outside the Generation 3 PSE Bank.")
+        val sourceBinding=PseBankSourceBinding.capture(selected)
+            ?:return showDialog("Gen 3 → Gen 7","The selected Bank identity could not be captured.")
         val bank=runCatching{selected.readBytes()}.getOrNull()
             ?:return showDialog("Gen 3 → Gen 7","PSE could not read the preserved Gen 3 Bank entry.")
         val source=if(bank.size==80)parsePk3(bank,0,false)else null
@@ -48477,7 +48482,7 @@ class MainActivity : Activity() {
         if(trainer.gender!="Male"&&trainer.gender!="Female")
             return showDialog("Gen 3 → Gen 7 blocked","The destination trainer gender is ${trainer.gender}. PSE will not guess the native PK7 handling-trainer gender.\n\nThe Bank record and destination were left unchanged.")
         fun snapshotsMatch()=bound()&&runCatching{
-            file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)
+            file.readBytes().contentEquals(destination)&&sourceBinding.matches(bank,true)
         }.getOrDefault(false)
         val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 3 → Gen 7")
             .setMessage("Resolving the exact ability mapping and preparing a reviewed native PK7…")
@@ -48492,7 +48497,7 @@ class MainActivity : Activity() {
             }
             val converted=parsePk6(pk7,0,PK6_STORED_SIZE,false,807)
                 ?:return@loadGen3ToGen7TransferMetaAsync showDialog("Gen 3 → Gen 7","The prepared PK7 could not be reopened.")
-            val prepared=Gen3Gen7Prepared(selected,bank,source,destination,trainer,meta,pk7,converted,file,openedUri,openedLabel)
+            val prepared=Gen3Gen7Prepared(selected,bank,source,destination,trainer,meta,pk7,converted,file,openedUri,openedLabel,sourceBinding)
             val oldPid="%08X".format(source.pid);val newPid="%08X".format(converted.pid)
             val pidNote=if(source.pid==converted.pid)"PID remains $oldPid." else
                 "PID changes $oldPid → $newPid only to preserve the reviewed ${if(source.shiny)"shiny" else "non-shiny"} state under the Gen 7 threshold."
@@ -48574,6 +48579,7 @@ class MainActivity : Activity() {
             val info=boxStorageInfo(original)?:error("The Gen 7 PC layout is unavailable.")
             require(target in 0 until info.second){"The selected Gen 7 slot is invalid."}
             val initialChecks=validateGen7CoreChecksums(original);require(initialChecks.first){initialChecks.second}
+            require(p.sourceBinding.matches(p.bankBytes,true)){"The Gen 3 Bank identity changed."}
             val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The Gen 3 Bank record changed."}
             val source=if(bank.size==80)parsePk3(bank,0,false)else null
             require(source!=null&&source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&
@@ -48631,7 +48637,7 @@ class MainActivity : Activity() {
                 gen7DexRegistered(written,reopened)){"The exact converted PK7 or Pokédex registration did not persist."}
             val writtenChecks=validateGen7CoreChecksums(written);require(writtenChecks.first){writtenChecks.second}
             require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
-                p.bankFile.readBytes().contentEquals(p.bankBytes)&&file.readBytes().contentEquals(save)&&
+                p.sourceBinding.matches(p.bankBytes,true)&&file.readBytes().contentEquals(save)&&
                 isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&
                 bankCopy.readBytes().contentEquals(p.bankBytes)){
                 "The source identity, Gen 3 Bank record, verified Gen 7 destination or retained recovery files changed before cleanup."
@@ -48665,7 +48671,7 @@ class MainActivity : Activity() {
                     p.bankFile.writeBytes(p.bankBytes)
                 }
                 val restored=p.bankFile.readBytes();val parsed=if(restored.size==80)parsePk3(restored,0,false)else null
-                restored.contentEquals(p.bankBytes)&&parsed!=null&&parsed.checksumValid&&
+                p.sourceBinding.matches(p.bankBytes,true)&&restored.contentEquals(p.bankBytes)&&parsed!=null&&parsed.checksumValid&&
                     parsed.pid==p.source.pid&&parsed.species==p.source.species&&
                     parsed.tid==p.source.tid&&parsed.sid==p.source.sid
             }.getOrDefault(false)
