@@ -9756,7 +9756,7 @@ class MainActivity : Activity() {
         val hyperTrainFlags: Int
     )
 
-    private data class Gen5Profile(
+    internal data class Gen5Profile(
         val family:String, val sequel:Boolean, val checksumTable:Int, val pokedexOffset:Int,
         val checksumTableLength:Int, val checksumBlockChecksumOffset:Int
     )
@@ -54121,21 +54121,8 @@ class MainActivity : Activity() {
         val built=buildGen1ToGen5Pk5Bytes(bankBytes,p,GEN1_BANK_FILE_SIZE,meta.baseFriendship,meta.abilityId,dex,pid,gender,nickname,originGame,{data,offset,length,text,max->writeGen5String(data,offset,length,text,max)},{encryptPk5(it)})
         return verifyGen1ToGen5Pk5Bytes(built,p,parsePk5(built.encrypted,false),dex,meta.baseFriendship,meta.abilityId,gen5Pk5PpUps(built.encrypted))
     }
-    private fun gen5PokedexBlock(profile:Gen5Profile):Triple<Int,Int,Int>{val len=if(profile.sequel)0x04DC else 0x04D4;val local=profile.pokedexOffset+len+2;val mirror=if(profile.sequel)0x25F6C else 0x23F6E;return Triple(len,local,mirror)}
-    private fun registerGen1ToGen5Pokedex(save:ByteArray,p:Gen5Profile,mon:PokemonEntry){
-        val dex=mon.species;require(dex in 1..649);val bit=dex-1;val mask=1 shl(bit and 7);val byte=bit/8;val region=(if(mon.shiny)2 else 0) or (mon.gender and 1);val base=p.pokedexOffset
-        val caught=base+0x08+byte;val seen=base+0x5C+region*0x54+byte;val displayedRegions=(0..3).map{base+0x1AC+it*0x54+byte};for(o in listOf(caught,seen)){require(o in save.indices);save[o]=(save[o].toInt() or mask).toByte()};if(displayedRegions.none{(save[it].toInt() and mask)!=0}){val o=base+0x1AC+region*0x54+byte;save[o]=(save[o].toInt() or mask).toByte()}
-        if(dex<=493){val langBase=base+(if(p.sequel)0x328 else 0x320);val langBit=bit*7+1;val o=langBase+langBit/8;save[o]=(save[o].toInt() or (1 shl(langBit and 7))).toByte()}
-        val(len,local,mirror)=gen5PokedexBlock(p);val crc=gen4Crc16Ccitt(save,base,base+len);writeU16LE(save,local,crc);writeU16LE(save,mirror,crc);val tableCrc=gen4Crc16Ccitt(save,p.checksumTable,p.checksumTable+p.checksumTableLength);writeU16LE(save,p.checksumBlockChecksumOffset,tableCrc)
-    }
-    private fun gen1ToGen5DexRegistered(save:ByteArray,p:Gen5Profile,mon:PokemonEntry):Boolean{val bit=mon.species-1;val mask=1 shl(bit and 7);val byte=bit/8;val region=(if(mon.shiny)2 else 0) or (mon.gender and 1);val base=p.pokedexOffset;return (save[base+0x08+byte].toInt() and mask)!=0&&(save[base+0x5C+region*0x54+byte].toInt() and mask)!=0&&(0..3).any{(save[base+0x1AC+it*0x54+byte].toInt() and mask)!=0}}
-    private fun gen5DestinationSlotIsStructurallyEmpty(data:ByteArray,global:Int):Boolean{
-        if(global !in 0 until 720)return false
-        val off=0x00400+(global/30)*0x1000+(global%30)*136
-        if(off<0||off+136>data.size)return false
-        val raw=data.copyOfRange(off,off+136)
-        return raw.all{it==0.toByte()}&&parsePk5(raw,false)==null
-    }
+    private fun gen5DestinationSlotIsStructurallyEmpty(data:ByteArray,global:Int):Boolean=
+        gen5DestinationSlotIsStructurallyEmptyBytes(data,global){parsePk5(it,false)}
     private data class Gen1Gen5SinglePrepared(
         val bankFile:File,val bankBytes:ByteArray,val source:Gen1Pokemon,val destination:ByteArray,
         val meta:Gen1ToGen5Meta,val pk5:ByteArray,val converted:PokemonEntry,

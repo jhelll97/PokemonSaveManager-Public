@@ -621,6 +621,97 @@ internal fun verifyGen1ToGen5Pk5Bytes(
     return built.encrypted
 }
 
+private fun gen1ToGen5Crc16Ccitt(data:ByteArray,start:Int,endExclusive:Int):Int {
+    var crc=0xFFFF
+    val end=endExclusive.coerceAtMost(data.size)
+    var i=start.coerceAtLeast(0)
+    while(i<end) {
+        crc=crc xor ((data[i].toInt() and 0xFF) shl 8)
+        repeat(8) {
+            crc=if((crc and 0x8000)!=0) ((crc shl 1) xor 0x1021) and 0xFFFF
+            else (crc shl 1) and 0xFFFF
+        }
+        i++
+    }
+    return crc and 0xFFFF
+}
+
+private fun writeGen1ToGen5U16(data:ByteArray,offset:Int,value:Int) {
+    if(offset<0||offset+1>=data.size)return
+    data[offset]=(value and 0xFF).toByte()
+    data[offset+1]=((value ushr 8) and 0xFF).toByte()
+}
+
+internal fun registerGen1ToGen5Pokedex(
+    save:ByteArray,
+    profile:MainActivity.Gen5Profile,
+    pokemon:MainActivity.PokemonEntry
+) {
+    val dex=pokemon.species
+    require(dex in 1..649)
+    val bit=dex-1
+    val mask=1 shl(bit and 7)
+    val byte=bit/8
+    val region=(if(pokemon.shiny)2 else 0) or (pokemon.gender and 1)
+    val base=profile.pokedexOffset
+    val caught=base+0x08+byte
+    val seen=base+0x5C+region*0x54+byte
+    val displayedRegions=(0..3).map { base+0x1AC+it*0x54+byte }
+    for(offset in listOf(caught,seen)) {
+        require(offset in save.indices)
+        save[offset]=(save[offset].toInt() or mask).toByte()
+    }
+    if(displayedRegions.none { (save[it].toInt() and mask)!=0 }) {
+        val offset=base+0x1AC+region*0x54+byte
+        save[offset]=(save[offset].toInt() or mask).toByte()
+    }
+    if(dex<=493) {
+        val languageBase=base+(if(profile.sequel)0x328 else 0x320)
+        val languageBit=bit*7+1
+        val offset=languageBase+languageBit/8
+        save[offset]=(save[offset].toInt() or (1 shl(languageBit and 7))).toByte()
+    }
+    val length=if(profile.sequel)0x04DC else 0x04D4
+    val local=profile.pokedexOffset+length+2
+    val mirror=if(profile.sequel)0x25F6C else 0x23F6E
+    val pokedexCrc=gen1ToGen5Crc16Ccitt(save,base,base+length)
+    writeGen1ToGen5U16(save,local,pokedexCrc)
+    writeGen1ToGen5U16(save,mirror,pokedexCrc)
+    val tableCrc=gen1ToGen5Crc16Ccitt(
+        save,
+        profile.checksumTable,
+        profile.checksumTable+profile.checksumTableLength
+    )
+    writeGen1ToGen5U16(save,profile.checksumBlockChecksumOffset,tableCrc)
+}
+
+internal fun gen1ToGen5DexRegistered(
+    save:ByteArray,
+    profile:MainActivity.Gen5Profile,
+    pokemon:MainActivity.PokemonEntry
+):Boolean {
+    val bit=pokemon.species-1
+    val mask=1 shl(bit and 7)
+    val byte=bit/8
+    val region=(if(pokemon.shiny)2 else 0) or (pokemon.gender and 1)
+    val base=profile.pokedexOffset
+    return (save[base+0x08+byte].toInt() and mask)!=0&&
+        (save[base+0x5C+region*0x54+byte].toInt() and mask)!=0&&
+        (0..3).any { (save[base+0x1AC+it*0x54+byte].toInt() and mask)!=0 }
+}
+
+internal fun gen5DestinationSlotIsStructurallyEmptyBytes(
+    data:ByteArray,
+    global:Int,
+    parse:(ByteArray)->MainActivity.PokemonEntry?
+):Boolean {
+    if(global !in 0 until 720)return false
+    val offset=0x00400+(global/30)*0x1000+(global%30)*136
+    if(offset<0||offset+136>data.size)return false
+    val raw=data.copyOfRange(offset,offset+136)
+    return raw.all { it==0.toByte() }&&parse(raw)==null
+}
+
 internal fun requireExactGen3BankPartySource(
     item: Gen3BankBatchItem,
     root: File,
