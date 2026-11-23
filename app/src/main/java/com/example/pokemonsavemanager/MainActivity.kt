@@ -53874,11 +53874,15 @@ class MainActivity : Activity() {
         val file=importedFile?:return
         val openedFile=file;val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        val destinationBinding=PseBankDestinationBinding.capture(file)
+        if(destinationBinding==null||!destinationBinding.matches(preparedDestination,bound())){
+            showDialog("Gen 1 → Gen 5 multi-transfer","The destination identity changed after review. Reopen PSE Bank. Nothing was changed.");return
+        }
         val fresh=runCatching{file.readBytes()}.getOrNull()?:return
         val removed=ArrayList<Pair<File,ByteArray>>();val cleanupAttempted=HashSet<String>()
         var writeStarted=false;var safetyBackup:File?=null;var stagedDestination:ByteArray?=null;var bankRecovery:ExactBankRecoverySet?=null
         try{
-            require(bound()){"The Gen 5 destination identity changed. Nothing was changed."}
+            require(destinationBinding.matches(preparedDestination,bound())){"The Gen 5 destination identity changed. Nothing was changed."}
             require(prepared.isNotEmpty()){"No Gen 1 Bank entries were prepared."}
             require(prepared.map{it.bankFile.absolutePath}.distinct().size==prepared.size){"The prepared selection contains a duplicate."}
             require(fresh.contentEquals(preparedDestination)){"The Gen 5 destination changed after preparation."}
@@ -53919,13 +53923,13 @@ class MainActivity : Activity() {
             updateGen5BoxChecksum(work,box,profile)
             require(work.indices.all{it in allowed||work[it]==fresh[it]}){"Unrelated Gen 5 save data changed during staging."}
             require(gen5BoxChecksumValid(work,box,profile)&&gen5ChecksumTableValid(work,profile)&&expected.all{gen1ToGen5DexRegistered(work,profile,it.third)}){"The staged Gen 5 checksums or Pokédex failed verification."}
-            require(bound()&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination or a selected Bank record changed before backup. Nothing was written."}
+            require(destinationBinding.matches(fresh,bound())&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination or a selected Bank record changed before backup. Nothing was written."}
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen1BatchToGen5_",".backup",backupsDir());safetyBackup=recovery
             recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The exact Gen 5 batch recovery backup did not verify."};retainGen2ToGen5SafetyBackup(recovery,fresh)
             val sourceRecovery=ExactBankRecoverySet("PSE_G1ToG5_BatchRecovery_");for(item in refreshed)sourceRecovery.capture(item.bankBytes,bankDir());require(sourceRecovery.matches()){ "The exact Gen 1 Bank recovery set did not verify." };bankRecovery=sourceRecovery
-            require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&sourceRecovery.matches()&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination, selected Bank records or retained recovery backup changed before writing."}
+            require(destinationBinding.matches(fresh,bound())&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&sourceRecovery.matches()&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination, selected Bank records or retained recovery backup changed before writing."}
             stagedDestination=work.copyOf();writeStarted=true;file.writeBytes(work)
-            val written=file.readBytes();require(written.contentEquals(work)){"The destination changed while the batch was written."}
+            val written=file.readBytes();require(destinationBinding.matches(work,bound())&&written.contentEquals(work)){"The destination changed while the batch was written."}
             val wp=detectGen5Profile(written)?:error("The persisted Gen 5 layout could not be re-read.")
             require(gen5BoxChecksumValid(written,box,wp)&&gen5ChecksumTableValid(written,wp)){"The persisted Gen 5 save failed checksum validation."}
             require(written.indices.all{it in allowed||written[it]==fresh[it]}){"Unrelated Gen 5 data changed after persistence."}
@@ -53935,19 +53939,20 @@ class MainActivity : Activity() {
                 require(actual.contentEquals(bytes)&&samePk5(q,staged)&&gen5Pk5PpUps(actual).contentEquals(gen5Pk5PpUps(bytes))&&gen1ToGen5DexRegistered(written,wp,q)){"A persisted PK5, PP-Up value or Pokédex registration did not verify."}
             }
             for(item in refreshed){
-                require(bound()&&file.readBytes().contentEquals(work)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&sourceRecovery.matches()&&exactBankPathsAbsent(removed.map{it.first})){"The verified destination identity, data, removed paths or retained recovery changed before Bank cleanup."}
+                require(destinationBinding.matches(work,bound())&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&sourceRecovery.matches()&&exactBankPathsAbsent(removed.map{it.first})){"The verified destination identity, data, removed paths or retained recovery changed before Bank cleanup."}
                 val current=item.bankFile.readBytes();require(current.contentEquals(item.bankBytes)&&parseGen1BankPayload(current)?.let{sameGen1TransferRecord(it,item.source)}==true){"A Bank record changed before cleanup; the destination was restored."}
                 cleanupAttempted.add(item.bankFile.absolutePath);require(item.bankFile.delete()&&!item.bankFile.exists()){"A Bank record could not be removed after destination verification."};removed.add(item.bankFile to item.bankBytes)
                 require(sourceRecovery.matches()&&exactBankPathsAbsent(removed.map{it.first})){"A removed Gen 1 Bank path or retained recovery changed during cleanup."}
             }
-            require(bound()&&file.readBytes().contentEquals(work)&&removed.size==refreshed.size&&exactBankPathsAbsent(removed.map{it.first})&&sourceRecovery.matches()){ "The verified Gen 5 destination, removed Bank batch or retained recovery changed after cleanup." }
+            require(destinationBinding.matches(work,bound())&&removed.size==refreshed.size&&exactBankPathsAbsent(removed.map{it.first})&&sourceRecovery.matches()){ "The verified Gen 5 destination, removed Bank batch or retained recovery changed after cleanup." }
         }catch(e:Exception){
             for(item in prepared)runCatching{restoreExactMissingStandardBankRecord(item.bankFile,item.bankBytes,cleanupAttempted.contains(item.bankFile.absolutePath),null)}
             val banksRestored=prepared.all{item->runCatching{val bytes=item.bankFile.readBytes();bytes.contentEquals(item.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,item.source)}==true}.getOrDefault(false)}
             val saveRestored=runCatching{
+                val current=file.readBytes();require(destinationBinding.matches(current,bound())){"The Gen 5 destination identity changed during recovery; the current file was left untouched."}
                 restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 5 destination write began; unknown current bytes were left untouched.","The Generation 5 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes();val p=detectGen5Profile(restored)
-                require(restored.contentEquals(fresh)&&p!=null&&gen5ChecksumTableValid(restored,p)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,p)}){"The restored Generation 5 destination did not verify."}
+                require(destinationBinding.matches(fresh,bound())&&restored.contentEquals(fresh)&&p!=null&&gen5ChecksumTableValid(restored,p)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,p)}){"The restored Generation 5 destination did not verify."}
                 true
             }.getOrDefault(false)
             val recovery=when{
