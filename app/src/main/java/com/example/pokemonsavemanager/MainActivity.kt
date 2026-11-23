@@ -11408,10 +11408,15 @@ class MainActivity : Activity() {
         val sourceGeneration:Int,val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry,
         val destination:ByteArray,val meta:Gen3ToGen4Meta,val pk5:ByteArray,
         val converted:PokemonEntry,val destinationFile:File,
-        val sourceUri:Uri?,val sourceLabel:String?,val gen3Plan:Gen3ToGen4Plan?=null
+        val sourceUri:Uri?,val sourceLabel:String?,val gen3Plan:Gen3ToGen4Plan?=null,
+        val sourceBinding:PseBankSourceBinding?=null
     )
 
     private fun genToGen5Title(p:Gen4Gen5Prepared)="Gen ${p.sourceGeneration} → Gen 5"
+
+    private fun genToGen5BankStillBound(p:Gen4Gen5Prepared):Boolean=
+        p.sourceBinding?.matches(p.bankBytes,true)
+            ?:runCatching{p.bankFile.readBytes().contentEquals(p.bankBytes)}.getOrDefault(false)
 
     private fun gen4ToGen5PreflightRejection(p:PokemonEntry):String?=when{
         !p.checksumValid->"The source PK4 checksum is invalid."
@@ -11542,7 +11547,7 @@ class MainActivity : Activity() {
         importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&
             currentSourceLabel==p.sourceLabel&&runCatching{
                 p.destinationFile.readBytes().contentEquals(p.destination)&&
-                    p.bankFile.readBytes().contentEquals(p.bankBytes)
+                    genToGen5BankStillBound(p)
             }.getOrDefault(false)
 
     private fun chooseGen4ToGen5Destination(p:Gen4Gen5Prepared){
@@ -11589,6 +11594,7 @@ class MainActivity : Activity() {
             val profile=detectGen5Profile(original)?:error("The Generation 5 destination is no longer valid.")
             require(gen5ChecksumTableValid(original,profile)&&(0 until 24).all{gen5BoxChecksumValid(original,it,profile)}){"The destination box checksums changed."}
             require(target in 0 until 720){"The Gen 5 destination slot is invalid."}
+            require(genToGen5BankStillBound(p)){"The Gen ${p.sourceGeneration} Bank identity changed."}
             val bank=p.bankFile.readBytes()
             require(bank.contentEquals(p.bankBytes)){"The Gen ${p.sourceGeneration} Bank record changed."}
             val pk5=when(p.sourceGeneration){
@@ -11639,7 +11645,7 @@ class MainActivity : Activity() {
                 "The exact converted PK5 did not persist."
             }
             require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
-                p.bankFile.readBytes().contentEquals(p.bankBytes)&&file.readBytes().contentEquals(save)&&
+                genToGen5BankStillBound(p)&&file.readBytes().contentEquals(save)&&
                 isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&
                 bankCopy.readBytes().contentEquals(bank)){
                 "The source identity, Gen ${p.sourceGeneration} Bank record, recovery snapshots or verified Gen 5 destination changed before Bank cleanup."
@@ -11674,7 +11680,7 @@ class MainActivity : Activity() {
                     p.bankFile.writeBytes(p.bankBytes)
                 }
                 val restored=p.bankFile.readBytes()
-                restored.contentEquals(p.bankBytes)&&when(p.sourceGeneration){
+                genToGen5BankStillBound(p)&&restored.contentEquals(p.bankBytes)&&when(p.sourceGeneration){
                     3->parsePk3(restored,0,false)?.let{it.checksumValid&&it.pid==p.source.pid&&
                         it.species==p.source.species&&it.tid==p.source.tid&&it.sid==p.source.sid}==true
                     4->parsePk4(restored,false)?.let{it.checksumValid&&sameGen4ToGen5Pk5(it,p.source)}==true
@@ -48018,6 +48024,8 @@ class MainActivity : Activity() {
             ?:return showDialog("Gen 3 → Gen 5","The selected Bank path could not be verified.")
         if(canonical.parentFile!=root||!canonical.isFile||!canonical.extension.equals("pk3",true))
             return showDialog("Gen 3 → Gen 5","The selected record is outside the Generation 3 PSE Bank.")
+        val sourceBinding=PseBankSourceBinding.capture(canonical)
+            ?:return showDialog("Gen 3 → Gen 5","The selected Bank identity could not be captured.")
         val bank=runCatching{canonical.readBytes()}.getOrNull()
             ?:return showDialog("Gen 3 → Gen 5","The selected Bank record could not be read.")
         val source=(if(bank.size==80)parsePk3(bank,0,false)else null)
@@ -48029,7 +48037,10 @@ class MainActivity : Activity() {
         if(needsPidLegalise&&!legalisePid){
             AlertDialog.Builder(this).setTitle("Legalise Gen 3 ability PID")
                 .setMessage("The saved PK3 ability flag conflicts with PID parity. PSE can keep the recorded ability slot by changing the PID while preserving nature, gender and shiny state. The reviewed direct Gen 5 conversion will show the final PID. Cancel leaves the Bank record and destination unchanged.")
-                .setNegativeButton("Cancel",null).setPositiveButton("Legalise PID"){_,_->prepareGen3ToGen5Transfer(bankFile,shown,true)}.show()
+                .setNegativeButton("Cancel",null).setPositiveButton("Legalise PID"){_,_->
+                    if(!sourceBinding.matches(bank,true))showDialog("Gen 3 → Gen 5","The selected Bank identity changed after Legalise review. Nothing was changed.")
+                    else prepareGen3ToGen5Transfer(bankFile,shown,true)
+                }.show()
             return
         }
         gen3ToGen4PreflightRejection(source,legalisePid)?.let{
@@ -48051,7 +48062,7 @@ class MainActivity : Activity() {
         if(!gen5ChecksumTableValid(destination,profile)||(0 until 24).any{!gen5BoxChecksumValid(destination,it,profile)})
             return showDialog("Gen 3 → Gen 5","The loaded destination is not a valid, checksum-clean Generation 5 save.")
         fun snapshotsMatch()=bound()&&runCatching{
-            file.readBytes().contentEquals(destination)&&canonical.readBytes().contentEquals(bank)
+            file.readBytes().contentEquals(destination)&&sourceBinding.matches(bank,true)
         }.getOrDefault(false)
         val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 3 → Gen 5")
             .setMessage("Resolving the destination-valid ability slot and preparing a verified native PK5…")
@@ -48078,7 +48089,8 @@ class MainActivity : Activity() {
             val prepared=Gen4Gen5Prepared(
                 sourceGeneration=3,bankFile=canonical,bankBytes=bank,source=source,
                 destination=destination,meta=meta,pk5=pk5,converted=converted,
-                destinationFile=file,sourceUri=openedUri,sourceLabel=openedLabel,gen3Plan=plan
+                destinationFile=file,sourceUri=openedUri,sourceLabel=openedLabel,gen3Plan=plan,
+                sourceBinding=sourceBinding
             )
             val oldMet=if(source.metLocation==0)"none" else "#${source.metLocation}"
             val pidNotice=if(converted.pid==source.pid)"PID preserved." else
