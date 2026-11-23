@@ -669,7 +669,39 @@ class MainActivity : Activity() {
             file.writeBytes(work);val written=file.readBytes();require(destinationBinding.matches(work,bound())&&written.contentEquals(work)){"The Gen 2 destination changed while the batch was written."};val writtenProfile=detectGen2Profile(written)?:error("The persisted Gen 2 destination failed checksum verification.");require(gen2ChecksumValid(written,writtenProfile)){"The persisted Gen 2 checksum is invalid."};val afterPayloads=gen2LocationPayloads(written,location,writtenProfile);require(afterPayloads.size==stagedPayloads.size&&sameGen2PayloadList(afterPayloads,stagedPayloads)){"The persisted Gen 2 box records changed after staging."}
             require(destinationBinding.matches(work,bound())&&writtenProfile.key==profile.key&&verifyGen2SaveIntegrity(written).first){"The persisted Gen 2 batch withdrawal or destination identity did not verify."}
             for(i in refreshed.indices){val item=refreshed[i];val slot=slots[i];val persisted=parseGen2Box(written,targetBox).firstOrNull{it.slot==slot};require(persisted!=null&&sameGen2BankRecord(persisted,item.source)){"A persisted Gen 2 Bank record did not preserve every supported field."};require(gen2BoxRawCore(written,targetBox,slot).contentEquals(rawRecords[i])){"An exact Gen 2 Bank record did not persist."};require(gen2PokedexOwnedSeen(written,writtenProfile,item.source.species)){"A transferred species was not registered Seen and Owned after persistence."}}
-            for((index,item) in refreshed.withIndex()){require(destinationBinding.matches(work,bound())){"The verified Gen 2 destination changed before Bank cleanup."};require(retainedBinding.matches(fresh,isBackupKept(backup))){"The retained Gen 2 batch recovery backup changed before Bank cleanup."};val recoveryBytes=bankRecovery[index].readBytes();require(bankRecoveryBindings[bankRecovery[index].absolutePath]?.matches(item.bankBytes,true)==true&&bankRecovery[index].isFile&&recoveryBytes.contentEquals(item.bankBytes)&&parseGen2BankPayload(recoveryBytes)?.let{sameGen2BankRecord(it,item.source)}==true){"A Gen 2 Bank recovery snapshot changed before cleanup."};val cleanup=item.bankFile.readBytes();require(item.sourceBinding.matches(item.bankBytes,true)&&cleanup.contentEquals(item.bankBytes)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,item.source)}==true){"A selected Gen 2 Bank record changed before cleanup."};removed.add(item.bankFile to item.bankBytes);require(item.bankFile.delete()){"A selected Gen 2 Bank record could not be removed after destination verification."};require(!item.bankFile.exists()){"A removed Gen 2 Bank record still exists."}}
+            for((index,item) in refreshed.withIndex()){
+                require(exactBankPathsAbsent(removed.map{it.first})){
+                    "An earlier removed Gen 2 Bank path reappeared before the next cleanup step."
+                }
+                require(destinationBinding.matches(work,bound())){
+                    "The verified Gen 2 destination changed before Bank cleanup."
+                }
+                require(retainedBinding.matches(fresh,isBackupKept(backup))){
+                    "The retained Gen 2 batch recovery backup changed before Bank cleanup."
+                }
+                val recoveryBytes=bankRecovery[index].readBytes()
+                require(bankRecoveryBindings[bankRecovery[index].absolutePath]?.matches(item.bankBytes,true)==true&&
+                    bankRecovery[index].isFile&&recoveryBytes.contentEquals(item.bankBytes)&&
+                    parseGen2BankPayload(recoveryBytes)?.let{sameGen2BankRecord(it,item.source)}==true){
+                    "A Gen 2 Bank recovery snapshot changed before cleanup."
+                }
+                val cleanup=item.bankFile.readBytes()
+                require(item.sourceBinding.matches(item.bankBytes,true)&&cleanup.contentEquals(item.bankBytes)&&
+                    parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,item.source)}==true){
+                    "A selected Gen 2 Bank record changed before cleanup."
+                }
+                val deleted=item.bankFile.delete()
+                require(deleted&&!item.bankFile.exists()){
+                    "A selected Gen 2 Bank record could not be removed after destination verification."
+                }
+                removed.add(item.bankFile to item.bankBytes)
+                require(exactBankPathsAbsent(removed.map{it.first})){
+                    "A removed Gen 2 Bank path did not remain absent after cleanup."
+                }
+            }
+            require(removed.size==refreshed.size&&exactBankPathsAbsent(removed.map{it.first})){
+                "The verified Gen 2 removed Bank batch changed after cleanup."
+            }
             require(destinationBinding.matches(work,bound())){"The verified Gen 2 destination changed after Bank cleanup."}
             require(retainedBinding.matches(fresh,isBackupKept(backup))){"The retained Gen 2 batch recovery backup changed after Bank cleanup."}
             require(recoverySnapshotsMatch(refreshed)&&refreshed.indices.all{index->
