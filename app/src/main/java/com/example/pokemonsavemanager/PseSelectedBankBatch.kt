@@ -1069,7 +1069,7 @@ internal data class Gen1ToGen7BatchDisclosure(
     val name:String,
     val dex:Int,
     val sourceLevel:Int,
-    val sourceExperience:Int,
+    val sourceExperience:Long,
     val sourceMoves:IntArray,
     val sourcePp:IntArray,
     val ppUps:IntArray,
