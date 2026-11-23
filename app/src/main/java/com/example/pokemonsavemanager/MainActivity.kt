@@ -1959,15 +1959,6 @@ class MainActivity : Activity() {
             showDialog("Move selected failed",(error.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:""))
         }
     }
-    private fun gen1ItemName(id:Int):String {
-        // Gen 1 machine item IDs: HM01-HM05 = 0xC4-0xC8 (196-200),
-        // TM01-TM50 = 0xC9-0xFA (201-250).
-        if(id in 196..200) return "HM%02d".format(id - 195)
-        if(id in 201..250) return "TM%02d".format(id - 200)
-        return when(id){
-        1->"Master Ball";2->"Ultra Ball";3->"Great Ball";4->"Poké Ball";5->"Town Map";6->"Bicycle";7->"?????";8->"Safari Ball";9->"Pokédex";10->"Moon Stone";11->"Antidote";12->"Burn Heal";13->"Ice Heal";14->"Awakening";15->"Parlyz Heal";16->"Full Restore";17->"Max Potion";18->"Hyper Potion";19->"Super Potion";20->"Potion";21->"BoulderBadge";22->"CascadeBadge";23->"ThunderBadge";24->"RainbowBadge";25->"SoulBadge";26->"MarshBadge";27->"VolcanoBadge";28->"EarthBadge";29->"Escape Rope";30->"Repel";31->"Old Amber";32->"Fire Stone";33->"Thunderstone";34->"Water Stone";35->"HP Up";36->"Protein";37->"Iron";38->"Carbos";39->"Calcium";40->"Rare Candy";41->"Dome Fossil";42->"Helix Fossil";43->"Secret Key";44->"?????";45->"Bike Voucher";46->"X Accuracy";47->"Leaf Stone";48->"Card Key";49->"Nugget";50->"PP Up";51->"Poké Doll";52->"Full Heal";53->"Revive";54->"Max Revive";55->"Guard Spec.";56->"Super Repel";57->"Max Repel";58->"Dire Hit";59->"Coin";60->"Fresh Water";61->"Soda Pop";62->"Lemonade";63->"S.S. Ticket";64->"Gold Teeth";65->"X Attack";66->"X Defend";67->"X Speed";68->"X Special";69->"Coin Case";70->"Oak's Parcel";71->"Itemfinder";72->"Silph Scope";73->"Poké Flute";74->"Lift Key";75->"Exp. All";76->"Old Rod";77->"Good Rod";78->"Super Rod";79->"PP Up";80->"Ether";81->"Max Ether";82->"Elixer";83->"Max Elixer";else->"Item #$id"}
-    }
-
     private fun parseGen1ItemList(data:ByteArray,base:Int,capacity:Int,allowUninitialised:Boolean=false):List<Pair<Int,Int>>?{
         if(data.size!=SIZE_G1||base<0||base+2+capacity*2>data.size)return null
         val count=data[base].toInt()and 255
@@ -11257,9 +11248,6 @@ class MainActivity : Activity() {
         require(q.checksumValid&&q.pid==p.pid&&q.species==p.species&&q.tid==p.tid&&q.sid==p.sid&&q.nickname==p.nickname.ifBlank{defaultName}&&q.otName==p.otName&&q.experience==p.experience&&q.nature==p.nature&&q.shiny==p.shiny&&q.heldItem==0&&q.friendship==p.friendship&&q.language==p.language&&q.markingValue==p.markingValue&&q.abilityNumber==p.abilityNumber&&q.originGame==plan.originGame&&q.ball==p.ball&&q.metLevel==p.metLevel&&q.metLocation==0&&q.otGender==p.otGender&&q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(IntArray(4){if(p.moves[it]==0)0 else p.movePP[it].coerceIn(0,63)})&&gen3MovePpUps(out).contentEquals(ups)&&q.evs.contentEquals(p.evs)&&q.ivs.contentEquals(p.ivs)&&q.pokerusDays==(p.pokerusDays and 0xF)&&q.pokerusStrain==(p.pokerusStrain and 0xF)){"The converted PK3 did not preserve every destination-representable field."}
         return out
     }
-
-    private fun sameGen4ToGen3Pk3(a:PokemonEntry,b:PokemonEntry):Boolean=
-        a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.otName==b.otName&&a.experience==b.experience&&a.nature==b.nature&&a.shiny==b.shiny&&a.originGame==b.originGame&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.metLocation==b.metLocation&&a.language==b.language&&a.markingValue==b.markingValue&&a.abilityNumber==b.abilityNumber&&a.heldItem==b.heldItem&&a.friendship==b.friendship&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)
 
     private fun prepareGen4ToGen3Transfer(bankFile:File,shown:PokemonEntry,legalisedOriginGame:Int?=null){
         val file=importedFile?:return showDialog("Gen 4 → Gen 3","Load a valid Generation 3 destination save first.");val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
@@ -53003,110 +52991,10 @@ class MainActivity : Activity() {
 
     private fun natureName(id: Int): String = NATURE_NAMES.getOrElse(id) { "Unknown" }
 
-    private fun pokemonGenderName(id: Int): String = when (id) {
-        0 -> "Male"
-        1 -> "Female"
-        2 -> "Genderless"
-        else -> "Unknown ($id)"
-    }
-
-    private fun abilitySlotName(value: Int): String = when (value) {
-        1 -> "Ability 1"
-        2 -> "Ability 2"
-        4 -> "Hidden Ability"
-        else -> "Unknown ($value)"
-    }
-
-    private fun gen5OriginGameName(value: Int): String = when (value) {
-        20 -> "Pokémon White (#20)"
-        21 -> "Pokémon Black (#21)"
-        22 -> "Pokémon White 2 (#22)"
-        23 -> "Pokémon Black 2 (#23)"
-        7 -> "Pokémon HeartGold (#7)"
-        8 -> "Pokémon SoulSilver (#8)"
-        10 -> "Pokémon Diamond (#10)"
-        11 -> "Pokémon Pearl (#11)"
-        12 -> "Pokémon Platinum (#12)"
-        1 -> "Pokémon Sapphire (#1)"
-        2 -> "Pokémon Ruby (#2)"
-        3 -> "Pokémon Emerald (#3)"
-        4 -> "Pokémon FireRed (#4)"
-        5 -> "Pokémon LeafGreen (#5)"
-        else -> if (value == 0) "Unknown" else "Game #$value"
-    }
-
-    private fun gen3OriginGameName(value: Int): String = when (value) {
-        1 -> "Pokémon Sapphire (#1)"
-        2 -> "Pokémon Ruby (#2)"
-        3 -> "Pokémon Emerald (#3)"
-        4 -> "Pokémon FireRed (#4)"
-        5 -> "Pokémon LeafGreen (#5)"
-        else -> if (value == 0) "Unknown" else "Game #$value"
-    }
-
-    private fun gen3BallName(value: Int): String = when (value) {
-        1 -> "Master Ball (#1)"
-        2 -> "Ultra Ball (#2)"
-        3 -> "Great Ball (#3)"
-        4 -> "Poké Ball (#4)"
-        5 -> "Safari Ball (#5)"
-        6 -> "Net Ball (#6)"
-        7 -> "Dive Ball (#7)"
-        8 -> "Nest Ball (#8)"
-        9 -> "Repeat Ball (#9)"
-        10 -> "Timer Ball (#10)"
-        11 -> "Luxury Ball (#11)"
-        12 -> "Premier Ball (#12)"
-        else -> if (value == 0) "Unknown" else "Ball #$value"
-    }
-
-    private fun gen5BallName(value: Int): String = when (value) {
-        1 -> "Master Ball (#1)"
-        2 -> "Ultra Ball (#2)"
-        3 -> "Great Ball (#3)"
-        4 -> "Poké Ball (#4)"
-        5 -> "Safari Ball (#5)"
-        6 -> "Net Ball (#6)"
-        7 -> "Dive Ball (#7)"
-        8 -> "Nest Ball (#8)"
-        9 -> "Repeat Ball (#9)"
-        10 -> "Timer Ball (#10)"
-        11 -> "Luxury Ball (#11)"
-        12 -> "Premier Ball (#12)"
-        13 -> "Dusk Ball (#13)"
-        14 -> "Heal Ball (#14)"
-        15 -> "Quick Ball (#15)"
-        16 -> "Cherish Ball (#16)"
-        17 -> "Fast Ball (#17)"
-        18 -> "Level Ball (#18)"
-        19 -> "Lure Ball (#19)"
-        20 -> "Heavy Ball (#20)"
-        21 -> "Love Ball (#21)"
-        22 -> "Friend Ball (#22)"
-        23 -> "Moon Ball (#23)"
-        24 -> "Sport Ball (#24)"
-        25 -> "Dream Ball (#25)"
-        else -> if (value == 0) "Unknown" else "Ball #$value"
-    }
-
     private fun formatPokemonDate(year: Int, month: Int, day: Int): String {
         if (year == 0 || month !in 1..12 || day !in 1..31) return "Not set"
         return String.format(Locale.US, "%04d-%02d-%02d", 2000 + year, month, day)
     }
-
-    private fun pokemonLanguageName(value: Int): String = when (value) {
-        1 -> "Japanese"
-        2 -> "English"
-        3 -> "French"
-        4 -> "Italian"
-        5 -> "German"
-        7 -> "Spanish"
-        8 -> "Korean"
-        9 -> "Chinese (Simplified)"
-        10 -> "Chinese (Traditional)"
-        else -> "Unknown ($value)"
-    }
-
 
     data class Gen1Pokemon(
         val slot: Int,
@@ -55751,8 +55639,6 @@ class MainActivity : Activity() {
     private val gen2BreedingMetadataRows="GENDER_F12_5,EGG_MONSTER,EGG_PLANT|GENDER_F12_5,EGG_MONSTER,EGG_PLANT|GENDER_F12_5,EGG_MONSTER,EGG_PLANT|GENDER_F12_5,EGG_MONSTER,EGG_DRAGON|GENDER_F12_5,EGG_MONSTER,EGG_DRAGON|GENDER_F12_5,EGG_MONSTER,EGG_DRAGON|GENDER_F12_5,EGG_MONSTER,EGG_WATER_1|GENDER_F12_5,EGG_MONSTER,EGG_WATER_1|GENDER_F12_5,EGG_MONSTER,EGG_WATER_1|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_FLYING,EGG_FLYING|GENDER_F50,EGG_FLYING,EGG_FLYING|GENDER_F50,EGG_FLYING,EGG_FLYING|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_FLYING,EGG_FLYING|GENDER_F50,EGG_FLYING,EGG_FLYING|GENDER_F50,EGG_GROUND,EGG_DRAGON|GENDER_F50,EGG_GROUND,EGG_DRAGON|GENDER_F50,EGG_GROUND,EGG_FAIRY|GENDER_F50,EGG_GROUND,EGG_FAIRY|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F100,EGG_MONSTER,EGG_GROUND|GENDER_F100,EGG_NONE,EGG_NONE|GENDER_F100,EGG_NONE,EGG_NONE|GENDER_F0,EGG_MONSTER,EGG_GROUND|GENDER_F0,EGG_MONSTER,EGG_GROUND|GENDER_F0,EGG_MONSTER,EGG_GROUND|GENDER_F75,EGG_FAIRY,EGG_FAIRY|GENDER_F75,EGG_FAIRY,EGG_FAIRY|GENDER_F75,EGG_GROUND,EGG_GROUND|GENDER_F75,EGG_GROUND,EGG_GROUND|GENDER_F75,EGG_FAIRY,EGG_FAIRY|GENDER_F75,EGG_FAIRY,EGG_FAIRY|GENDER_F50,EGG_FLYING,EGG_FLYING|GENDER_F50,EGG_FLYING,EGG_FLYING|GENDER_F50,EGG_PLANT,EGG_PLANT|GENDER_F50,EGG_PLANT,EGG_PLANT|GENDER_F50,EGG_PLANT,EGG_PLANT|GENDER_F50,EGG_BUG,EGG_PLANT|GENDER_F50,EGG_BUG,EGG_PLANT|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_WATER_1,EGG_GROUND|GENDER_F50,EGG_WATER_1,EGG_GROUND|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F25,EGG_GROUND,EGG_GROUND|GENDER_F25,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_WATER_1,EGG_WATER_1|GENDER_F50,EGG_WATER_1,EGG_WATER_1|GENDER_F50,EGG_WATER_1,EGG_WATER_1|GENDER_F25,EGG_HUMANSHAPE,EGG_HUMANSHAPE|GENDER_F25,EGG_HUMANSHAPE,EGG_HUMANSHAPE|GENDER_F25,EGG_HUMANSHAPE,EGG_HUMANSHAPE|GENDER_F25,EGG_HUMANSHAPE,EGG_HUMANSHAPE|GENDER_F25,EGG_HUMANSHAPE,EGG_HUMANSHAPE|GENDER_F25,EGG_HUMANSHAPE,EGG_HUMANSHAPE|GENDER_F50,EGG_PLANT,EGG_PLANT|GENDER_F50,EGG_PLANT,EGG_PLANT|GENDER_F50,EGG_PLANT,EGG_PLANT|GENDER_F50,EGG_WATER_3,EGG_WATER_3|GENDER_F50,EGG_WATER_3,EGG_WATER_3|GENDER_F50,EGG_MINERAL,EGG_MINERAL|GENDER_F50,EGG_MINERAL,EGG_MINERAL|GENDER_F50,EGG_MINERAL,EGG_MINERAL|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_MONSTER,EGG_WATER_1|GENDER_F50,EGG_MONSTER,EGG_WATER_1|GENDER_UNKNOWN,EGG_MINERAL,EGG_MINERAL|GENDER_UNKNOWN,EGG_MINERAL,EGG_MINERAL|GENDER_F50,EGG_FLYING,EGG_GROUND|GENDER_F50,EGG_FLYING,EGG_FLYING|GENDER_F50,EGG_FLYING,EGG_FLYING|GENDER_F50,EGG_WATER_1,EGG_GROUND|GENDER_F50,EGG_WATER_1,EGG_GROUND|GENDER_F50,EGG_INDETERMINATE,EGG_INDETERMINATE|GENDER_F50,EGG_INDETERMINATE,EGG_INDETERMINATE|GENDER_F50,EGG_WATER_3,EGG_WATER_3|GENDER_F50,EGG_WATER_3,EGG_WATER_3|GENDER_F50,EGG_INDETERMINATE,EGG_INDETERMINATE|GENDER_F50,EGG_INDETERMINATE,EGG_INDETERMINATE|GENDER_F50,EGG_INDETERMINATE,EGG_INDETERMINATE|GENDER_F50,EGG_MINERAL,EGG_MINERAL|GENDER_F50,EGG_HUMANSHAPE,EGG_HUMANSHAPE|GENDER_F50,EGG_HUMANSHAPE,EGG_HUMANSHAPE|GENDER_F50,EGG_WATER_3,EGG_WATER_3|GENDER_F50,EGG_WATER_3,EGG_WATER_3|GENDER_UNKNOWN,EGG_MINERAL,EGG_MINERAL|GENDER_UNKNOWN,EGG_MINERAL,EGG_MINERAL|GENDER_F50,EGG_PLANT,EGG_PLANT|GENDER_F50,EGG_PLANT,EGG_PLANT|GENDER_F50,EGG_MONSTER,EGG_MONSTER|GENDER_F50,EGG_MONSTER,EGG_MONSTER|GENDER_F0,EGG_HUMANSHAPE,EGG_HUMANSHAPE|GENDER_F0,EGG_HUMANSHAPE,EGG_HUMANSHAPE|GENDER_F50,EGG_MONSTER,EGG_MONSTER|GENDER_F50,EGG_INDETERMINATE,EGG_INDETERMINATE|GENDER_F50,EGG_INDETERMINATE,EGG_INDETERMINATE|GENDER_F50,EGG_MONSTER,EGG_GROUND|GENDER_F50,EGG_MONSTER,EGG_GROUND|GENDER_F100,EGG_FAIRY,EGG_FAIRY|GENDER_F50,EGG_PLANT,EGG_PLANT|GENDER_F100,EGG_MONSTER,EGG_MONSTER|GENDER_F50,EGG_WATER_1,EGG_DRAGON|GENDER_F50,EGG_WATER_1,EGG_DRAGON|GENDER_F50,EGG_WATER_2,EGG_WATER_2|GENDER_F50,EGG_WATER_2,EGG_WATER_2|GENDER_UNKNOWN,EGG_WATER_3,EGG_WATER_3|GENDER_UNKNOWN,EGG_WATER_3,EGG_WATER_3|GENDER_F50,EGG_HUMANSHAPE,EGG_HUMANSHAPE|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F100,EGG_HUMANSHAPE,EGG_HUMANSHAPE|GENDER_F25,EGG_HUMANSHAPE,EGG_HUMANSHAPE|GENDER_F25,EGG_HUMANSHAPE,EGG_HUMANSHAPE|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F0,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_WATER_2,EGG_DRAGON|GENDER_F50,EGG_WATER_2,EGG_DRAGON|GENDER_F50,EGG_MONSTER,EGG_WATER_1|GENDER_UNKNOWN,EGG_DITTO,EGG_DITTO|GENDER_F12_5,EGG_GROUND,EGG_GROUND|GENDER_F12_5,EGG_GROUND,EGG_GROUND|GENDER_F12_5,EGG_GROUND,EGG_GROUND|GENDER_F12_5,EGG_GROUND,EGG_GROUND|GENDER_UNKNOWN,EGG_MINERAL,EGG_MINERAL|GENDER_F12_5,EGG_WATER_1,EGG_WATER_3|GENDER_F12_5,EGG_WATER_1,EGG_WATER_3|GENDER_F12_5,EGG_WATER_1,EGG_WATER_3|GENDER_F12_5,EGG_WATER_1,EGG_WATER_3|GENDER_F12_5,EGG_FLYING,EGG_FLYING|GENDER_F12_5,EGG_MONSTER,EGG_MONSTER|GENDER_UNKNOWN,EGG_NONE,EGG_NONE|GENDER_UNKNOWN,EGG_NONE,EGG_NONE|GENDER_UNKNOWN,EGG_NONE,EGG_NONE|GENDER_F50,EGG_WATER_1,EGG_DRAGON|GENDER_F50,EGG_WATER_1,EGG_DRAGON|GENDER_F50,EGG_WATER_1,EGG_DRAGON|GENDER_UNKNOWN,EGG_NONE,EGG_NONE|GENDER_UNKNOWN,EGG_NONE,EGG_NONE|GENDER_F12_5,EGG_MONSTER,EGG_PLANT|GENDER_F12_5,EGG_MONSTER,EGG_PLANT|GENDER_F12_5,EGG_MONSTER,EGG_PLANT|GENDER_F12_5,EGG_GROUND,EGG_GROUND|GENDER_F12_5,EGG_GROUND,EGG_GROUND|GENDER_F12_5,EGG_GROUND,EGG_GROUND|GENDER_F12_5,EGG_MONSTER,EGG_WATER_1|GENDER_F12_5,EGG_MONSTER,EGG_WATER_1|GENDER_F12_5,EGG_MONSTER,EGG_WATER_1|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_FLYING,EGG_FLYING|GENDER_F50,EGG_FLYING,EGG_FLYING|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_FLYING,EGG_FLYING|GENDER_F50,EGG_WATER_2,EGG_WATER_2|GENDER_F50,EGG_WATER_2,EGG_WATER_2|GENDER_F50,EGG_NONE,EGG_NONE|GENDER_F75,EGG_NONE,EGG_NONE|GENDER_F75,EGG_NONE,EGG_NONE|GENDER_F12_5,EGG_NONE,EGG_NONE|GENDER_F12_5,EGG_FLYING,EGG_FAIRY|GENDER_F50,EGG_FLYING,EGG_FLYING|GENDER_F50,EGG_FLYING,EGG_FLYING|GENDER_F50,EGG_MONSTER,EGG_GROUND|GENDER_F50,EGG_MONSTER,EGG_GROUND|GENDER_F50,EGG_MONSTER,EGG_GROUND|GENDER_F50,EGG_PLANT,EGG_PLANT|GENDER_F50,EGG_WATER_1,EGG_FAIRY|GENDER_F50,EGG_WATER_1,EGG_FAIRY|GENDER_F50,EGG_MINERAL,EGG_MINERAL|GENDER_F50,EGG_WATER_1,EGG_WATER_1|GENDER_F50,EGG_FAIRY,EGG_PLANT|GENDER_F50,EGG_FAIRY,EGG_PLANT|GENDER_F50,EGG_FAIRY,EGG_PLANT|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_PLANT,EGG_PLANT|GENDER_F50,EGG_PLANT,EGG_PLANT|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_WATER_1,EGG_GROUND|GENDER_F50,EGG_WATER_1,EGG_GROUND|GENDER_F12_5,EGG_GROUND,EGG_GROUND|GENDER_F12_5,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_FLYING,EGG_FLYING|GENDER_F50,EGG_MONSTER,EGG_WATER_1|GENDER_F50,EGG_INDETERMINATE,EGG_INDETERMINATE|GENDER_UNKNOWN,EGG_NONE,EGG_NONE|GENDER_F50,EGG_INDETERMINATE,EGG_INDETERMINATE|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_MINERAL,EGG_MINERAL|GENDER_F75,EGG_GROUND,EGG_FAIRY|GENDER_F75,EGG_GROUND,EGG_FAIRY|GENDER_F50,EGG_WATER_2,EGG_WATER_2|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_BUG,EGG_BUG|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_INDETERMINATE,EGG_INDETERMINATE|GENDER_F50,EGG_INDETERMINATE,EGG_INDETERMINATE|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F75,EGG_WATER_1,EGG_WATER_3|GENDER_F50,EGG_WATER_1,EGG_WATER_2|GENDER_F50,EGG_WATER_1,EGG_WATER_2|GENDER_F50,EGG_WATER_1,EGG_GROUND|GENDER_F50,EGG_WATER_1,EGG_WATER_1|GENDER_F50,EGG_FLYING,EGG_FLYING|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_WATER_1,EGG_DRAGON|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_UNKNOWN,EGG_MINERAL,EGG_MINERAL|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F50,EGG_GROUND,EGG_GROUND|GENDER_F0,EGG_NONE,EGG_NONE|GENDER_F0,EGG_HUMANSHAPE,EGG_HUMANSHAPE|GENDER_F100,EGG_NONE,EGG_NONE|GENDER_F25,EGG_NONE,EGG_NONE|GENDER_F25,EGG_NONE,EGG_NONE|GENDER_F100,EGG_GROUND,EGG_GROUND|GENDER_F100,EGG_FAIRY,EGG_FAIRY|GENDER_UNKNOWN,EGG_NONE,EGG_NONE|GENDER_UNKNOWN,EGG_NONE,EGG_NONE|GENDER_UNKNOWN,EGG_NONE,EGG_NONE|GENDER_F50,EGG_MONSTER,EGG_MONSTER|GENDER_F50,EGG_MONSTER,EGG_MONSTER|GENDER_F50,EGG_MONSTER,EGG_MONSTER|GENDER_UNKNOWN,EGG_NONE,EGG_NONE|GENDER_UNKNOWN,EGG_NONE,EGG_NONE|GENDER_UNKNOWN,EGG_NONE,EGG_NONE"
     private val gen2BreedingMetadata=gen2BreedingMetadataRows.split("|").map{row->val v=row.split(",");Gen2BreedingMetadata(v[0],v[1],v[2])}
     private fun canonicalGen2BreedingMetadata(species:Int):Gen2BreedingMetadata?=gen2BreedingMetadata.getOrNull(species-1)
-    private fun gen2GenderRatioLabel(code:String):String=when(code){"GENDER_F0"->"Male only";"GENDER_F100"->"Female only";"GENDER_F12_5"->"12.5% female / 87.5% male";"GENDER_F25"->"25% female / 75% male";"GENDER_F50"->"50% female / 50% male";"GENDER_F75"->"75% female / 25% male";"GENDER_UNKNOWN"->"Genderless";else->"Unknown"}
-    private fun gen2EggGroupLabel(code:String):String=when(code){"EGG_MONSTER"->"Monster";"EGG_WATER_1"->"Water 1";"EGG_BUG"->"Bug";"EGG_FLYING"->"Flying";"EGG_GROUND"->"Ground (Field)";"EGG_FAIRY"->"Fairy";"EGG_PLANT"->"Plant (Grass)";"EGG_HUMANSHAPE"->"Humanshape (Human-Like)";"EGG_WATER_3"->"Water 3";"EGG_MINERAL"->"Mineral";"EGG_INDETERMINATE"->"Indeterminate (Amorphous)";"EGG_WATER_2"->"Water 2";"EGG_DITTO"->"Ditto";"EGG_DRAGON"->"Dragon";"EGG_NONE"->"No Eggs Discovered";else->"Unknown"}
     private fun gen2EggGroupsLabel(metadata:Gen2BreedingMetadata):String=listOf(gen2EggGroupLabel(metadata.eggGroup1Code),gen2EggGroupLabel(metadata.eggGroup2Code)).distinct().joinToString(" + ")
 
     private val gen2SpeciesTypes="Grass/Poison|Grass/Poison|Grass/Poison|Fire|Fire|Fire/Flying|Water|Water|Water|Bug|Bug|Bug/Flying|Bug/Poison|Bug/Poison|Bug/Poison|Normal/Flying|Normal/Flying|Normal/Flying|Normal|Normal|Normal/Flying|Normal/Flying|Poison|Poison|Electric|Electric|Ground|Ground|Poison|Poison|Poison/Ground|Poison|Poison|Poison/Ground|Normal|Normal|Fire|Fire|Normal|Normal|Poison/Flying|Poison/Flying|Grass/Poison|Grass/Poison|Grass/Poison|Bug/Grass|Bug/Grass|Bug/Poison|Bug/Poison|Ground|Ground|Normal|Normal|Water|Water|Fighting|Fighting|Fire|Fire|Water|Water|Water/Fighting|Psychic|Psychic|Psychic|Fighting|Fighting|Fighting|Grass/Poison|Grass/Poison|Grass/Poison|Water/Poison|Water/Poison|Rock/Ground|Rock/Ground|Rock/Ground|Fire|Fire|Water/Psychic|Water/Psychic|Electric/Steel|Electric/Steel|Normal/Flying|Normal/Flying|Normal/Flying|Water|Water/Ice|Poison|Poison|Water|Water/Ice|Ghost/Poison|Ghost/Poison|Ghost/Poison|Rock/Ground|Psychic|Psychic|Water|Water|Electric|Electric|Grass/Psychic|Grass/Psychic|Ground|Ground|Fighting|Fighting|Normal|Poison|Poison|Ground/Rock|Ground/Rock|Normal|Grass|Normal|Water|Water|Water|Water|Water|Water/Psychic|Psychic|Bug/Flying|Ice/Psychic|Electric|Fire|Bug|Normal|Water|Water/Flying|Water/Ice|Normal|Normal|Water|Electric|Fire|Normal|Rock/Water|Rock/Water|Rock/Water|Rock/Water|Rock/Flying|Normal|Ice/Flying|Electric/Flying|Fire/Flying|Dragon|Dragon|Dragon/Flying|Psychic|Psychic|Grass|Grass|Grass|Fire|Fire|Fire|Water|Water|Water|Normal|Normal|Normal/Flying|Normal/Flying|Bug/Flying|Bug/Flying|Bug/Poison|Bug/Poison|Poison/Flying|Water/Electric|Water/Electric|Electric|Normal|Normal|Normal|Normal/Flying|Psychic/Flying|Psychic/Flying|Electric|Electric|Electric|Grass|Water|Water|Rock|Water|Grass/Flying|Grass/Flying|Grass/Flying|Normal|Grass|Grass|Bug/Flying|Water/Ground|Water/Ground|Psychic|Dark|Dark/Flying|Water/Psychic|Ghost|Psychic|Psychic|Normal/Psychic|Bug|Bug/Steel|Normal|Ground/Flying|Steel/Ground|Normal|Normal|Water/Poison|Bug/Steel|Bug/Rock|Bug/Fighting|Dark/Ice|Normal|Normal|Fire|Fire/Rock|Ice/Ground|Ice/Ground|Water/Rock|Water|Water|Ice/Flying|Water/Flying|Steel/Flying|Dark/Fire|Dark/Fire|Water/Dragon|Ground|Ground|Normal|Normal|Normal|Fighting|Fighting|Ice/Psychic|Electric|Fire|Normal|Normal|Electric|Fire|Water|Rock/Ground|Rock/Ground|Rock/Dark|Psychic/Flying|Fire/Flying|Psychic/Grass".split("|")
@@ -56247,8 +56133,6 @@ class MainActivity : Activity() {
         236->listOf(Gen2Evolution(236,107,null,null,20,null,null,null,-1),Gen2Evolution(236,106,null,null,20,null,null,null,1),Gen2Evolution(236,237,null,null,20,null,null,null,0))
         else->listOfNotNull(gen2Evolution(species))
     }
-
-    private fun gen2StatRelationLabel(relation:Int):String=when{relation<0->"Attack lower than Defense";relation>0->"Attack higher than Defense";else->"Attack equal to Defense"}
 
     private fun prepareGen2Evolution(mon:Gen2Pokemon,location:String){
         val openedFile=importedFile?:return showDialog("Evolve Pokémon","Load a Gen 2 save before evolving. Nothing was changed.")
@@ -58572,8 +58456,6 @@ class MainActivity : Activity() {
         val q=parsePk3(out,0,false)?:error("The converted PK3 could not be parsed.");require(q.checksumValid&&q.species==p.species&&q.tid==p.tid&&q.nickname==p.nickname.ifBlank{defaultName}&&q.otName==p.otName&&q.experience==p.experience&&q.nature==plan.nature&&q.shiny==p.shiny&&q.heldItem==0&&q.friendship==p.happiness&&q.pokerusDays==(p.pokerus and 0xF)&&q.pokerusStrain==((p.pokerus ushr 4) and 0xF)&&q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(p.movePP)&&gen3MovePpUps(out).contentEquals(ppUps)&&q.evs.contentEquals(ev)&&q.ivs.contentEquals(iv)&&gen3PidGender(pid,meta.genderRate)==plan.gender&&q.abilityNumber==1&&q.originGame==originGame&&q.ball==4&&q.metLevel==p.level.coerceIn(1,100)&&q.language==2&&q.metLocation==0&&q.otGender==0){"The converted PK3 did not preserve every destination-representable field."}
         return out
     }
-
-    private fun sameGen2ToGen3Pk3(a:PokemonEntry,b:PokemonEntry):Boolean = a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.otName==b.otName&&a.experience==b.experience&&a.nature==b.nature&&a.shiny==b.shiny&&a.abilityNumber==b.abilityNumber&&a.originGame==b.originGame&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.metLocation==b.metLocation&&a.otGender==b.otGender&&a.language==b.language&&a.heldItem==b.heldItem&&a.friendship==b.friendship&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.isEgg==b.isEgg&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)
 
     private data class Gen3PokedexLayout(
         val mirrors: IntArray,
@@ -67528,11 +67410,6 @@ private data class Gen2ToGen5LegalisePlan(
         }
         return count
     }
-
-    private fun sameReviewedPokemonEntry(a: PokemonEntry, b: PokemonEntry): Boolean =
-        a.copy(evs=b.evs,moves=b.moves,movePP=b.movePP,ivs=b.ivs,relearnMoves=b.relearnMoves)==b&&
-            a.evs.contentEquals(b.evs)&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&
-            a.ivs.contentEquals(b.ivs)&&a.relearnMoves.contentEquals(b.relearnMoves)
 
     private fun confirmDepositToBank(location: String,p:PokemonEntry,openedFile:File,openedUri:Uri?,openedLabel:String?,openedSource:ByteArray) {
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel

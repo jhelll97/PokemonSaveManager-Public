@@ -120,6 +120,130 @@ internal fun sameGen1ToGen6BatchPk6(
     b: MainActivity.PokemonEntry
 ): Boolean =a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.isNicknamed==b.isNicknamed&&a.otName==b.otName&&a.experience==b.experience&&a.ability==b.ability&&a.abilityNumber==b.abilityNumber&&a.nature==b.nature&&a.gender==b.gender&&a.shiny==b.shiny&&a.originGame==b.originGame&&a.metLocation==b.metLocation&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.language==b.language&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)
 
+internal fun gen1ItemName(id:Int):String {
+        // Gen 1 machine item IDs: HM01-HM05 = 0xC4-0xC8 (196-200),
+        // TM01-TM50 = 0xC9-0xFA (201-250).
+        if(id in 196..200) return "HM%02d".format(id - 195)
+        if(id in 201..250) return "TM%02d".format(id - 200)
+        return when(id){
+        1->"Master Ball";2->"Ultra Ball";3->"Great Ball";4->"Poké Ball";5->"Town Map";6->"Bicycle";7->"?????";8->"Safari Ball";9->"Pokédex";10->"Moon Stone";11->"Antidote";12->"Burn Heal";13->"Ice Heal";14->"Awakening";15->"Parlyz Heal";16->"Full Restore";17->"Max Potion";18->"Hyper Potion";19->"Super Potion";20->"Potion";21->"BoulderBadge";22->"CascadeBadge";23->"ThunderBadge";24->"RainbowBadge";25->"SoulBadge";26->"MarshBadge";27->"VolcanoBadge";28->"EarthBadge";29->"Escape Rope";30->"Repel";31->"Old Amber";32->"Fire Stone";33->"Thunderstone";34->"Water Stone";35->"HP Up";36->"Protein";37->"Iron";38->"Carbos";39->"Calcium";40->"Rare Candy";41->"Dome Fossil";42->"Helix Fossil";43->"Secret Key";44->"?????";45->"Bike Voucher";46->"X Accuracy";47->"Leaf Stone";48->"Card Key";49->"Nugget";50->"PP Up";51->"Poké Doll";52->"Full Heal";53->"Revive";54->"Max Revive";55->"Guard Spec.";56->"Super Repel";57->"Max Repel";58->"Dire Hit";59->"Coin";60->"Fresh Water";61->"Soda Pop";62->"Lemonade";63->"S.S. Ticket";64->"Gold Teeth";65->"X Attack";66->"X Defend";67->"X Speed";68->"X Special";69->"Coin Case";70->"Oak's Parcel";71->"Itemfinder";72->"Silph Scope";73->"Poké Flute";74->"Lift Key";75->"Exp. All";76->"Old Rod";77->"Good Rod";78->"Super Rod";79->"PP Up";80->"Ether";81->"Max Ether";82->"Elixer";83->"Max Elixer";else->"Item #$id"}
+    }
+
+internal fun sameGen4ToGen3Pk3(a:MainActivity.PokemonEntry,b:MainActivity.PokemonEntry):Boolean=
+        a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.otName==b.otName&&a.experience==b.experience&&a.nature==b.nature&&a.shiny==b.shiny&&a.originGame==b.originGame&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.metLocation==b.metLocation&&a.language==b.language&&a.markingValue==b.markingValue&&a.abilityNumber==b.abilityNumber&&a.heldItem==b.heldItem&&a.friendship==b.friendship&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)
+
+internal fun sameGen2ToGen3Pk3(a:MainActivity.PokemonEntry,b:MainActivity.PokemonEntry):Boolean = a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.otName==b.otName&&a.experience==b.experience&&a.nature==b.nature&&a.shiny==b.shiny&&a.abilityNumber==b.abilityNumber&&a.originGame==b.originGame&&a.ball==b.ball&&a.metLevel==b.metLevel&&a.metLocation==b.metLocation&&a.otGender==b.otGender&&a.language==b.language&&a.heldItem==b.heldItem&&a.friendship==b.friendship&&a.pokerusDays==b.pokerusDays&&a.pokerusStrain==b.pokerusStrain&&a.isEgg==b.isEgg&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)
+
+internal fun sameReviewedPokemonEntry(a: MainActivity.PokemonEntry, b: MainActivity.PokemonEntry): Boolean =
+        a.copy(evs=b.evs,moves=b.moves,movePP=b.movePP,ivs=b.ivs,relearnMoves=b.relearnMoves)==b&&
+            a.evs.contentEquals(b.evs)&&a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&
+            a.ivs.contentEquals(b.ivs)&&a.relearnMoves.contentEquals(b.relearnMoves)
+
+internal fun pokemonGenderName(id: Int): String = when (id) {
+        0 -> "Male"
+        1 -> "Female"
+        2 -> "Genderless"
+        else -> "Unknown ($id)"
+    }
+
+internal fun abilitySlotName(value: Int): String = when (value) {
+        1 -> "Ability 1"
+        2 -> "Ability 2"
+        4 -> "Hidden Ability"
+        else -> "Unknown ($value)"
+    }
+
+internal fun gen5OriginGameName(value: Int): String = when (value) {
+        20 -> "Pokémon White (#20)"
+        21 -> "Pokémon Black (#21)"
+        22 -> "Pokémon White 2 (#22)"
+        23 -> "Pokémon Black 2 (#23)"
+        7 -> "Pokémon HeartGold (#7)"
+        8 -> "Pokémon SoulSilver (#8)"
+        10 -> "Pokémon Diamond (#10)"
+        11 -> "Pokémon Pearl (#11)"
+        12 -> "Pokémon Platinum (#12)"
+        1 -> "Pokémon Sapphire (#1)"
+        2 -> "Pokémon Ruby (#2)"
+        3 -> "Pokémon Emerald (#3)"
+        4 -> "Pokémon FireRed (#4)"
+        5 -> "Pokémon LeafGreen (#5)"
+        else -> if (value == 0) "Unknown" else "Game #$value"
+    }
+
+internal fun gen3OriginGameName(value: Int): String = when (value) {
+        1 -> "Pokémon Sapphire (#1)"
+        2 -> "Pokémon Ruby (#2)"
+        3 -> "Pokémon Emerald (#3)"
+        4 -> "Pokémon FireRed (#4)"
+        5 -> "Pokémon LeafGreen (#5)"
+        else -> if (value == 0) "Unknown" else "Game #$value"
+    }
+
+internal fun gen3BallName(value: Int): String = when (value) {
+        1 -> "Master Ball (#1)"
+        2 -> "Ultra Ball (#2)"
+        3 -> "Great Ball (#3)"
+        4 -> "Poké Ball (#4)"
+        5 -> "Safari Ball (#5)"
+        6 -> "Net Ball (#6)"
+        7 -> "Dive Ball (#7)"
+        8 -> "Nest Ball (#8)"
+        9 -> "Repeat Ball (#9)"
+        10 -> "Timer Ball (#10)"
+        11 -> "Luxury Ball (#11)"
+        12 -> "Premier Ball (#12)"
+        else -> if (value == 0) "Unknown" else "Ball #$value"
+    }
+
+internal fun gen5BallName(value: Int): String = when (value) {
+        1 -> "Master Ball (#1)"
+        2 -> "Ultra Ball (#2)"
+        3 -> "Great Ball (#3)"
+        4 -> "Poké Ball (#4)"
+        5 -> "Safari Ball (#5)"
+        6 -> "Net Ball (#6)"
+        7 -> "Dive Ball (#7)"
+        8 -> "Nest Ball (#8)"
+        9 -> "Repeat Ball (#9)"
+        10 -> "Timer Ball (#10)"
+        11 -> "Luxury Ball (#11)"
+        12 -> "Premier Ball (#12)"
+        13 -> "Dusk Ball (#13)"
+        14 -> "Heal Ball (#14)"
+        15 -> "Quick Ball (#15)"
+        16 -> "Cherish Ball (#16)"
+        17 -> "Fast Ball (#17)"
+        18 -> "Level Ball (#18)"
+        19 -> "Lure Ball (#19)"
+        20 -> "Heavy Ball (#20)"
+        21 -> "Love Ball (#21)"
+        22 -> "Friend Ball (#22)"
+        23 -> "Moon Ball (#23)"
+        24 -> "Sport Ball (#24)"
+        25 -> "Dream Ball (#25)"
+        else -> if (value == 0) "Unknown" else "Ball #$value"
+    }
+
+internal fun pokemonLanguageName(value: Int): String = when (value) {
+        1 -> "Japanese"
+        2 -> "English"
+        3 -> "French"
+        4 -> "Italian"
+        5 -> "German"
+        7 -> "Spanish"
+        8 -> "Korean"
+        9 -> "Chinese (Simplified)"
+        10 -> "Chinese (Traditional)"
+        else -> "Unknown ($value)"
+    }
+
+internal fun gen2GenderRatioLabel(code:String):String=when(code){"GENDER_F0"->"Male only";"GENDER_F100"->"Female only";"GENDER_F12_5"->"12.5% female / 87.5% male";"GENDER_F25"->"25% female / 75% male";"GENDER_F50"->"50% female / 50% male";"GENDER_F75"->"75% female / 25% male";"GENDER_UNKNOWN"->"Genderless";else->"Unknown"}
+
+internal fun gen2EggGroupLabel(code:String):String=when(code){"EGG_MONSTER"->"Monster";"EGG_WATER_1"->"Water 1";"EGG_BUG"->"Bug";"EGG_FLYING"->"Flying";"EGG_GROUND"->"Ground (Field)";"EGG_FAIRY"->"Fairy";"EGG_PLANT"->"Plant (Grass)";"EGG_HUMANSHAPE"->"Humanshape (Human-Like)";"EGG_WATER_3"->"Water 3";"EGG_MINERAL"->"Mineral";"EGG_INDETERMINATE"->"Indeterminate (Amorphous)";"EGG_WATER_2"->"Water 2";"EGG_DITTO"->"Ditto";"EGG_DRAGON"->"Dragon";"EGG_NONE"->"No Eggs Discovered";else->"Unknown"}
+
+internal fun gen2StatRelationLabel(relation:Int):String=when{relation<0->"Attack lower than Defense";relation>0->"Attack higher than Defense";else->"Attack equal to Defense"}
+
 internal fun gen1ToGen7PkMismatch(
     a: MainActivity.PokemonEntry,
     b: MainActivity.PokemonEntry
