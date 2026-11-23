@@ -418,6 +418,35 @@ internal class ExactBankRecoverySet(private val prefix:String="PSE_G3_BankPartyR
         entries.map { it.first }.filter { it.exists() }.joinToString(", ") { it.name }
 }
 
+internal fun createGen1ToGen4BatchRecovery(
+    expected:List<ByteArray>,
+    directory:File
+):ExactBankRecoverySet {
+    val recovery=ExactBankRecoverySet("PSE_G1ToG4_BatchRecovery_")
+    expected.forEach{recovery.capture(it,directory)}
+    require(recovery.matches())
+    return recovery
+}
+
+internal fun gen1ToGen4BatchRecoveryFailureNotice(recovery:ExactBankRecoverySet?):String {
+    val names=recovery?.retainedNames().orEmpty()
+    return if(names.isEmpty())"" else "\n\nBank recovery snapshots: "+names
+}
+
+internal fun finishGen1ToGen4BatchRecovery(recovery:ExactBankRecoverySet?):String=
+    if(recovery==null||recovery.cleanupExact())"" else
+        "; one or more exact Bank recoveries retained for review"
+
+internal fun gen1ToGen4BatchRecoveryMessage(
+    banksRestored:Boolean,
+    saveRestored:Boolean
+):String=when {
+    banksRestored&&saveRestored->"The exact Gen 4 destination and every selected Gen 1 Bank record were restored or kept and verified."
+    banksRestored->"Every selected Gen 1 Bank record was restored, but destination restoration was not verified. Use the retained destination backup before editing again."
+    saveRestored->"The exact Gen 4 destination was restored, but one or more Bank records were not verified. Keep every exact Gen 1 Bank recovery payload."
+    else->"Automatic recovery could not be verified. Keep the retained destination backup and every exact Gen 1 Bank recovery payload for review."
+}
+
 internal fun requireExactGen3BankPartySource(
     item: Gen3BankBatchItem,
     root: File,
