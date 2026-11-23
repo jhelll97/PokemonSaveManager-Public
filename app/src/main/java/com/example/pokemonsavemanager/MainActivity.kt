@@ -59325,7 +59325,7 @@ class MainActivity : Activity() {
     }
 
     private data class Gen2Gen3BatchPrepared(
-        val bankFile:File,val bankBytes:ByteArray,val source:Gen2Pokemon,val meta:Gen1ToGen7TransferMeta,
+        val bankFile:File,val bankBytes:ByteArray,val source:Gen2Pokemon,val sourceBinding:PseBankSourceBinding,val meta:Gen1ToGen7TransferMeta,
         val plan:Gen2ToGen3LegalisePlan,val pk3:ByteArray,val converted:PokemonEntry
     )
 
@@ -59350,15 +59350,12 @@ class MainActivity : Activity() {
         if(chosen.map{it.absolutePath}.distinct().size!=chosen.size)return showDialog("Gen 2 → Gen 3 multi-transfer","The selection contains the same Bank entry more than once. Nothing was changed.")
         val destination=runCatching{file.readBytes()}.getOrNull()?:return showDialog("Gen 2 → Gen 3 multi-transfer","The Gen 3 destination could not be read.")
         if(generationForSize(destination.size)!=3||!gen3SaveValid(destination))return showDialog("Gen 2 → Gen 3 multi-transfer","Load a valid Generation 3 save first.")
-        val selected=try{chosen.map{bankFile->
-            require(bankFile.isFile&&bankFile.extension.equals("pse2",true)){"A selected Gen 2 Bank record no longer exists."}
-            val bytes=bankFile.readBytes();val source=parseGen2BankPayload(bytes)?:error("A selected Gen 2 Bank record is invalid.")
-            val hardReason=when{source.isEgg||source.species !in 1..251||source.moves.any{it !in 0..251}||source.heldItem in GEN2_MAIL_ITEM_IDS->gen2ToGen3Rejection(source);else->null}
+        val selected=try{loadBoundGen2BankBatch(chosen,bankDir(),::parseGen2BankPayload).onEach{item->
+            val source=item.source;val hardReason=when{source.isEgg||source.species !in 1..251||source.moves.any{it !in 0..251}||source.heldItem in GEN2_MAIL_ITEM_IDS->gen2ToGen3Rejection(source);else->null}
             require(hardReason==null){"${source.nickname.ifBlank{"Pokémon #${source.species}"}} cannot transfer: $hardReason"}
-            Triple(bankFile,bytes,source)
         }}catch(e:Exception){return showDialog("Cannot transfer selection to Gen 3","${e.message?:"A selected Bank record could not be read."}\n\nNo safe deterministic Gen 3 legalisation is available. Every selected Bank record and the destination were left unchanged.")}
-        if(binding!=null&&(!destination.contentEquals(binding.destination)||binding.bankImages.size!=selected.size||!binding.bankImages.zip(selected).all{(image,item)->image.first==item.first.absolutePath&&image.second.contentEquals(item.second)}))return showDialog("Gen 2 → Gen 3 multi-transfer","The original destination or ordered Bank selection changed after Legalise confirmation. Nothing was changed.")
-        fun snapshotsMatch()=bound()&&runCatching{file.readBytes().contentEquals(destination)&&selected.all{it.first.readBytes().contentEquals(it.second)}}.getOrDefault(false)
+        if(binding!=null&&(!destination.contentEquals(binding.destination)||binding.bankImages.size!=selected.size||!binding.bankImages.zip(selected).all{(image,item)->image.first==item.bankFile.absolutePath&&image.second.contentEquals(item.bankBytes)&&item.sourceBinding.matches(item.bankBytes,true)}))return showDialog("Gen 2 → Gen 3 multi-transfer","The original destination or ordered Bank identity changed after Legalise confirmation. Nothing was changed.")
+        fun snapshotsMatch()=bound()&&runCatching{file.readBytes().contentEquals(destination)&&selected.all{it.sourceBinding.matches(it.bankBytes,true)}}.getOrDefault(false)
         val pc=gen3PcBuffer(destination)?:return showDialog("Gen 2 → Gen 3 multi-transfer","PSE could not reconstruct Gen 3 PC storage. Nothing was changed.")
         val targets=(0 until 14).mapNotNull{box->val empty=(0 until 30).filter{slot->gen3DestinationSlotIsStructurallyEmpty(pc,box*30+slot)};if(empty.size>=selected.size)box to empty.take(selected.size) else null}
         if(targets.isEmpty())return showDialog("Gen 2 → Gen 3 multi-transfer","No single Gen 3 PC box has ${selected.size} structurally empty slots for the complete selection. Existing or nonzero slot data was left unchanged; free capacity, reduce the selection, or load another valid save.")
@@ -59370,7 +59367,7 @@ class MainActivity : Activity() {
             if(index!=expectedIndex||pickerOffered||!snapshotsMatch())return stop("The destination identity, snapshots or preparation order changed.")
             if(index>=selected.size){
                 val currentDestination=runCatching{file.readBytes()}.getOrNull();if(currentDestination==null||!currentDestination.contentEquals(destination))return stop("The Gen 3 destination changed while conversion data was prepared.")
-                for((bankFile,bankBytes,source) in selected){val current=runCatching{bankFile.readBytes()}.getOrNull();if(current==null||!current.contentEquals(bankBytes)||parseGen2BankPayload(current)?.let{sameGen2BankRecord(it,source)}!=true)return stop("A selected Gen 2 Bank record changed while conversion data was prepared.")}
+                for(item in selected){val current=runCatching{item.bankFile.readBytes()}.getOrNull();if(current==null||!item.sourceBinding.matches(item.bankBytes,true)||!current.contentEquals(item.bankBytes)||parseGen2BankPayload(current)?.let{sameGen2BankRecord(it,item.source)}!=true)return stop("A selected Gen 2 Bank identity or record changed while conversion data was prepared.")}
                 pickerOffered=true
                 if(confirmedPlans==null){
                     val summary=prepared.joinToString("\n"){gen2ToGen3BatchLegaliseSummary(it.source,it.plan)}
@@ -59380,7 +59377,7 @@ class MainActivity : Activity() {
                         .setPositiveButton("Make legal for Gen 3"){_,_->
                             if(legaliseConsumed){showDialog("Gen 2 → Gen 3 multi-transfer","This Legalise confirmation was already submitted. Reopen PSE Bank.");return@setPositiveButton};legaliseConsumed=true
                             if(!snapshotsMatch()){stop("The destination identity or original snapshots changed after Legalise confirmation.");return@setPositiveButton}
-                            prepareSelectedGen2BankToGen3(chosen,requiredPlans,file,Gen2Gen3BatchBinding(openedUri,openedLabel,destination,selected.map{it.first.absolutePath to it.second}))
+                            prepareSelectedGen2BankToGen3(chosen,requiredPlans,file,Gen2Gen3BatchBinding(openedUri,openedLabel,destination,selected.map{it.bankFile.absolutePath to it.bankBytes}))
                         }.show();return
                 }
                 if(confirmedPlans!=requiredPlans)return stop("The prepared Gen 3 Legalise plan no longer matches this selection.")
@@ -59393,7 +59390,7 @@ class MainActivity : Activity() {
                     }
                     .setNegativeButton("Cancel",null).show();return
             }
-            val(bankFile,bankBytes,source)=selected[index]
+            val selectedItem=selected[index];val bankFile=selectedItem.bankFile;val bankBytes=selectedItem.bankBytes;val source=selectedItem.source
             var metadataConsumed=false
             loadGen1ToGen7TransferMetaAsync(source.species,source.moves){meta->
                 if(importedFile?.absolutePath!=file.absolutePath)return@loadGen1ToGen7TransferMetaAsync stop("The active save changed while conversion data was prepared.")
@@ -59405,7 +59402,7 @@ class MainActivity : Activity() {
                 if(confirmedPlans!=null&&confirmedPlans[bankFile.absolutePath]!=plan)return@loadGen1ToGen7TransferMetaAsync stop("The prepared Gen 3 Legalise plan changed for ${source.nickname.ifBlank{"Pokémon #${source.species}"}}.")
                 val pk3=try{buildGen2ToGen3Pk3(bankBytes,source,destination,meta,plan)}catch(e:Exception){return@loadGen1ToGen7TransferMetaAsync stop(e.message?:"A selected Pokémon could not be converted.")}
                 val converted=parsePk3(pk3,0,false)?:return@loadGen1ToGen7TransferMetaAsync stop("A prepared PK3 conversion could not be parsed.")
-                prepared.add(Gen2Gen3BatchPrepared(bankFile,bankBytes,source,meta,plan,pk3,converted));expectedIndex=index+1;next(index+1)
+                prepared.add(Gen2Gen3BatchPrepared(bankFile,bankBytes,source,selectedItem.sourceBinding,meta,plan,pk3,converted));expectedIndex=index+1;next(index+1)
             }
         }
         next(0)
@@ -59420,25 +59417,25 @@ class MainActivity : Activity() {
         try{
             require(bound()){"The destination identity changed before batch validation."}
             require(prepared.isNotEmpty()){"The prepared selection is empty."};require(prepared.map{it.bankFile.absolutePath}.distinct().size==prepared.size){"The prepared selection contains a duplicate Bank entry."};require(fresh.contentEquals(preparedDestination)&&generationForSize(fresh.size)==3&&gen3SaveValid(fresh)){"The Gen 3 destination changed or is no longer valid."};require(targetBox in 0..13){"The selected Gen 3 destination box is invalid."};require(targetSlots.size==prepared.size&&targetSlots.distinct().size==targetSlots.size&&targetSlots.all{it in 0 until 30}){"The reviewed Gen 3 destination slots are invalid."}
-            val refreshed=prepared.map{item->val bank=item.bankFile.readBytes();require(bank.contentEquals(item.bankBytes)){"A selected Gen 2 Bank record changed after preparation."};val source=parseGen2BankPayload(bank)?:error("A selected Gen 2 Bank record is invalid.");require(sameGen2BankRecord(source,item.source)){"A selected Gen 2 Pokémon changed after preparation."};require(item.plan==gen2ToGen3LegalisePlan(source,item.meta)){"A prepared Gen 3 Legalise plan no longer matches a selected Pokémon."};gen2ToGen3Rejection(source,item.plan,item.meta)?.let{error(it)};val pk3=buildGen2ToGen3Pk3(bank,source,fresh,item.meta,item.plan);val converted=parsePk3(pk3,0,false)?:error("A refreshed PK3 could not be parsed.");require(pk3.contentEquals(item.pk3)&&sameGen2ToGen3Pk3(converted,item.converted)){"A prepared PK3 conversion changed before staging."};item}
+            val refreshed=prepared.map{item->val bank=item.bankFile.readBytes();require(item.sourceBinding.matches(item.bankBytes,true)&&bank.contentEquals(item.bankBytes)){"A selected Gen 2 Bank identity or record changed after preparation."};val source=parseGen2BankPayload(bank)?:error("A selected Gen 2 Bank record is invalid.");require(sameGen2BankRecord(source,item.source)){"A selected Gen 2 Pokémon changed after preparation."};require(item.plan==gen2ToGen3LegalisePlan(source,item.meta)){"A prepared Gen 3 Legalise plan no longer matches a selected Pokémon."};gen2ToGen3Rejection(source,item.plan,item.meta)?.let{error(it)};val pk3=buildGen2ToGen3Pk3(bank,source,fresh,item.meta,item.plan);val converted=parsePk3(pk3,0,false)?:error("A refreshed PK3 could not be parsed.");require(pk3.contentEquals(item.pk3)&&sameGen2ToGen3Pk3(converted,item.converted)){"A prepared PK3 conversion changed before staging."};item}
             val save=fresh.copyOf();val pc=gen3PcBuffer(save)?:error("Could not reconstruct Gen 3 PC storage.");val beforePc=pc.copyOf();require(targetSlots.all{slot->gen3DestinationSlotIsStructurallyEmpty(pc,targetBox*30+slot)}){"A reviewed Gen 3 destination slot is no longer structurally empty. Existing slot data was not overwritten."}
             val expected=ArrayList<Triple<Int,ByteArray,PokemonEntry>>()
             for(i in refreshed.indices){val item=refreshed[i];val target=targetBox*30+targetSlots[i];val off=4+target*80;require(gen3DestinationSlotIsStructurallyEmpty(pc,target)){"Box ${targetBox+1} • Slot ${targetSlots[i]+1} is no longer structurally empty. Existing slot data was not overwritten."};item.pk3.copyInto(pc,off);val staged=parsePk3(pc,off,false)?:error("A staged PK3 could not be parsed.");require(sameGen2ToGen3Pk3(staged,item.converted)){"A staged PK3 changed."};expected.add(Triple(target,item.pk3,staged))}
             val changed=expected.flatMap{(target,bytes,_)->val off=4+target*80;(off until off+bytes.size).toList()}.toHashSet();require(pc.indices.all{it in changed||pc[it]==beforePc[it]}){"Unrelated Gen 3 PC data changed during batch staging."}
             val dexes=expected.map{it.third.species};writeSelectedGen1ToGen3PcAndDexFrozen(save,pc,dexes);require(gen3SaveValid(save)&&dexes.distinct().all{gen2ToGen3DexRegistered(save,it)}){"The staged Gen 3 checksums or Pokédex mirrors failed verification."}
-            require(refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"A selected Gen 2 Bank record changed during staging."}
+            require(refreshed.all{it.sourceBinding.matches(it.bankBytes,true)}){"A selected Gen 2 Bank identity or record changed during staging."}
             require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(fresh)){"The active Gen 3 destination changed during staging. Nothing was written."}
             require(bound()&&gen3SaveValid(save)){"The staged Gen 3 destination identity or integrity is invalid."}
             val backup=File.createTempFile(backupGameName(file)+"_PreGen2ToGen3Batch_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The exact Gen 3 batch recovery backup did not verify."};retainGen2ToGen3SafetyBackup(backup,fresh)
             val sourceRecovery=ExactBankRecoverySet("PSE_G2ToG3_BatchRecovery_");for(item in refreshed)sourceRecovery.capture(item.bankBytes,bankDir());require(sourceRecovery.matches()){ "The exact Gen 2 Bank recovery set did not verify." };bankRecovery=sourceRecovery
-            require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&sourceRecovery.matches()&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The Gen 3 destination, selected Bank records or retained backup changed before writing. Nothing was written."}
+            require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&sourceRecovery.matches()&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.sourceBinding.matches(it.bankBytes,true)}){"The Gen 3 destination, selected Bank identities or retained backup changed before writing. Nothing was written."}
             stagedDestination=save.copyOf()
             writeStarted=true
             file.writeBytes(save);val written=file.readBytes();require(written.contentEquals(save)&&gen3SaveValid(written)&&dexes.distinct().all{gen2ToGen3DexRegistered(written,it)}){"The persisted Gen 3 save, checksums or Pokédex mirrors failed verification."};val vpc=gen3PcBuffer(written)?:error("Could not re-open Gen 3 PC storage.")
             for((target,pk3,staged) in expected){val off=4+target*80;val actual=vpc.copyOfRange(off,off+80);val q=parsePk3(actual,0,false)?:error("A persisted PK3 could not be parsed.");require(actual.contentEquals(pk3)&&sameGen2ToGen3Pk3(q,staged)){"An exact converted PK3 did not persist."}};require(vpc.indices.all{it in changed||vpc[it]==beforePc[it]}){"Unrelated Gen 3 PC data changed after batch persistence."}
             require(bound()&&gen3SaveValid(written)){"The Gen 3 destination identity or integrity changed before batch Bank cleanup."}
-            for(item in refreshed){require(bound()){"The destination identity changed before a batch Bank cleanup."};require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(save)){"The verified Gen 3 destination changed before Bank cleanup."};require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&sourceRecovery.matches()&&exactBankPathsAbsent(removed.map{it.first})){"The retained Gen 3 recovery backup, removed paths or Bank recovery set changed before cleanup."};val cleanup=item.bankFile.readBytes();require(cleanup.contentEquals(item.bankBytes)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,item.source)}==true){"A selected Gen 2 Bank record changed before cleanup."};cleanupAttempted.add(item.bankFile.absolutePath);require(item.bankFile.delete()&&!item.bankFile.exists()){"A selected Gen 2 Bank record could not be removed after destination verification."};removed.add(item.bankFile to item.bankBytes);require(sourceRecovery.matches()&&exactBankPathsAbsent(removed.map{it.first})){"A removed Gen 2 Bank path or retained recovery changed during cleanup."}}
+            for(item in refreshed){require(bound()){"The destination identity changed before a batch Bank cleanup."};require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(save)){"The verified Gen 3 destination changed before Bank cleanup."};require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&sourceRecovery.matches()&&exactBankPathsAbsent(removed.map{it.first})){"The retained Gen 3 recovery backup, removed paths or Bank recovery set changed before cleanup."};val cleanup=item.bankFile.readBytes();require(item.sourceBinding.matches(item.bankBytes,true)&&cleanup.contentEquals(item.bankBytes)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,item.source)}==true){"A selected Gen 2 Bank identity or record changed before cleanup."};cleanupAttempted.add(item.bankFile.absolutePath);require(item.bankFile.delete()&&!item.bankFile.exists()){"A selected Gen 2 Bank record could not be removed after destination verification."};removed.add(item.bankFile to item.bankBytes);require(sourceRecovery.matches()&&exactBankPathsAbsent(removed.map{it.first})){"A removed Gen 2 Bank path or retained recovery changed during cleanup."}}
             require(bound()){"The destination identity changed after batch Bank cleanup."}
             require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(save)){"The verified Gen 3 destination changed after Bank cleanup."};require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&removed.size==refreshed.size&&exactBankPathsAbsent(removed.map{it.first})&&sourceRecovery.matches()){"The retained Gen 3 recovery backup, removed Bank batch or Bank recovery set changed after cleanup."}
         }catch(e:Exception){
@@ -59447,7 +59444,7 @@ class MainActivity : Activity() {
                 val recovered=runCatching{
                     restoreExactMissingStandardBankRecord(item.bankFile,item.bankBytes,cleanupAttempted.contains(item.bankFile.absolutePath),null)
                     val restored=item.bankFile.readBytes();val parsed=parseGen2BankPayload(restored)
-                    require(restored.contentEquals(item.bankBytes)&&parsed?.let{sameGen2BankRecord(it,item.source)}==true){"A selected Gen 2 Bank record could not be restored or verified exactly."}
+                    require(item.sourceBinding.matches(item.bankBytes,true)&&restored.contentEquals(item.bankBytes)&&parsed?.let{sameGen2BankRecord(it,item.source)}==true){"A selected Gen 2 Bank identity or record could not be restored and verified exactly."}
                 }.isSuccess
                 if(!recovered)bankRestored=false
             }
