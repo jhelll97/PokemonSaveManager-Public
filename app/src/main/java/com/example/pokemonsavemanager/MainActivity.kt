@@ -1720,11 +1720,12 @@ class MainActivity : Activity() {
         val data=runCatching{file.readBytes()}.getOrNull()?:return
         val profile=detectGen2Profile(data)?:run{showDialog("Transfer to Gen 2","Load a valid Gold, Silver or Crystal save first.");return}
         val parsed=try {
-            chosen.map{f->val bytes=f.readBytes();Gen1Gen2BatchPrepared(f,bytes,parseGen1BankPayload(bytes)?:error("A selected Gen 1 Bank record is invalid."))}
+            loadBoundGen1BankBatch(chosen,bankDir(),::parseGen1BankPayload).map{item->Gen1Gen2BatchPrepared(item.bankFile,item.bankBytes,item.source,item.sourceBinding)}
         } catch(e:Exception) {
             showDialog("Transfer to Gen 2",e.message?:"A selected Gen 1 Bank record could not be read. Nothing was changed.")
             return
         }
+        if(!parsed.all{it.sourceBinding.matches(it.bankBytes,true)}){showDialog("Transfer to Gen 2","A selected Bank identity changed during preparation. Nothing was changed.");return}
         val targets=availableGen2BoxTargets(data).filter{it.second>=chosen.size}
         if(targets.isEmpty()){showDialog("Transfer to Gen 2","No single Gen 2 PC box has room for all ${chosen.size} selected Pokémon. Nothing was changed.");return}
         val labels=targets.map{gen2BoxDestinationLabel(it.first,it.second,file,profile,currentSourceUri,data)}.toTypedArray()
@@ -1749,7 +1750,7 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private data class Gen1Gen2BatchPrepared(val bankFile:File,val bankBytes:ByteArray,val source:Gen1Pokemon)
+    private data class Gen1Gen2BatchPrepared(val bankFile:File,val bankBytes:ByteArray,val source:Gen1Pokemon,val sourceBinding:PseBankSourceBinding)
     private fun transferSelectedGen1BankToGen2(chosen:List<Gen1Gen2BatchPrepared>,targetBox:Int,openedFile:File,openedDestination:ByteArray,openedSource:Uri?,openedLabel:String?,profileKey:String){
         val file=openedFile
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedSource&&currentSourceLabel==openedLabel
@@ -1775,13 +1776,14 @@ class MainActivity : Activity() {
             val refreshed=chosen.map{item->
                 val bankBytes=runCatching{item.bankFile.readBytes()}.getOrElse{error("A selected Gen 1 Bank record could not be read.")}
                 val source=parseGen1BankPayload(bankBytes)?:error("A selected Gen 1 Bank record failed validation.")
-                require(bankBytes.contentEquals(item.bankBytes)&&sameGen1TransferRecord(source,item.source)){"A selected Gen 1 Bank record changed before transfer. Nothing was changed."}
-                Triple(item.bankFile,bankBytes,source)
+                require(item.sourceBinding.matches(item.bankBytes,true)&&bankBytes.contentEquals(item.bankBytes)&&sameGen1TransferRecord(source,item.source)){"A selected Gen 1 Bank identity or record changed before transfer. Nothing was changed."}
+                Gen1Gen2BatchPrepared(item.bankFile,bankBytes,source,item.sourceBinding)
             }
             val ownedBase=if(profile.key=="C")0x2A27 else 0x2A4C
             val seenBase=if(profile.key=="C")0x2A47 else 0x2A6C
             val work=fresh.copyOf();val expected=ArrayList<Triple<Int,Gen1Pokemon,ByteArray>>()
-            for((_,bankBytes,source) in refreshed){
+            for(item in refreshed){
+                val bankBytes=item.bankBytes;val source=item.source
                 val (mon,ot,nick)=buildGen1BankToGen2Record(bankBytes,source)
                 val slot=appendGen2BoxPokemon(work,targetBox,mon,ot,nick);expected.add(Triple(slot,source,bankBytes))
                 val dex=gen1DexFromInternalIndex(source.species)?:error("Species mapping failed during Pokédex registration.")
@@ -1809,11 +1811,12 @@ class MainActivity : Activity() {
                 require(dexRegistered(work,source,ownedBase,seenBase)){"A staged Gen 2 Pokédex registration did not verify."}
             }
             require(verifyGen2SaveIntegrity(work).first){"The complete staged Gen 2 batch destination failed integrity verification."}
+            require(bound()&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.sourceBinding.matches(it.bankBytes,true)}){"The destination or a selected Bank identity changed before backup. Nothing was written."}
             val backup=File.createTempFile(backupGameName(file)+"_PreGen1BankBatch_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The batch recovery backup did not persist exactly."}
             retainGen2SafetyBackup(backup,fresh)
-            val sourceRecovery=createGen1ToGen2BatchRecovery(refreshed.map{it.second},bankDir());bankRecovery=sourceRecovery
-            requireGen1ToGen2BatchRecoveryBoundary(bound()&&file.readBytes().contentEquals(fresh)&&refreshed.all{(bankFile,bankBytes,_)->bankFile.readBytes().contentEquals(bankBytes)},backup.readBytes().contentEquals(fresh)&&isBackupKept(backup),sourceRecovery,removed,0,0)
+            val sourceRecovery=createGen1ToGen2BatchRecovery(refreshed.map{it.bankBytes},bankDir());bankRecovery=sourceRecovery
+            requireGen1ToGen2BatchRecoveryBoundary(bound()&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.sourceBinding.matches(it.bankBytes,true)},backup.readBytes().contentEquals(fresh)&&isBackupKept(backup),sourceRecovery,removed,0,0)
             stagedDestination=work.copyOf()
             writeStarted=true
             file.writeBytes(work)
@@ -1830,9 +1833,10 @@ class MainActivity : Activity() {
                 require(dexRegistered(written,source,verifyOwned,verifySeen)){"A transferred Pokémon did not register as Seen and Owned in the Gen 2 Pokédex."}
             }
             require(gen2ChecksumValid(written,writtenProfile)){"The Gen 2 save checksum did not remain valid."}
-            for((bankFile,bankBytes,source) in refreshed){
+            for(item in refreshed){
+                val bankFile=item.bankFile;val bankBytes=item.bankBytes;val source=item.source
                 val current=runCatching{bankFile.readBytes()}.getOrElse{error("A selected Gen 1 Bank record could not be re-read before cleanup.")}
-                require(current.contentEquals(bankBytes) && parseGen1BankPayload(current)?.let{sameGen1TransferRecord(it,source)}==true){"A selected Gen 1 Bank record changed before cleanup; further Bank removal was stopped."}
+                require(item.sourceBinding.matches(bankBytes,true)&&current.contentEquals(bankBytes) && parseGen1BankPayload(current)?.let{sameGen1TransferRecord(it,source)}==true){"A selected Gen 1 Bank identity or record changed before cleanup; further Bank removal was stopped."}
                 requireGen1ToGen2BatchRecoveryBoundary(bound()&&file.readBytes().contentEquals(written),isBackupKept(backup)&&backup.readBytes().contentEquals(fresh),sourceRecovery,removed,removed.size,1)
                 cleanupAttempted.add(bankFile.absolutePath)
                 require(bankFile.delete()){"A Bank entry could not be removed after destination verification."}
@@ -1843,7 +1847,7 @@ class MainActivity : Activity() {
             requireGen1ToGen2BatchRecoveryBoundary(bound()&&file.readBytes().contentEquals(written),isBackupKept(backup)&&backup.readBytes().contentEquals(fresh),sourceRecovery,removed,refreshed.size,2)
         }catch(e:Exception){
             for(item in chosen)runCatching{restoreExactMissingStandardBankRecord(item.bankFile,item.bankBytes,cleanupAttempted.contains(item.bankFile.absolutePath),null)}
-            val banksRestored=chosen.all{item->runCatching{val bytes=item.bankFile.readBytes();bytes.contentEquals(item.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,item.source)}==true}.getOrDefault(false)}
+            val banksRestored=chosen.all{item->runCatching{val bytes=item.bankFile.readBytes();item.sourceBinding.matches(item.bankBytes,true)&&bytes.contentEquals(item.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,item.source)}==true}.getOrDefault(false)}
             val saveRestored=runCatching{
                 restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 2 batch destination write began; unknown current bytes were left untouched.","The Generation 2 batch destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
