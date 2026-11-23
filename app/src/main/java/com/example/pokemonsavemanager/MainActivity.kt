@@ -54434,7 +54434,7 @@ class MainActivity : Activity() {
         val pid=forceTransferShinyState((ec xor 0xA5A55A5AL) and 0xFFFFFFFFL,p.tid,shiny)
         writeU32LE(out,0x18,pid)
         val nature=(p.experience%25L).toInt();out[0x1C]=nature.toByte()
-        val gender=gen1ToGen5Gender(p,meta.genderRate);out[0x1D]=((gender and 3) shl 1).toByte()
+        val gender=gen1ToGen5GenderForRate(p,meta.genderRate);out[0x1D]=((gender and 3) shl 1).toByte()
         val ev=intArrayOf((p.statExp[0]/257).coerceIn(0,252),(p.statExp[1]/257).coerceIn(0,252),(p.statExp[2]/257).coerceIn(0,252),(p.statExp[3]/257).coerceIn(0,252),(p.statExp[4]/257).coerceIn(0,252),(p.statExp[4]/257).coerceIn(0,252))
         var total=ev.sum();while(total>510){val i=ev.indices.maxByOrNull{ev[it]}?:0;if(ev[i]==0)break;ev[i]--;total--}
         for(i in 0..5)out[0x1E+i]=ev[i].toByte()
