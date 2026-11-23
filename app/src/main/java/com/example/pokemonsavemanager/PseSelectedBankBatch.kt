@@ -994,6 +994,53 @@ internal fun finishGen1ToGen3BatchRecovery(recovery:ExactBankRecoverySet?):Strin
     if(recovery==null||recovery.cleanupExact())"" else
         "; one or more exact Bank recoveries retained for review"
 
+internal fun createGen1ToGen2BatchRecovery(
+    expected:List<ByteArray>,
+    directory:File
+):ExactBankRecoverySet {
+    val recovery=ExactBankRecoverySet("PSE_G1ToG2_BatchRecovery_")
+    expected.forEach{recovery.capture(it,directory)}
+    require(recovery.matches()) { "The exact Gen 1 Bank recovery set did not verify." }
+    return recovery
+}
+
+internal fun requireGen1ToGen2BatchRecoveryBoundary(
+    destinationMatches:Boolean,
+    backupMatches:Boolean,
+    recovery:ExactBankRecoverySet,
+    removed:List<Pair<File,ByteArray>>,
+    expectedRemoved:Int,
+    stage:Int
+) {
+    require(destinationMatches&&backupMatches&&recovery.matches()&&
+        removed.size==expectedRemoved&&exactBankPathsAbsent(removed.map{it.first})) {
+        when(stage) {
+            0->"The destination, selected Bank records or retained recovery backup changed before writing."
+            1->"The verified destination identity, retained backup, removed paths or Bank recovery set changed before cleanup."
+            else->"The verified Gen 2 destination, retained backup, removed Bank batch or Bank recovery set changed after cleanup."
+        }
+    }
+}
+
+internal fun gen1ToGen2BatchRecoveryMessage(
+    banksRestored:Boolean,
+    saveRestored:Boolean
+):String=when {
+    banksRestored&&saveRestored->"The exact Gen 2 destination and every selected Gen 1 Bank record were restored or kept and verified."
+    banksRestored->"Every selected Gen 1 Bank record was restored or kept, but destination recovery was not verified. Use the retained Gen 2 backup before editing again."
+    saveRestored->"The exact Gen 2 destination was restored or kept, but one or more Gen 1 Bank records were not verified. Keep the remaining Bank records and recovery data for review."
+    else->"Automatic recovery could not be fully verified. Stop editing and keep the retained backup and remaining files for review."
+}
+
+internal fun gen1ToGen2BatchRecoveryFailureNotice(recovery:ExactBankRecoverySet?):String {
+    val names=recovery?.retainedNames().orEmpty()
+    return if(names.isEmpty())"" else "\n\nBank recovery snapshots: "+names
+}
+
+internal fun finishGen1ToGen2BatchRecovery(recovery:ExactBankRecoverySet?):String=
+    if(recovery==null||recovery.cleanupExact())"" else
+        "; one or more exact Bank recoveries retained for review"
+
 internal fun createGen1ToGen4BatchRecovery(
     expected:List<ByteArray>,
     directory:File
