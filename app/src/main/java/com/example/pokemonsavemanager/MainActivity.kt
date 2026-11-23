@@ -53696,89 +53696,10 @@ class MainActivity : Activity() {
     ): ByteArray {
         val dex=gen1DexFromInternalIndex(p.species)
             ?:throw IllegalArgumentException("The Gen 1 species could not be mapped to the National Pokédex.")
-        require(destinationSave.size==SIZE_G7_SM||destinationSave.size==SIZE_G7_USUM){"A Generation 7 destination save is required."}
-        require(sourceBankBytes.size==GEN1_BANK_FILE_SIZE){"The preserved Gen 1 Bank record has an unexpected size."}
-        require(p.moves.all{it in 0..165}){"A Gen 1 move could not be represented in Generation 7."}
-        require(p.movePpUps.all{it in 0..3}){"The Gen 1 PP-Up values could not be represented safely."}
-        require((0..3).all{i->p.moves[i]!=0||(p.movePP[i]==0&&p.movePpUps[i]==0)}){"An empty Gen 1 move slot contains PP or PP-Up data that cannot be preserved."}
-        val rng=java.security.SecureRandom();val pk=ByteArray(PK6_STORED_SIZE)
-        val ec=randomU32(rng);writeU32LE(pk,0x00,ec);writeU16LE(pk,0x04,0);writeU16LE(pk,0x08,dex);writeU16LE(pk,0x0A,0);writeU16LE(pk,0x0C,p.tid);writeU16LE(pk,0x0E,0)
-        val nature=(p.experience%25L).toInt().coerceIn(0,24)
-        val transferExp=gen1ExperienceForLevel(speciesMeta.growth,p.level)
-        writeU32LE(pk,0x10,transferExp);pk[0x14]=transferMeta.abilityId.toByte();pk[0x15]=transferMeta.abilityNumber.toByte();writeU16LE(pk,0x16,0)
-        var pid=randomU32(rng);val shiny=gen1WouldBeShinyInGen2(p.dvs);pid=forceTransferShinyState(pid,p.tid,shiny);writeU32LE(pk,0x18,pid);pk[0x1C]=nature.toByte()
-        val gender=gen1TransferGender(p,transferMeta.genderRate);val fateful=dex==151;pk[0x1D]=(((gender and 3) shl 1)or(if(fateful)1 else 0)).toByte()
-        for(i in 0 until 6)pk[0x1E+i]=0;pk[0x2B]=0
-        val defaultName=GEN1_NATIONAL_NAMES.getOrElse(dex-1){"Pokemon"};val custom=p.nickname.isNotBlank()&&!p.nickname.equals(defaultName,true);val nickname=if(custom)p.nickname else defaultName
-        writeGen6String(pk,0x40,26,nickname)
-        val healedPp=IntArray(4)
-        for(i in 0..3){
-            val move=p.moves[i];writeU16LE(pk,0x5A+i*2,move)
-            if(move==0){healedPp[i]=0;pk[0x62+i]=0;pk[0x66+i]=0}
-            else{
-                val base=transferMeta.moveBasePp[move]?:error("Move #$move has no documented Generation 7 base-PP mapping.")
-                require(base in 1..63){"Move #$move has an invalid Generation 7 base-PP mapping."}
-                val ppUps=p.movePpUps[i];healedPp[i]=(base*(5+ppUps)/5).coerceIn(1,63)
-                pk[0x62+i]=healedPp[i].toByte();pk[0x66+i]=ppUps.toByte()
-            }
-        }
-        val ivs=shuffledTransferIvs(if(dex==151)5 else 3,rng);var iv32=0L
-        for(i in 0..5)iv32=iv32 or((ivs[i].toLong()and 31L)shl(i*5));if(custom)iv32=iv32 or 0x80000000L;writeU32LE(pk,0x74,iv32)
-        writeGen6String(pk,0x78,26,trainer.trainerName);pk[0x92]=if(trainer.gender.equals("Female",true))1 else 0;pk[0x93]=1;pk[0xA2]=transferMeta.baseFriendship.toByte()
-        writeGen6String(pk,0xB0,26,p.otName);pk[0xCA]=transferMeta.baseFriendship.toByte()
-        val cal=java.util.Calendar.getInstance();val metYear=(cal.get(java.util.Calendar.YEAR)-2000).coerceIn(0,255);val metMonth=cal.get(java.util.Calendar.MONTH)+1;val metDay=cal.get(java.util.Calendar.DAY_OF_MONTH)
-        pk[0xD4]=metYear.toByte();pk[0xD5]=metMonth.toByte();pk[0xD6]=metDay.toByte();writeU16LE(pk,0xD8,0);writeU16LE(pk,0xDA,30013);pk[0xDC]=4;pk[0xDD]=(p.level.coerceIn(1,100)and 0x7F).toByte();pk[0xDE]=0;pk[0xDF]=35;pk[0xE0]=0;pk[0xE1]=0;pk[0xE2]=0
-        val language=currentGen7LanguageId(destinationSave).coerceIn(1,10);pk[0xE3]=language.toByte()
-        updatePk6Checksum(pk);val encrypted=encryptPk6(pk)
-        val q=parsePk6(encrypted,0,PK6_STORED_SIZE,false,807)?:throw IllegalArgumentException("The converted PK7 could not be parsed.")
-        val mismatch=when{
-            !q.checksumValid->"PK7 checksum"
-            q.species!=dex->"species"
-            q.nickname!=nickname->"nickname"
-            q.isNicknamed!=custom->"nickname flag"
-            q.level!=p.level->"level"
-            q.heldItem!=0->"held item"
-            q.tid!=p.tid->"Trainer ID"
-            q.sid!=0->"Secret ID"
-            q.experience!=transferExp->"experience"
-            q.ability!=transferMeta.abilityId->"ability"
-            q.abilityNumber!=transferMeta.abilityNumber->"ability slot"
-            q.pid!=pid->"PID"
-            q.nature!=nature->"nature"
-            q.gender!=gender->"gender"
-            q.form!=0->"form"
-            q.evs.any{it!=0}->"EVs"
-            !q.moves.contentEquals(p.moves)->"moves"
-            !q.movePP.contentEquals(healedPp)->"move PP"
-            !gen6Pk6PpUps(encrypted).contentEquals(p.movePpUps)->"move PP Ups"
-            !q.ivs.contentEquals(ivs)->"IVs"
-            q.isEgg->"Egg flag"
-            q.otName!=p.otName->"Original Trainer name"
-            q.friendship!=transferMeta.baseFriendship->"friendship"
-            q.currentHandler!=1->"current handler"
-            gen6Pk6HandlerName(encrypted)!=trainer.trainerName->"current handler name"
-            q.pokerusDays!=0||q.pokerusStrain!=0->"Pokérus"
-            q.shiny!=shiny->"shiny state"
-            q.language!=language->"language"
-            q.markingValue!=0->"markings"
-            q.fatefulEncounter!=fateful->"fateful encounter flag"
-            q.relearnMoves.any{it!=0}->"relearn moves"
-            q.eggLocation!=0->"Egg location"
-            q.metLocation!=30013->"met location"
-            q.ball!=4->"Poké Ball"
-            q.metLevel!=p.level.coerceIn(1,100)->"met level"
-            q.otGender!=0->"Original Trainer gender"
-            q.originGame!=35->"origin game"
-            q.country!=0->"country"
-            q.region!=0->"region"
-            q.consoleRegion!=0->"console region"
-            q.eggYear!=0||q.eggMonth!=0||q.eggDay!=0->"Egg date"
-            q.metYear!=metYear||q.metMonth!=metMonth||q.metDay!=metDay->"met date"
-            q.hyperTrainFlags!=0->"Hyper Training flags"
-            else->null
-        }
-        require(mismatch==null){"The converted PK7 failed exact converted-field verification ($mismatch)."}
-        return encrypted
+        val defaultName=GEN1_NATIONAL_NAMES.getOrElse(dex-1){"Pokemon"}
+        val destinationLanguage=currentGen7LanguageId(destinationSave)
+        val built=buildGen1ToGen7Pk7Bytes(sourceBankBytes,p,destinationSave.size,trainer.trainerName,trainer.gender,speciesMeta,transferMeta,dex,defaultName,GEN1_BANK_FILE_SIZE,SIZE_G7_SM,SIZE_G7_USUM,PK6_STORED_SIZE,destinationLanguage,{randomU32(it)},{flawless,rng->shuffledTransferIvs(flawless,rng)},{pid,tid,shiny->forceTransferShinyState(pid,tid,shiny)},{growth,level->gen1ExperienceForLevel(growth,level)},{gen1WouldBeShinyInGen2(it)},{source,rate->gen1TransferGender(source,rate)},{data,offset,length,text->writeGen6String(data,offset,length,text)},{updatePk6Checksum(it)},{encryptPk6(it)})
+        return verifyGen1ToGen7Pk7Bytes(built,p,parsePk6(built.encrypted,0,PK6_STORED_SIZE,false,807),gen6Pk6PpUps(built.encrypted),gen6Pk6HandlerName(built.encrypted))
     }
 
 
