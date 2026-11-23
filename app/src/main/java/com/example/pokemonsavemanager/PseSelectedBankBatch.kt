@@ -557,6 +557,70 @@ internal fun verifyGen1ToGen4Pk4Bytes(
     return built.encrypted
 }
 
+internal data class BuiltGen1ToGen5Pk5(
+    val encrypted:ByteArray,
+    val nature:Int,
+    val shiny:Boolean,
+    val gender:Int,
+    val evs:IntArray,
+    val ivs:IntArray,
+    val nickname:String,
+    val originGame:Int
+)
+
+internal fun gen1ToGen5GenderForRate(source:MainActivity.Gen1Pokemon,rate:Int):Int {
+    if(rate<0)return 2
+    if(rate<=0)return 0
+    if(rate>=8)return 1
+    return if((source.dvs[0]*16)<rate*32)1 else 0
+}
+
+internal fun buildGen1ToGen5Pk5Bytes(
+    bankBytes:ByteArray,
+    source:MainActivity.Gen1Pokemon,
+    expectedBankSize:Int,
+    baseFriendship:Int,
+    abilityId:Int,
+    dex:Int,
+    pid:Long,
+    gender:Int,
+    nickname:String,
+    originGame:Int,
+    writeString:(ByteArray,Int,Int,String,Int)->Unit,
+    encrypt:(ByteArray)->ByteArray
+):BuiltGen1ToGen5Pk5 {
+    require(bankBytes.size==expectedBankSize){"The preserved Gen 1 Bank record has an unexpected size."}
+    require(source.movePpUps.all{it in 0..3}){"The Gen 1 PP-Up values could not be represented safely."}
+    require((0..3).all{i->source.moves[i]!=0||(source.movePP[i]==0&&source.movePpUps[i]==0)}){"An empty Gen 1 move slot contains PP or PP-Up data that cannot be preserved."}
+    val out=ByteArray(136);val nature=(source.experience%25L).toInt()
+    val shiny=source.dvs[2]==10&&source.dvs[3]==10&&source.dvs[4]==10&&source.dvs[1] in setOf(2,3,6,7,10,11,14,15)
+    writeGen1ToGen4U32(out,0,pid);writeGen1ToGen4U16(out,0x08,dex);writeGen1ToGen4U16(out,0x0C,source.tid);writeGen1ToGen4U16(out,0x0E,0);writeGen1ToGen4U32(out,0x10,source.experience)
+    out[0x14]=baseFriendship.toByte();out[0x15]=abilityId.toByte();out[0x17]=2
+    val ev=intArrayOf((source.statExp[0]/257).coerceIn(0,255),(source.statExp[1]/257).coerceIn(0,255),(source.statExp[2]/257).coerceIn(0,255),(source.statExp[3]/257).coerceIn(0,255),(source.statExp[4]/257).coerceIn(0,255),(source.statExp[4]/257).coerceIn(0,255))
+    var total=ev.sum();while(total>510){val i=ev.indices.maxByOrNull{ev[it]}?:0;if(ev[i]==0)break;ev[i]--;total--}
+    for(i in 0..5)out[0x18+i]=ev[i].toByte()
+    for(i in 0..3){writeGen1ToGen4U16(out,0x28+i*2,source.moves[i].coerceIn(0,467));out[0x30+i]=source.movePP[i].coerceIn(0,63).toByte();out[0x34+i]=source.movePpUps[i].toByte()}
+    val iv=intArrayOf(source.dvs[0],source.dvs[1],source.dvs[2],source.dvs[3],source.dvs[4],source.dvs[4]).map{(it*2).coerceIn(0,31)}.toIntArray()
+    var ivw=0L;for(i in 0..5)ivw=ivw or ((iv[i].toLong() and 31L) shl(i*5));writeGen1ToGen4U32(out,0x38,ivw)
+    out[0x40]=((gender and 3) shl 1).toByte();out[0x41]=nature.toByte();out[0x42]=0
+    writeString(out,0x48,22,nickname,10);out[0x5F]=originGame.toByte();writeString(out,0x68,16,source.otName,7);out[0x83]=4;out[0x84]=source.level.coerceIn(1,100).toByte()
+    return BuiltGen1ToGen5Pk5(encrypt(out),nature,shiny,gender,ev,iv,nickname,originGame)
+}
+
+internal fun verifyGen1ToGen5Pk5Bytes(
+    built:BuiltGen1ToGen5Pk5,
+    source:MainActivity.Gen1Pokemon,
+    converted:MainActivity.PokemonEntry?,
+    dex:Int,
+    baseFriendship:Int,
+    abilityId:Int,
+    ppUps:IntArray
+):ByteArray {
+    val q=converted?:error("The converted PK5 could not be parsed.")
+    require(q.checksumValid&&q.species==dex&&q.tid==source.tid&&q.sid==0&&q.nickname==built.nickname&&q.otName==source.otName&&q.experience==source.experience&&q.ability==abilityId&&q.abilityNumber==1&&q.gender==built.gender&&q.nature==built.nature&&q.shiny==built.shiny&&q.friendship==baseFriendship&&q.language==2&&q.heldItem==0&&q.ball==4&&q.metLevel==source.level.coerceIn(1,100)&&q.originGame==built.originGame&&q.moves.contentEquals(source.moves)&&q.movePP.contentEquals(source.movePP)&&ppUps.contentEquals(source.movePpUps)&&q.evs.contentEquals(built.evs)&&q.ivs.contentEquals(built.ivs)){"The converted PK5 failed identity or converted-field verification."}
+    return built.encrypted
+}
+
 internal fun requireExactGen3BankPartySource(
     item: Gen3BankBatchItem,
     root: File,
