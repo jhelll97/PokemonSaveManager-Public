@@ -1,6 +1,143 @@
 package com.example.pokemonsavemanager
 
 import java.io.File
+import java.math.BigInteger
+import java.security.MessageDigest
+import javax.crypto.Cipher
+import javax.crypto.spec.SecretKeySpec
+
+private val gen7MemePublicDer = byteArrayOf(
+    0x30,0x7C,0x30,0x0D,0x06,0x09,0x2A,0x86.toByte(),0x48,0x86.toByte(),0xF7.toByte(),0x0D,0x01,0x01,0x01,0x05,
+    0x00,0x03,0x6B,0x00,0x30,0x68,0x02,0x61,0x00,
+    0xB6.toByte(),0x1E,0x19,0x20,0x91.toByte(),0xF9.toByte(),0x0A,0x8F.toByte(),0x76,0xA6.toByte(),0xEA.toByte(),0xAA.toByte(),0x9A.toByte(),0x3C,0xE5.toByte(),0x8C.toByte(),
+    0x86.toByte(),0x3F,0x39,0xAE.toByte(),0x25,0x3F,0x03,0x78,0x16,0xF5.toByte(),0x97.toByte(),0x58,0x54,0xE0.toByte(),0x7A,0x9A.toByte(),
+    0x45,0x66,0x01,0xE7.toByte(),0xC9.toByte(),0x4C,0x29,0x75,0x9F.toByte(),0xE1.toByte(),0x55,0xC0.toByte(),0x64,0xED.toByte(),0xDF.toByte(),0xA1.toByte(),
+    0x11,0x44,0x3F,0x81.toByte(),0xEF.toByte(),0x1A,0x42,0x8C.toByte(),0xF6.toByte(),0xCD.toByte(),0x32,0xF9.toByte(),0xDA.toByte(),0xC9.toByte(),0xD4.toByte(),0x8E.toByte(),
+    0x94.toByte(),0xCF.toByte(),0xB3.toByte(),0xF6.toByte(),0x90.toByte(),0x12,0x0E,0x8E.toByte(),0x6B,0x91.toByte(),0x11,0xAD.toByte(),0xDA.toByte(),0xF1.toByte(),0x1E,0x7C,
+    0x96.toByte(),0x20,0x8C.toByte(),0x37,0xC0.toByte(),0x14,0x3F,0xF2.toByte(),0xBF.toByte(),0x3D,0x7E,0x83.toByte(),0x11,0x41,0xA9.toByte(),0x73,
+    0x02,0x03,0x01,0x00,0x01
+)
+
+private val gen7MemeModulus = byteArrayOf(
+    0xB6.toByte(),0x1E,0x19,0x20,0x91.toByte(),0xF9.toByte(),0x0A,0x8F.toByte(),0x76,0xA6.toByte(),0xEA.toByte(),0xAA.toByte(),0x9A.toByte(),0x3C,0xE5.toByte(),0x8C.toByte(),
+    0x86.toByte(),0x3F,0x39,0xAE.toByte(),0x25,0x3F,0x03,0x78,0x16,0xF5.toByte(),0x97.toByte(),0x58,0x54,0xE0.toByte(),0x7A,0x9A.toByte(),
+    0x45,0x66,0x01,0xE7.toByte(),0xC9.toByte(),0x4C,0x29,0x75,0x9F.toByte(),0xE1.toByte(),0x55,0xC0.toByte(),0x64,0xED.toByte(),0xDF.toByte(),0xA1.toByte(),
+    0x11,0x44,0x3F,0x81.toByte(),0xEF.toByte(),0x1A,0x42,0x8C.toByte(),0xF6.toByte(),0xCD.toByte(),0x32,0xF9.toByte(),0xDA.toByte(),0xC9.toByte(),0xD4.toByte(),0x8E.toByte(),
+    0x94.toByte(),0xCF.toByte(),0xB3.toByte(),0xF6.toByte(),0x90.toByte(),0x12,0x0E,0x8E.toByte(),0x6B,0x91.toByte(),0x11,0xAD.toByte(),0xDA.toByte(),0xF1.toByte(),0x1E,0x7C,
+    0x96.toByte(),0x20,0x8C.toByte(),0x37,0xC0.toByte(),0x14,0x3F,0xF2.toByte(),0xBF.toByte(),0x3D,0x7E,0x83.toByte(),0x11,0x41,0xA9.toByte(),0x73
+)
+
+private val gen7MemePrivateExponent = byteArrayOf(
+    0x77,0x54,0x55,0x66,0x8F.toByte(),0xFF.toByte(),0x3C,0xBA.toByte(),0x30,0x26,0xC2.toByte(),0xD0.toByte(),0xB2.toByte(),0x6B,0x80.toByte(),
+    0x85.toByte(),0x89.toByte(),0x59,0x58,0x34,0x11,0x57,0xAE.toByte(),0xB0.toByte(),0x3B,0x6B,0x04,0x95.toByte(),0xEE.toByte(),0x57,0x80.toByte(),0x3E,
+    0x21,0x86.toByte(),0xEB.toByte(),0x6C,0xB2.toByte(),0xEB.toByte(),0x62,0xA7.toByte(),0x1D,0xF1.toByte(),0x8A.toByte(),0x3C,0x9C.toByte(),0x65,0x79,0x07,0x76,
+    0x70,0x96.toByte(),0x1B,0x3A,0x61,0x02,0xDA.toByte(),0xBE.toByte(),0x5A,0x19,0x4A,0xB5.toByte(),0x8C.toByte(),0x32,0x50,0xAE.toByte(),0xD5.toByte(),
+    0x97.toByte(),0xFC.toByte(),0x78,0x97.toByte(),0x8A.toByte(),0x32,0x6D,0xB1.toByte(),0xD7.toByte(),0xB2.toByte(),0x8D.toByte(),0xCC.toByte(),0xCB.toByte(),0x2A,0x3E,0x01,0x4E,
+    0xDB.toByte(),0xD3.toByte(),0x97.toByte(),0xAD.toByte(),0x33,0xB8.toByte(),0xF2.toByte(),0x8C.toByte(),0xD5.toByte(),0x25,0x05,0x42,0x51
+)
+
+private fun aesEcbEncryptBlock(block: ByteArray, key: ByteArray): ByteArray {
+    val cipher = Cipher.getInstance("AES/ECB/NoPadding")
+    cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"))
+    return cipher.doFinal(block)
+}
+
+private fun xor16(a: ByteArray, b: ByteArray): ByteArray =
+    ByteArray(16) { i -> (a[i].toInt() xor b[i].toInt()).toByte() }
+
+private fun memeAesEncrypt96(input: ByteArray, key: ByteArray): ByteArray {
+    require(input.size == 0x60)
+    val out = ByteArray(0x60)
+    var chain = ByteArray(16)
+
+    for (blockIndex in 0 until 6) {
+        val off = blockIndex * 16
+        val block = input.copyOfRange(off, off + 16)
+        chain = aesEcbEncryptBlock(xor16(block, chain), key)
+        System.arraycopy(chain, 0, out, off, 16)
+    }
+
+    val mixed = xor16(chain, out.copyOfRange(0, 16))
+    val subkey = ByteArray(16)
+    for (i in 0 until 16 step 2) {
+        val b1 = mixed[i].toInt() and 0xFF
+        val b2 = mixed[i + 1].toInt() and 0xFF
+        subkey[i] = (((b1 shl 1) and 0xFF) or (b2 ushr 7)).toByte()
+        var next = (b2 shl 1) and 0xFF
+        if (i + 2 < 16) next = next or ((mixed[i + 2].toInt() and 0xFF) ushr 7)
+        subkey[i + 1] = next.toByte()
+    }
+    if ((mixed[0].toInt() and 0x80) != 0)
+        subkey[15] = (subkey[15].toInt() xor 0x87).toByte()
+
+    chain = ByteArray(16)
+    for (i in 0 until 6) {
+        val off = (6 - i - 1) * 16
+        val block = out.copyOfRange(off, off + 16)
+        val x = xor16(block, subkey)
+        val enc = aesEcbEncryptBlock(x, key)
+        val finalBlock = xor16(enc, chain)
+        System.arraycopy(finalBlock, 0, out, off, 16)
+        chain = x
+    }
+    return out
+}
+
+private fun toFixedUnsigned(value: BigInteger, length: Int): ByteArray {
+    val bytes = value.toByteArray()
+    if (bytes.size == length) return bytes
+    if (bytes.size == length + 1 && bytes[0].toInt() == 0)
+        return bytes.copyOfRange(1, bytes.size)
+    if (bytes.size > length)
+        return bytes.copyOfRange(bytes.size - length, bytes.size)
+    val out = ByteArray(length)
+    System.arraycopy(bytes, 0, out, length - bytes.size, bytes.size)
+    return out
+}
+
+private fun memeRsaPrivate96(input: ByteArray): ByteArray {
+    require(input.size == 0x60)
+    val n = BigInteger(1, gen7MemeModulus)
+    val d = BigInteger(1, gen7MemePrivateExponent)
+    return toFixedUnsigned(BigInteger(1, input).modPow(d, n), 0x60)
+}
+
+internal fun signGen7SaveInPlace(data: ByteArray, sizeSm: Int, sizeUsum: Int) {
+    require(data.size == sizeSm || data.size == sizeUsum) {
+        "Not a supported Gen 7 save."
+    }
+
+    val checksumTableOffset = data.size - 0x200
+    val checksumSignedLength = if (data.size == sizeUsum) 0x150 else 0x140
+    val signatureOffset = if (data.size == sizeUsum) 0x6C100 else 0x6BB00
+    require(signatureOffset + 0x80 <= data.size)
+
+    java.util.Arrays.fill(data, signatureOffset, signatureOffset + 0x80, 0.toByte())
+
+    val sha256 = MessageDigest.getInstance("SHA-256")
+    sha256.update(data, checksumTableOffset, checksumSignedLength)
+    val checksumDigest = sha256.digest()
+    System.arraycopy(checksumDigest, 0, data, signatureOffset, 0x20)
+
+    val sigBlock = data.copyOfRange(signatureOffset, signatureOffset + 0x80)
+    val sha1 = MessageDigest.getInstance("SHA-1")
+    sha1.update(sigBlock, 0, 0x78)
+    val integrity = sha1.digest()
+    System.arraycopy(integrity, 0, sigBlock, 0x78, 8)
+
+    val keySha1 = MessageDigest.getInstance("SHA-1")
+    keySha1.update(gen7MemePublicDer)
+    keySha1.update(sigBlock, 0, 0x20)
+    val aesKey = keySha1.digest().copyOfRange(0, 16)
+
+    val encrypted = memeAesEncrypt96(sigBlock.copyOfRange(0x20, 0x80), aesKey)
+    encrypted[0] = (encrypted[0].toInt() and 0x7F).toByte()
+    val rsa = memeRsaPrivate96(encrypted)
+    System.arraycopy(rsa, 0, sigBlock, 0x20, 0x60)
+
+    System.arraycopy(sigBlock, 0, data, signatureOffset, 0x80)
+}
+
 
 internal val GEN2_MAIL_ITEM_IDS=setOf(0x9e,0xb5,0xb6,0xb7,0xb8,0xb9,0xba,0xbb,0xbc,0xbd)
 
