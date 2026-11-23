@@ -48248,11 +48248,13 @@ class MainActivity : Activity() {
         fun bound()=importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel
         if(!preparedGen3ToGen4StillBound(p))return showDialog("Gen 3 → Gen 4","The destination identity or prepared snapshots changed. Reopen PSE Bank.")
         val file=p.destinationFile
+        val destinationBinding=PseBankDestinationBinding.capture(file)
+        if(destinationBinding==null||!destinationBinding.matches(p.destination,bound()))return showDialog("Gen 3 → Gen 4","The destination identity changed after review. Reopen PSE Bank. Nothing was changed.")
         val fresh=runCatching{file.readBytes()}.getOrNull()?:return
         var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null;var bankRecovery:File?=null;var stagedDestination:ByteArray?=null
         var retainedRecovery=false
         try{
-            require(bound()&&fresh.contentEquals(p.destination)){"The Gen 4 destination changed after review."}
+            require(destinationBinding.matches(p.destination,bound())&&fresh.contentEquals(p.destination)){"The Gen 4 destination changed after review."}
             require(target in 0 until 540){"Invalid Gen 4 PC slot."}
             val profile=detectGen4Profile(fresh)?:error("The destination is no longer a valid Gen 4 save.")
             val before=gen4Validation(fresh,profile)
@@ -48293,7 +48295,7 @@ class MainActivity : Activity() {
             val stagedValidation=gen4Validation(work,profile)
             require(stagedValidation.generalChecksum&&stagedValidation.storageChecksum&&stagedValidation.badPk4==0&&
                 gen1ToGen4DexRegistered(work,profile,staged.species)){"The staged Gen 4 save, PK4 or Pokédex failed verification."}
-            require(bound()&&file.readBytes().contentEquals(fresh)&&p.sourceBinding.matches(p.bankBytes,true)){
+            require(destinationBinding.matches(fresh,bound())&&p.sourceBinding.matches(p.bankBytes,true)){
                 "The destination or Bank identity changed during staging."
             }
             val backup=File.createTempFile(backupGameName(file)+"_PreGen3ToGen4Transfer_",".backup",backupsDir())
@@ -48303,14 +48305,14 @@ class MainActivity : Activity() {
             val recovery=File.createTempFile("PSE_G3ToG4_BankRecovery_",".tmp",bankDir())
             bankRecovery=recovery;recovery.writeBytes(p.bankBytes)
             require(recovery.readBytes().contentEquals(p.bankBytes)){"The Bank recovery snapshot did not verify."}
-            require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&
-                file.readBytes().contentEquals(fresh)&&p.sourceBinding.matches(p.bankBytes,true)&&
+            require(destinationBinding.matches(fresh,bound())&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&
+                p.sourceBinding.matches(p.bankBytes,true)&&
                 recovery.readBytes().contentEquals(p.bankBytes)){
                 "The destination, Bank identity or retained recovery snapshots changed before writing."
             }
             stagedDestination=work.copyOf();writeStarted=true;file.writeBytes(work)
             val written=file.readBytes()
-            require(written.contentEquals(work)&&written.indices.all{it in allowed||written[it]==fresh[it]}){
+            require(destinationBinding.matches(work,bound())&&written.contentEquals(work)&&written.indices.all{it in allowed||written[it]==fresh[it]}){
                 "The persisted destination changed outside the reviewed byte scope."
             }
             val wp=detectGen4Profile(written)?:error("The persisted Gen 4 layout could not be reopened.")
@@ -48325,14 +48327,14 @@ class MainActivity : Activity() {
                 gen4Pk4PpUps(actual).contentEquals(gen4Pk4PpUps(refreshedPk4))){
                 "The exact reviewed PK4 did not persist."
             }
-            require(bound()&&validGen2ToGen4Destination(written)&&file.readBytes().contentEquals(work)&&
+            require(destinationBinding.matches(work,bound())&&validGen2ToGen4Destination(written)&&
                 isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&
                 recovery.readBytes().contentEquals(p.bankBytes)){
                 "The verified destination or retained recovery snapshots changed before Bank cleanup."
             }
             require(p.sourceBinding.matches(p.bankBytes,true)){"The Gen 3 Bank identity changed before cleanup."}
             bankDeleteAttempted=true;require(p.bankFile.delete()){"The Gen 3 Bank record could not be removed after destination verification."}
-            require(!p.bankFile.exists()&&bound()&&file.readBytes().contentEquals(work)&&
+            require(!p.bankFile.exists()&&destinationBinding.matches(work,bound())&&
                 isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&
                 recovery.readBytes().contentEquals(p.bankBytes)){
                 "The completed conversion or retained destination and Bank recovery snapshots could not be rechecked after Bank cleanup."
@@ -48342,7 +48344,7 @@ class MainActivity : Activity() {
             )
             requireNativeBankWithdrawalPostCleanup(
                 generation=4,
-                destinationBound=bound()&&importedFile?.absolutePath==file.absolutePath,
+                destinationBound=destinationBinding.matches(work,bound()),
                 retainedRecovery=retainedRecovery,
                 recoveryFile=recovery,
                 destination=file,
@@ -48363,9 +48365,11 @@ class MainActivity : Activity() {
                     parsed.pid==p.source.pid&&parsed.species==p.source.species&&parsed.tid==p.source.tid&&parsed.sid==p.source.sid){"The Gen 3 Bank record could not be restored exactly."}
             }.isSuccess
             val saveRestored=runCatching{
+                val current=file.readBytes()
+                require(destinationBinding.matches(current,bound())){"The Gen 4 destination identity changed during recovery; the current file was left untouched."}
                 restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 4 destination write began; unknown current bytes were left untouched.","The Generation 4 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
-                require(restored.contentEquals(fresh)&&validGen2ToGen4Destination(restored)){"The restored Generation 4 destination did not verify."}
+                require(destinationBinding.matches(fresh,bound())&&restored.contentEquals(fresh)&&validGen2ToGen4Destination(restored)){"The restored Generation 4 destination did not verify."}
                 true
             }.getOrDefault(false)
             val bankRecoveryClean=if(bankRestored&&saveRestored){
