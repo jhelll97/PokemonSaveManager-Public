@@ -47320,7 +47320,7 @@ class MainActivity : Activity() {
                 "The exact Gen 3 Bank batch did not persist in the destination box."
             }
             selected.forEachIndexed { index, item ->
-                require(removed.all { !it.first.exists() } &&
+                require(exactBankPathsAbsent(removed.map{it.first}) &&
                     recoverySnapshotsMatch(refreshed)) {
                     "An earlier Gen 3 Bank removal or recovery snapshot changed during cleanup."
                 }
@@ -47351,14 +47351,17 @@ class MainActivity : Activity() {
                     recoveryPokemon.sid == item.pokemon.sid) {
                     "A Gen 3 Bank recovery snapshot changed before removal."
                 }
-                removed.add(item.bankFile to refreshed[index])
                 val deleted = item.bankFile.delete()
                 require(deleted && !item.bankFile.exists()) {
                     "A verified Gen 3 Bank record could not be removed."
                 }
+                removed.add(item.bankFile to refreshed[index])
+                require(exactBankPathsAbsent(removed.map{it.first})) {
+                    "A removed Gen 3 Bank path did not remain absent after cleanup."
+                }
             }
             require(removed.size == selected.size &&
-                removed.all { !it.first.exists() } &&
+                exactBankPathsAbsent(removed.map{it.first}) &&
                 destinationBinding.matches(work,destinationBound()) &&
                 openedFile.readBytes().contentEquals(work) &&
                 retainedBinding.matches(fresh,isBackupKept(backup!!)) &&
