@@ -1138,51 +1138,6 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun gen1ToGen7PkMismatch(a:PokemonEntry,b:PokemonEntry):String?=when{
-        !a.checksumValid||!b.checksumValid->"PK7 checksum"
-        a.species!=b.species->"species"
-        a.nickname!=b.nickname->"nickname"
-        a.isNicknamed!=b.isNicknamed->"nickname flag"
-        a.level!=b.level->"level"
-        a.heldItem!=b.heldItem->"held item"
-        a.tid!=b.tid->"Trainer ID"
-        a.sid!=b.sid->"Secret ID"
-        a.experience!=b.experience->"experience"
-        a.ability!=b.ability->"ability"
-        a.abilityNumber!=b.abilityNumber->"ability slot"
-        a.pid!=b.pid->"PID"
-        a.nature!=b.nature->"nature"
-        a.gender!=b.gender->"gender"
-        a.form!=b.form->"form"
-        !a.evs.contentEquals(b.evs)->"EVs"
-        !a.moves.contentEquals(b.moves)->"moves"
-        !a.movePP.contentEquals(b.movePP)->"move PP"
-        !a.ivs.contentEquals(b.ivs)->"IVs"
-        a.isEgg!=b.isEgg->"Egg flag"
-        a.otName!=b.otName->"Original Trainer name"
-        a.friendship!=b.friendship->"friendship"
-        a.currentHandler!=b.currentHandler->"current handler"
-        a.pokerusDays!=b.pokerusDays||a.pokerusStrain!=b.pokerusStrain->"Pokérus"
-        a.shiny!=b.shiny->"shiny state"
-        a.language!=b.language->"language"
-        a.markingValue!=b.markingValue->"markings"
-        a.fatefulEncounter!=b.fatefulEncounter->"fateful encounter flag"
-        !a.relearnMoves.contentEquals(b.relearnMoves)->"relearn moves"
-        a.eggLocation!=b.eggLocation->"Egg location"
-        a.metLocation!=b.metLocation->"met location"
-        a.ball!=b.ball->"Poké Ball"
-        a.metLevel!=b.metLevel->"met level"
-        a.otGender!=b.otGender->"Original Trainer gender"
-        a.originGame!=b.originGame->"origin game"
-        a.country!=b.country->"country"
-        a.region!=b.region->"region"
-        a.consoleRegion!=b.consoleRegion->"console region"
-        a.eggYear!=b.eggYear||a.eggMonth!=b.eggMonth||a.eggDay!=b.eggDay->"Egg date"
-        a.metYear!=b.metYear||a.metMonth!=b.metMonth||a.metDay!=b.metDay->"met date"
-        a.hyperTrainFlags!=b.hyperTrainFlags->"Hyper Training flags"
-        else->null
-    }
-
     private fun transferSelectedGen1BankToGen7(preparedBatch:List<Gen1Gen7BatchPrepared>,preparedDestination:ByteArray,box:Int){
         val file=importedFile?:return
         val openedFile=file;val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
@@ -60554,51 +60509,6 @@ private data class Gen2ToGen5LegalisePlan(
         if(bankBytes.size!=GEN2_BANK_FILE_SIZE)return IntArray(4){-1}
         val o=GEN2_BANK_HEADER_SIZE
         return IntArray(4){(bankBytes[o+23+it].toInt() ushr 6) and 3}
-    }
-
-    private fun gen2ForwardPkMismatch(a:PokemonEntry,b:PokemonEntry):String?=when{
-        !a.checksumValid||!b.checksumValid->"checksum"
-        a.pid!=b.pid->"PID"
-        a.species!=b.species->"species"
-        a.nickname!=b.nickname->"nickname"
-        a.isNicknamed!=b.isNicknamed->"nickname flag"
-        a.level!=b.level->"level"
-        a.heldItem!=b.heldItem->"held item"
-        a.tid!=b.tid->"Trainer ID"
-        a.sid!=b.sid->"Secret ID"
-        a.experience!=b.experience->"experience"
-        a.ability!=b.ability->"ability"
-        a.abilityNumber!=b.abilityNumber->"ability slot"
-        a.nature!=b.nature->"nature"
-        a.gender!=b.gender->"gender"
-        a.form!=b.form->"form"
-        !a.evs.contentEquals(b.evs)->"EVs"
-        !a.moves.contentEquals(b.moves)->"moves"
-        !a.movePP.contentEquals(b.movePP)->"move PP"
-        !a.ivs.contentEquals(b.ivs)->"IVs"
-        a.isEgg!=b.isEgg->"Egg flag"
-        a.otName!=b.otName->"Original Trainer name"
-        a.friendship!=b.friendship->"friendship"
-        a.currentHandler!=b.currentHandler->"current handler"
-        a.pokerusDays!=b.pokerusDays||a.pokerusStrain!=b.pokerusStrain->"Pokérus"
-        a.shiny!=b.shiny->"shiny state"
-        a.language!=b.language->"language"
-        a.markingValue!=b.markingValue->"markings"
-        a.fatefulEncounter!=b.fatefulEncounter->"fateful encounter flag"
-        !a.relearnMoves.contentEquals(b.relearnMoves)->"relearn moves"
-        a.eggLocation!=b.eggLocation->"Egg location"
-        a.metLocation!=b.metLocation->"met location"
-        a.ball!=b.ball->"Poké Ball"
-        a.metLevel!=b.metLevel->"met level"
-        a.otGender!=b.otGender->"Original Trainer gender"
-        a.originGame!=b.originGame->"origin game"
-        a.country!=b.country->"country"
-        a.region!=b.region->"region"
-        a.consoleRegion!=b.consoleRegion->"console region"
-        a.eggYear!=b.eggYear||a.eggMonth!=b.eggMonth||a.eggDay!=b.eggDay->"Egg date"
-        a.metYear!=b.metYear||a.metMonth!=b.metMonth||a.metDay!=b.metDay->"met date"
-        a.hyperTrainFlags!=b.hyperTrainFlags->"Hyper Training flags"
-        else->null
     }
 
     private fun buildGen2ToGen6Pk6(bankBytes:ByteArray,p:Gen2Pokemon,destinationSave:ByteArray,trainer:TrainerData,meta:Gen1ToGen7TransferMeta,plan:Gen2ToGen6LegalisePlan):ByteArray {
