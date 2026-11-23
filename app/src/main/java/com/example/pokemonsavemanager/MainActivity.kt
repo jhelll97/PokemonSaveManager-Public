@@ -1050,6 +1050,7 @@ class MainActivity : Activity() {
         val bankFile:File,
         val bankBytes:ByteArray,
         val source:Gen1Pokemon,
+        val sourceBinding:PseBankSourceBinding,
         val pk7:ByteArray,
         val converted:PokemonEntry
     )
@@ -1068,13 +1069,7 @@ class MainActivity : Activity() {
             (0 until 30).count{slot->gen6DestinationSlotIsStructurallyEmpty(saveData,boxOffset,slotCount,maxSpecies,box*30+slot)}>=chosen.size
         }
         if(!hasCapacity){showDialog("Gen 1 → Gen 7 multi-transfer","No single Gen 7 PC box has enough structurally empty slots for all ${chosen.size} selected Pokémon. Nonzero destination records were left unchanged.");return}
-        val selected=try{
-            chosen.map{bankFile->
-                val bankBytes=bankFile.readBytes()
-                val source=parseGen1BankPayload(bankBytes)?:error("A selected Gen 1 Bank record is invalid.")
-                Triple(bankFile,bankBytes,source)
-            }
-        }catch(e:Exception){showDialog("Gen 1 → Gen 7 multi-transfer",e.message?:"A selected Bank record could not be read.");return}
+        val selected=try{loadBoundGen1BankBatch(chosen,bankDir(),::parseGen1BankPayload)}catch(e:Exception){showDialog("Gen 1 → Gen 7 multi-transfer",e.message?:"A selected Bank record could not be read.");return}
         val trainer=parseTrainerGen7(saveData,saveData.size)?:run{showDialog("Gen 1 → Gen 7 multi-transfer","PSE could not read the destination Gen 7 trainer data.");return}
         val loading=AlertDialog.Builder(this).setTitle("Prepare ${chosen.size} Gen 1 → Gen 7 conversions").setMessage("Checking every preserved Gen 1 record and preparing native PK7 conversions…").setCancelable(false).create()
         loading.show()
@@ -1083,16 +1078,18 @@ class MainActivity : Activity() {
         fun next(index:Int){
             if(index>=selected.size){
                 if(loading.isShowing)loading.dismiss()
+                if(!selected.all{it.sourceBinding.matches(it.bankBytes,true)}){showDialog("Gen 1 → Gen 7 multi-transfer","A selected Bank identity changed during preparation. Nothing was changed.");return}
                 chooseSelectedGen1BankToGen7Destination(prepared,saveData)
                 return
             }
-            val(bankFile,bankBytes,source)=selected[index]
+            val item=selected[index];val bankFile=item.bankFile;val bankBytes=item.bankBytes;val source=item.source
             val dex=gen1DexFromInternalIndex(source.species)?:run{stop("A selected Gen 1 species could not be mapped to the National Pokédex. Nothing was changed.");return}
             loadGen1MoveSourcesAsync(dex) movesDone@{moveSources->
                 if(moveSources==null){stop("PSE could not load the Gen 1 move-legality data. Check your connection and try again; no Bank record was changed.");return@movesDone}
                 loadGen1SpeciesMetaAsync(dex) speciesDone@{speciesMeta->
                     if(speciesMeta==null){stop("PSE could not load the Gen 1 species data. Check your connection and try again; no Bank record was changed.");return@speciesDone}
                     loadGen1ToGen7TransferMetaAsync(dex,source.moves) transferDone@{transferMeta->
+                        if(!item.sourceBinding.matches(item.bankBytes,true)){stop("A selected Bank identity changed during preparation. Nothing was changed.");return@transferDone}
                         if(transferMeta==null){stop("PSE could not load the Gen 7 conversion data. Check your connection and try again; no Bank record was changed.");return@transferDone}
                         val illegalMoves=source.moves.filter{moveId->moveId!=0&&moveSources[moveId]?.let{it.nonLevelSource||(it.minimumLevel!=null&&it.minimumLevel<=source.level)}!=true}
                         if(illegalMoves.isNotEmpty()){
@@ -1102,7 +1099,7 @@ class MainActivity : Activity() {
                         }
                         val pk7=try{buildGen1ToGen7Pk7(bankBytes,source,saveData,trainer,speciesMeta,transferMeta)}catch(e:Exception){stop(e.message?:"A selected Pokémon could not be converted to PK7.");return@transferDone}
                         val converted=parsePk6(pk7,0,PK6_STORED_SIZE,false,807)?:run{stop("A prepared Gen 7 conversion could not be verified. Nothing was changed.");return@transferDone}
-                        prepared.add(Gen1Gen7BatchPrepared(bankFile,bankBytes,source,pk7,converted))
+                        prepared.add(Gen1Gen7BatchPrepared(bankFile,bankBytes,source,item.sourceBinding,pk7,converted))
                         next(index+1)
                     }
                 }
@@ -1147,14 +1144,14 @@ class MainActivity : Activity() {
             val freshChecksums=validateGen7CoreChecksums(fresh);require(freshChecksums.first){freshChecksums.second}
             val refreshed=preparedBatch.map{prepared->
                 val current=runCatching{prepared.bankFile.readBytes()}.getOrElse{error("A selected Gen 1 Bank record could not be read.")}
-                require(current.contentEquals(prepared.bankBytes)){"A selected Gen 1 Bank record changed after preparation. Nothing was changed."}
+                require(prepared.sourceBinding.matches(prepared.bankBytes,true)&&current.contentEquals(prepared.bankBytes)){"A selected Gen 1 Bank identity or record changed after preparation. Nothing was changed."}
                 val source=parseGen1BankPayload(current)?:error("A selected Gen 1 Bank record failed validation.")
                 require(sameGen1TransferRecord(source,prepared.source)){"A selected Gen 1 Bank record no longer matches its prepared conversion."}
                 require(prepared.pk7.size==PK6_STORED_SIZE){"A prepared PK7 has an unexpected size."}
                 val converted=parsePk6(prepared.pk7,0,PK6_STORED_SIZE,false,807)?:error("A prepared PK7 could not be parsed.")
                 val mismatch=gen1ToGen7PkMismatch(converted,prepared.converted);val ppUpsMatch=gen6Pk6PpUps(prepared.pk7).contentEquals(source.movePpUps)
                 require(mismatch==null&&converted.tid==source.tid&&ppUpsMatch){"A prepared PK7 differs in ${mismatch?:if(converted.tid!=source.tid)"Trainer ID" else "PP-Up data"}."}
-                Gen1Gen7BatchPrepared(prepared.bankFile,current,source,prepared.pk7,converted)
+                Gen1Gen7BatchPrepared(prepared.bankFile,current,source,prepared.sourceBinding,prepared.pk7,converted)
             }
             val currentEmpty=(0 until 30).filter{slot->gen6DestinationSlotIsStructurallyEmpty(fresh,boxOffset,slotCount,maxSpecies,box*30+slot)}
             require(currentEmpty.size>=refreshed.size){"Gen 7 Box ${box+1} no longer has enough structurally empty slots for the complete batch. Nonzero records were left unchanged."}
@@ -1185,11 +1182,11 @@ class MainActivity : Activity() {
             require(expected.all{gen7DexRegistered(work,it.third)}){"A staged Gen 7 Pokédex registration did not verify for the complete batch."}
             val stagedChecksums=validateGen7CoreChecksums(work);require(stagedChecksums.first){stagedChecksums.second}
             require(pcStorageIsolated(work)){"Unrelated Gen 7 PC data changed while rebuilding batch integrity data."}
-            require(bound()&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination or a selected Bank record changed before backup. Nothing was written."}
+            require(bound()&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.sourceBinding.matches(it.bankBytes,true)}){"The destination or a selected Bank identity changed before backup. Nothing was written."}
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen1BatchToGen7_",".backup",backupsDir());safetyBackup=recovery
             recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The exact Gen 7 batch recovery backup did not verify."};retainGen1ToGen7SafetyBackup(recovery,fresh)
             val sourceRecovery=ExactBankRecoverySet("PSE_G1ToG7_BatchRecovery_");for(prepared in refreshed)sourceRecovery.capture(prepared.bankBytes,bankDir());require(sourceRecovery.matches()){ "The exact Gen 1 Bank recovery set did not verify." };bankRecovery=sourceRecovery
-            require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&sourceRecovery.matches()&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"The destination, selected Bank records or retained recovery backup changed before writing."}
+            require(bound()&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&sourceRecovery.matches()&&file.readBytes().contentEquals(fresh)&&refreshed.all{it.sourceBinding.matches(it.bankBytes,true)}){"The destination, selected Bank identities or retained recovery backup changed before writing."}
             stagedDestination=work.copyOf()
             writeStarted=true
             file.writeBytes(work)
@@ -1205,14 +1202,14 @@ class MainActivity : Activity() {
             for(prepared in refreshed){
                 require(bound()&&file.readBytes().contentEquals(work)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&sourceRecovery.matches()&&exactBankPathsAbsent(removed.map{it.first})){"The verified destination identity, data, removed paths or retained recovery changed before Bank cleanup."}
                 val current=runCatching{prepared.bankFile.readBytes()}.getOrElse{error("A selected Gen 1 Bank record could not be re-read before cleanup.")}
-                require(current.contentEquals(prepared.bankBytes) && parseGen1BankPayload(current)?.let{sameGen1TransferRecord(it,prepared.source)}==true){"A selected Gen 1 Bank record changed before cleanup. The Gen 7 destination was restored."}
+                require(prepared.sourceBinding.matches(prepared.bankBytes,true)&&current.contentEquals(prepared.bankBytes) && parseGen1BankPayload(current)?.let{sameGen1TransferRecord(it,prepared.source)}==true){"A selected Gen 1 Bank identity or record changed before cleanup. The Gen 7 destination was restored."}
                 cleanupAttempted.add(prepared.bankFile.absolutePath);require(prepared.bankFile.delete()&&!prepared.bankFile.exists()){"A Bank entry could not be removed after destination verification."};removed.add(prepared.bankFile to prepared.bankBytes)
                 require(sourceRecovery.matches()&&exactBankPathsAbsent(removed.map{it.first})){"A removed Gen 1 Bank path or retained recovery changed during cleanup."}
             }
             require(bound()&&file.readBytes().contentEquals(work)&&removed.size==refreshed.size&&exactBankPathsAbsent(removed.map{it.first})&&sourceRecovery.matches()){ "The verified Gen 7 destination, removed Bank batch or retained recovery changed after cleanup." }
         }catch(e:Exception){
             for(prepared in preparedBatch)runCatching{restoreExactMissingStandardBankRecord(prepared.bankFile,prepared.bankBytes,cleanupAttempted.contains(prepared.bankFile.absolutePath),null)}
-            val banksRestored=preparedBatch.all{prepared->runCatching{val bytes=prepared.bankFile.readBytes();bytes.contentEquals(prepared.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,prepared.source)}==true}.getOrDefault(false)}
+            val banksRestored=preparedBatch.all{prepared->runCatching{val bytes=prepared.bankFile.readBytes();prepared.sourceBinding.matches(prepared.bankBytes,true)&&bytes.contentEquals(prepared.bankBytes)&&parseGen1BankPayload(bytes)?.let{sameGen1TransferRecord(it,prepared.source)}==true}.getOrDefault(false)}
             val saveRestored=runCatching{
                 restoreExactStagedDestination(file,fresh,stagedDestination,writeStarted,"No Generation 7 destination write began; unknown current bytes were left untouched.","The Generation 7 destination no longer matches this batch transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
