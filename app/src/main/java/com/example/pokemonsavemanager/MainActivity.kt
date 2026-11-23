@@ -1623,13 +1623,8 @@ class MainActivity : Activity() {
         val targets=(0 until 14).mapNotNull{b->val empty=(0 until 30).filter{slot->gen3DestinationSlotIsStructurallyEmpty(pc,b*30+slot)};if(empty.size>=chosen.size)b to empty.take(chosen.size) else null}
         if(targets.isEmpty()){showDialog("Gen 1 → Gen 3","No single Gen 3 PC box has ${chosen.size} structurally empty slots for the complete selection. Existing or nonzero slot data was left unchanged; free capacity, reduce the selection, or load another valid save.");return}
         val labels=targets.map{(box,slots)->"Box ${box+1} • Slots ${slots.joinToString(", "){(it+1).toString()}}"}.toTypedArray()
-        var selectedTarget=0
-        AlertDialog.Builder(this).setTitle("PSE Convert ${chosen.size} Gen 1 Pokémon → Gen 3")
-            .setMessage("Choose the exact ordered structurally empty native PK3 slots. PSE preserves every nonzero destination record, retains the source Bank records until destination reopen succeeds, and makes no claim of official migration or provenance.")
-            .setSingleChoiceItems(labels,selectedTarget){_,which->selectedTarget=which}
-            .setNegativeButton("Cancel",null)
-            .setPositiveButton("Convert"){_,_->val(box,slots)=targets[selectedTarget];transferSelectedGen1BankToGen3(parsed,data,box,slots)}
-            .show()
+        val disclosure=gen1ToGen3BatchDisclosure(parsed.map{item->val p=item.source;Gen1ToGen3BatchDisclosure(p.nickname.ifBlank{gen1SpeciesNameFromInternal(p.species)},requireNotNull(gen1DexFromInternalIndex(p.species)),p.level,p.experience,p.moves,p.movePP,p.movePpUps,p.statExp,item.bankBytes[GEN1_BANK_HEADER_SIZE+7].toInt() and 0xFF,item.converted)})
+        showGen1ToGen3BatchDisclosureAndDestination(this,chosen.size,disclosure,labels){selectedTarget->val(box,slots)=targets[selectedTarget];transferSelectedGen1BankToGen3(parsed,data,box,slots)}
     }
 
     private data class Gen1Gen3BatchPrepared(val bankFile:File,val bankBytes:ByteArray,val source:Gen1Pokemon,val pk3:ByteArray,val converted:PokemonEntry)

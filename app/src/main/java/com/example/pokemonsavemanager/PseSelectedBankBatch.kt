@@ -1099,9 +1099,39 @@ internal fun gen1ToGen7BatchDisclosure(records:List<Gen1ToGen7BatchDisclosure>):
     append("This is a PSE native-format conversion. It does not claim an official trade or migration, encounter legality, legality certification or verified provenance. Choose one destination Box for the complete ordered batch, or Cancel to leave both sides unchanged.")
 }
 
-internal fun showGen1ToGen7BatchDisclosureAndDestination(
+internal data class Gen1ToGen3BatchDisclosure(
+    val name:String,
+    val dex:Int,
+    val sourceLevel:Int,
+    val sourceExperience:Long,
+    val sourceMoves:IntArray,
+    val sourcePp:IntArray,
+    val ppUps:IntArray,
+    val sourceStatExp:IntArray,
+    val catchRate:Int,
+    val converted:MainActivity.PokemonEntry
+)
+
+internal fun gen1ToGen3BatchDisclosure(records:List<Gen1ToGen3BatchDisclosure>):String=buildString {
+    append("Exact disclosed native PK3 conversion effects for every selected record\n")
+    append("No in-memory Legalise edits are applied in this batch. Every material native-format change is shown below.\n")
+    records.forEachIndexed{index,record->
+        val q=record.converted
+        append("\n${index+1}. ${record.name} → Gen 3 Pokédex #${record.dex}\n")
+        for(slot in 0..3)append("• Move slot ${slot+1}: #${record.sourceMoves.getOrElse(slot){0}} • PP ${record.sourcePp.getOrElse(slot){0}} • PP Ups ${record.ppUps.getOrElse(slot){0}}\n")
+        append("• Level ${record.sourceLevel}; EXP ${record.sourceExperience}; shiny ${q.shiny}; PID ${"%08X".format(q.pid)} carries nature #${q.nature}; SID becomes 0.\n")
+        append("• DVs become IVs ${q.ivs.joinToString("/")}; Special supplies both special IVs. Stat Exp ${record.sourceStatExp.joinToString("/")} becomes EVs ${q.evs.joinToString("/")} (total ${q.evs.sum()}) after the Gen 3 cap.\n")
+        append("• Friendship ${q.friendship}; language #${q.language}; held item ${q.heldItem}; Ball #${q.ball}; met level ${q.metLevel}; met location #${q.metLocation}; destination-compatible origin #${q.originGame}.\n")
+        append("• Gen 1 catch-rate byte ${record.catchRate} and fields without native PK3 representation are omitted.\n")
+    }
+    append("\nSpecies, nickname, OT, TID, EXP, level, move IDs, current PP, PP Ups and reviewed shiny state are retained. The original Gen 1 save remains unchanged. Exact Bank bytes remain until every ordered native PK3 slot, Pokédex mirror, section checksum and destination reopen verifies. PSE retains destination and per-record Bank recovery snapshots and restores both sides independently on failure.\n\n")
+    append("There was no official Gen 1 or Gen 2 to Gen 3 transfer route. This is a PSE native-format conversion and does not claim an official trade or migration, encounter legality, legality certification or verified provenance. Choose one destination Box for the complete ordered batch, or Cancel to leave both sides unchanged.")
+}
+
+private fun showBankBatchDisclosureAndDestination(
     activity:Activity,
-    count:Int,
+    reviewTitle:String,
+    destinationTitle:String,
     disclosure:String,
     labels:Array<String>,
     onConvert:(Int)->Unit
@@ -1109,7 +1139,7 @@ internal fun showGen1ToGen7BatchDisclosureAndDestination(
     fun showDestinationPicker(){
         var selectedTarget=0
         var consumed=false
-        AlertDialog.Builder(activity).setTitle("Choose Gen 7 destination")
+        AlertDialog.Builder(activity).setTitle(destinationTitle)
             .setSingleChoiceItems(labels,selectedTarget){_,which->selectedTarget=which}
             .setNegativeButton("Cancel",null)
             .setPositiveButton("Convert"){_,_->
@@ -1117,12 +1147,18 @@ internal fun showGen1ToGen7BatchDisclosureAndDestination(
             }
             .show()
     }
-    AlertDialog.Builder(activity).setTitle("PSE Convert $count Gen 1 Pokémon → Gen 7")
+    AlertDialog.Builder(activity).setTitle(reviewTitle)
         .setMessage(disclosure)
         .setNegativeButton("Cancel",null)
         .setPositiveButton("Choose destination"){_,_->showDestinationPicker()}
         .show()
 }
+
+internal fun showGen1ToGen7BatchDisclosureAndDestination(activity:Activity,count:Int,disclosure:String,labels:Array<String>,onConvert:(Int)->Unit)=
+    showBankBatchDisclosureAndDestination(activity,"PSE Convert $count Gen 1 Pokémon → Gen 7","Choose Gen 7 destination",disclosure,labels,onConvert)
+
+internal fun showGen1ToGen3BatchDisclosureAndDestination(activity:Activity,count:Int,disclosure:String,labels:Array<String>,onConvert:(Int)->Unit)=
+    showBankBatchDisclosureAndDestination(activity,"PSE Convert $count Gen 1 Pokémon → Gen 3","Choose Gen 3 destination",disclosure,labels,onConvert)
 
 internal fun createGen1ToGen4BatchRecovery(
     expected:List<ByteArray>,
