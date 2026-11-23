@@ -447,6 +447,50 @@ internal fun gen1ToGen4BatchRecoveryMessage(
     else->"Automatic recovery could not be verified. Keep the retained destination backup and every exact Gen 1 Bank recovery payload for review."
 }
 
+internal fun sameGen1ToGen4BatchPk4(
+    a:MainActivity.PokemonEntry,
+    b:MainActivity.PokemonEntry
+):Boolean=
+    a.checksumValid&&b.checksumValid&&a.pid==b.pid&&a.species==b.species&&
+        a.tid==b.tid&&a.sid==b.sid&&a.nickname==b.nickname&&a.otName==b.otName&&
+        a.experience==b.experience&&a.ability==b.ability&&a.nature==b.nature&&
+        a.shiny==b.shiny&&a.originGame==b.originGame&&a.ball==b.ball&&
+        a.metLevel==b.metLevel&&a.language==b.language&&
+        a.moves.contentEquals(b.moves)&&a.movePP.contentEquals(b.movePP)&&
+        a.evs.contentEquals(b.evs)&&a.ivs.contentEquals(b.ivs)
+
+internal fun requireGen1ToGen4BatchRecoveryBoundary(
+    destinationMatches:Boolean,
+    backupMatches:Boolean,
+    recovery:ExactBankRecoverySet,
+    sourcesMatch:Boolean=true,
+    stage:Int
+) {
+    require(destinationMatches&&backupMatches&&recovery.matches()&&sourcesMatch) {
+        when(stage) {
+            0->"The destination, selected Bank records or retained recovery backup changed before writing."
+            1->"The verified destination identity, data or retained backup changed before Bank cleanup."
+            else->"The verified Gen 4 destination changed after Bank cleanup."
+        }
+    }
+}
+
+internal fun requireGen1ToGen4BatchRemovedPaths(
+    removed:List<Pair<File,ByteArray>>,
+    expectedCount:Int?=null,
+    recovery:ExactBankRecoverySet?=null,
+    stage:Int
+) {
+    val absent=exactBankPathsAbsent(removed.map{it.first})
+    require(absent&&expectedCount?.let{removed.size==it}!=false&&recovery?.matches()!=false) {
+        when(stage) {
+            0->"An earlier removed Gen 1 Bank path reappeared before the next cleanup step."
+            1->"A removed Gen 1 Bank path did not remain absent after cleanup."
+            else->"The verified Gen 1 removed Bank batch changed after cleanup."
+        }
+    }
+}
+
 internal fun requireExactGen3BankPartySource(
     item: Gen3BankBatchItem,
     root: File,
