@@ -725,26 +725,22 @@ internal fun parsePk6Bytes(
     size:Int,
     party:Boolean,
     maxSpecies:Int,
-    storedSize:Int,
-    decrypt:(ByteArray)->ByteArray,
-    readU16:(ByteArray,Int)->Int,
-    readU32:(ByteArray,Int)->Long,
-    readString:(ByteArray,Int,Int)->String
+    storedSize:Int
 ):MainActivity.PokemonEntry? {
     if(offset<0||offset+size>data.size)return null
     val raw=data.copyOfRange(offset,offset+size)
     if(raw.all { it.toInt()==0 })return null
-    val pk=decrypt(raw)
-    val species=readU16(pk,0x08)
+    val pk=decryptPk6Bytes(raw,storedSize)
+    val species=readPk6U16(pk,0x08)
     if(species !in 1..maxSpecies)return null
 
-    val heldItem=readU16(pk,0x0A)
-    val tid=readU16(pk,0x0C)
-    val sid=readU16(pk,0x0E)
-    val experience=readU32(pk,0x10)
+    val heldItem=readPk6U16(pk,0x0A)
+    val tid=readPk6U16(pk,0x0C)
+    val sid=readPk6U16(pk,0x0E)
+    val experience=readPk6U32(pk,0x10)
     val ability=pk[0x14].toInt() and 0xFF
     val abilityNumber=pk[0x15].toInt() and 0x07
-    val pid=readU32(pk,0x18)
+    val pid=readPk6U32(pk,0x18)
     val nature=pk[0x1C].toInt() and 0xFF
     val genderForm=pk[0x1D].toInt() and 0xFF
     val gender=(genderForm ushr 1) and 0x3
@@ -760,15 +756,15 @@ internal fun parsePk6Bytes(
     val pokerusState=pk[0x2B].toInt() and 0xFF
     val pokerusDays=pokerusState and 0xF
     val pokerusStrain=pokerusState ushr 4
-    val nickname=readString(pk,0x40,26)
+    val nickname=readPk6String(pk,0x40,26)
     val moves=intArrayOf(
-        readU16(pk,0x5A),readU16(pk,0x5C),readU16(pk,0x5E),readU16(pk,0x60)
+        readPk6U16(pk,0x5A),readPk6U16(pk,0x5C),readPk6U16(pk,0x5E),readPk6U16(pk,0x60)
     )
     val movePP=intArrayOf(
         pk[0x62].toInt() and 0xFF,pk[0x63].toInt() and 0xFF,
         pk[0x64].toInt() and 0xFF,pk[0x65].toInt() and 0xFF
     )
-    val iv32=readU32(pk,0x74)
+    val iv32=readPk6U32(pk,0x74)
     val ivs=intArrayOf(
         ((iv32 ushr 0) and 0x1F).toInt(),
         ((iv32 ushr 5) and 0x1F).toInt(),
@@ -781,12 +777,12 @@ internal fun parsePk6Bytes(
     val isNicknamed=(iv32 and 0x80000000L)!=0L
     val currentHandler=pk[0x93].toInt() and 0xFF
     val friendship=if(currentHandler==0)pk[0xCA].toInt() and 0xFF else pk[0xA2].toInt() and 0xFF
-    val otName=readString(pk,0xB0,26)
+    val otName=readPk6String(pk,0xB0,26)
     val language=pk[0xE3].toInt() and 0xFF
-    val markingValue=if(maxSpecies<=721)pk[0x2A].toInt() and 0xFF else readU16(pk,0x16)
+    val markingValue=if(maxSpecies<=721)pk[0x2A].toInt() and 0xFF else readPk6U16(pk,0x16)
     val fatefulEncounter=(pk[0x1D].toInt() and 0x01)!=0
     val relearnMoves=intArrayOf(
-        readU16(pk,0x6A),readU16(pk,0x6C),readU16(pk,0x6E),readU16(pk,0x70)
+        readPk6U16(pk,0x6A),readPk6U16(pk,0x6C),readPk6U16(pk,0x6E),readPk6U16(pk,0x70)
     )
     val eggYear=pk[0xD1].toInt() and 0xFF
     val eggMonth=pk[0xD2].toInt() and 0xFF
@@ -794,8 +790,8 @@ internal fun parsePk6Bytes(
     val metYear=pk[0xD4].toInt() and 0xFF
     val metMonth=pk[0xD5].toInt() and 0xFF
     val metDay=pk[0xD6].toInt() and 0xFF
-    val eggLocation=readU16(pk,0xD8)
-    val metLocation=readU16(pk,0xDA)
+    val eggLocation=readPk6U16(pk,0xD8)
+    val metLocation=readPk6U16(pk,0xDA)
     val ball=pk[0xDC].toInt() and 0xFF
     val metLevelGender=pk[0xDD].toInt() and 0xFF
     val metLevel=metLevelGender and 0x7F
@@ -806,11 +802,11 @@ internal fun parsePk6Bytes(
     val region=pk[0xE1].toInt() and 0xFF
     val consoleRegion=pk[0xE2].toInt() and 0xFF
 
-    val expectedChecksum=readU16(pk,0x06)
+    val expectedChecksum=readPk6U16(pk,0x06)
     var calc=0
     var pos=0x08
     while(pos+1<storedSize) {
-        calc=(calc+readU16(pk,pos)) and 0xFFFF
+        calc=(calc+readPk6U16(pk,pos)) and 0xFFFF
         pos+=2
     }
     val level=if(party&&pk.size>0xEC)pk[0xEC].toInt() and 0xFF else null
@@ -826,6 +822,123 @@ internal fun parsePk6Bytes(
         originGame,country,region,consoleRegion,eggYear,eggMonth,eggDay,
         metYear,metMonth,metDay,hyperTrainFlags
     )
+}
+
+private const val PSE_PK6_BLOCK_SIZE=56
+
+private val PSE_PK6_BLOCK_POSITION_INVERT=intArrayOf(
+    0,1,2,4,3,5,6,7,12,18,13,19,8,10,14,20,
+    16,22,9,11,15,21,17,23,0,1,2,4,3,5,6,7
+)
+
+private val PSE_PK6_BLOCK_POSITION=intArrayOf(
+    0,1,2,3,0,1,3,2,0,2,1,3,0,3,1,2,
+    0,2,3,1,0,3,2,1,1,0,2,3,1,0,3,2,
+    2,0,1,3,3,0,1,2,2,0,3,1,3,0,2,1,
+    1,2,0,3,1,3,0,2,2,1,0,3,3,1,0,2,
+    2,3,0,1,3,2,0,1,1,2,3,0,1,3,2,0,
+    2,1,3,0,3,1,2,0,2,3,1,0,3,2,1,0,
+    0,1,2,3,0,1,3,2,0,2,1,3,0,3,1,2,
+    0,2,3,1,0,3,2,1,1,0,2,3,1,0,3,2
+)
+
+private fun readPk6U16(data:ByteArray,offset:Int):Int {
+    if(offset<0||offset+1>=data.size)return 0
+    return (data[offset].toInt() and 0xFF) or ((data[offset+1].toInt() and 0xFF) shl 8)
+}
+
+private fun readPk6U32(data:ByteArray,offset:Int):Long {
+    if(offset<0||offset+3>=data.size)return 0
+    return (data[offset].toLong() and 0xFF) or
+        ((data[offset+1].toLong() and 0xFF) shl 8) or
+        ((data[offset+2].toLong() and 0xFF) shl 16) or
+        ((data[offset+3].toLong() and 0xFF) shl 24)
+}
+
+private fun readPk6String(data:ByteArray,offset:Int,byteLength:Int):String {
+    val sb=StringBuilder()
+    var p=offset
+    val end=minOf(offset+byteLength,data.size)
+    while(p+1<end) {
+        val value=readPk6U16(data,p)
+        if(value==0||value==0xFFFF)break
+        if(value in 0xD800..0xDFFF)sb.append('�') else sb.append(value.toChar())
+        p+=2
+    }
+    return sb.toString().trimEnd('\u0000')
+}
+
+private fun cryptPk6Bytes(data:ByteArray,start:Int,end:Int,initialSeed:Long) {
+    var seed=initialSeed
+    var p=start
+    while(p+1<end) {
+        seed=(0x41C64E6DL*seed+0x6073L) and 0xFFFFFFFFL
+        val xor=((seed ushr 16) and 0xFFFF).toInt()
+        val value=readPk6U16(data,p) xor xor
+        data[p]=(value and 0xFF).toByte()
+        data[p+1]=((value ushr 8) and 0xFF).toByte()
+        p+=2
+    }
+}
+
+private fun swapPk6ByteBlocks(data:ByteArray,a:Int,b:Int) {
+    for(i in 0 until PSE_PK6_BLOCK_SIZE) {
+        val t=data[a+i]
+        data[a+i]=data[b+i]
+        data[b+i]=t
+    }
+}
+
+private fun shufflePk6Bytes(data:ByteArray,start:Int,sv:Int) {
+    if(sv==0)return
+    val base=sv*4
+    val perm=intArrayOf(0,1,2,3)
+    val slotOf=intArrayOf(0,1,2,3)
+    for(i in 0 until 3) {
+        val desired=PSE_PK6_BLOCK_POSITION[base+i]
+        val j=slotOf[desired]
+        if(j==i)continue
+        swapPk6ByteBlocks(data,start+i*PSE_PK6_BLOCK_SIZE,start+j*PSE_PK6_BLOCK_SIZE)
+        val blockAtI=perm[i]
+        perm[j]=blockAtI
+        slotOf[blockAtI]=j
+    }
+}
+
+internal fun decryptPk6Bytes(input:ByteArray,storedSize:Int):ByteArray {
+    val data=input.copyOf()
+    if(data.size<storedSize)return data
+    val encrypted=readPk6U16(data,0xC8)!=0||readPk6U16(data,0x58)!=0
+    if(!encrypted)return data
+    val ec=readPk6U32(data,0) and 0xFFFFFFFFL
+    cryptPk6Bytes(data,0x08,storedSize,ec)
+    if(data.size>storedSize)cryptPk6Bytes(data,storedSize,data.size,ec)
+    shufflePk6Bytes(data,0x08,((ec ushr 13) and 31).toInt())
+    return data
+}
+
+internal fun updatePk6ChecksumBytes(pk:ByteArray,storedSize:Int) {
+    var sum=0
+    var pos=0x08
+    while(pos+1<storedSize) {
+        sum=(sum+readPk6U16(pk,pos)) and 0xFFFF
+        pos+=2
+    }
+    if(0x07<pk.size) {
+        pk[0x06]=(sum and 0xFF).toByte()
+        pk[0x07]=((sum ushr 8) and 0xFF).toByte()
+    }
+}
+
+internal fun encryptPk6Bytes(decrypted:ByteArray,storedSize:Int):ByteArray {
+    val data=decrypted.copyOf()
+    if(data.size<storedSize)return data
+    val ec=readPk6U32(data,0) and 0xFFFFFFFFL
+    val sv=((ec ushr 13) and 31).toInt()
+    shufflePk6Bytes(data,0x08,PSE_PK6_BLOCK_POSITION_INVERT[sv])
+    cryptPk6Bytes(data,0x08,storedSize,ec)
+    if(data.size>storedSize)cryptPk6Bytes(data,storedSize,data.size,ec)
+    return data
 }
 
 internal data class BuiltGen3ToGen7Pk7(

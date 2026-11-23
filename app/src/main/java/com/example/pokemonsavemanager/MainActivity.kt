@@ -63328,64 +63328,10 @@ private data class Gen2ToGen5LegalisePlan(
     }
 
     private fun parsePk6(data: ByteArray, offset: Int, size: Int, party: Boolean, maxSpecies: Int = 721): PokemonEntry? {
-        return parsePk6Bytes(
-            data, offset, size, party, maxSpecies, PK6_STORED_SIZE,
-            ::decryptPk6IfNeeded, ::readU16LE, ::readU32LE, ::readGen6String
-        )
+        return parsePk6Bytes(data, offset, size, party, maxSpecies, PK6_STORED_SIZE)
     }
 
-    private fun decryptPk6IfNeeded(input: ByteArray): ByteArray {
-        val data = input.copyOf()
-        if (data.size < PK6_STORED_SIZE) return data
-        val encrypted = readU16LE(data, 0xC8) != 0 || readU16LE(data, 0x58) != 0
-        if (!encrypted) return data
-
-        val ec = readU32LE(data, 0).toLong() and 0xFFFFFFFFL
-        cryptPk6Range(data, 0x08, PK6_STORED_SIZE, ec)
-        if (data.size > PK6_STORED_SIZE) cryptPk6Range(data, PK6_STORED_SIZE, data.size, ec)
-
-        val sv = ((ec ushr 13) and 31).toInt()
-        shufflePk6(data, 0x08, sv)
-        return data
-    }
-
-    private fun cryptPk6Range(data: ByteArray, start: Int, end: Int, initialSeed: Long) {
-        var seed = initialSeed
-        var p = start
-        while (p + 1 < end) {
-            seed = (0x41C64E6DL * seed + 0x6073L) and 0xFFFFFFFFL
-            val xor = ((seed ushr 16) and 0xFFFF).toInt()
-            val value = readU16LE(data, p) xor xor
-            data[p] = (value and 0xFF).toByte()
-            data[p + 1] = ((value ushr 8) and 0xFF).toByte()
-            p += 2
-        }
-    }
-
-    private fun shufflePk6(data: ByteArray, start: Int, sv: Int) {
-        if (sv == 0) return
-        val order = BLOCK_POSITION
-        val base = sv * 4
-        val perm = intArrayOf(0, 1, 2, 3)
-        val slotOf = intArrayOf(0, 1, 2, 3)
-        for (i in 0 until 3) {
-            val desired = order[base + i]
-            val j = slotOf[desired]
-            if (j == i) continue
-            swapPk6Blocks(data, start + i * PK6_BLOCK_SIZE, start + j * PK6_BLOCK_SIZE)
-            val blockAtI = perm[i]
-            perm[j] = blockAtI
-            slotOf[blockAtI] = j
-        }
-    }
-
-    private fun swapPk6Blocks(data: ByteArray, a: Int, b: Int) {
-        for (i in 0 until PK6_BLOCK_SIZE) {
-            val t = data[a + i]
-            data[a + i] = data[b + i]
-            data[b + i] = t
-        }
-    }
+    private fun decryptPk6IfNeeded(input: ByteArray): ByteArray = decryptPk6Bytes(input, PK6_STORED_SIZE)
 
     private fun loadGen3Artwork(view: ImageView, species: Int, shiny: Boolean) {
         view.setImageDrawable(null)
@@ -66882,26 +66828,10 @@ private data class Gen2ToGen5LegalisePlan(
         }
     }
     private fun updatePk6Checksum(pk: ByteArray) {
-        var sum = 0
-        var pos = 0x08
-        while (pos + 1 < PK6_STORED_SIZE) {
-            sum = (sum + readU16LE(pk, pos)) and 0xFFFF
-            pos += 2
-        }
-        writeU16LE(pk, 0x06, sum)
+        updatePk6ChecksumBytes(pk, PK6_STORED_SIZE)
     }
 
-    private fun encryptPk6(decrypted: ByteArray): ByteArray {
-        val data = decrypted.copyOf()
-        if (data.size < PK6_STORED_SIZE) return data
-        val ec = readU32LE(data, 0) and 0xFFFFFFFFL
-        val sv = ((ec ushr 13) and 31).toInt()
-        val invert = BLOCK_POSITION_INVERT[sv]
-        shufflePk6(data, 0x08, invert)
-        cryptPk6Range(data, 0x08, PK6_STORED_SIZE, ec)
-        if (data.size > PK6_STORED_SIZE) cryptPk6Range(data, PK6_STORED_SIZE, data.size, ec)
-        return data
-    }
+    private fun encryptPk6(decrypted: ByteArray): ByteArray = encryptPk6Bytes(decrypted, PK6_STORED_SIZE)
 
     private fun chooseDuplicateDestination(location: String, p: PokemonEntry) {
         val sourceGlobal = boxedLocationToGlobalIndex(location) ?: return
@@ -68680,7 +68610,6 @@ private data class Gen2ToGen5LegalisePlan(
         private const val PLAYTIME_OFFSET_USUM = 0x41000
         private const val PK6_STORED_SIZE = 0xE8
         private const val PK6_PARTY_SIZE = 0x104
-        private const val PK6_BLOCK_SIZE = 56
         private const val BOX_SLOT_COUNT = 31 * 30
         private val NATURE_NAMES = arrayOf(
             "Hardy", "Lonely", "Brave", "Adamant", "Naughty",
@@ -68688,20 +68617,6 @@ private data class Gen2ToGen5LegalisePlan(
             "Timid", "Hasty", "Serious", "Jolly", "Naive",
             "Modest", "Mild", "Quiet", "Bashful", "Rash",
             "Calm", "Gentle", "Sassy", "Careful", "Quirky"
-        )
-        private val BLOCK_POSITION_INVERT = intArrayOf(
-            0,1,2,4, 3,5,6,7, 12,18,13,19, 8,10,14,20,
-            16,22,9,11, 15,21,17,23, 0,1,2,4, 3,5,6,7
-        )
-        private val BLOCK_POSITION = intArrayOf(
-            0,1,2,3, 0,1,3,2, 0,2,1,3, 0,3,1,2,
-            0,2,3,1, 0,3,2,1, 1,0,2,3, 1,0,3,2,
-            2,0,1,3, 3,0,1,2, 2,0,3,1, 3,0,2,1,
-            1,2,0,3, 1,3,0,2, 2,1,0,3, 3,1,0,2,
-            2,3,0,1, 3,2,0,1, 1,2,3,0, 1,3,2,0,
-            2,1,3,0, 3,1,2,0, 2,3,1,0, 3,2,1,0,
-            0,1,2,3, 0,1,3,2, 0,2,1,3, 0,3,1,2,
-            0,2,3,1, 0,3,2,1, 1,0,2,3, 1,0,3,2
         )
     }
 
