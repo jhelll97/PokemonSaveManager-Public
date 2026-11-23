@@ -47578,11 +47578,13 @@ class MainActivity : Activity() {
     private fun transferGen3BankToGen2(bankFile:File,source:PokemonEntry,bankBytes:ByteArray,sourceBinding:PseBankSourceBinding,mon:ByteArray,ot:ByteArray,nick:ByteArray,targetBox:Int,file:File,openedDestination:ByteArray,openedUri:Uri?,openedLabel:String?,profileKey:String){
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         if(!sourceBinding.matches(bankBytes,true)){showDialog("Gen 3 → Gen 2","The selected Bank identity changed. Reopen PSE Bank. Nothing was changed.");return}
+        val destinationBinding=PseBankDestinationBinding.capture(file)
+        if(destinationBinding==null||!destinationBinding.matches(openedDestination,bound())){showDialog("Gen 3 → Gen 2","The destination identity changed after review. Reopen PSE Bank. Nothing was changed.");return}
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
         var stagedDestination:ByteArray?=null
         var retainedRecovery=false
         try{
-            val fresh=file.readBytes();require(bound()&&fresh.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(fresh).first){"The destination save or source identity changed. Reopen PSE Bank."}
+            val fresh=file.readBytes();require(destinationBinding.matches(openedDestination,bound())&&fresh.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(fresh).first){"The destination save or source identity changed. Reopen PSE Bank."}
             val profile=detectGen2Profile(fresh)?:error("The destination is no longer a valid Gen 2 save.");require(profile.key==profileKey&&targetBox in 1..14){"The selected Gen 2 profile or PC Box changed."}
             val base=gen2BoxOffset(targetBox);val count=fresh[base].toInt()and 0xFF;require(count in 0..19){"The selected Gen 2 Box is full or structurally invalid."}
             val before=gen2LocationPayloads(fresh,"Box $targetBox",profile);val currentBank=bankFile.readBytes();require(sourceBinding.matches(bankBytes,true)&&currentBank.contentEquals(bankBytes)){"The selected Gen 3 Bank identity or record changed."};val current=parsePk3(currentBank,0,false)?:error("The Gen 3 Bank record is invalid.");require(current.checksumValid&&current.pid==source.pid&&current.species==source.species&&current.tid==source.tid&&current.sid==source.sid){"The selected Gen 3 Pokémon changed."}
@@ -47593,19 +47595,19 @@ class MainActivity : Activity() {
             b.writeBytes(fresh);require(b.readBytes().contentEquals(fresh)){"The recovery backup did not verify."};retainGen2SafetyBackup(b,fresh)
             val bankCopy=File.createTempFile("PSE_G3ToG2_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
             bankCopy.writeBytes(bankBytes);require(bankCopy.readBytes().contentEquals(bankBytes)){"The Bank recovery snapshot did not verify."}
-            require(bound()&&file.readBytes().contentEquals(fresh)&&sourceBinding.matches(bankBytes,true)&&
+            require(destinationBinding.matches(fresh,bound())&&sourceBinding.matches(bankBytes,true)&&
                 isBackupKept(b)&&b.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){
                 "The source identity, destination or retained recovery snapshots changed before writing."
             }
             stagedDestination=work.copyOf()
-            writeStarted=true;file.writeBytes(work);val written=file.readBytes();val wp=detectGen2Profile(written)?:error("The persisted Gen 2 save failed validation.");require(bound()&&written.contentEquals(work)&&wp.key==profileKey&&verifyGen2SaveIntegrity(written).first){"The persisted Gen 2 destination failed verification."}
+            writeStarted=true;file.writeBytes(work);val written=file.readBytes();val wp=detectGen2Profile(written)?:error("The persisted Gen 2 save failed validation.");require(destinationBinding.matches(work,bound())&&written.contentEquals(work)&&wp.key==profileKey&&verifyGen2SaveIntegrity(written).first){"The persisted Gen 2 destination failed verification."}
             val after=gen2LocationPayloads(written,"Box $targetBox",wp);require(after.size==before.size+1&&sameGen2PayloadList(after.take(before.size),before)&&gen2BoxRawCore(written,targetBox,slot).contentEquals(mon)&&gen2PokedexOwnedSeen(written,wp,source.species)){"The exact converted record, existing Box contents or Pokédex registration did not persist."}
-            require(sourceBinding.matches(bankBytes,true)&&bound()&&file.readBytes().contentEquals(written)&&
+            require(sourceBinding.matches(bankBytes,true)&&destinationBinding.matches(work,bound())&&
                 isBackupKept(b)&&b.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){
                 "The destination, Bank identity or retained recovery snapshots changed before cleanup."
             }
             bankDeleteAttempted=true;require(bankFile.delete()&&!bankFile.exists()){"The destination was written, but Bank cleanup could not be verified."}
-            require(!bankFile.exists()&&bound()&&file.readBytes().contentEquals(written)&&isBackupKept(b)&&
+            require(!bankFile.exists()&&destinationBinding.matches(work,bound())&&isBackupKept(b)&&
                 b.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){
                 "The verified Gen 2 destination identity, removed Gen 3 Bank path or retained recovery snapshots changed after Bank cleanup."
             }
@@ -47614,7 +47616,7 @@ class MainActivity : Activity() {
             )
             requireNativeBankWithdrawalPostCleanup(
                 generation=2,
-                destinationBound=bound()&&importedFile?.absolutePath==file.absolutePath,
+                destinationBound=destinationBinding.matches(work,bound()),
                 retainedRecovery=retainedRecovery,
                 recoveryFile=bankCopy,
                 destination=file,
@@ -47636,6 +47638,7 @@ class MainActivity : Activity() {
             }.getOrDefault(false)
             val destinationRestored=runCatching{
                 val current=file.readBytes()
+                require(destinationBinding.matches(current,bound())){"The Gen 2 destination identity changed during recovery; the current file was left untouched."}
                 if(!current.contentEquals(openedDestination)){
                     require(writeStarted){"No Generation 2 destination write began; unknown current bytes were left untouched."}
                     val staged=stagedDestination
@@ -47643,7 +47646,7 @@ class MainActivity : Activity() {
                     file.writeBytes(openedDestination)
                 }
                 val restored=file.readBytes()
-                require(restored.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(restored).first&&
+                require(destinationBinding.matches(openedDestination,bound())&&restored.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(restored).first&&
                     detectGen2Profile(restored)?.key==profileKey){"The restored Generation 2 destination did not verify."}
                 true
             }.getOrDefault(false)
