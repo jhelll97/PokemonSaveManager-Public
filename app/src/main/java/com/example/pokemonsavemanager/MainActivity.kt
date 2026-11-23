@@ -598,7 +598,10 @@ class MainActivity : Activity() {
 
     private fun moveSelectedGen2BankPokemon(selected:List<Gen2BankBatchItem>,openedDestination:ByteArray,targetBox:Int,openedFile:File,openedSource:Uri?,openedLabel:String?) {
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedSource&&currentSourceLabel==openedLabel
-        if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog("Move selected","The active save changed after destination selection. Reopen the Bank selection. Nothing was changed.");return}
+        val destinationBinding=PseBankDestinationBinding.capture(openedFile)
+        if(destinationBinding==null||!destinationBinding.matches(openedDestination,bound())){
+            showDialog("Gen 2 Bank multi-withdrawal","The destination identity changed after review. Reopen PSE Bank. Nothing was changed.");return
+        }
         val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;val removed=ArrayList<Pair<File,ByteArray>>();var writeStarted=false
         var stagedDestination:ByteArray?=null
         val recoveryProfileKey=detectGen2Profile(openedDestination)?.key
@@ -606,7 +609,7 @@ class MainActivity : Activity() {
         val bankRecovery=ArrayList<File>()
         var completionMessage=""
         try{
-            require(bound()&&verifyGen2SaveIntegrity(fresh).first){"The captured Gen 2 batch source identity or full integrity changed."}
+            require(destinationBinding.matches(openedDestination,bound())&&fresh.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(fresh).first){"The captured Gen 2 batch destination identity or full integrity changed."}
             require(selected.isNotEmpty()){"The prepared Gen 2 Bank selection is empty."};require(selected.map{it.bankFile.absolutePath}.distinct().size==selected.size){"The prepared selection contains a duplicate Gen 2 Bank entry."}
             require(fresh.contentEquals(openedDestination)){"The Gen 2 destination changed after the box list opened."};val profile=detectGen2Profile(fresh)?:error("The fresh Gen 2 destination failed checksum validation.");require(gen2ChecksumValid(fresh,profile)){"The fresh Gen 2 checksum is invalid."};require(targetBox in 1..14){"The selected Gen 2 destination box is invalid."}
             require(profile.key==detectGen2Profile(openedDestination)?.key){"The Gen 2 batch destination profile changed."}
@@ -627,20 +630,19 @@ class MainActivity : Activity() {
                 require(recovery.isFile&&recovered.contentEquals(item.bankBytes)&&parseGen2BankPayload(recovered)?.let{sameGen2BankRecord(it,item.source)}==true){"A Gen 2 Bank recovery snapshot did not verify."}
             }
             require(refreshed.all{it.bankFile.readBytes().contentEquals(it.bankBytes)}){"A selected Gen 2 Bank record changed during staging."}
-            require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(fresh)){"The active Gen 2 destination changed during staging. Nothing was written."}
-            require(bound()&&backup.readBytes().contentEquals(fresh)&&isBackupKept(backup)){"The source identity or retained recovery backup changed before batch withdrawal."}
+            require(destinationBinding.matches(fresh,bound())){"The active Gen 2 destination changed during staging. Nothing was written."}
+            require(destinationBinding.matches(fresh,bound())&&backup.readBytes().contentEquals(fresh)&&isBackupKept(backup)){"The destination identity or retained recovery backup changed before batch withdrawal."}
             require(refreshed.indices.all{index->
                 val recovered=bankRecovery[index].readBytes()
                 bankRecovery[index].isFile&&recovered.contentEquals(refreshed[index].bankBytes)&&parseGen2BankPayload(recovered)?.let{sameGen2BankRecord(it,refreshed[index].source)}==true
             }){"A Gen 2 Bank recovery snapshot changed before batch withdrawal."}
             stagedDestination=work.copyOf()
             writeStarted=true
-            file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)){"The Gen 2 destination changed while the batch was written."};val writtenProfile=detectGen2Profile(written)?:error("The persisted Gen 2 destination failed checksum verification.");require(gen2ChecksumValid(written,writtenProfile)){"The persisted Gen 2 checksum is invalid."};val afterPayloads=gen2LocationPayloads(written,location,writtenProfile);require(afterPayloads.size==stagedPayloads.size&&sameGen2PayloadList(afterPayloads,stagedPayloads)){"The persisted Gen 2 box records changed after staging."}
-            require(bound()&&writtenProfile.key==profile.key&&verifyGen2SaveIntegrity(written).first){"The persisted Gen 2 batch withdrawal or source identity did not verify."}
+            file.writeBytes(work);val written=file.readBytes();require(destinationBinding.matches(work,bound())&&written.contentEquals(work)){"The Gen 2 destination changed while the batch was written."};val writtenProfile=detectGen2Profile(written)?:error("The persisted Gen 2 destination failed checksum verification.");require(gen2ChecksumValid(written,writtenProfile)){"The persisted Gen 2 checksum is invalid."};val afterPayloads=gen2LocationPayloads(written,location,writtenProfile);require(afterPayloads.size==stagedPayloads.size&&sameGen2PayloadList(afterPayloads,stagedPayloads)){"The persisted Gen 2 box records changed after staging."}
+            require(destinationBinding.matches(work,bound())&&writtenProfile.key==profile.key&&verifyGen2SaveIntegrity(written).first){"The persisted Gen 2 batch withdrawal or destination identity did not verify."}
             for(i in refreshed.indices){val item=refreshed[i];val slot=slots[i];val persisted=parseGen2Box(written,targetBox).firstOrNull{it.slot==slot};require(persisted!=null&&sameGen2BankRecord(persisted,item.source)){"A persisted Gen 2 Bank record did not preserve every supported field."};require(gen2BoxRawCore(written,targetBox,slot).contentEquals(rawRecords[i])){"An exact Gen 2 Bank record did not persist."};require(gen2PokedexOwnedSeen(written,writtenProfile,item.source.species)){"A transferred species was not registered Seen and Owned after persistence."}}
-            for((index,item) in refreshed.withIndex()){require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 2 destination changed before Bank cleanup."};require(bound()){"The source identity changed before a batch Bank cleanup."};require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 batch recovery backup changed before Bank cleanup."};val recoveryBytes=bankRecovery[index].readBytes();require(bankRecovery[index].isFile&&recoveryBytes.contentEquals(item.bankBytes)&&parseGen2BankPayload(recoveryBytes)?.let{sameGen2BankRecord(it,item.source)}==true){"A Gen 2 Bank recovery snapshot changed before cleanup."};val cleanup=item.bankFile.readBytes();require(cleanup.contentEquals(item.bankBytes)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,item.source)}==true){"A selected Gen 2 Bank record changed before cleanup."};removed.add(item.bankFile to item.bankBytes);require(item.bankFile.delete()){"A selected Gen 2 Bank record could not be removed after destination verification."};require(!item.bankFile.exists()){"A removed Gen 2 Bank record still exists."}}
-            require(importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)){"The verified Gen 2 destination changed after Bank cleanup."}
-            require(bound()){"The source identity changed after batch Bank cleanup."}
+            for((index,item) in refreshed.withIndex()){require(destinationBinding.matches(work,bound())){"The verified Gen 2 destination changed before Bank cleanup."};require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 batch recovery backup changed before Bank cleanup."};val recoveryBytes=bankRecovery[index].readBytes();require(bankRecovery[index].isFile&&recoveryBytes.contentEquals(item.bankBytes)&&parseGen2BankPayload(recoveryBytes)?.let{sameGen2BankRecord(it,item.source)}==true){"A Gen 2 Bank recovery snapshot changed before cleanup."};val cleanup=item.bankFile.readBytes();require(cleanup.contentEquals(item.bankBytes)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,item.source)}==true){"A selected Gen 2 Bank record changed before cleanup."};removed.add(item.bankFile to item.bankBytes);require(item.bankFile.delete()){"A selected Gen 2 Bank record could not be removed after destination verification."};require(!item.bankFile.exists()){"A removed Gen 2 Bank record still exists."}}
+            require(destinationBinding.matches(work,bound())){"The verified Gen 2 destination changed after Bank cleanup."}
             require(isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)){"The retained Gen 2 batch recovery backup changed after Bank cleanup."}
             require(refreshed.indices.all{index->
                 val recovered=bankRecovery[index].readBytes()
@@ -648,8 +650,11 @@ class MainActivity : Activity() {
             }){"A Gen 2 Bank recovery snapshot changed after Bank cleanup."}
             completionMessage=finishSelectedGen2BankWithdrawal(
                 bankRecovery,refreshed.map{it.bankBytes},refreshed.size,targetBox,
-                bound(),file,work,backup,fresh,isBackupKept(backup),removed
+                destinationBinding.matches(work,bound()),file,work,backup,fresh,isBackupKept(backup),removed
             )
+            require(destinationBinding.matches(work,bound())){
+                "The verified Gen 2 destination identity changed during recovery cleanup."
+            }
         }catch(e:Exception){
             var bankRestored=true
             for(item in selected){
@@ -663,13 +668,14 @@ class MainActivity : Activity() {
             }
             val destinationRestored=runCatching{
                 val found=file.readBytes()
+                require(destinationBinding.matches(found,bound())){"The Gen 2 destination identity changed during recovery; the current file was left untouched."}
                 if(writeStarted&&!found.contentEquals(fresh)){
                     val staged=stagedDestination
                     require(staged!=null&&found.contentEquals(staged)){"The Gen 2 destination no longer matches this batch's staged bytes; the retained backup was left for recovery."}
                     file.writeBytes(fresh)
                 }
                 val restored=file.readBytes();val restoredProfile=detectGen2Profile(restored)
-                require(restored.contentEquals(fresh)&&restoredProfile?.key==recoveryProfileKey&&verifyGen2SaveIntegrity(restored).first){"The restored Gen 2 destination bytes, profile or integrity did not verify."};true
+                require(destinationBinding.matches(fresh,bound())&&restored.contentEquals(fresh)&&restoredProfile?.key==recoveryProfileKey&&verifyGen2SaveIntegrity(restored).first){"The restored Gen 2 destination identity, bytes, profile or integrity did not verify."};true
             }.getOrDefault(false)
             val retainedBackup=safetyBackup?.let{saved->runCatching{
                 saved.isFile&&isBackupKept(saved)&&saved.readBytes().contentEquals(fresh)
