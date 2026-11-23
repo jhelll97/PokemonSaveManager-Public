@@ -719,6 +719,115 @@ internal fun gen5DestinationSlotIsStructurallyEmptyBytes(
     return raw.all { it==0.toByte() }&&parse(raw)==null
 }
 
+internal fun parsePk6Bytes(
+    data:ByteArray,
+    offset:Int,
+    size:Int,
+    party:Boolean,
+    maxSpecies:Int,
+    storedSize:Int,
+    decrypt:(ByteArray)->ByteArray,
+    readU16:(ByteArray,Int)->Int,
+    readU32:(ByteArray,Int)->Long,
+    readString:(ByteArray,Int,Int)->String
+):MainActivity.PokemonEntry? {
+    if(offset<0||offset+size>data.size)return null
+    val raw=data.copyOfRange(offset,offset+size)
+    if(raw.all { it.toInt()==0 })return null
+    val pk=decrypt(raw)
+    val species=readU16(pk,0x08)
+    if(species !in 1..maxSpecies)return null
+
+    val heldItem=readU16(pk,0x0A)
+    val tid=readU16(pk,0x0C)
+    val sid=readU16(pk,0x0E)
+    val experience=readU32(pk,0x10)
+    val ability=pk[0x14].toInt() and 0xFF
+    val abilityNumber=pk[0x15].toInt() and 0x07
+    val pid=readU32(pk,0x18)
+    val nature=pk[0x1C].toInt() and 0xFF
+    val genderForm=pk[0x1D].toInt() and 0xFF
+    val gender=(genderForm ushr 1) and 0x3
+    val form=genderForm ushr 3
+    val evs=intArrayOf(
+        pk[0x1E].toInt() and 0xFF,
+        pk[0x1F].toInt() and 0xFF,
+        pk[0x20].toInt() and 0xFF,
+        pk[0x21].toInt() and 0xFF,
+        pk[0x22].toInt() and 0xFF,
+        pk[0x23].toInt() and 0xFF
+    )
+    val pokerusState=pk[0x2B].toInt() and 0xFF
+    val pokerusDays=pokerusState and 0xF
+    val pokerusStrain=pokerusState ushr 4
+    val nickname=readString(pk,0x40,26)
+    val moves=intArrayOf(
+        readU16(pk,0x5A),readU16(pk,0x5C),readU16(pk,0x5E),readU16(pk,0x60)
+    )
+    val movePP=intArrayOf(
+        pk[0x62].toInt() and 0xFF,pk[0x63].toInt() and 0xFF,
+        pk[0x64].toInt() and 0xFF,pk[0x65].toInt() and 0xFF
+    )
+    val iv32=readU32(pk,0x74)
+    val ivs=intArrayOf(
+        ((iv32 ushr 0) and 0x1F).toInt(),
+        ((iv32 ushr 5) and 0x1F).toInt(),
+        ((iv32 ushr 10) and 0x1F).toInt(),
+        ((iv32 ushr 15) and 0x1F).toInt(),
+        ((iv32 ushr 20) and 0x1F).toInt(),
+        ((iv32 ushr 25) and 0x1F).toInt()
+    )
+    val isEgg=(iv32 and 0x40000000L)!=0L
+    val isNicknamed=(iv32 and 0x80000000L)!=0L
+    val currentHandler=pk[0x93].toInt() and 0xFF
+    val friendship=if(currentHandler==0)pk[0xCA].toInt() and 0xFF else pk[0xA2].toInt() and 0xFF
+    val otName=readString(pk,0xB0,26)
+    val language=pk[0xE3].toInt() and 0xFF
+    val markingValue=if(maxSpecies<=721)pk[0x2A].toInt() and 0xFF else readU16(pk,0x16)
+    val fatefulEncounter=(pk[0x1D].toInt() and 0x01)!=0
+    val relearnMoves=intArrayOf(
+        readU16(pk,0x6A),readU16(pk,0x6C),readU16(pk,0x6E),readU16(pk,0x70)
+    )
+    val eggYear=pk[0xD1].toInt() and 0xFF
+    val eggMonth=pk[0xD2].toInt() and 0xFF
+    val eggDay=pk[0xD3].toInt() and 0xFF
+    val metYear=pk[0xD4].toInt() and 0xFF
+    val metMonth=pk[0xD5].toInt() and 0xFF
+    val metDay=pk[0xD6].toInt() and 0xFF
+    val eggLocation=readU16(pk,0xD8)
+    val metLocation=readU16(pk,0xDA)
+    val ball=pk[0xDC].toInt() and 0xFF
+    val metLevelGender=pk[0xDD].toInt() and 0xFF
+    val metLevel=metLevelGender and 0x7F
+    val otGender=(metLevelGender ushr 7) and 1
+    val hyperTrainFlags=pk[0xDE].toInt() and 0xFF
+    val originGame=pk[0xDF].toInt() and 0xFF
+    val country=pk[0xE0].toInt() and 0xFF
+    val region=pk[0xE1].toInt() and 0xFF
+    val consoleRegion=pk[0xE2].toInt() and 0xFF
+
+    val expectedChecksum=readU16(pk,0x06)
+    var calc=0
+    var pos=0x08
+    while(pos+1<storedSize) {
+        calc=(calc+readU16(pk,pos)) and 0xFFFF
+        pos+=2
+    }
+    val level=if(party&&pk.size>0xEC)pk[0xEC].toInt() and 0xFF else null
+    val shinyValue=tid xor sid xor (pid.toInt() and 0xFFFF) xor ((pid.toInt() ushr 16) and 0xFFFF)
+    val shiny=shinyValue<16
+
+    return MainActivity.PokemonEntry(
+        species,nickname,isNicknamed,level,calc==expectedChecksum,
+        heldItem,tid,sid,experience,ability,abilityNumber,pid,nature,gender,form,
+        evs,moves,movePP,ivs,isEgg,otName,friendship,currentHandler,
+        pokerusDays,pokerusStrain,shiny,language,markingValue,
+        fatefulEncounter,relearnMoves,eggLocation,metLocation,ball,metLevel,otGender,
+        originGame,country,region,consoleRegion,eggYear,eggMonth,eggDay,
+        metYear,metMonth,metDay,hyperTrainFlags
+    )
+}
+
 internal data class BuiltGen3ToGen7Pk7(
     val encrypted:ByteArray,
     val pid:Long,
