@@ -46966,6 +46966,11 @@ class MainActivity : Activity() {
         }
     }
 
+    private data class Gen3BoxBankBatchItem(
+        val bankFile:File,val bankBytes:ByteArray,val pokemon:PokemonEntry,
+        val sourceBinding:PseBankSourceBinding
+    )
+
     private fun chooseSelectedGen3BankDestination(
         chosen: List<File>,
         openedFile: File,
@@ -46991,23 +46996,28 @@ class MainActivity : Activity() {
             require(chosen.map { it.absolutePath }.distinct().size == chosen.size) {
                 "The selection contains the same Gen 3 Bank entry more than once."
             }
-            val bankRoot = bankDir().canonicalFile
+            val bankRoot = bankDir()
+            require(bankRoot.absoluteFile==bankRoot.canonicalFile&&bankRoot.isDirectory) {
+                "The canonical Gen 3 Bank folder is unavailable."
+            }
             chosen.map { bankFile ->
-                require(bankFile.isFile &&
+                require(bankFile.absoluteFile==bankFile.canonicalFile&&bankFile.isFile &&
                     bankFile.extension.equals("pk3", true) &&
-                    bankFile.parentFile?.canonicalFile == bankRoot) {
+                    bankFile.parentFile == bankRoot) {
                     "A selected Gen 3 Bank record is missing or outside the active Bank."
                 }
+                val sourceBinding=PseBankSourceBinding.capture(bankFile)
+                    ?:error("A selected Gen 3 Bank record identity could not be captured.")
                 val bytes = bankFile.readBytes()
                 val pokemon = if (bytes.size == 80) {
                     parsePk3(bytes, 0, false)
                 } else {
                     null
                 }
-                require(pokemon != null && pokemon.checksumValid) {
+                require(sourceBinding.matches(bytes,true)&&pokemon != null && pokemon.checksumValid) {
                     "A selected Gen 3 Bank record failed PK3 validation."
                 }
-                Gen3BankBatchItem(bankFile, bytes, pokemon)
+                Gen3BoxBankBatchItem(bankFile, bytes, pokemon, sourceBinding)
             }
         } catch (error: Exception) {
             showDialog(
@@ -47083,7 +47093,7 @@ class MainActivity : Activity() {
     }
 
     private fun moveSelectedGen3BankPokemon(
-        selected: List<Gen3BankBatchItem>,
+        selected: List<Gen3BoxBankBatchItem>,
         openedDestination: ByteArray,
         targetBox: Int,
         targetSlots: List<Int>,
@@ -47134,11 +47144,14 @@ class MainActivity : Activity() {
             require(gen3PcBoxNames(freshPc)[targetBox] == targetBoxName) {
                 "The destination box changed after review."
             }
-            val bankRoot = bankDir().canonicalFile
+            val bankRoot = bankDir()
+            require(bankRoot.absoluteFile==bankRoot.canonicalFile&&bankRoot.isDirectory) {
+                "The canonical Gen 3 Bank folder is unavailable."
+            }
             val refreshed = selected.map { item ->
-                require(item.bankFile.isFile &&
+                require(item.sourceBinding.matches(item.bankBytes,true)&&item.bankFile.isFile &&
                     item.bankFile.extension.equals("pk3", true) &&
-                    item.bankFile.parentFile?.canonicalFile == bankRoot) {
+                    item.bankFile.parentFile == bankRoot) {
                     "A selected Gen 3 Bank record is no longer available."
                 }
                 val bytes = item.bankFile.readBytes()
@@ -47248,9 +47261,7 @@ class MainActivity : Activity() {
                 backup!!.readBytes().contentEquals(fresh) &&
                 openedFile.readBytes().contentEquals(fresh) &&
                 selected.indices.all { index ->
-                    selected[index].bankFile.isFile &&
-                        selected[index].bankFile.readBytes()
-                            .contentEquals(refreshed[index])
+                    selected[index].sourceBinding.matches(refreshed[index],true)
                 }) {
                 "The destination or a selected Bank record changed before writing."
             }
@@ -47290,7 +47301,8 @@ class MainActivity : Activity() {
                 require(isBackupKept(backup!!) && backup!!.readBytes().contentEquals(fresh)) {
                     "The retained Gen 3 recovery backup changed before Bank cleanup."
                 }
-                require(item.bankFile.readBytes().contentEquals(refreshed[index])) {
+                require(item.sourceBinding.matches(refreshed[index],true)&&
+                    item.bankFile.readBytes().contentEquals(refreshed[index])) {
                     "A selected Bank record changed before removal."
                 }
                 val recoveryBytes = bankRecovery[index].readBytes()
@@ -47349,7 +47361,8 @@ class MainActivity : Activity() {
             }
             bankRestored = bankRestored && selected.all { item ->
                 runCatching {
-                    item.bankFile.isFile && item.bankFile.readBytes().contentEquals(item.bankBytes)
+                    item.sourceBinding.matches(item.bankBytes,true)&&
+                        item.bankFile.isFile && item.bankFile.readBytes().contentEquals(item.bankBytes)
                 }.getOrDefault(false)
             }
             val saveRestored = runCatching {
