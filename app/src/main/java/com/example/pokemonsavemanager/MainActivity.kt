@@ -47117,6 +47117,7 @@ class MainActivity : Activity() {
         var writeStarted = false
         var stagedDestination: ByteArray? = null
         var backup: File? = null
+        var backupBinding:PseBankDestinationBinding?=null
         val bankRecovery = ArrayList<File>()
         val bankRecoveryBindings=HashMap<String,PseBankSourceBinding>()
         fun recoverySnapshotsMatch(expected:List<ByteArray>):Boolean{
@@ -47236,13 +47237,23 @@ class MainActivity : Activity() {
                 "The withdrawal changed data outside destination slots and PC checksums."
             }
 
+            val backupRoot=backupsDir()
+            require(backupRoot.absoluteFile==backupRoot.canonicalFile&&backupRoot.isDirectory) {
+                "The canonical destination backup folder is unavailable."
+            }
             backup = File.createTempFile(
                 backupGameName(openedFile) + "_PreGen3BankWithdraw_",
                 ".backup",
-                backupsDir()
+                backupRoot
             )
+            require(backup!!.absoluteFile==backup!!.canonicalFile&&backup!!.parentFile==backupRoot) {
+                "The Gen 3 recovery backup path could not be bound."
+            }
+            val retainedBinding=PseBankDestinationBinding.capture(backup!!)
+                ?:error("The Gen 3 recovery backup identity could not be captured.")
+            backupBinding=retainedBinding
             backup!!.writeBytes(fresh)
-            require(backup!!.readBytes().contentEquals(fresh)) {
+            require(retainedBinding.matches(fresh,true)) {
                 "The recovery backup did not verify."
             }
             retainGen2ToGen3SafetyBackup(backup!!, fresh)
@@ -47277,8 +47288,7 @@ class MainActivity : Activity() {
                 }
             }
             require(destinationBinding.matches(fresh,destinationBound()) &&
-                isBackupKept(backup!!) &&
-                backup!!.readBytes().contentEquals(fresh) &&
+                retainedBinding.matches(fresh,isBackupKept(backup!!)) &&
                 openedFile.readBytes().contentEquals(fresh) &&
                 selected.indices.all { index ->
                     selected[index].sourceBinding.matches(refreshed[index],true)
@@ -47318,7 +47328,7 @@ class MainActivity : Activity() {
                     openedFile.readBytes().contentEquals(work)) {
                     "The verified Gen 3 destination changed before Bank cleanup."
                 }
-                require(isBackupKept(backup!!) && backup!!.readBytes().contentEquals(fresh)) {
+                require(retainedBinding.matches(fresh,isBackupKept(backup!!))) {
                     "The retained Gen 3 recovery backup changed before Bank cleanup."
                 }
                 require(item.sourceBinding.matches(refreshed[index],true)&&
@@ -47351,7 +47361,7 @@ class MainActivity : Activity() {
                 removed.all { !it.first.exists() } &&
                 destinationBinding.matches(work,destinationBound()) &&
                 openedFile.readBytes().contentEquals(work) &&
-                isBackupKept(backup!!) && backup!!.readBytes().contentEquals(fresh) &&
+                retainedBinding.matches(fresh,isBackupKept(backup!!)) &&
                 recoverySnapshotsMatch(refreshed)) {
                 "The verified Gen 3 destination, removed Bank batch or retained recovery snapshots changed after Bank cleanup."
             }
@@ -47363,7 +47373,7 @@ class MainActivity : Activity() {
             )
             requireSelectedNativeBankBatchPostCleanup(
                 3,destinationBinding.matches(work,destinationBound()),!withdrawalCompletion.recoveryClean,bankRecovery,
-                openedFile,work,backup!!,fresh,isBackupKept(backup!!),selected.map{it.bankFile}
+                openedFile,work,backup!!,fresh,retainedBinding.matches(fresh,isBackupKept(backup!!)),selected.map{it.bankFile}
             )
 
             selectedBankFiles.clear()
@@ -47405,8 +47415,7 @@ class MainActivity : Activity() {
             }.getOrDefault(false)
             val retainedBackup = backup?.let { saved ->
                 runCatching {
-                    saved.isFile && isBackupKept(saved) &&
-                        saved.readBytes().contentEquals(openedDestination)
+                    backupBinding?.matches(openedDestination,isBackupKept(saved))==true
                 }.getOrDefault(false)
             } ?: false
             val verifiedBankRecovery = bankRecovery.mapIndexedNotNull { index, copy ->
