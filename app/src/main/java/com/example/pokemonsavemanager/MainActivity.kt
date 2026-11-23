@@ -47118,6 +47118,15 @@ class MainActivity : Activity() {
         var stagedDestination: ByteArray? = null
         var backup: File? = null
         val bankRecovery = ArrayList<File>()
+        val bankRecoveryBindings=HashMap<String,PseBankSourceBinding>()
+        fun recoverySnapshotsMatch(expected:List<ByteArray>):Boolean{
+            if(bankRecovery.size!=expected.size||!exactGen3BankRecoverySnapshots(bankRecovery,expected))return false
+            val verified=bankRecovery.indices.map{index->
+                bankRecoveryBindings[bankRecovery[index].absolutePath]
+                    ?.matches(expected[index],true)==true
+            }
+            return verified.all{it}
+        }
         try {
             require(destinationBinding.matches(openedDestination,destinationBound())) {
                 "The loaded destination identity changed after box selection."
@@ -47237,17 +47246,28 @@ class MainActivity : Activity() {
                 "The recovery backup did not verify."
             }
             retainGen2ToGen3SafetyBackup(backup!!, fresh)
+            val recoveryRoot=bankDir()
+            require(recoveryRoot.absoluteFile==recoveryRoot.canonicalFile&&recoveryRoot.isDirectory) {
+                "The canonical Gen 3 Bank recovery folder is unavailable."
+            }
             selected.forEachIndexed { index, item ->
                 val recovery = File.createTempFile(
                     "PSE_G3BatchWithdraw_${index + 1}_",
                     ".tmp",
-                    bankDir()
+                    recoveryRoot
                 )
                 bankRecovery.add(recovery)
+                require(recovery.absoluteFile==recovery.canonicalFile&&recovery.parentFile==recoveryRoot) {
+                    "A PK3 Bank recovery snapshot path could not be bound."
+                }
+                val recoveryBinding=PseBankSourceBinding.capture(recovery)
+                    ?:error("A PK3 Bank recovery snapshot identity could not be captured.")
+                bankRecoveryBindings[recovery.absolutePath]=recoveryBinding
                 recovery.writeBytes(refreshed[index])
                 val recovered = recovery.readBytes()
                 val parsed = if (recovered.size == 80) parsePk3(recovered, 0, false) else null
-                require(recovery.isFile && recovered.contentEquals(refreshed[index]) &&
+                require(recoveryBinding.matches(refreshed[index],true)&&
+                    recovery.isFile && recovered.contentEquals(refreshed[index]) &&
                     parsed != null && parsed.checksumValid &&
                     parsed.pid == item.pokemon.pid &&
                     parsed.species == item.pokemon.species &&
@@ -47265,7 +47285,7 @@ class MainActivity : Activity() {
                 }) {
                 "The destination or a selected Bank record changed before writing."
             }
-            require(exactGen3BankRecoverySnapshots(bankRecovery, refreshed)) {
+            require(recoverySnapshotsMatch(refreshed)) {
                 "A Gen 3 Bank recovery snapshot changed before writing."
             }
 
@@ -47291,7 +47311,7 @@ class MainActivity : Activity() {
             }
             selected.forEachIndexed { index, item ->
                 require(removed.all { !it.first.exists() } &&
-                    exactGen3BankRecoverySnapshots(bankRecovery, refreshed)) {
+                    recoverySnapshotsMatch(refreshed)) {
                     "An earlier Gen 3 Bank removal or recovery snapshot changed during cleanup."
                 }
                 require(destinationBinding.matches(work,destinationBound()) &&
@@ -47311,7 +47331,8 @@ class MainActivity : Activity() {
                 } else {
                     null
                 }
-                require(bankRecovery[index].isFile &&
+                require(bankRecoveryBindings[bankRecovery[index].absolutePath]
+                    ?.matches(refreshed[index],true)==true&&bankRecovery[index].isFile &&
                     recoveryBytes.contentEquals(refreshed[index]) &&
                     recoveryPokemon != null && recoveryPokemon.checksumValid &&
                     recoveryPokemon.pid == item.pokemon.pid &&
@@ -47331,7 +47352,7 @@ class MainActivity : Activity() {
                 destinationBinding.matches(work,destinationBound()) &&
                 openedFile.readBytes().contentEquals(work) &&
                 isBackupKept(backup!!) && backup!!.readBytes().contentEquals(fresh) &&
-                exactGen3BankRecoverySnapshots(bankRecovery, refreshed)) {
+                recoverySnapshotsMatch(refreshed)) {
                 "The verified Gen 3 destination, removed Bank batch or retained recovery snapshots changed after Bank cleanup."
             }
             val withdrawalCompletion = finishSelectedGen3BankWithdrawal(
@@ -47398,7 +47419,9 @@ class MainActivity : Activity() {
                     } else {
                         null
                     }
-                    if (copy.isFile && recovered.contentEquals(item.bankBytes) &&
+                    if (bankRecoveryBindings[copy.absolutePath]
+                            ?.matches(item.bankBytes,true)==true&&
+                        copy.isFile && recovered.contentEquals(item.bankBytes) &&
                         parsed != null && parsed.checksumValid &&
                         parsed.pid == item.pokemon.pid &&
                         parsed.species == item.pokemon.species &&
@@ -47410,7 +47433,8 @@ class MainActivity : Activity() {
             val allBankRecoveryVerified =
                 bankRecovery.size == selected.size &&
                     verifiedBankRecovery.size == selected.size
-            val bankRecoveryClean = if (saveRestored && bankRestored) {
+            val bankRecoveryClean = if (saveRestored && bankRestored&&
+                recoverySnapshotsMatch(selected.map{it.bankBytes})) {
                 cleanupExactBankRecoverySnapshots(
                     bankRecovery,
                     selected.map { it.bankBytes }
