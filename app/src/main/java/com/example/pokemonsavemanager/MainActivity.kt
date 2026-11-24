@@ -12945,23 +12945,26 @@ class MainActivity : Activity() {
         if((destination.size!=SIZE_G6_XY&&destination.size!=SIZE_G6_ORAS)||!bound()||!gen6BoxChecksumValid(destination)||!gen6BlockChecksumValid(destination,20))return showDialog("Gen 5 → Gen 6","Load a checksum-clean Pokémon X, Y, Omega Ruby or Alpha Sapphire save first.")
         val trainer=analyzeSave(file).trainer?:return showDialog("Gen 5 → Gen 6","PSE could not read the destination trainer identity.")
         if(trainer.gender!="Male"&&trainer.gender!="Female")return showDialog("Gen 5 → Gen 6 blocked","The destination trainer gender is ${trainer.gender}. PSE will not guess the native PK6 handling-trainer gender.\n\nThe Bank record and destination were left unchanged.")
-        val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return;val selected=runCatching{bankFile.canonicalFile}.getOrNull()?:return
-        if(selected.parentFile!=root||!selected.extension.equals("pk5",true))return showDialog("Gen 5 → Gen 6","The selected record is outside the Generation 5 PSE Bank.")
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return;val selected=runCatching{require(bankFile.absoluteFile==bankFile.canonicalFile);bankFile.canonicalFile}.getOrNull()?:return
+        if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk5",true))return showDialog("Gen 5 → Gen 6","The selected record is outside the Generation 5 PSE Bank.")
+        val sourceBinding=PseBankSourceBinding.capture(selected)
+            ?:return showDialog("Gen 5 → Gen 6","The selected Bank identity could not be captured.")
         val bank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Gen 5 → Gen 6","The Bank record could not be read.")
         val source=if(bank.size==136)parsePk5(bank,false)else null
-        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
+        if(!sourceBinding.matches(bank,true)||source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
             source.tid!=shown.tid||source.sid!=shown.sid)
             return showDialog("Gen 5 → Gen 6","The selected Bank record changed or failed its PK5 checksum.")
         gen5ToGen6PreflightRejection(source)?.let{return showDialog("Gen 5 → Gen 6 blocked","$it\n\nThe Bank record and destination were left unchanged.")}
         val originTitle=gen5CompatibleOriginTitle(source.originGame)
             ?:return showDialog("Gen 5 → Gen 6 blocked","The source origin is not a documented native Generation 1–5 title. Nothing was changed.")
         val pk6=try{buildGen5ToGen6Pk6(bank,source,destination,trainer)}catch(e:Exception){return showDialog("Gen 5 → Gen 6 blocked",(e.message?:"No safe native mapping is available.")+"\n\nNothing was changed.")}
-        if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false))return showDialog("Gen 5 → Gen 6","The destination or Bank record changed during preparation. Nothing was changed.")
+        if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&sourceBinding.matches(bank,true)}.getOrDefault(false))return showDialog("Gen 5 → Gen 6","The destination or Bank record changed during preparation. Nothing was changed.")
         val converted=parsePk6(pk6,0,PK6_STORED_SIZE,false,721)?:return showDialog("Gen 5 → Gen 6","The prepared PK6 could not be re-read.")
         val prepared=Gen5Gen6Prepared(
             sourceGeneration=5,bankFile=selected,bankBytes=bank,source=source,
             destination=destination,trainer=trainer,pk6=pk6,converted=converted,
-            destinationFile=file,sourceUri=openedUri,sourceLabel=openedLabel
+            destinationFile=file,sourceUri=openedUri,sourceLabel=openedLabel,
+            sourceBinding=sourceBinding
         )
         val oldPid="%08X".format(source.pid);val newPid="%08X".format(converted.pid);val pidNote=if(source.pid==converted.pid)"PID remains $oldPid." else "PID changes $oldPid → $newPid only to preserve ${if(source.shiny)"shiny" else "non-shiny"} status under Gen 6's wider shiny threshold."
         val preview="PSE will write a native PK6 while preserving species/form, TID/SID, nickname and OT, experience, ability slot, nature, gender, shiny state, moves/PP/PP Ups, IVs, EVs, friendship, Pokérus, Ball, met level, origin game and dates.\n\nReviewed Gen 6 differences:\n• $pidNote\n• Gen 5 one-bit markings 0x${"%02X".format(source.markingValue)} remain the same six native one-bit PK6 markings.\n• Met location #${source.metLocation} becomes native transfer marker 30001; this is labelled as a PSE conversion and does not claim official transporter provenance.\n• Egg location #${source.eggLocation} becomes 0 because the location catalog is not interchangeable.\n• Current handler becomes ${trainer.trainerName} (${trainer.gender}); the original OT remains ${source.otName}.\n• Relearn moves and geographic fields start empty because PK5 stores neither.\n\nHeld items and unsupported forms are blocked instead of discarded. The PK5 Bank record remains until one selected empty native PK6 slot, required Pokédex flags, native checksums and the persisted PK6 reopen all verify. A Keep-pinned destination backup and independent Bank snapshot remain byte-bound before writing and through cleanup; failure restores both sides independently."
