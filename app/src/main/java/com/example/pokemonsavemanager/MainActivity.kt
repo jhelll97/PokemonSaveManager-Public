@@ -37068,12 +37068,16 @@ class MainActivity : Activity() {
 
     private fun transferGen7BankToGen5(p:Gen7Gen5Prepared,target:Int){
         if(!gen7ToGen5StillBound(p))return showDialog("Gen 7 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")
-        val file=p.destinationFile;val original=runCatching{file.readBytes()}.getOrNull()?:return
+        val file=p.destinationFile
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel
+        val destinationBinding=PseBankDestinationBinding.capture(file)
+        if(destinationBinding==null||!destinationBinding.matches(p.destination,bound()))return showDialog("Gen 7 → Gen 5","The destination identity changed after review. Reopen PSE Bank. Nothing was changed.")
+        val original=runCatching{file.readBytes()}.getOrNull()?:return
         var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
         var stagedDestination:ByteArray?=null
         var retainedRecovery=false
         try{
-            require(original.contentEquals(p.destination)&&target in 0 until 720){"The prepared Generation 5 destination changed or the selected slot is invalid."}
+            require(destinationBinding.matches(p.destination,bound())&&original.contentEquals(p.destination)&&target in 0 until 720){"The prepared Generation 5 destination identity changed or the selected slot is invalid."}
             val profile=detectGen5Profile(original)?:error("The destination is no longer a valid Generation 5 save.")
             require(gen5ChecksumTableValid(original,profile)&&(0 until 24).all{gen5BoxChecksumValid(original,it,profile)}){"The destination box checksums or checksum table changed."}
             val bank=p.bankFile.readBytes();require(p.sourceBinding.matches(p.bankBytes,true)&&bank.contentEquals(p.bankBytes)){"The Gen 7 Bank identity or record changed."}
@@ -37109,26 +37113,24 @@ class MainActivity : Activity() {
             retainGen6ToGen5SafetyBackup(recovery,original)
             val bankCopy=File.createTempFile("PSE_G7ToG5_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
             bankCopy.writeBytes(p.bankBytes);require(bankCopy.readBytes().contentEquals(p.bankBytes)){"The Bank recovery snapshot did not verify."}
-            require(gen7ToGen5StillBound(p)&&file.readBytes().contentEquals(original)&&isBackupKept(recovery)&&
+            require(gen7ToGen5StillBound(p)&&destinationBinding.matches(original,bound())&&isBackupKept(recovery)&&
                 recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(p.bankBytes)){
                 "The source identity or retained destination and Bank recovery snapshots changed before writing."
             }
             stagedDestination=save.copyOf()
             writeStarted=true;file.writeBytes(save);val written=file.readBytes()
-            require(written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){"The persisted Generation 5 save differs from the reviewed write scope."}
+            require(destinationBinding.matches(save,bound())&&written.contentEquals(save)&&written.indices.all{it in allowed||written[it]==original[it]}){"The persisted Generation 5 destination identity changed or data differs from the reviewed write scope."}
             val wp=detectGen5Profile(written)?:error("The persisted Generation 5 save could not be reopened.")
             require(gen5BoxChecksumValid(written,box,wp)&&gen5ChecksumTableValid(written,wp)&&gen1ToGen5DexRegistered(written,wp,staged)){"The persisted Generation 5 save failed checksum or Pokédex validation."}
             val actual=written.copyOfRange(offset,offset+136);val reopened=parsePk5(actual,false)
             require(actual.contentEquals(pk5)&&reopened!=null&&sameGen6ToGen5Pk5(reopened,converted5)&&gen5Pk5PpUps(actual).contentEquals(gen6Pk6PpUps(bank))){"The exact converted PK5 did not persist after reopening."}
-            require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&
-                currentSourceLabel==p.sourceLabel&&p.sourceBinding.matches(p.bankBytes,true)&&
-                file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&
+            require(destinationBinding.matches(save,bound())&&p.sourceBinding.matches(p.bankBytes,true)&&
+                isBackupKept(recovery)&&
                 recovery.readBytes().contentEquals(original)&&bankCopy.readBytes().contentEquals(p.bankBytes)){
                 "The source identity, Bank record, destination or retained recovery snapshots changed before cleanup."
             }
             deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 7 Bank record could not be removed after destination verification."}
-            require(!p.bankFile.exists()&&importedFile?.absolutePath==file.absolutePath&&
-                currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&file.readBytes().contentEquals(save)&&
+            require(!p.bankFile.exists()&&destinationBinding.matches(save,bound())&&
                 isBackupKept(recovery)&&recovery.readBytes().contentEquals(original)&&
                 bankCopy.readBytes().contentEquals(p.bankBytes)){
                 "The verified Gen 5 destination identity, removed Gen 7 Bank path or retained recovery snapshots changed after Bank cleanup."
@@ -37138,7 +37140,7 @@ class MainActivity : Activity() {
             )
             requireNativeBankWithdrawalPostCleanup(
                 generation=5,
-                destinationBound=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel,
+                destinationBound=destinationBinding.matches(save,bound()),
                 retainedRecovery=retainedRecovery,
                 recoveryFile=bankCopy,
                 destination=file,
@@ -37161,10 +37163,12 @@ class MainActivity : Activity() {
                 }==true
             }.getOrDefault(false)
             val saveRestored=runCatching{
+                val current=file.readBytes()
+                require(destinationBinding.matches(current,bound())){"The Gen 5 destination identity changed during recovery; the current file was left untouched."}
                 restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Gen 5 destination write began; unknown current bytes were left untouched.","The Gen 5 destination no longer matches this transfer's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
                 val rp=detectGen5Profile(restored)?:error("The restored Generation 5 layout is invalid.")
-                require(restored.contentEquals(original)&&gen5ChecksumTableValid(restored,rp)&&
+                require(destinationBinding.matches(original,bound())&&restored.contentEquals(original)&&gen5ChecksumTableValid(restored,rp)&&
                     (0 until 24).all{gen5BoxChecksumValid(restored,it,rp)}){"The restored Gen 5 destination did not verify."}
                 true
             }.getOrDefault(false)
