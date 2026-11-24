@@ -67965,6 +67965,7 @@ private data class Gen2ToGen5LegalisePlan(
         var cleanupAttempted=false
         var safetyBackup:File?=null
         var bankRecovery:File?=null
+        var bankRecoveryBinding:PseBankSourceBinding?=null
         var stagedDestination:ByteArray?=null
         try{
             require(bound()&&nativeValid(original)&&file.readBytes().contentEquals(original)){"The destination identity, bytes or native checksums changed before withdrawal."}
@@ -67973,10 +67974,14 @@ private data class Gen2ToGen5LegalisePlan(
             backup.writeBytes(original)
             if(currentGen==6)retainGenToGen6SafetyBackup(backup,original)else retainGen1ToGen7SafetyBackup(backup,original)
             require(backup.readBytes().contentEquals(original)&&isBackupKept(backup)){"The retained Generation $currentGen destination backup did not verify."}
-            val recovery=File.createTempFile("PSE_Direct_PK${bankGen}_BankRecovery_",".tmp",bankDir());bankRecovery=recovery
+            val bankRoot=bankDir();require(bankRoot.absoluteFile==bankRoot.canonicalFile&&bankRoot.isDirectory){"The canonical PSE Bank recovery folder is unavailable."}
+            val recovery=File.createTempFile("PSE_Direct_PK${bankGen}_BankRecovery_",".tmp",bankRoot);bankRecovery=recovery
+            require(recovery.absoluteFile==recovery.canonicalFile&&recovery.parentFile==bankRoot){"The PK$bankGen Bank recovery snapshot path could not be bound."}
+            val recoveryBinding=PseBankSourceBinding.capture(recovery)?:error("The PK$bankGen Bank recovery snapshot identity could not be captured.")
+            bankRecoveryBinding=recoveryBinding
             recovery.writeBytes(raw)
-            require(recovery.readBytes().contentEquals(raw)){"The exact PK$bankGen Bank recovery snapshot did not verify."}
-            fun recoveryValid()=backup.readBytes().contentEquals(original)&&isBackupKept(backup)&&recovery.readBytes().contentEquals(raw)
+            require(recoveryBinding.matches(raw,true)){"The exact PK$bankGen Bank recovery snapshot did not verify."}
+            fun recoveryValid()=backup.readBytes().contentEquals(original)&&isBackupKept(backup)&&recoveryBinding.matches(raw,true)
             val work=original.copyOf()
             targetRaw.copyInto(work,offset)
             refreshBoxChecksum(work)
@@ -68005,7 +68010,7 @@ private data class Gen2ToGen5LegalisePlan(
             require(bound()&&file.readBytes().contentEquals(verifyData)&&nativeValid(verifyData)&&recoveryValid()&&!exactBankFile.exists()){
                 "The verified destination or retained recovery data changed after Bank cleanup."
             }
-            val bankRecoveryClean=cleanupExactBankRecoverySnapshots(
+            val bankRecoveryClean=recoveryBinding.matches(raw,true)&&cleanupExactBankRecoverySnapshots(
                 listOf(recovery),listOf(raw)
             )
             requireNativeBankWithdrawalPostCleanup(
@@ -68024,9 +68029,9 @@ private data class Gen2ToGen5LegalisePlan(
                 val recovery=bankRecovery
                 if(!exactBankFile.exists()){
                     require(cleanupAttempted){"The Bank record disappeared before PSE attempted cleanup; its path was not overwritten."}
-                    require(recovery!=null&&recovery.readBytes().contentEquals(raw)){"The exact PK$bankGen Bank recovery snapshot is unavailable."}
+                    require(recovery!=null&&bankRecoveryBinding?.matches(raw,true)==true){"The exact PK$bankGen Bank recovery snapshot is unavailable."}
                     require(exactBankFile.createNewFile()){"The Bank recovery path could not be reserved."}
-                    exactBankFile.writeBytes(recovery.readBytes())
+                    exactBankFile.writeBytes(raw)
                 }
                 val restored=exactBankFile.readBytes()
                 val parsed=if(restored.size==PK6_STORED_SIZE)parsePk6(restored,0,PK6_STORED_SIZE,false,sourceMaxSpecies)else null
@@ -68043,7 +68048,7 @@ private data class Gen2ToGen5LegalisePlan(
             }.getOrDefault(false)
             val bankRecoveryClean=if(bankRestored&&destinationRestored){
                 bankRecovery?.let{
-                    cleanupExactBankRecoverySnapshots(listOf(it),listOf(raw))
+                    bankRecoveryBinding?.matches(raw,true)==true&&cleanupExactBankRecoverySnapshots(listOf(it),listOf(raw))
                 }?:false
             }else false
             val recoveryMessage=when{
