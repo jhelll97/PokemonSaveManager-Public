@@ -2846,12 +2846,12 @@ internal fun requireNativeBankWithdrawalPostCleanup(
     backup: File,
     expectedBackup: ByteArray,
     kept: Boolean,
-    source: File
+    sourceAbsent: Boolean
 ) {
     require(destinationBound &&
         destination.isFile && destination.readBytes().contentEquals(expectedDestination) &&
         retainedBankBackupMatches(backup, expectedBackup, kept) &&
-        !source.exists() &&
+        sourceAbsent &&
         (retainedRecovery || !recoveryFile.exists())) {
         "The verified Generation $generation destination, removed Bank source or retained recovery data changed during recovery cleanup."
     }

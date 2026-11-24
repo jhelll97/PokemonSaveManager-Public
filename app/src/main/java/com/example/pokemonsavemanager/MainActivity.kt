@@ -68016,8 +68016,8 @@ private data class Gen2ToGen5LegalisePlan(
                 "The verified destination, Bank record or retained recovery data changed before Bank cleanup."
             }
             cleanupAttempted=true
-            require(exactBankFile.delete()&&!exactBankFile.exists()){"The verified Bank entry could not be removed."}
-            require(destinationBinding.matches(verifyData,bound())&&nativeValid(verifyData)&&recoveryValid()&&!exactBankFile.exists()){
+            require(exactBankFile.delete()&&sourceBinding.absent(true)){"The verified Bank entry could not be removed."}
+            require(destinationBinding.matches(verifyData,bound())&&nativeValid(verifyData)&&recoveryValid()&&sourceBinding.absent(true)){
                 "The verified destination or retained recovery data changed after Bank cleanup."
             }
             val bankRecoveryClean=recoveryBinding.matches(raw,true)&&cleanupExactBankRecoverySnapshots(
@@ -68025,7 +68025,7 @@ private data class Gen2ToGen5LegalisePlan(
             )
             requireNativeBankWithdrawalPostCleanup(
                 currentGen,destinationBinding.matches(verifyData,bound()),!bankRecoveryClean,recovery,
-                file,verifyData,backup,original,retainedBinding.matches(original,isBackupKept(backup)),exactBankFile
+                file,verifyData,backup,original,retainedBinding.matches(original,isBackupKept(backup)),sourceBinding.absent(true)
             )
             val box=target/30+1
             val slot=target%30+1
@@ -68037,7 +68037,7 @@ private data class Gen2ToGen5LegalisePlan(
         }catch(e:Exception){
             val bankRestored=runCatching{
                 val recovery=bankRecovery
-                val sourceRecreated=!exactBankFile.exists()
+                val sourceRecreated=sourceBinding.absent(true)
                 if(sourceRecreated){
                     require(cleanupAttempted){"The Bank record disappeared before PSE attempted cleanup; its path was not overwritten."}
                     require(recovery!=null&&bankRecoveryBinding?.matches(raw,true)==true){"The exact PK$bankGen Bank recovery snapshot is unavailable."}

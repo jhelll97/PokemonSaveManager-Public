@@ -17,6 +17,10 @@ internal class PseBankDestinationBinding private constructor(
         bound&&file.absoluteFile==file.canonicalFile&&file.canonicalPath==identity&&
             file.isFile&&file.readBytes().contentEquals(expected)
     }.getOrDefault(false)
+
+    fun absent(bound:Boolean):Boolean=runCatching {
+        bound&&file.absoluteFile==file.canonicalFile&&file.canonicalPath==identity&&!file.exists()
+    }.getOrDefault(false)
 }
 
 internal typealias PseBankSourceBinding=PseBankDestinationBinding
