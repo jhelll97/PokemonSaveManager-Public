@@ -48001,7 +48001,8 @@ class MainActivity : Activity() {
     private data class Gen3Gen4Prepared(
         val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry,val sourceBinding:PseBankSourceBinding,val destination:ByteArray,
         val plan:Gen3ToGen4Plan,val pk4:ByteArray,val converted:PokemonEntry,
-        val destinationFile:File,val sourceUri:Uri?,val sourceLabel:String?
+        val destinationFile:File,val sourceUri:Uri?,val sourceLabel:String?,
+        val ballLegalised:Boolean,val sourceBall:Int
     )
 
     private fun loadGen3ToGen4MetaAsync(
@@ -48245,7 +48246,9 @@ class MainActivity : Activity() {
         return encrypted
     }
 
-    private fun prepareGen3ToGen4Transfer(bankFile:File,shown:PokemonEntry,legalisePid:Boolean=false){
+    private fun prepareGen3ToGen4Transfer(
+        bankFile:File,shown:PokemonEntry,legalisePid:Boolean=false,legaliseBall:Boolean=false
+    ){
         val file=importedFile?:return showDialog("Gen 3 → Gen 4","Load a valid Generation 4 destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
@@ -48263,8 +48266,20 @@ class MainActivity : Activity() {
             ?:return showDialog("Gen 3 → Gen 4","The selected Bank record is not a valid PK3.")
         if(!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||source.tid!=shown.tid||source.sid!=shown.sid)
             return showDialog("Gen 3 → Gen 4","The selected Bank record changed or failed its PK3 checksum. Nothing was changed.")
-        val needsPidLegalise=((source.pid.toInt() and 1)+1)!=source.abilityNumber
-        if(needsPidLegalise)gen3ToGen4PidLegaliseRejection(source)?.let{
+        if(legaliseBall&&source.ball!=0)
+            return showDialog("Gen 3 → Gen 4","The reviewed ball Legalise no longer matches the exact PK3 source. Nothing was changed.")
+        if(source.ball==0&&!legaliseBall){
+            AlertDialog.Builder(this).setTitle("Legalise Gen 3 ball")
+                .setMessage("This PK3 stores ball ID 0, which has no native Generation 4 ball mapping. PSE can map it to Poké Ball ID 4 only after your explicit choice. This changes destination metadata and does not claim an official migration, legality certification or verified provenance. Cancel leaves the Bank record and destination unchanged.")
+                .setNegativeButton("Cancel",null).setPositiveButton("Use Poké Ball (ID 4)"){_,_->
+                    if(!sourceBinding.matches(bank,true))showDialog("Gen 3 → Gen 4","The selected Bank identity changed after Legalise review. Nothing was changed.")
+                    else prepareGen3ToGen4Transfer(bankFile,shown,legalisePid=legalisePid,legaliseBall=true)
+                }.show()
+            return
+        }
+        val conversionSource=if(legaliseBall)source.copy(ball=4) else source
+        val needsPidLegalise=((conversionSource.pid.toInt() and 1)+1)!=conversionSource.abilityNumber
+        if(needsPidLegalise)gen3ToGen4PidLegaliseRejection(conversionSource)?.let{
             return showDialog("Gen 3 → Gen 4 blocked","$it\n\nThe Bank record and destination were left unchanged.")
         }
         if(needsPidLegalise&&!legalisePid){
@@ -48272,11 +48287,11 @@ class MainActivity : Activity() {
                 .setMessage("The saved PK3 ability flag conflicts with PID parity. PSE can keep the recorded ability slot by changing the PID while preserving nature, gender and shiny state. The PID is identity data, so review the proposed value before writing. Cancel leaves the Bank record and destination unchanged.")
                 .setNegativeButton("Cancel",null).setPositiveButton("Legalise PID"){_,_->
                     if(!sourceBinding.matches(bank,true))showDialog("Gen 3 → Gen 4","The selected Bank identity changed after Legalise review. Nothing was changed.")
-                    else prepareGen3ToGen4Transfer(bankFile,shown,true)
+                    else prepareGen3ToGen4Transfer(bankFile,shown,legalisePid=true,legaliseBall=legaliseBall)
                 }.show()
             return
         }
-        gen3ToGen4PreflightRejection(source,legalisePid)?.let{
+        gen3ToGen4PreflightRejection(conversionSource,legalisePid)?.let{
             return showDialog("Gen 3 → Gen 4 blocked","$it\n\nThe Bank record and destination were left unchanged.")
         }
         val destination=runCatching{file.readBytes()}.getOrNull()
@@ -48289,34 +48304,38 @@ class MainActivity : Activity() {
         val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 3 → Gen 4")
             .setMessage("Resolving the exact Generation 4 ability slot and preparing a verified native PK4…")
             .setCancelable(false).create();loading.show()
-        loadGen3ToGen4MetaAsync(source,4){meta,reason->
+        loadGen3ToGen4MetaAsync(conversionSource,4){meta,reason->
             if(loading.isShowing)loading.dismiss()
             if(!snapshotsMatch())return@loadGen3ToGen4MetaAsync showDialog("Gen 3 → Gen 4","The destination or Bank record changed during preparation. Nothing was changed.")
             if(meta==null)return@loadGen3ToGen4MetaAsync showDialog("Gen 3 → Gen 4 blocked",(reason?:"Conversion metadata could not be verified.")+"\n\nThe Bank record and destination were left unchanged.")
-            val plan=try{makeGen3ToGen4Plan(source,meta,legalisePid)}catch(e:Exception){
+            val plan=try{makeGen3ToGen4Plan(conversionSource,meta,legalisePid)}catch(e:Exception){
                 return@loadGen3ToGen4MetaAsync showDialog("Gen 3 → Gen 4 blocked",(e.message?:"No safe mapping is available.")+"\n\nThe Bank record and destination were left unchanged.")
             }
-            val pk4=try{buildGen3ToGen4Pk4(bank,source,destination,plan)}catch(e:Exception){
+            val pk4=try{buildGen3ToGen4Pk4(bank,conversionSource,destination,plan)}catch(e:Exception){
                 return@loadGen3ToGen4MetaAsync showDialog("Gen 3 → Gen 4",e.message?:"The PK4 conversion could not be prepared.")
             }
             val converted=parsePk4(pk4,false)?:return@loadGen3ToGen4MetaAsync showDialog("Gen 3 → Gen 4","The prepared PK4 could not be verified.")
-            val prepared=Gen3Gen4Prepared(canonical,bank,source,sourceBinding,destination,plan,pk4,converted,file,openedUri,openedLabel)
-            val oldMet=if(source.metLocation==0)"none" else "#${source.metLocation}"
+            val prepared=Gen3Gen4Prepared(
+                canonical,bank,conversionSource,sourceBinding,destination,plan,pk4,converted,
+                file,openedUri,openedLabel,legaliseBall,source.ball
+            )
+            val oldMet=if(conversionSource.metLocation==0)"none" else "#${conversionSource.metLocation}"
             val pidSummary=if(plan.pidLegalised)"PID after explicit ability-parity Legalise" else "PID"
-            val originTitle=gen3CompatibleOriginTitle(source.originGame)?:return@loadGen3ToGen4MetaAsync showDialog("Gen 3 → Gen 4 blocked","The source origin is no longer a documented native Generation 3 title. Nothing was changed.")
+            val originTitle=gen3CompatibleOriginTitle(conversionSource.originGame)?:return@loadGen3ToGen4MetaAsync showDialog("Gen 3 → Gen 4 blocked","The source origin is no longer a documented native Generation 3 title. Nothing was changed.")
             val preview=buildString{
                 append("PSE Bank conversion preview\n\n")
                 append("Preserved: species, $pidSummary, shiny state, gender, nature, OT/TID/SID, nickname, EXP, friendship, IVs, EVs, moves, current PP, PP Ups and Pokérus.\n")
-                append("Ball: exact Generation 3 ball ID ${source.ball} (${gen3BallName(source.ball)}) is preserved in the native conversion.\n")
-                append("Origin preserved: $originTitle (ID ${source.originGame}).\n")
-                if(plan.pidLegalised)append("PID: ${"%08X".format(source.pid)} → ${"%08X".format(plan.pid)}. The saved ability slot, nature, gender and shiny state are preserved.\n")
+                if(legaliseBall)append("Ball Legalise: source PK3 ball ID 0 → Poké Ball ID 4. This is the explicit metadata change you reviewed; the source PK3 remains unchanged.\n")
+                else append("Ball: exact Generation 3 ball ID ${conversionSource.ball} (${gen3BallName(conversionSource.ball)}) is preserved in the native conversion.\n")
+                append("Origin preserved: $originTitle (ID ${conversionSource.originGame}).\n")
+                if(plan.pidLegalised)append("PID: ${"%08X".format(conversionSource.pid)} → ${"%08X".format(plan.pid)}. The saved ability slot, nature, gender and shiny state are preserved.\n")
                 append("\n")
-                append("Ability: source slot ${source.abilityNumber} → verified Gen 4 ability #${plan.meta.abilityId}.\n")
+                append("Ability: source slot ${conversionSource.abilityNumber} → verified Gen 4 ability #${plan.meta.abilityId}.\n")
                 append("Level: ${plan.level}, derived from the preserved EXP.\n")
                 append("Required migration difference: Gen 3 met location $oldMet becomes Gen 4 Pal Park location #55 with migration date 20${plan.metYear.toString().padStart(2,'0')}-${plan.metMonth.toString().padStart(2,'0')}-${plan.metDay.toString().padStart(2,'0')}.\n\n")
                 append("This is a PSE Bank conversion using Gen 4-compatible migration semantics. It is not an in-game trade and does not claim official transfer provenance. The source save stays unchanged. Exact retained destination and Bank recovery snapshots are required before writing and remain byte-bound through final Bank cleanup; failure restores both sides independently.")
             }
-            AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{meta.speciesName}} • Gen 3 → Gen 4")
+            AlertDialog.Builder(this).setTitle("${conversionSource.nickname.ifBlank{meta.speciesName}} • Gen 3 → Gen 4")
                 .setMessage(preview).setNegativeButton("Cancel",null)
                 .setPositiveButton("Choose destination"){_,_->
                     if(!snapshotsMatch())showDialog("Gen 3 → Gen 4","The destination or Bank record changed after review. Nothing was changed.")
@@ -48598,9 +48617,20 @@ class MainActivity : Activity() {
             require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&source.tid==p.source.tid&&source.sid==p.source.sid){
                 "The selected Gen 3 Pokémon changed after review."
             }
-            val refreshedPlan=makeGen3ToGen4PlanWithDate(source,p.plan.meta,p.plan.metYear,p.plan.metMonth,p.plan.metDay,p.plan.pidLegalised)
+            val conversionSource=if(p.ballLegalised){
+                require(p.sourceBall==0&&source.ball==p.sourceBall&&p.source.ball==4){
+                    "The reviewed Gen 3 ball Legalise no longer matches the exact PK3 source."
+                }
+                source.copy(ball=4)
+            }else{
+                require(source.ball==p.sourceBall&&p.source.ball==source.ball){
+                    "The source ball changed after review."
+                }
+                source
+            }
+            val refreshedPlan=makeGen3ToGen4PlanWithDate(conversionSource,p.plan.meta,p.plan.metYear,p.plan.metMonth,p.plan.metDay,p.plan.pidLegalised)
             require(refreshedPlan==p.plan){"The prepared conversion plan no longer matches the source."}
-            val refreshedPk4=buildGen3ToGen4Pk4(bank,source,fresh,refreshedPlan)
+            val refreshedPk4=buildGen3ToGen4Pk4(bank,conversionSource,fresh,refreshedPlan)
             val refreshed=parsePk4(refreshedPk4,false)?:error("The refreshed PK4 could not be parsed.")
             require(refreshedPk4.contentEquals(p.pk4)&&sameGen3ToGen4Pk4(refreshed,p.converted)&&
                 gen4Pk4PpUps(refreshedPk4).contentEquals(gen4Pk4PpUps(p.pk4))){
