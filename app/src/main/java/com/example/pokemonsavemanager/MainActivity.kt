@@ -12525,7 +12525,8 @@ class MainActivity : Activity() {
 
     private fun prepareGen5ToGen2Transfer(
         bankFile:File,shown:PokemonEntry,confirmedMovePlan:Gen5ToGen2MovePlan?=null,
-        reviewedBank:ByteArray?=null,reviewedDestination:ByteArray?=null
+        reviewedBank:ByteArray?=null,reviewedDestination:ByteArray?=null,
+        retainedSourceBinding:PseBankSourceBinding?=null
     ){
         val file=importedFile?:return showDialog("Gen 5 → Gen 2","Load a valid Gold, Silver or Crystal destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
@@ -12538,17 +12539,19 @@ class MainActivity : Activity() {
             return showDialog("Gen 5 → Gen 2","The loaded Generation 2 destination failed native checksum or structural validation.")
         val root=runCatching{bankDir().canonicalFile}.getOrNull()
             ?:return showDialog("Gen 5 → Gen 2","The PSE Bank folder could not be verified.")
-        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+        val selected=runCatching{require(bankFile.absoluteFile==bankFile.canonicalFile);bankFile.canonicalFile}.getOrNull()
             ?:return showDialog("Gen 5 → Gen 2","The selected Bank path could not be verified.")
         if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk5",true))
             return showDialog("Gen 5 → Gen 2","The selected record is outside the Generation 5 PSE Bank.")
+        val sourceBinding=retainedSourceBinding?:PseBankSourceBinding.capture(selected)
+        if(sourceBinding==null)return showDialog("Gen 5 → Gen 2","The selected Bank identity could not be captured.")
         val bank=runCatching{selected.readBytes()}.getOrNull()
             ?:return showDialog("Gen 5 → Gen 2","The selected Bank record could not be read.")
         val source=if(bank.size==136)parsePk5(bank,false)else null
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
             source.tid!=shown.tid||source.sid!=shown.sid)
             return showDialog("Gen 5 → Gen 2","The selected Bank record changed or failed its PK5 checksum.")
-        if(reviewedBank!=null&&!bank.contentEquals(reviewedBank)||reviewedDestination!=null&&!destination.contentEquals(reviewedDestination))
+        if(!sourceBinding.matches(reviewedBank?:bank,true)||(reviewedBank!=null&&!bank.contentEquals(reviewedBank))||(reviewedDestination!=null&&!destination.contentEquals(reviewedDestination)))
             return showDialog("Gen 5 → Gen 2","The source or destination changed after the move-removal review. Nothing was changed.")
         val movePlan=try{gen5ToGen2MovePlan(bank,source)}catch(e:Exception){
             return showDialog("Gen 5 → Gen 2 blocked",(e.message?:"The source move data could not be reviewed safely.")+"\n\nThe Bank record and destination were left unchanged.")
@@ -12577,10 +12580,10 @@ class MainActivity : Activity() {
                 .setMessage(removalReview).setNegativeButton("Cancel",null)
                 .setPositiveButton("Remove listed moves"){_,_->
                     if(removalConsumed){showDialog("Gen 5 → Gen 2","This move-removal review was already submitted. Reopen PSE Bank.");return@setPositiveButton};removalConsumed=true
-                    if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false)){
+                    if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&sourceBinding.matches(bank,true)}.getOrDefault(false)){
                         showDialog("Gen 5 → Gen 2","The source or destination changed after review. Nothing was changed.");return@setPositiveButton
                     }
-                    prepareGen5ToGen2Transfer(selected,source,movePlan,bank.copyOf(),destination.copyOf())
+                    prepareGen5ToGen2Transfer(selected,source,movePlan,bank.copyOf(),destination.copyOf(),sourceBinding)
                 }.show()
             return
         }
@@ -12625,23 +12628,24 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 5 → Gen 2")
             .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("Choose Gen 2 Box"){_,_->
                 if(reviewConsumed){showDialog("Gen 5 → Gen 2","This review was already submitted. Reopen PSE Bank.");return@setPositiveButton};reviewConsumed=true
-                if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false)){
+                if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&sourceBinding.matches(bank,true)}.getOrDefault(false)){
                     showDialog("Gen 5 → Gen 2","The source or destination changed after review. Nothing was changed.");return@setPositiveButton
                 }
                 AlertDialog.Builder(this).setTitle("Choose Gen 2 PC Box").setItems(labels){_,which->
                     if(transferConsumed||which !in targets.indices){showDialog("Gen 5 → Gen 2","This destination choice was already handled. Reopen PSE Bank.");return@setItems};transferConsumed=true
-                    transferGen5BankToGen2(selected,source,bank,mon,ot,nick,acceptedMovePlan,targets[which].first,file,destination,openedUri,openedLabel,profile.key)
+                    transferGen5BankToGen2(selected,source,bank,sourceBinding,mon,ot,nick,acceptedMovePlan,targets[which].first,file,destination,openedUri,openedLabel,profile.key)
                 }.setNegativeButton("Cancel",null).show()
             }.show()
     }
 
 
     private fun transferGen5BankToGen2(
-        bankFile:File,source:PokemonEntry,bankBytes:ByteArray,mon:ByteArray,ot:ByteArray,nick:ByteArray,
+        bankFile:File,source:PokemonEntry,bankBytes:ByteArray,sourceBinding:PseBankSourceBinding,mon:ByteArray,ot:ByteArray,nick:ByteArray,
         confirmedMovePlan:Gen5ToGen2MovePlan?,targetBox:Int,file:File,openedDestination:ByteArray,
         openedUri:Uri?,openedLabel:String?,profileKey:String
     ){
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
+        if(!sourceBinding.matches(bankBytes,true)){showDialog("Gen 5 → Gen 2","The selected Bank identity changed. Reopen PSE Bank. Nothing was changed.");return}
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
         var stagedDestination:ByteArray?=null
         var retainedRecovery=false
@@ -12653,7 +12657,7 @@ class MainActivity : Activity() {
             val base=gen2BoxOffset(targetBox);val count=fresh[base].toInt()and 0xFF
             require(count in 0..19){"The selected Gen 2 Box is full or structurally invalid."}
             val before=gen2LocationPayloads(fresh,"Box $targetBox",profile)
-            val currentBank=bankFile.readBytes();require(currentBank.contentEquals(bankBytes)){"The selected Gen 5 Bank record changed."}
+            val currentBank=bankFile.readBytes();require(sourceBinding.matches(bankBytes,true)&&currentBank.contentEquals(bankBytes)){"The selected Gen 5 Bank identity or record changed."}
             val current=parsePk5(currentBank,false)?:error("The Gen 5 Bank record is invalid.")
             require(current.checksumValid&&current.pid==source.pid&&current.species==source.species&&current.tid==source.tid&&current.sid==source.sid){"The selected Gen 5 Pokémon changed."}
             val refreshed=buildGen5ToGen2Record(currentBank,current,confirmedMovePlan)
@@ -12667,9 +12671,9 @@ class MainActivity : Activity() {
             retainGen2SafetyBackup(b,fresh)
             val bankCopy=File.createTempFile("PSE_G5ToG2_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
             bankCopy.writeBytes(bankBytes);require(bankCopy.readBytes().contentEquals(bankBytes)){"The exact PK5 Bank recovery snapshot did not verify."}
-            require(bound()&&file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(bankBytes)&&
+            require(bound()&&file.readBytes().contentEquals(fresh)&&sourceBinding.matches(bankBytes,true)&&
                 isBackupKept(b)&&b.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){
-                "The source, destination or retained recovery snapshots changed before writing."
+                "The source identity, destination or retained recovery snapshots changed before writing."
             }
             stagedDestination=work.copyOf()
             writeStarted=true;file.writeBytes(work);val written=file.readBytes()
@@ -12677,9 +12681,9 @@ class MainActivity : Activity() {
             require(bound()&&written.contentEquals(work)&&wp.key==profileKey&&verifyGen2SaveIntegrity(written).first){"The persisted Gen 2 destination failed verification."}
             val after=gen2LocationPayloads(written,"Box $targetBox",wp)
             require(after.size==before.size+1&&sameGen2PayloadList(after.take(before.size),before)&&gen2BoxRawCore(written,targetBox,slot).contentEquals(mon)&&gen2PokedexOwnedSeen(written,wp,source.species)){"The exact converted record, existing Box contents or Pokédex registration did not persist."}
-            require(bankFile.readBytes().contentEquals(bankBytes)&&bound()&&file.readBytes().contentEquals(written)&&
+            require(sourceBinding.matches(bankBytes,true)&&bound()&&file.readBytes().contentEquals(written)&&
                 isBackupKept(b)&&b.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(bankBytes)){
-                "The destination, Bank record or retained recovery snapshots changed before cleanup."
+                "The destination, Bank identity or retained recovery snapshots changed before cleanup."
             }
             bankDeleteAttempted=true;require(bankFile.delete()&&!bankFile.exists()){"The destination was written, but Bank cleanup could not be verified."}
             require(!bankFile.exists()&&bound()&&file.readBytes().contentEquals(written)&&isBackupKept(b)&&
@@ -12708,7 +12712,7 @@ class MainActivity : Activity() {
                     bankFile.writeBytes(bankBytes)
                 }
                 val restored=bankFile.readBytes()
-                restored.contentEquals(bankBytes)&&parsePk5(restored,false)?.let{
+                sourceBinding.matches(bankBytes,true)&&restored.contentEquals(bankBytes)&&parsePk5(restored,false)?.let{
                     it.checksumValid&&it.pid==source.pid&&it.species==source.species&&
                         it.tid==source.tid&&it.sid==source.sid
                 }==true
