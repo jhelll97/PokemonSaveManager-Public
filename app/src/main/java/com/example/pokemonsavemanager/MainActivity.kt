@@ -36764,7 +36764,7 @@ class MainActivity : Activity() {
         if(!gen6ToGen7SnapshotsMatch(p)||p.submitted)return showDialog(title,"The destination or Bank record changed, or this transfer was already submitted. Reopen PSE Bank.")
         val file=p.destinationFile
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel
-        val bindDestination=p.sourceGeneration==4
+        val bindDestination=p.sourceGeneration in 4..5
         val destinationBinding=if(bindDestination)PseBankDestinationBinding.capture(file)else null
         if(bindDestination&&(destinationBinding==null||!destinationBinding.matches(p.destination,bound())))
             return showDialog(title,"The destination identity changed after review. Reopen PSE Bank. Nothing was changed.")
