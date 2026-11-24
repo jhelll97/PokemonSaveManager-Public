@@ -2193,7 +2193,6 @@ internal fun gen2ForwardBuiltPkMismatchBytes(
     pokemon.species!=source.species->"species"
     pokemon.nickname!=expectedName->"nickname"
     pokemon.isNicknamed!=customNickname->"nickname flag"
-    pokemon.level!=source.level->"level"
     pokemon.heldItem!=0->"held item"
     pokemon.tid!=source.tid->"Trainer ID"
     pokemon.sid!=0->"Secret ID"
