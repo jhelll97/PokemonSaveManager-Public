@@ -67912,12 +67912,11 @@ private data class Gen2ToGen5LegalisePlan(
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         if(!bound()){showDialog("Withdraw","The loaded destination identity changed after slot selection. Reopen PSE Bank. Nothing was changed.");return}
         val file=openedFile
-        val destinationBinding=PseBankDestinationBinding.capture(file)?:run{
-            showDialog("Withdraw","The destination identity could not be captured. Reopen PSE Bank. Nothing was changed.");return
-        }
-        fun destinationMatches(expected:ByteArray)=destinationBinding.matches(expected,bound())
         val original=try{file.readBytes()}catch(e:Exception){showDialog("Withdraw","The exact destination could not be read. Nothing was changed.");return}
-        if(!destinationMatches(original)){showDialog("Withdraw","The destination identity or bytes changed after slot selection. Reopen PSE Bank. Nothing was changed.");return}
+        val destinationBinding=PseBankDestinationBinding.capture(file)
+        if(destinationBinding==null||!destinationBinding.matches(original,bound())){
+            showDialog("Withdraw","The destination identity changed after review. Reopen PSE Bank. Nothing was changed.");return
+        }
         val currentGen=generationForSize(original.size)
         val root=runCatching{bankDir().canonicalFile}.getOrNull()?:run{showDialog("Withdraw","The PSE Bank folder could not be verified. Nothing was changed.");return}
         val exactBankFile=runCatching{bankFile.canonicalFile}.getOrNull()?:run{showDialog("Withdraw","The selected Bank path could not be verified. Nothing was changed.");return}
@@ -67976,7 +67975,7 @@ private data class Gen2ToGen5LegalisePlan(
         var bankRecoveryBinding:PseBankSourceBinding?=null
         var stagedDestination:ByteArray?=null
         try{
-            require(destinationMatches(original)&&nativeValid(original)){"The destination identity, bytes or native checksums changed before withdrawal."}
+            require(destinationBinding.matches(original,bound())&&nativeValid(original)){"The destination identity, bytes or native checksums changed before withdrawal."}
             require(sourceBinding.matches(raw,true)){"The selected PK$bankGen Bank record changed before recovery staging."}
             val backup=File.createTempFile(backupGameName(file)+"_PreDirectBankWithdrawal_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(original)
@@ -67998,7 +67997,7 @@ private data class Gen2ToGen5LegalisePlan(
             require(staged.contentEquals(targetRaw)&&stagedPokemon!=null&&stagedPokemon.checksumValid&&nativeValid(work)){
                 "The reviewed PK$currentGen destination record or native checksums did not stage exactly."
             }
-            require(destinationMatches(original)&&sourceBinding.matches(raw,true)&&recoveryValid()){
+            require(destinationBinding.matches(original,bound())&&sourceBinding.matches(raw,true)&&recoveryValid()){
                 "The destination, Bank record or retained recovery data changed before writing."
             }
             stagedDestination=work.copyOf()
@@ -68007,7 +68006,7 @@ private data class Gen2ToGen5LegalisePlan(
             val verifyData=file.readBytes()
             val actual=verifyData.copyOfRange(offset,offset+PK6_STORED_SIZE)
             val verifyPokemon=parsePk6(actual,0,PK6_STORED_SIZE,false,maxSpecies)
-            require(destinationMatches(work)&&verifyData.contentEquals(work)&&actual.contentEquals(targetRaw)&&verifyPokemon!=null&&verifyPokemon.checksumValid&&nativeValid(verifyData)){
+            require(destinationBinding.matches(work,bound())&&verifyData.contentEquals(work)&&actual.contentEquals(targetRaw)&&verifyPokemon!=null&&verifyPokemon.checksumValid&&nativeValid(verifyData)){
                 "The persisted PK$currentGen destination record or native checksums did not verify."
             }
             require(sourceBinding.matches(raw,true)&&recoveryValid()){
@@ -68015,14 +68014,14 @@ private data class Gen2ToGen5LegalisePlan(
             }
             cleanupAttempted=true
             require(exactBankFile.delete()&&!exactBankFile.exists()){"The verified Bank entry could not be removed."}
-            require(destinationMatches(verifyData)&&nativeValid(verifyData)&&recoveryValid()&&!exactBankFile.exists()){
+            require(destinationBinding.matches(verifyData,bound())&&nativeValid(verifyData)&&recoveryValid()&&!exactBankFile.exists()){
                 "The verified destination or retained recovery data changed after Bank cleanup."
             }
             val bankRecoveryClean=recoveryBinding.matches(raw,true)&&cleanupExactBankRecoverySnapshots(
                 listOf(recovery),listOf(raw)
             )
             requireNativeBankWithdrawalPostCleanup(
-                currentGen,destinationMatches(verifyData),!bankRecoveryClean,recovery,
+                currentGen,destinationBinding.matches(verifyData,bound()),!bankRecoveryClean,recovery,
                 file,verifyData,backup,original,isBackupKept(backup),exactBankFile
             )
             val box=target/30+1
@@ -68051,10 +68050,10 @@ private data class Gen2ToGen5LegalisePlan(
             }.getOrDefault(false)
             val destinationRestored=runCatching{
                 val current=file.readBytes()
-                require(destinationMatches(current)){"The Generation $currentGen destination identity changed during recovery; the current file was left untouched."}
+                require(destinationBinding.matches(current,bound())){"The exact Generation $currentGen destination could not be restored or verified."}
                 restoreExactStagedDestination(file,original,stagedDestination,writeStarted,"No Generation $currentGen destination write began; unknown current bytes were left untouched.","The Generation $currentGen destination no longer matches this withdrawal's staged bytes; the retained backup was left for recovery.")
                 val restored=file.readBytes()
-                require(destinationMatches(original)&&restored.contentEquals(original)&&nativeValid(restored)){"The exact Generation $currentGen destination could not be restored or verified."}
+                require(destinationBinding.matches(original,bound())&&restored.contentEquals(original)&&nativeValid(restored)){"The exact Generation $currentGen destination could not be restored or verified."}
                 true
             }.getOrDefault(false)
             val bankRecoveryClean=if(bankRestored&&destinationRestored){
