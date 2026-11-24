@@ -13419,7 +13419,7 @@ class MainActivity : Activity() {
         if(currentGen==4)b.setPositiveButton("PSE Convert to Gen 4"){_,_->prepareGen6ToGen4Transfer(bankFile,p,null)}
         if(currentGen==5)b.setPositiveButton("PSE Convert to Gen 5"){_,_->prepareGen6ToGen5Transfer(bankFile,p,null,null)}
         if(currentGen==6)b.setPositiveButton("Withdraw to Gen 6"){_,_->prepareGen6BankWithdrawal(bankFile,p)}
-        if(currentGen==7)b.setPositiveButton("PSE Convert to Gen 7"){_,_->prepareGen6ToGen7Transfer(bankFile,p)}
+        if(currentGen==7)b.setPositiveButton("PSE Convert to Gen 7"){_,_->prepareGen6ToGen7Transfer(bankFile,p,null,null)}
         b.show()
     }
 
@@ -36735,28 +36735,31 @@ class MainActivity : Activity() {
         return encrypted
     }
 
-    private fun prepareGen6ToGen7Transfer(bankFile:File,shown:PokemonEntry,requestedOriginGame:Int?=null){
+    private fun prepareGen6ToGen7Transfer(
+        bankFile:File,shown:PokemonEntry,requestedOriginGame:Int?,retainedSourceBinding:PseBankSourceBinding?
+    ){
         val file=importedFile?:return showDialog("Gen 6 → Gen 7","Load a valid Sun, Moon, Ultra Sun or Ultra Moon destination first.");val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val destination=runCatching{file.readBytes()}.getOrNull()?:return showDialog("Gen 6 → Gen 7","The destination save could not be read.");val checks=validateGen7CoreChecksums(destination);if(!bound()||generationForSize(destination.size)!=7||!checks.first)return showDialog("Gen 6 → Gen 7",checks.second)
-        val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return;val selected=runCatching{bankFile.canonicalFile}.getOrNull()?:return;if(selected.parentFile!=root||!selected.extension.equals("pk6",true))return showDialog("Gen 6 → Gen 7","The selected record is outside the Generation 6 PSE Bank.")
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return;val selected=runCatching{require(bankFile.absoluteFile==bankFile.canonicalFile);bankFile.canonicalFile}.getOrNull()?:return;if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk6",true))return showDialog("Gen 6 → Gen 7","The selected record is outside the Generation 6 PSE Bank.")
+        val sourceBinding=retainedSourceBinding?:PseBankSourceBinding.capture(selected)?:return showDialog("Gen 6 → Gen 7","The selected Bank identity could not be captured.")
         val bank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Gen 6 → Gen 7","The Bank record could not be read.");val source=if(bank.size==PK6_STORED_SIZE)parsePk6(bank,0,PK6_STORED_SIZE,false,721)else null
-        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||source.tid!=shown.tid||source.sid!=shown.sid)return showDialog("Gen 6 → Gen 7","The selected Bank record changed or failed its PK6 checksum.");val needsLegalise=gen6CompatibleOriginTitle(source.originGame)==null
+        if(!sourceBinding.matches(bank,true)||source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||source.tid!=shown.tid||source.sid!=shown.sid)return showDialog("Gen 6 → Gen 7","The selected Bank record changed or failed its PK6 checksum.");val needsLegalise=gen6CompatibleOriginTitle(source.originGame)==null
         val originGame=requestedOriginGame?:source.originGame
         if(needsLegalise&&requestedOriginGame==null){
             val choices=listOf(24 to "Pokémon X",25 to "Pokémon Y",26 to "Pokémon Alpha Sapphire",27 to "Pokémon Omega Ruby")
             AlertDialog.Builder(this).setTitle("Choose Gen 6 origin mapping")
                 .setMessage("Origin game ID ${source.originGame} is not a documented native Generation 1–6 title. Choose the exact Gen 6 title to write in PK7. This is an explicit PSE Legalise choice, not verified history; cancelling leaves the Bank record and destination unchanged.")
                 .setItems(choices.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
-                    prepareGen6ToGen7Transfer(bankFile,shown,choices[which].first)
+                    prepareGen6ToGen7Transfer(selected,source,choices[which].first,sourceBinding)
                 }
                 .setNegativeButton("Cancel",null).show()
             return
         }
         if(needsLegalise&&originGame !in 24..27)return showDialog("Gen 6 → Gen 7 blocked","Choose Pokémon X, Y, Alpha Sapphire or Omega Ruby as the Gen 6 origin.")
         gen6ToGen7PreflightRejection(source,bank,originGame)?.let{return showDialog("Gen 6 → Gen 7 blocked","$it\n\nThe PK6 Bank record and Gen 7 destination were left unchanged.")}
-        val pk7=try{buildGen6ToGen7Pk7(bank,source,originGame)}catch(e:Exception){return showDialog("Gen 6 → Gen 7 blocked",(e.message?:"No safe native PK7 mapping is available.")+"\n\nNothing was changed.")};if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false))return showDialog("Gen 6 → Gen 7","The destination or Bank record changed during preparation. Nothing was changed.")
-        val converted=parsePk6(pk7,0,PK6_STORED_SIZE,false,807)?:return showDialog("Gen 6 → Gen 7","The prepared PK7 could not be re-read.");val markingNote=gen6ToGen7Markings(source.markingValue).second;val prepared=Gen6Gen7Prepared(selected,bank,source,destination,pk7,converted,file,openedUri,openedLabel,markingNote,originGame)
+        val pk7=try{buildGen6ToGen7Pk7(bank,source,originGame)}catch(e:Exception){return showDialog("Gen 6 → Gen 7 blocked",(e.message?:"No safe native PK7 mapping is available.")+"\n\nNothing was changed.")};if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&sourceBinding.matches(bank,true)}.getOrDefault(false))return showDialog("Gen 6 → Gen 7","The destination or Bank record changed during preparation. Nothing was changed.")
+        val converted=parsePk6(pk7,0,PK6_STORED_SIZE,false,807)?:return showDialog("Gen 6 → Gen 7","The prepared PK7 could not be re-read.");val markingNote=gen6ToGen7Markings(source.markingValue).second;val prepared=Gen6Gen7Prepared(selected,bank,source,destination,pk7,converted,file,openedUri,openedLabel,markingNote,originGame,sourceBinding=sourceBinding)
         val originTitle=gen6CompatibleOriginTitle(originGame)?:return showDialog("Gen 6 → Gen 7 blocked","The reviewed origin mapping is no longer destination-valid. Nothing was changed.")
         val originNote=if(needsLegalise)"Origin Legalise: game ID ${source.originGame} → $originTitle (ID $originGame); this is a user-selected provenance change, not verified history." else "Origin preserved: $originTitle (ID $originGame)."
         val preview="PSE Bank conversion into native PK7 storage; this does not claim an official Pokémon Bank transaction or provenance.\n\nPreserved exactly: species/form, encryption constant, PID, OT/TID/SID, nickname, held item, EXP, ability/slot, nature, gender, shiny state, moves/PP/PP Ups/relearn moves, IVs, EVs, friendship and handler data, Pokérus, encounter locations, Ball, met level, language, dates, geography, memories and all other stored metadata not named below.\n\nReviewed format differences:\n• $markingNote.\n• $originNote\n• PK6 Super Training Bag state must be empty because PK7 uses bytes 0x16–0x17 for markings; nonzero Bag state is blocked rather than discarded.\n• Gen 7 Resort state and Hyper Training start empty. Nonzero reserved PK6 byte 0xDE is blocked rather than reinterpreted.\n• Generation-specific Pikachu forms, Eggs, invalid catalogue values and unsupported metadata are blocked with their exact reason.\n\nThe user chooses one empty native Gen 7 slot. PSE then updates that exact PK7, required Pokédex flags, Box/Pokédex block CRCs and the native save signature. A Keep-pinned destination backup and independent exact Bank snapshot stay byte-bound before writing and through cleanup. If failure happens before PSE writes or deletes a side, PSE verifies that side stayed exact instead of claiming restoration; after a PSE mutation, it restores and reopens that side independently."
