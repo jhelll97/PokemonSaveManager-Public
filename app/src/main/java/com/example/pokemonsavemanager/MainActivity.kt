@@ -58529,6 +58529,7 @@ class MainActivity : Activity() {
         if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog(routeTitle,"The active save changed after destination preparation. Reopen PSE Bank. Nothing was changed.");return}
         val file=openedFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;var writeStarted=false;var bankDeleteAttempted=false
         var safetyBackup:File?=null;var bankRecovery:File?=null
+        var bankRecoveryBinding:PseBankSourceBinding?=null
         var stagedDestination:ByteArray?=null
         var retainedRecovery=false
         try{
@@ -58546,9 +58547,13 @@ class MainActivity : Activity() {
             require(bound()&&verifyGen1SaveIntegrity(work).first){"The staged Gen 1 destination identity or full integrity is invalid."}
             val backup=File.createTempFile(backupGameName(file)+"_PreGen2ToGen1Transfer_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(fresh);require(backup.readBytes().contentEquals(fresh)){"The exact Gen 1 recovery backup did not verify."};retainGen2ToGen1SafetyBackup(backup,fresh)
-            val bankCopy=File.createTempFile("PSE_G2ToG1_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
-            bankCopy.writeBytes(expectedBank);require(bankCopy.readBytes().contentEquals(expectedBank)){"The exact Gen 2 Bank recovery snapshot did not verify."}
-            require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(expectedBank)&&
+            val bankRoot=bankDir();require(bankRoot.absoluteFile==bankRoot.canonicalFile&&bankRoot.isDirectory){"The canonical PSE Bank recovery folder is unavailable."}
+            val bankCopy=File.createTempFile("PSE_G2ToG1_BankRecovery_",".tmp",bankRoot);bankRecovery=bankCopy
+            require(bankCopy.absoluteFile==bankCopy.canonicalFile&&bankCopy.parentFile==bankRoot){"The Gen 2 Bank recovery snapshot path could not be bound."}
+            val bankCopyBinding=PseBankSourceBinding.capture(bankCopy)?:error("The Gen 2 Bank recovery snapshot identity could not be captured.")
+            bankRecoveryBinding=bankCopyBinding
+            bankCopy.writeBytes(expectedBank);require(bankCopyBinding.matches(expectedBank,true)){"The exact Gen 2 Bank recovery snapshot did not verify."}
+            require(bound()&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&bankCopyBinding.matches(expectedBank,true)&&
                 file.readBytes().contentEquals(fresh)&&bankFile.readBytes().contentEquals(expectedBank)){
                 "The destination, Bank record or retained recovery snapshots changed before writing. Nothing was written."
             }
@@ -58557,17 +58562,17 @@ class MainActivity : Activity() {
             file.writeBytes(work);val written=file.readBytes();require(written.contentEquals(work)){"The Gen 1 destination changed while it was written."};val post=verifyGen1WriteState(written,targetBox);require(post.first){post.second};val after=parseGen1Box(written,targetBox).pokemon.sortedBy{it.slot};require(after.size==before.size+1&&after.take(before.size).zip(before).all{(a,b)->sameGen1TransferRecord(a,b)}){"The persisted Gen 1 box changed unexpectedly."};val q=after.firstOrNull{it.slot==slot};require(q!=null&&matches(q)){"The persisted Gen 1 conversion did not preserve every supported field."};val actualBase=gen1BoxDataOffset(written,targetBox)+GEN1_BOX_MONS+slot*GEN1_BOX_MON_SIZE;require(written.copyOfRange(actualBase,actualBase+GEN1_BOX_MON_SIZE).contentEquals(mon)){"The exact Gen 1 record did not persist."};require((written[0x25A3+dexIndex/8].toInt() and dexMask)!=0&&(written[0x25B6+dexIndex/8].toInt() and dexMask)!=0){"The species was not registered Seen and Caught in Gen 1."}
             require(bound()&&importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)&&
                 verifyGen1SaveIntegrity(written).first&&isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&
-                bankCopy.readBytes().contentEquals(expectedBank)){
+                bankCopyBinding.matches(expectedBank,true)){
                 "The verified Gen 1 destination or retained recovery snapshots changed before Bank cleanup."
             }
             val cleanup=bankFile.readBytes();require(cleanup.contentEquals(expectedBank)&&parseGen2BankPayload(cleanup)?.let{sameGen2BankRecord(it,source)}==true){"The Gen 2 Bank record changed before cleanup."};bankDeleteAttempted=true;require(bankFile.delete()){"The Gen 2 Bank entry could not be removed after destination verification."};require(!bankFile.exists()){"The removed Gen 2 Bank entry still exists."}
             require(!bankFile.exists()&&bound()&&importedFile?.absolutePath==file.absolutePath&&file.readBytes().contentEquals(work)&&
-                isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(expectedBank)){
+                isBackupKept(backup)&&backup.readBytes().contentEquals(fresh)&&bankCopyBinding.matches(expectedBank,true)){
                 "The verified Gen 1 destination identity, removed Gen 2 Bank path or retained recovery snapshots changed after Bank cleanup."
             }
-            retainedRecovery=!cleanupExactBankRecoverySnapshots(
+            retainedRecovery=!(bankCopyBinding.matches(expectedBank,true)&&cleanupExactBankRecoverySnapshots(
                 listOf(bankCopy),listOf(expectedBank)
-            )
+            ))
             requireNativeBankWithdrawalPostCleanup(
                 generation=1,
                 destinationBound=bound()&&importedFile?.absolutePath==file.absolutePath,
@@ -58597,7 +58602,7 @@ class MainActivity : Activity() {
             }.getOrDefault(false)
             val bankRecoveryClean=if(bankRestored&&destinationRestored){
                 bankRecovery?.let{
-                    cleanupExactBankRecoverySnapshots(listOf(it),listOf(expectedBank))
+                    bankRecoveryBinding?.matches(expectedBank,true)==true&&cleanupExactBankRecoverySnapshots(listOf(it),listOf(expectedBank))
                 }?:true
             }else false
             val recovery=when{
