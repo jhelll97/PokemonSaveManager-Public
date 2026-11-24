@@ -67971,6 +67971,7 @@ private data class Gen2ToGen5LegalisePlan(
         var writeStarted=false
         var cleanupAttempted=false
         var safetyBackup:File?=null
+        var backupBinding:PseBankDestinationBinding?=null
         var bankRecovery:File?=null
         var bankRecoveryBinding:PseBankSourceBinding?=null
         var stagedDestination:ByteArray?=null
@@ -67978,9 +67979,11 @@ private data class Gen2ToGen5LegalisePlan(
             require(destinationBinding.matches(original,bound())&&nativeValid(original)){"The destination identity, bytes or native checksums changed before withdrawal."}
             require(sourceBinding.matches(raw,true)){"The selected PK$bankGen Bank record changed before recovery staging."}
             val backup=File.createTempFile(backupGameName(file)+"_PreDirectBankWithdrawal_",".backup",backupsDir());safetyBackup=backup
+            val retainedBinding=PseBankDestinationBinding.capture(backup)?:error("The retained Generation $currentGen destination backup did not verify.")
+            backupBinding=retainedBinding
             backup.writeBytes(original)
             if(currentGen==6)retainGenToGen6SafetyBackup(backup,original)else retainGen1ToGen7SafetyBackup(backup,original)
-            require(backup.readBytes().contentEquals(original)&&isBackupKept(backup)){"The retained Generation $currentGen destination backup did not verify."}
+            require(retainedBinding.matches(original,isBackupKept(backup))){"The retained Generation $currentGen destination backup did not verify."}
             val bankRoot=bankDir();require(bankRoot.absoluteFile==bankRoot.canonicalFile&&bankRoot.isDirectory){"The canonical PSE Bank recovery folder is unavailable."}
             val recovery=File.createTempFile("PSE_Direct_PK${bankGen}_BankRecovery_",".tmp",bankRoot);bankRecovery=recovery
             require(recovery.absoluteFile==recovery.canonicalFile&&recovery.parentFile==bankRoot){"The PK$bankGen Bank recovery snapshot path could not be bound."}
@@ -67988,7 +67991,7 @@ private data class Gen2ToGen5LegalisePlan(
             bankRecoveryBinding=recoveryBinding
             recovery.writeBytes(raw)
             require(recoveryBinding.matches(raw,true)){"The exact PK$bankGen Bank recovery snapshot did not verify."}
-            fun recoveryValid()=backup.readBytes().contentEquals(original)&&isBackupKept(backup)&&recoveryBinding.matches(raw,true)
+            fun recoveryValid()=retainedBinding.matches(original,isBackupKept(backup))&&recoveryBinding.matches(raw,true)
             val work=original.copyOf()
             targetRaw.copyInto(work,offset)
             refreshBoxChecksum(work)
@@ -68022,7 +68025,7 @@ private data class Gen2ToGen5LegalisePlan(
             )
             requireNativeBankWithdrawalPostCleanup(
                 currentGen,destinationBinding.matches(verifyData,bound()),!bankRecoveryClean,recovery,
-                file,verifyData,backup,original,isBackupKept(backup),exactBankFile
+                file,verifyData,backup,original,retainedBinding.matches(original,isBackupKept(backup)),exactBankFile
             )
             val box=target/30+1
             val slot=target%30+1
@@ -68056,7 +68059,8 @@ private data class Gen2ToGen5LegalisePlan(
                 require(destinationBinding.matches(original,bound())&&restored.contentEquals(original)&&nativeValid(restored)){"The exact Generation $currentGen destination could not be restored or verified."}
                 true
             }.getOrDefault(false)
-            val bankRecoveryClean=if(bankRestored&&destinationRestored){
+            val bankRecoveryClean=if(bankRestored&&destinationRestored&&
+                safetyBackup?.let{backupBinding?.matches(original,isBackupKept(it))==true}==true){
                 bankRecovery?.let{
                     bankRecoveryBinding?.matches(raw,true)==true&&cleanupExactBankRecoverySnapshots(listOf(it),listOf(raw))
                 }?:false
