@@ -2846,6 +2846,30 @@ internal fun requireNativeBankWithdrawalPostCleanup(
     backup: File,
     expectedBackup: ByteArray,
     kept: Boolean,
+    source: File
+) = requireNativeBankWithdrawalPostCleanup(
+    generation=generation,
+    destinationBound=destinationBound,
+    retainedRecovery=retainedRecovery,
+    recoveryFile=recoveryFile,
+    destination=destination,
+    expectedDestination=expectedDestination,
+    backup=backup,
+    expectedBackup=expectedBackup,
+    kept=kept,
+    sourceAbsent=!source.exists()
+)
+
+internal fun requireNativeBankWithdrawalPostCleanup(
+    generation: Int,
+    destinationBound: Boolean,
+    retainedRecovery: Boolean,
+    recoveryFile: File,
+    destination: File,
+    expectedDestination: ByteArray,
+    backup: File,
+    expectedBackup: ByteArray,
+    kept: Boolean,
     sourceAbsent: Boolean
 ) {
     require(destinationBound &&
