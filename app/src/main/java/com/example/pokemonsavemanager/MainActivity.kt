@@ -68038,15 +68038,16 @@ private data class Gen2ToGen5LegalisePlan(
             val bankRestored=runCatching{
                 val recovery=bankRecovery
                 val sourceRecreated=sourceBinding.absent(true)
-                if(sourceRecreated){
+                val binding=if(sourceRecreated){
                     require(cleanupAttempted){"The Bank record disappeared before PSE attempted cleanup; its path was not overwritten."}
                     require(recovery!=null&&bankRecoveryBinding?.matches(raw,true)==true){"The exact PK$bankGen Bank recovery snapshot is unavailable."}
                     require(exactBankFile.createNewFile()){"The Bank recovery path could not be reserved."}
-                    exactBankFile.writeBytes(raw)
-                }
+                    PseBankSourceBinding.capture(exactBankFile)?:error("The exact PK$bankGen Bank record could not be restored or verified.")
+                }else sourceBinding
+                if(sourceRecreated)exactBankFile.writeBytes(raw)
                 val restored=exactBankFile.readBytes()
                 val parsed=if(restored.size==PK6_STORED_SIZE)parsePk6(restored,0,PK6_STORED_SIZE,false,sourceMaxSpecies)else null
-                require((sourceRecreated||sourceBinding.matches(raw,true))&&restored.contentEquals(raw)&&parsed!=null&&parsed.checksumValid&&parsed.pid==bankPokemon.pid&&parsed.species==bankPokemon.species&&parsed.tid==bankPokemon.tid&&parsed.sid==bankPokemon.sid){
+                require(binding.matches(raw,true)&&restored.contentEquals(raw)&&parsed!=null&&parsed.checksumValid&&parsed.pid==bankPokemon.pid&&parsed.species==bankPokemon.species&&parsed.tid==bankPokemon.tid&&parsed.sid==bankPokemon.sid){
                     "The exact PK$bankGen Bank record could not be restored or verified."
                 }
                 true
