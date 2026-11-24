@@ -37607,6 +37607,7 @@ class MainActivity : Activity() {
         if(destinationBinding==null||!destinationBinding.matches(p.destination,bound()))return showDialog("Gen 5 → Gen 3","The destination identity changed after review. Reopen PSE Bank. Nothing was changed.")
         val fresh=runCatching{file.readBytes()}.getOrNull()?:return
         var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
+        var bankRecoveryBinding:PseBankSourceBinding?=null
         var stagedDestination:ByteArray?=null
         var retainedRecovery=false
         try{
@@ -37643,9 +37644,13 @@ class MainActivity : Activity() {
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen5ToGen3_",".backup",backupsDir());backup=recovery
             recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The recovery backup did not verify."}
             retainGen2ToGen3SafetyBackup(recovery,fresh)
-            val bankCopy=File.createTempFile("PSE_G5ToG3_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy
-            bankCopy.writeBytes(p.bankBytes);require(bankCopy.readBytes().contentEquals(p.bankBytes)){"The Bank recovery snapshot did not verify."}
-            require(isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(p.bankBytes)&&
+            val bankRoot=bankDir();require(bankRoot.absoluteFile==bankRoot.canonicalFile&&bankRoot.isDirectory){"The canonical PSE Bank recovery folder is unavailable."}
+            val bankCopy=File.createTempFile("PSE_G5ToG3_BankRecovery_",".tmp",bankRoot);bankRecovery=bankCopy
+            require(bankCopy.absoluteFile==bankCopy.canonicalFile&&bankCopy.parentFile==bankRoot){"The PK5 Bank recovery snapshot path could not be bound."}
+            val bankCopyBinding=PseBankSourceBinding.capture(bankCopy)?:error("The PK5 Bank recovery snapshot identity could not be captured.")
+            bankRecoveryBinding=bankCopyBinding
+            bankCopy.writeBytes(p.bankBytes);require(bankCopyBinding.matches(p.bankBytes,true)){"The Bank recovery snapshot did not verify."}
+            require(isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&bankCopyBinding.matches(p.bankBytes,true)&&
                 destinationBinding.matches(fresh,bound())&&p.sourceBinding.matches(p.bankBytes,true)){"The retained snapshots, destination identity or Bank record changed before writing."}
             stagedDestination=save.copyOf()
             writeStarted=true;file.writeBytes(save);val written=file.readBytes()
@@ -37654,18 +37659,19 @@ class MainActivity : Activity() {
             val vpc=gen3PcBuffer(written)?:error("Could not reopen Gen 3 PC storage.")
             val actual=vpc.copyOfRange(off,off+80);val reopened=parsePk3(actual,0,false)?:error("The persisted PK3 could not be parsed.")
             require(actual.contentEquals(pk3)&&sameGen4ToGen3Pk3(reopened,staged)){"The exact native PK3 did not persist."}
-            require(p.sourceBinding.matches(p.bankBytes,true)&&destinationBinding.matches(save,bound())){
-                "The source identity, PK5 Bank record or verified destination changed before cleanup."
+            require(p.sourceBinding.matches(p.bankBytes,true)&&destinationBinding.matches(save,bound())&&
+                isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&bankCopyBinding.matches(p.bankBytes,true)){
+                "The source identity, PK5 Bank record, verified destination or retained recovery snapshots changed before cleanup."
             }
             deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The PK5 Bank record could not be removed after destination verification."}
             require(!p.bankFile.exists()&&destinationBinding.matches(save,bound())&&
                 recovery.readBytes().contentEquals(fresh)&&isBackupKept(recovery)&&
-                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                bankCopyBinding.matches(p.bankBytes,true)){
                 "The verified Gen 3 destination identity, removed Gen 5 Bank path or retained recovery snapshots changed after Bank cleanup."
             }
-            retainedRecovery=!cleanupExactBankRecoverySnapshots(
+            retainedRecovery=!(bankCopyBinding.matches(p.bankBytes,true)&&cleanupExactBankRecoverySnapshots(
                 listOf(bankCopy),listOf(p.bankBytes)
-            )
+            ))
             requireNativeBankWithdrawalPostCleanup(
                 generation=3,
                 destinationBound=destinationBinding.matches(save,bound()),
@@ -37696,7 +37702,7 @@ class MainActivity : Activity() {
             }.getOrDefault(false)
             val bankRecoveryClean=if(bankRestored&&saveRestored){
                 bankRecovery?.let{
-                    cleanupExactBankRecoverySnapshots(listOf(it),listOf(p.bankBytes))
+                    bankRecoveryBinding?.matches(p.bankBytes,true)==true&&cleanupExactBankRecoverySnapshots(listOf(it),listOf(p.bankBytes))
                 }?:true
             }else false
             val recovery=when{
