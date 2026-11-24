@@ -12772,14 +12772,16 @@ class MainActivity : Activity() {
                 "The destination trainer gender is ${trainer.gender}. PSE will not guess the native PK7 handling-trainer gender.\n\nThe Bank record and destination were left unchanged.")
         val root=runCatching{bankDir().canonicalFile}.getOrNull()
             ?:return showDialog("Gen 5 → Gen 7","The PSE Bank path could not be verified.")
-        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+        val selected=runCatching{require(bankFile.absoluteFile==bankFile.canonicalFile);bankFile.canonicalFile}.getOrNull()
             ?:return showDialog("Gen 5 → Gen 7","The selected Bank path could not be verified.")
         if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk5",true))
             return showDialog("Gen 5 → Gen 7","The selected record is outside the Generation 5 PSE Bank.")
+        val sourceBinding=PseBankSourceBinding.capture(selected)
+            ?:return showDialog("Gen 5 → Gen 7","The selected Bank identity could not be captured.")
         val bank=runCatching{selected.readBytes()}.getOrNull()
             ?:return showDialog("Gen 5 → Gen 7","The selected Bank record could not be read.")
         val source=if(bank.size==136)parsePk5(bank,false)else null
-        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
+        if(!sourceBinding.matches(bank,true)||source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
             source.tid!=shown.tid||source.sid!=shown.sid)
             return showDialog("Gen 5 → Gen 7","The selected Bank record changed or failed its PK5 checksum.")
         gen5ToGen6PreflightRejection(source)?.let{
@@ -12791,7 +12793,7 @@ class MainActivity : Activity() {
         if(sourceUps.any{it !in 0..3}||(0..3).any{source.moves[it]==0&&sourceUps[it]!=0})
             return showDialog("Gen 5 → Gen 7 blocked","The PK5 contains PP-Up data that cannot be preserved exactly.\n\nNothing was changed.")
         fun snapshotsMatch()=bound()&&runCatching{
-            file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)
+            file.readBytes().contentEquals(destination)&&sourceBinding.matches(bank,true)
         }.getOrDefault(false)
         val pk6=try{buildGen5ToGen6Pk6(bank,source,destination,trainer,7)}catch(e:Exception){
             return showDialog("Gen 5 → Gen 7 blocked",(e.message?:"The PK6 conversion bridge could not be prepared.")+"\n\nNothing was changed.")
@@ -12810,7 +12812,7 @@ class MainActivity : Activity() {
         val prepared=Gen6Gen7Prepared(
             bankFile=selected,bankBytes=bank,source=source,destination=destination,pk7=pk7,converted=converted,
             destinationFile=file,sourceUri=openedUri,sourceLabel=openedLabel,markingNote=markingNote,
-            originGame=converted.originGame,sourceGeneration=5,trainer=trainer
+            originGame=converted.originGame,sourceGeneration=5,trainer=trainer,sourceBinding=sourceBinding
         )
         val oldPid="%08X".format(source.pid);val newPid="%08X".format(converted.pid)
         val pidNote=if(source.pid==converted.pid)"PID remains $oldPid." else
