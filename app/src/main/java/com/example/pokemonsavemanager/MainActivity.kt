@@ -10913,10 +10913,12 @@ class MainActivity : Activity() {
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val root=runCatching{bankDir().canonicalFile}.getOrNull()
             ?:return showDialog("Gen 4 → Gen 6","The PSE Bank path could not be verified.")
-        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+        val selected=runCatching{require(bankFile.absoluteFile==bankFile.canonicalFile);bankFile.canonicalFile}.getOrNull()
             ?:return showDialog("Gen 4 → Gen 6","The selected Bank path could not be verified.")
         if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk4",true))
             return showDialog("Gen 4 → Gen 6","The selected record is outside the Generation 4 PSE Bank.")
+        val sourceBinding=PseBankSourceBinding.capture(selected)
+            ?:return showDialog("Gen 4 → Gen 6","The selected Bank identity could not be captured.")
         val bank=runCatching{selected.readBytes()}.getOrNull()
             ?:return showDialog("Gen 4 → Gen 6","The selected Bank record could not be read.")
         val source=if(bank.size==136)parsePk4(bank,false)else null
@@ -10942,7 +10944,7 @@ class MainActivity : Activity() {
             return showDialog("Gen 4 → Gen 6 blocked",
                 "The destination trainer gender is ${trainer.gender}. PSE will not guess the native PK6 handling-trainer gender.\n\nThe Bank record and destination were left unchanged.")
         fun snapshotsMatch()=bound()&&runCatching{
-            file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)
+            file.readBytes().contentEquals(destination)&&sourceBinding.matches(bank,true)
         }.getOrDefault(false)
         val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 4 → Gen 6")
             .setMessage("Resolving the exact Generation 5 ability mapping and preparing a verified native PK6…")
@@ -10972,7 +10974,8 @@ class MainActivity : Activity() {
             val prepared=Gen5Gen6Prepared(
                 sourceGeneration=4,bankFile=selected,bankBytes=bank,source=source,
                 destination=destination,trainer=trainer,pk6=pk6,converted=converted,
-                destinationFile=file,sourceUri=openedUri,sourceLabel=openedLabel,gen4Meta=meta
+                destinationFile=file,sourceUri=openedUri,sourceLabel=openedLabel,gen4Meta=meta,
+                sourceBinding=sourceBinding
             )
             val oldPid="%08X".format(source.pid);val newPid="%08X".format(converted.pid)
             val pidNote=if(source.pid==converted.pid)"PID remains $oldPid." else
