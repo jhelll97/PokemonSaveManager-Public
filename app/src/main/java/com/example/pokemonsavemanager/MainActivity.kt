@@ -48090,26 +48090,6 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun gen3ToGen4PidLegaliseRejection(p:PokemonEntry):String?{
-        if(((p.pid.toInt() and 1)+1)==p.abilityNumber)return null
-        return when(p.species){
-            201->"PID Legalise is blocked for Unown because the current conversion cannot prove that a replacement PID preserves its form."
-            265->"PID Legalise is blocked for Wurmple because the current conversion cannot prove that a replacement PID preserves its evolution path."
-            327->"PID Legalise is blocked for Spinda because changing the PID changes its spot pattern."
-            else->null
-        }
-    }
-
-    private fun gen3CompatibleOriginTitle(id:Int):String?=when(id){
-        1->"Pokémon Sapphire"
-        2->"Pokémon Ruby"
-        3->"Pokémon Emerald"
-        4->"Pokémon FireRed"
-        5->"Pokémon LeafGreen"
-        15->"Pokémon Colosseum / XD"
-        else->null
-    }
-
     private fun gen3ToGen4PreflightRejection(p:PokemonEntry,allowPidLegalise:Boolean=false):String?=when{
         !p.checksumValid->"The source PK3 checksum is invalid."
         p.species !in 1..386->"Species #${p.species} is not a valid Generation 3 species."
@@ -48123,7 +48103,7 @@ class MainActivity : Activity() {
         p.ball !in 1..12->"Ball ID ${p.ball} is outside the verified Generation 3 range 1–12; the Bank record and destination were left unchanged."
         gen3CompatibleOriginTitle(p.originGame)==null->"Origin game ID ${p.originGame} is not a documented native Generation 3 title."
         p.abilityNumber !in 1..2->"The PK3 ability slot is invalid."
-        allowPidLegalise&&gen3ToGen4PidLegaliseRejection(p)!=null->gen3ToGen4PidLegaliseRejection(p)
+        allowPidLegalise&&gen3ToGen4PidLegaliseRejection(p.species,p.pid.toInt(),p.abilityNumber)!=null->gen3ToGen4PidLegaliseRejection(p.species,p.pid.toInt(),p.abilityNumber)
         !allowPidLegalise&&((p.pid.toInt() and 1)+1)!=p.abilityNumber->"The PK3 ability flag does not match its PID ability parity. Choose explicit PID Legalise to preserve the recorded ability slot."
         p.nickname.any{gen4EncodeChar(it)==null}->"The nickname contains a character that the native Gen 4 writer cannot represent."
         p.otName.any{gen4EncodeChar(it)==null}->"The Original Trainer name contains a character that the native Gen 4 writer cannot represent."
@@ -48278,7 +48258,7 @@ class MainActivity : Activity() {
         }
         val conversionSource=if(legaliseBall)source.copy(ball=4) else source
         val needsPidLegalise=((conversionSource.pid.toInt() and 1)+1)!=conversionSource.abilityNumber
-        if(needsPidLegalise)gen3ToGen4PidLegaliseRejection(conversionSource)?.let{
+        if(needsPidLegalise)gen3ToGen4PidLegaliseRejection(conversionSource.species,conversionSource.pid.toInt(),conversionSource.abilityNumber)?.let{
             return showDialog("Gen 3 → Gen 4 blocked","$it\n\nThe Bank record and destination were left unchanged.")
         }
         if(needsPidLegalise&&!legalisePid){
