@@ -13004,10 +13004,11 @@ class MainActivity : Activity() {
             currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel
         if(!gen5ToGen6StillBound(p))return showDialog(title,"The destination or Bank record changed. Reopen PSE Bank.")
         val file=p.destinationFile
-        val destinationBinding=if(p.sourceGeneration==3)PseBankDestinationBinding.capture(file)else null
-        if(p.sourceGeneration==3&&(destinationBinding==null||!destinationBinding.matches(p.destination,bound())))
+        val bindDestination=p.sourceGeneration in 3..4
+        val destinationBinding=if(bindDestination)PseBankDestinationBinding.capture(file)else null
+        if(bindDestination&&(destinationBinding==null||!destinationBinding.matches(p.destination,bound())))
             return showDialog(title,"The destination identity changed after review. Reopen PSE Bank. Nothing was changed.")
-        fun destinationMatches(expected:ByteArray)=if(p.sourceGeneration==3){
+        fun destinationMatches(expected:ByteArray)=if(bindDestination){
             destinationBinding?.matches(expected,bound())==true
         }else bound()&&runCatching{file.readBytes().contentEquals(expected)}.getOrDefault(false)
         val original=runCatching{file.readBytes()}.getOrNull()?:return showDialog(title,"The destination save could not be read.")
