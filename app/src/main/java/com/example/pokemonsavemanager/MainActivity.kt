@@ -35333,7 +35333,7 @@ class MainActivity : Activity() {
             .setNeutralButton("Delete"){_,_->AlertDialog.Builder(this).setTitle("Delete Bank entry?").setMessage("This permanently removes the preserved Gen 7 PK7 copy.").setNegativeButton("Cancel",null).setPositiveButton("Delete"){_,_->if(bankFile.delete()){Toast.makeText(this,"Bank entry deleted",Toast.LENGTH_SHORT).show();showBank()}else showDialog("PSE Bank","The Bank entry could not be deleted.")}.show()}
         if(currentGen==1)b.setPositiveButton("PSE Convert to Gen 1"){_,_->prepareGen7ToGen1Transfer(bankFile,p,null,null,null,null)}
         if(currentGen==2)b.setPositiveButton("PSE Convert to Gen 2"){_,_->prepareGen7ToGen2Transfer(bankFile,p,null,null,null,null)}
-        if(currentGen==3)b.setPositiveButton("PSE Convert to Gen 3"){_,_->prepareGen7ToGen3Transfer(bankFile,p,null,null,null)}
+        if(currentGen==3)b.setPositiveButton("PSE Convert to Gen 3"){_,_->prepareGen7ToGen3Transfer(bankFile,p,null,null)}
         if(currentGen==4)b.setPositiveButton("PSE Convert to Gen 4"){_,_->prepareGen7ToGen4Transfer(bankFile,p,null)}
         if(currentGen==5)b.setPositiveButton("PSE Convert to Gen 5"){_,_->prepareGen7ToGen5Transfer(bankFile,p,null)}
         if(currentGen==6)b.setPositiveButton("PSE Convert to Gen 6"){_,_->prepareGen7ToGen6Transfer(bankFile,p,null,null)}
@@ -35624,7 +35624,6 @@ class MainActivity : Activity() {
 
     private data class Gen7Gen3Prepared(
         val bankFile:File,val bankBytes:ByteArray,val sourceBinding:PseBankSourceBinding,val source:PokemonEntry,val destination:ByteArray,
-        val destinationBinding:PseBankDestinationBinding,
         val pk6:ByteArray,val converted6:PokemonEntry,
         val plan5:Gen6Gen5Plan,val pk5:ByteArray,val converted5:PokemonEntry,
         val meta4:Gen3ToGen4Meta,val meta3:Gen3ToGen4Meta,val originGame:Int,val originLegalised:Boolean,
@@ -35633,13 +35632,12 @@ class MainActivity : Activity() {
     )
 
     private fun gen7ToGen3StillBound(p:Gen7Gen3Prepared):Boolean=runCatching{
-        p.destinationBinding.matches(p.destination,importedFile?.absolutePath==p.destinationFile.absolutePath&&
-            currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel)&&p.sourceBinding.matches(p.bankBytes,true)
+        importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
+            p.destinationFile.readBytes().contentEquals(p.destination)&&p.sourceBinding.matches(p.bankBytes,true)
     }.getOrDefault(false)
 
     private fun prepareGen7ToGen3Transfer(
-        bankFile:File,shown:PokemonEntry,requestedOriginGame:Int?,retainedSourceBinding:PseBankSourceBinding?,
-        retainedDestinationBinding:PseBankDestinationBinding?
+        bankFile:File,shown:PokemonEntry,requestedOriginGame:Int?,retainedSourceBinding:PseBankSourceBinding?
     ){
         val file=importedFile?:return showDialog("Gen 7 → Gen 3","Load a valid Generation 3 destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
@@ -35648,10 +35646,6 @@ class MainActivity : Activity() {
             ?:return showDialog("Gen 7 → Gen 3","The destination save could not be read.")
         if(!bound()||generationForSize(destination.size)!=3||!gen3SaveValid(destination))
             return showDialog("Gen 7 → Gen 3","The loaded destination is not a valid bound Generation 3 save.")
-        val destinationBinding=retainedDestinationBinding?:PseBankDestinationBinding.capture(file)
-            ?:return showDialog("Gen 7 → Gen 3","The destination identity could not be captured. Reopen the save.")
-        if(!destinationBinding.matches(destination,bound()))
-            return showDialog("Gen 7 → Gen 3","The destination identity changed during preparation. Nothing was changed.")
         val root=runCatching{bankDir().canonicalFile}.getOrNull()
             ?:return showDialog("Gen 7 → Gen 3","The PSE Bank folder could not be verified.")
         val selected=runCatching{require(bankFile.absoluteFile==bankFile.canonicalFile);bankFile.canonicalFile}.getOrNull()
@@ -35674,7 +35668,7 @@ class MainActivity : Activity() {
             AlertDialog.Builder(this).setTitle("Choose Gen 3 origin")
                 .setMessage("This PK7 origin cannot be written directly to native PK3. Choose the exact destination-valid title and ID to write. This explicit PSE Legalise change does not verify history. Cancel leaves both files unchanged.")
                 .setItems(games.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
-                    prepareGen7ToGen3Transfer(selected,source,games[which].first,sourceBinding,destinationBinding)
+                    prepareGen7ToGen3Transfer(selected,source,games[which].first,sourceBinding)
                 }
                 .setNegativeButton("Cancel",null).show()
             return
@@ -35705,7 +35699,7 @@ class MainActivity : Activity() {
             return showDialog("Gen 7 → Gen 3 blocked","$it\n\nNothing was changed.")
         }
         fun snapshotsMatch()=bound()&&runCatching{
-            destinationBinding.matches(destination,true)&&sourceBinding.matches(bank,true)
+            file.readBytes().contentEquals(destination)&&sourceBinding.matches(bank,true)
         }.getOrDefault(false)
         val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 7 → Gen 3")
             .setMessage("Verifying the Generation 4 bridge, historical ability slot and native PK3 mapping…")
@@ -35731,7 +35725,7 @@ class MainActivity : Activity() {
                 val converted3=parsePk3(pk3,0,false)
                     ?:return@inner showDialog("Gen 7 → Gen 3","The prepared PK3 could not be reopened.")
                 val omitted=gen6ToGen5OmittedMetadata(pk6,converted6)
-                val prepared=Gen7Gen3Prepared(selected,bank,sourceBinding,source,destination,destinationBinding,pk6,converted6,plan5,pk5,converted5,meta4,meta3,originGame,originLegalised,pk4,converted4,plan3,pk3,converted3,file,openedUri,openedLabel,omitted)
+                val prepared=Gen7Gen3Prepared(selected,bank,sourceBinding,source,destination,pk6,converted6,plan5,pk5,converted5,meta4,meta3,originGame,originLegalised,pk4,converted4,plan3,pk3,converted3,file,openedUri,openedLabel,omitted)
                 val originNotice=if(originLegalised)"Origin Legalise: ${originGameName(source.originGame)} (ID ${source.originGame}) → $originTitle (ID $originGame). This is a user-selected provenance edit and does not verify history." else "Origin preserved: $originTitle (ID $originGame)."
                 val pidNotice=if(converted3.pid==source.pid)"PID remains ${"%08X".format(source.pid)}." else
                     "PID changes ${"%08X".format(source.pid)} → ${"%08X".format(converted3.pid)} only to satisfy Generation 4/3 PID-derived nature, ability slot, gender and shiny constraints."
@@ -35780,8 +35774,8 @@ class MainActivity : Activity() {
     private fun transferGen7BankToGen3(p:Gen7Gen3Prepared,target:Int){
         fun bound()=importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel
         if(!gen7ToGen3StillBound(p))return showDialog("Gen 7 → Gen 3","The prepared snapshots changed. Reopen PSE Bank.")
-        val file=p.destinationFile;val destinationBinding=p.destinationBinding
-        if(!destinationBinding.matches(p.destination,bound()))return showDialog("Gen 7 → Gen 3","The destination identity changed after review. Reopen PSE Bank. Nothing was changed.")
+        val file=p.destinationFile;val destinationBinding=PseBankDestinationBinding.capture(file)
+        if(destinationBinding==null||!destinationBinding.matches(p.destination,bound()))return showDialog("Gen 7 → Gen 3","The destination identity changed after review. Reopen PSE Bank. Nothing was changed.")
         fun destinationMatches(expected:ByteArray)=destinationBinding.matches(expected,bound())
         val fresh=runCatching{file.readBytes()}.getOrNull()?:return
         var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
