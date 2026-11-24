@@ -35333,7 +35333,7 @@ class MainActivity : Activity() {
             .setNeutralButton("Delete"){_,_->AlertDialog.Builder(this).setTitle("Delete Bank entry?").setMessage("This permanently removes the preserved Gen 7 PK7 copy.").setNegativeButton("Cancel",null).setPositiveButton("Delete"){_,_->if(bankFile.delete()){Toast.makeText(this,"Bank entry deleted",Toast.LENGTH_SHORT).show();showBank()}else showDialog("PSE Bank","The Bank entry could not be deleted.")}.show()}
         if(currentGen==1)b.setPositiveButton("PSE Convert to Gen 1"){_,_->prepareGen7ToGen1Transfer(bankFile,p,null,null,null,null)}
         if(currentGen==2)b.setPositiveButton("PSE Convert to Gen 2"){_,_->prepareGen7ToGen2Transfer(bankFile,p,null,null,null,null)}
-        if(currentGen==3)b.setPositiveButton("PSE Convert to Gen 3"){_,_->prepareGen7ToGen3Transfer(bankFile,p,null)}
+        if(currentGen==3)b.setPositiveButton("PSE Convert to Gen 3"){_,_->prepareGen7ToGen3Transfer(bankFile,p,null,null)}
         if(currentGen==4)b.setPositiveButton("PSE Convert to Gen 4"){_,_->prepareGen7ToGen4Transfer(bankFile,p,null)}
         if(currentGen==5)b.setPositiveButton("PSE Convert to Gen 5"){_,_->prepareGen7ToGen5Transfer(bankFile,p,null)}
         if(currentGen==6)b.setPositiveButton("PSE Convert to Gen 6"){_,_->prepareGen7ToGen6Transfer(bankFile,p,null,null)}
@@ -35623,7 +35623,7 @@ class MainActivity : Activity() {
 
 
     private data class Gen7Gen3Prepared(
-        val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry,val destination:ByteArray,
+        val bankFile:File,val bankBytes:ByteArray,val sourceBinding:PseBankSourceBinding,val source:PokemonEntry,val destination:ByteArray,
         val pk6:ByteArray,val converted6:PokemonEntry,
         val plan5:Gen6Gen5Plan,val pk5:ByteArray,val converted5:PokemonEntry,
         val meta4:Gen3ToGen4Meta,val meta3:Gen3ToGen4Meta,val originGame:Int,val originLegalised:Boolean,
@@ -35633,10 +35633,12 @@ class MainActivity : Activity() {
 
     private fun gen7ToGen3StillBound(p:Gen7Gen3Prepared):Boolean=runCatching{
         importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
-            p.destinationFile.readBytes().contentEquals(p.destination)&&p.bankFile.readBytes().contentEquals(p.bankBytes)
+            p.destinationFile.readBytes().contentEquals(p.destination)&&p.sourceBinding.matches(p.bankBytes,true)
     }.getOrDefault(false)
 
-    private fun prepareGen7ToGen3Transfer(bankFile:File,shown:PokemonEntry,requestedOriginGame:Int?=null){
+    private fun prepareGen7ToGen3Transfer(
+        bankFile:File,shown:PokemonEntry,requestedOriginGame:Int?,retainedSourceBinding:PseBankSourceBinding?
+    ){
         val file=importedFile?:return showDialog("Gen 7 → Gen 3","Load a valid Generation 3 destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
@@ -35646,14 +35648,16 @@ class MainActivity : Activity() {
             return showDialog("Gen 7 → Gen 3","The loaded destination is not a valid bound Generation 3 save.")
         val root=runCatching{bankDir().canonicalFile}.getOrNull()
             ?:return showDialog("Gen 7 → Gen 3","The PSE Bank folder could not be verified.")
-        val selected=runCatching{bankFile.canonicalFile}.getOrNull()
+        val selected=runCatching{require(bankFile.absoluteFile==bankFile.canonicalFile);bankFile.canonicalFile}.getOrNull()
             ?:return showDialog("Gen 7 → Gen 3","The selected Bank path could not be verified.")
         if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk7",true))
             return showDialog("Gen 7 → Gen 3","The selected record is outside the Generation 7 PSE Bank.")
+        val sourceBinding=retainedSourceBinding?:PseBankSourceBinding.capture(selected)
+            ?:return showDialog("Gen 7 → Gen 3","The selected Bank identity could not be captured.")
         val bank=runCatching{selected.readBytes()}.getOrNull()
             ?:return showDialog("Gen 7 → Gen 3","The selected Bank record could not be read.")
         val source=if(bank.size==PK6_STORED_SIZE)parsePk6(bank,0,PK6_STORED_SIZE,false,807)else null
-        if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
+        if(!sourceBinding.matches(bank,true)||source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
             source.tid!=shown.tid||source.sid!=shown.sid)
             return showDialog("Gen 7 → Gen 3","The selected Bank record changed or failed its PK7 checksum.")
         val originLegalised=gen3CompatibleOriginTitle(source.originGame)==null
@@ -35664,7 +35668,7 @@ class MainActivity : Activity() {
             AlertDialog.Builder(this).setTitle("Choose Gen 3 origin")
                 .setMessage("This PK7 origin cannot be written directly to native PK3. Choose the exact destination-valid title and ID to write. This explicit PSE Legalise change does not verify history. Cancel leaves both files unchanged.")
                 .setItems(games.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
-                    prepareGen7ToGen3Transfer(bankFile,shown,games[which].first)
+                    prepareGen7ToGen3Transfer(selected,source,games[which].first,sourceBinding)
                 }
                 .setNegativeButton("Cancel",null).show()
             return
@@ -35695,7 +35699,7 @@ class MainActivity : Activity() {
             return showDialog("Gen 7 → Gen 3 blocked","$it\n\nNothing was changed.")
         }
         fun snapshotsMatch()=bound()&&runCatching{
-            file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)
+            file.readBytes().contentEquals(destination)&&sourceBinding.matches(bank,true)
         }.getOrDefault(false)
         val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 7 → Gen 3")
             .setMessage("Verifying the Generation 4 bridge, historical ability slot and native PK3 mapping…")
@@ -35721,7 +35725,7 @@ class MainActivity : Activity() {
                 val converted3=parsePk3(pk3,0,false)
                     ?:return@inner showDialog("Gen 7 → Gen 3","The prepared PK3 could not be reopened.")
                 val omitted=gen6ToGen5OmittedMetadata(pk6,converted6)
-                val prepared=Gen7Gen3Prepared(selected,bank,source,destination,pk6,converted6,plan5,pk5,converted5,meta4,meta3,originGame,originLegalised,pk4,converted4,plan3,pk3,converted3,file,openedUri,openedLabel,omitted)
+                val prepared=Gen7Gen3Prepared(selected,bank,sourceBinding,source,destination,pk6,converted6,plan5,pk5,converted5,meta4,meta3,originGame,originLegalised,pk4,converted4,plan3,pk3,converted3,file,openedUri,openedLabel,omitted)
                 val originNotice=if(originLegalised)"Origin Legalise: ${originGameName(source.originGame)} (ID ${source.originGame}) → $originTitle (ID $originGame). This is a user-selected provenance edit and does not verify history." else "Origin preserved: $originTitle (ID $originGame)."
                 val pidNotice=if(converted3.pid==source.pid)"PID remains ${"%08X".format(source.pid)}." else
                     "PID changes ${"%08X".format(source.pid)} → ${"%08X".format(converted3.pid)} only to satisfy Generation 4/3 PID-derived nature, ability slot, gender and shiny constraints."
@@ -35776,7 +35780,7 @@ class MainActivity : Activity() {
         try{
             require(fresh.contentEquals(p.destination)&&generationForSize(fresh.size)==3&&gen3SaveValid(fresh)){"The Gen 3 destination changed or failed validation."}
             require(target in 0 until 420){"The destination slot is invalid."}
-            val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The PK7 Bank record changed."}
+            val bank=p.bankFile.readBytes();require(p.sourceBinding.matches(p.bankBytes,true)&&bank.contentEquals(p.bankBytes)){"The PK7 Bank identity or record changed."}
             val source=parsePk6(bank,0,PK6_STORED_SIZE,false,807)?:error("The PK7 Bank record is invalid.")
             require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&source.tid==p.source.tid&&source.sid==p.source.sid){"The selected Pokémon changed."}
             val pk6=buildGen7ToGen6Pk6(bank,source,p.originGame)
@@ -35826,7 +35830,7 @@ class MainActivity : Activity() {
             val vpc=gen3PcBuffer(written)?:error("Could not reopen Gen 3 PC storage.")
             val actual=vpc.copyOfRange(off,off+80);val reopened=parsePk3(actual,0,false)?:error("The persisted PK3 could not be parsed.")
             require(actual.contentEquals(pk3)&&sameGen4ToGen3Pk3(reopened,staged)){"The exact native PK3 did not persist."}
-            require(p.bankFile.readBytes().contentEquals(p.bankBytes)&&importedFile?.absolutePath==file.absolutePath&&
+            require(p.sourceBinding.matches(p.bankBytes,true)&&importedFile?.absolutePath==file.absolutePath&&
                 currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&file.readBytes().contentEquals(save)&&
                 isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&
                 bankCopy.readBytes().contentEquals(p.bankBytes)){
@@ -35861,7 +35865,7 @@ class MainActivity : Activity() {
                     p.bankFile.writeBytes(p.bankBytes)
                 }
                 val restored=p.bankFile.readBytes()
-                restored.contentEquals(p.bankBytes)&&parsePk6(restored,0,PK6_STORED_SIZE,false,807)?.let{
+                p.sourceBinding.matches(p.bankBytes,true)&&restored.contentEquals(p.bankBytes)&&parsePk6(restored,0,PK6_STORED_SIZE,false,807)?.let{
                     it.checksumValid&&it.pid==p.source.pid&&it.species==p.source.species&&
                         it.tid==p.source.tid&&it.sid==p.source.sid
                 }==true
