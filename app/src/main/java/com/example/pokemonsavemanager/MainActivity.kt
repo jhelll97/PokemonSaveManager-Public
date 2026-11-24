@@ -67925,6 +67925,9 @@ private data class Gen2ToGen5LegalisePlan(
             showDialog("Withdraw","The selected record is outside the supported Generation 6 or Generation 7 PSE Bank. Nothing was changed.")
             return
         }
+        val sourceBinding=PseBankSourceBinding.capture(exactBankFile)?:run{
+            showDialog("Withdraw","The selected Bank identity could not be captured. Reopen PSE Bank. Nothing was changed.");return
+        }
         if(!canBankTransfer(bankGen,currentGen,p.species)){
             showDialog("Withdraw blocked",bankTransferBlockReason(bankGen,currentGen,p.species))
             return
@@ -67942,7 +67945,7 @@ private data class Gen2ToGen5LegalisePlan(
             return
         }
         val raw=try{exactBankFile.readBytes()}catch(e:Exception){showDialog("Withdraw","The exact Bank record could not be read. Nothing was changed.");return}
-        if(!raw.contentEquals(openedBank)){
+        if(!sourceBinding.matches(raw,true)||!raw.contentEquals(openedBank)){
             showDialog("Withdraw","The selected Bank record changed after destination selection. Reopen PSE Bank. Nothing was changed.")
             return
         }
@@ -67969,7 +67972,7 @@ private data class Gen2ToGen5LegalisePlan(
         var stagedDestination:ByteArray?=null
         try{
             require(bound()&&nativeValid(original)&&file.readBytes().contentEquals(original)){"The destination identity, bytes or native checksums changed before withdrawal."}
-            require(exactBankFile.readBytes().contentEquals(raw)){"The selected PK$bankGen Bank record changed before recovery staging."}
+            require(sourceBinding.matches(raw,true)){"The selected PK$bankGen Bank record changed before recovery staging."}
             val backup=File.createTempFile(backupGameName(file)+"_PreDirectBankWithdrawal_",".backup",backupsDir());safetyBackup=backup
             backup.writeBytes(original)
             if(currentGen==6)retainGenToGen6SafetyBackup(backup,original)else retainGen1ToGen7SafetyBackup(backup,original)
@@ -67990,7 +67993,7 @@ private data class Gen2ToGen5LegalisePlan(
             require(staged.contentEquals(targetRaw)&&stagedPokemon!=null&&stagedPokemon.checksumValid&&nativeValid(work)){
                 "The reviewed PK$currentGen destination record or native checksums did not stage exactly."
             }
-            require(bound()&&file.readBytes().contentEquals(original)&&exactBankFile.readBytes().contentEquals(raw)&&recoveryValid()){
+            require(bound()&&file.readBytes().contentEquals(original)&&sourceBinding.matches(raw,true)&&recoveryValid()){
                 "The destination, Bank record or retained recovery data changed before writing."
             }
             stagedDestination=work.copyOf()
@@ -68002,7 +68005,7 @@ private data class Gen2ToGen5LegalisePlan(
             require(bound()&&verifyData.contentEquals(work)&&actual.contentEquals(targetRaw)&&verifyPokemon!=null&&verifyPokemon.checksumValid&&nativeValid(verifyData)){
                 "The persisted PK$currentGen destination record or native checksums did not verify."
             }
-            require(exactBankFile.readBytes().contentEquals(raw)&&recoveryValid()){
+            require(sourceBinding.matches(raw,true)&&recoveryValid()){
                 "The verified destination, Bank record or retained recovery data changed before Bank cleanup."
             }
             cleanupAttempted=true
@@ -68027,7 +68030,8 @@ private data class Gen2ToGen5LegalisePlan(
         }catch(e:Exception){
             val bankRestored=runCatching{
                 val recovery=bankRecovery
-                if(!exactBankFile.exists()){
+                val sourceRecreated=!exactBankFile.exists()
+                if(sourceRecreated){
                     require(cleanupAttempted){"The Bank record disappeared before PSE attempted cleanup; its path was not overwritten."}
                     require(recovery!=null&&bankRecoveryBinding?.matches(raw,true)==true){"The exact PK$bankGen Bank recovery snapshot is unavailable."}
                     require(exactBankFile.createNewFile()){"The Bank recovery path could not be reserved."}
@@ -68035,7 +68039,7 @@ private data class Gen2ToGen5LegalisePlan(
                 }
                 val restored=exactBankFile.readBytes()
                 val parsed=if(restored.size==PK6_STORED_SIZE)parsePk6(restored,0,PK6_STORED_SIZE,false,sourceMaxSpecies)else null
-                require(restored.contentEquals(raw)&&parsed!=null&&parsed.checksumValid&&parsed.pid==bankPokemon.pid&&parsed.species==bankPokemon.species&&parsed.tid==bankPokemon.tid&&parsed.sid==bankPokemon.sid){
+                require((sourceRecreated||sourceBinding.matches(raw,true))&&restored.contentEquals(raw)&&parsed!=null&&parsed.checksumValid&&parsed.pid==bankPokemon.pid&&parsed.species==bankPokemon.species&&parsed.tid==bankPokemon.tid&&parsed.sid==bankPokemon.sid){
                     "The exact PK$bankGen Bank record could not be restored or verified."
                 }
                 true
