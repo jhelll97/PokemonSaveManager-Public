@@ -13417,7 +13417,7 @@ class MainActivity : Activity() {
         if(currentGen==2)b.setPositiveButton("PSE Convert to Gen 2"){_,_->prepareGen6ToGen2Transfer(bankFile,p)}
         if(currentGen==3)b.setPositiveButton("PSE Convert to Gen 3"){_,_->prepareGen6ToGen3Transfer(bankFile,p,null)}
         if(currentGen==4)b.setPositiveButton("PSE Convert to Gen 4"){_,_->prepareGen6ToGen4Transfer(bankFile,p,null)}
-        if(currentGen==5)b.setPositiveButton("PSE Convert to Gen 5"){_,_->prepareGen6ToGen5Transfer(bankFile,p,null)}
+        if(currentGen==5)b.setPositiveButton("PSE Convert to Gen 5"){_,_->prepareGen6ToGen5Transfer(bankFile,p,null,null)}
         if(currentGen==6)b.setPositiveButton("Withdraw to Gen 6"){_,_->prepareGen6BankWithdrawal(bankFile,p)}
         if(currentGen==7)b.setPositiveButton("PSE Convert to Gen 7"){_,_->prepareGen6ToGen7Transfer(bankFile,p)}
         b.show()
@@ -36513,7 +36513,7 @@ class MainActivity : Activity() {
 
     private fun prepareGen6ToGen5Transfer(
         bankFile:File,shown:PokemonEntry,requestedPlan:Gen6Gen5Plan?,
-        retainedSourceBinding:PseBankSourceBinding?=null
+        retainedSourceBinding:PseBankSourceBinding?
     ){
         val file=importedFile?:return showDialog("Gen 6 → Gen 5","Load a valid Generation 5 destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
@@ -36527,7 +36527,7 @@ class MainActivity : Activity() {
         if(sourceBinding==null)return showDialog("Gen 6 → Gen 5","The selected Bank identity could not be captured.")
         val bank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Gen 6 → Gen 5","The Bank record could not be read.")
         val source=if(bank.size==PK6_STORED_SIZE)parsePk6(bank,0,PK6_STORED_SIZE,false,721)else null
-        if(!sourceBinding.matches(bank,true)||source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||source.tid!=shown.tid||source.sid!=shown.sid)return showDialog("Gen 6 → Gen 5","The selected Bank identity changed or failed its PK6 checksum.")
+        if(!sourceBinding.matches(bank,true)||source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||source.tid!=shown.tid||source.sid!=shown.sid)return showDialog("Gen 6 → Gen 5","The selected Bank record changed or failed its PK6 checksum.")
         val sourceIsGen6Title=source.originGame in 24..27
         gen6ToGen5PreflightRejection(source,sourceIsGen6Title)?.let{return showDialog("Gen 6 → Gen 5 blocked","$it\n\nThe Bank record and destination were left unchanged.")}
         val sourceOriginTitle=gen5CompatibleOriginTitle(source.originGame)
@@ -36547,7 +36547,7 @@ class MainActivity : Activity() {
         }
         if(plan.legalised&&source.originGame !in 24..27)return showDialog("Gen 6 → Gen 5 blocked","The requested origin conversion does not apply to this record.")
         val pk5=try{buildGen6ToGen5Pk5(bank,source,destination,plan)}catch(e:Exception){return showDialog("Gen 6 → Gen 5 blocked",(e.message?:"No safe native mapping is available.")+"\n\nNothing was changed.")}
-        if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&sourceBinding.matches(bank,true)}.getOrDefault(false))return showDialog("Gen 6 → Gen 5","The destination or Bank identity changed during preparation. Nothing was changed.")
+        if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&sourceBinding.matches(bank,true)}.getOrDefault(false))return showDialog("Gen 6 → Gen 5","The destination or Bank record changed during preparation. Nothing was changed.")
         val converted=parsePk5(pk5,false)?:return showDialog("Gen 6 → Gen 5","The prepared PK5 could not be re-read.")
         val omitted=gen6ToGen5OmittedMetadata(bank,source);val prepared=Gen6Gen5Prepared(selected,bank,sourceBinding,source,destination,plan,pk5,converted,file,openedUri,openedLabel,omitted)
         val pidNote=if(source.pid==converted.pid)"PID remains ${"%08X".format(source.pid)}." else "PID changes ${"%08X".format(source.pid)} → ${"%08X".format(converted.pid)} only to preserve ${if(source.shiny)"shiny" else "non-shiny"} state and the normal ability slot under Gen 5 PID rules."
@@ -36585,7 +36585,7 @@ class MainActivity : Activity() {
         var retainedRecovery=false
         try{
             require(original.contentEquals(p.destination)&&target in 0 until 720){"The prepared Generation 5 destination changed or the selected slot is invalid."};val profile=detectGen5Profile(original)?:error("The destination is no longer a valid Generation 5 save.");require(gen5ChecksumTableValid(original,profile)&&(0 until 24).all{gen5BoxChecksumValid(original,it,profile)}){"The destination box checksums or checksum table changed."}
-            val bank=p.bankFile.readBytes();require(p.sourceBinding.matches(p.bankBytes,true)&&bank.contentEquals(p.bankBytes)){"The Gen 6 Bank identity or record changed."};val source=parsePk6(bank,0,PK6_STORED_SIZE,false,721)?:error("The PK6 Bank record is invalid.");require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&source.tid==p.source.tid&&source.sid==p.source.sid){"The selected source no longer matches the reviewed Pokémon."}
+            val bank=p.bankFile.readBytes();require(p.sourceBinding.matches(p.bankBytes,true)&&bank.contentEquals(p.bankBytes)){"The Gen 6 Bank record changed."};val source=parsePk6(bank,0,PK6_STORED_SIZE,false,721)?:error("The PK6 Bank record is invalid.");require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&source.tid==p.source.tid&&source.sid==p.source.sid){"The selected source no longer matches the reviewed Pokémon."}
             val pk5=buildGen6ToGen5Pk5(bank,source,original,p.plan);require(pk5.contentEquals(p.pk5)){"The reviewed PK5 conversion changed before writing."};val box=target/30;val slot=target%30;val offset=0x00400+box*0x1000+slot*136;require(gen5DestinationSlotIsStructurallyEmpty(original,target)){"The selected Generation 5 slot is no longer structurally empty. Nonzero records were left unchanged."}
             val save=original.copyOf();pk5.copyInto(save,offset);val staged=parsePk5(save.copyOfRange(offset,offset+136),false)?:error("The staged PK5 could not be parsed.");require(sameGen6ToGen5Pk5(staged,p.converted)&&gen5Pk5PpUps(pk5).contentEquals(gen6Pk6PpUps(bank))){"The staged PK5 differs from the reviewed conversion."}
             val allowed=HashSet<Int>();for(i in offset until offset+136)allowed.add(i);val bit=staged.species-1;val maskByte=bit/8;val dex=profile.pokedexOffset;allowed.add(dex+0x08+maskByte);for(region in 0..3){allowed.add(dex+0x5C+region*0x54+maskByte);allowed.add(dex+0x1AC+region*0x54+maskByte)};if(staged.species<=493){val langBit=bit*7+1;allowed.add(dex+(if(profile.sequel)0x328 else 0x320)+langBit/8)};val (_,dexLocal,dexMirror)=gen5PokedexBlock(profile);for(i in 0..1){allowed.add(dexLocal+i);allowed.add(dexMirror+i);allowed.add(0x00400+box*0x1000+0x0FF2+i);allowed.add(profile.checksumTable+2+box*2+i);allowed.add(profile.checksumBlockChecksumOffset+i)}
