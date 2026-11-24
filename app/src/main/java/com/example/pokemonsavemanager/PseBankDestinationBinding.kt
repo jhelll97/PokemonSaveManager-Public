@@ -8,26 +8,44 @@ internal class PseBankDestinationBinding private constructor(
     private val file:File,
     private val identity:String,
     private val device:Long,
-    private val inode:Long
+    private val inode:Long,
+    private val parent:File,
+    private val parentIdentity:String,
+    private val parentDevice:Long,
+    private val parentInode:Long
 ) {
     companion object {
         fun capture(file:File):PseBankDestinationBinding?=runCatching {
             require(file.absoluteFile==file.canonicalFile&&file.isFile)
+            val parent=file.parentFile?:error("Missing parent")
+            require(parent.absoluteFile==parent.canonicalFile&&parent.isDirectory)
+            val parentStat=Os.stat(parent.path)
+            require(OsConstants.S_ISDIR(parentStat.st_mode))
             val stat=Os.stat(file.path)
             require(OsConstants.S_ISREG(stat.st_mode))
-            PseBankDestinationBinding(file,file.canonicalPath,stat.st_dev,stat.st_ino)
+            PseBankDestinationBinding(
+                file,file.canonicalPath,stat.st_dev,stat.st_ino,
+                parent,parent.canonicalPath,parentStat.st_dev,parentStat.st_ino
+            )
         }.getOrNull()
     }
 
+    private fun parentMatches():Boolean=runCatching {
+        val stat=Os.stat(parent.path)
+        parent.absoluteFile==parent.canonicalFile&&parent.canonicalPath==parentIdentity&&
+            parent.isDirectory&&OsConstants.S_ISDIR(stat.st_mode)&&
+            stat.st_dev==parentDevice&&stat.st_ino==parentInode
+    }.getOrDefault(false)
+
     fun matches(expected:ByteArray,bound:Boolean):Boolean=runCatching {
         val stat=Os.stat(file.path)
-        bound&&file.absoluteFile==file.canonicalFile&&file.canonicalPath==identity&&
+        bound&&parentMatches()&&file.absoluteFile==file.canonicalFile&&file.canonicalPath==identity&&
             OsConstants.S_ISREG(stat.st_mode)&&stat.st_dev==device&&stat.st_ino==inode&&
             file.isFile&&file.readBytes().contentEquals(expected)
     }.getOrDefault(false)
 
     fun absent(bound:Boolean):Boolean=runCatching {
-        bound&&file.absoluteFile==file.canonicalFile&&file.canonicalPath==identity&&!file.exists()
+        bound&&parentMatches()&&file.absoluteFile==file.canonicalFile&&file.canonicalPath==identity&&!file.exists()
     }.getOrDefault(false)
 }
 
