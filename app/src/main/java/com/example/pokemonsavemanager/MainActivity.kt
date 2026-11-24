@@ -11234,7 +11234,7 @@ class MainActivity : Activity() {
     }
 
     private data class Gen4Gen3Prepared(
-        val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry,val destination:ByteArray,
+        val bankFile:File,val bankBytes:ByteArray,val sourceBinding:PseBankSourceBinding,val source:PokemonEntry,val destination:ByteArray,
         val plan:Gen4ToGen3Plan,val pk3:ByteArray,val converted:PokemonEntry,val destinationFile:File,
         val sourceUri:Uri?,val sourceLabel:String?
     )
@@ -11297,14 +11297,22 @@ class MainActivity : Activity() {
         return out
     }
 
-    private fun prepareGen4ToGen3Transfer(bankFile:File,shown:PokemonEntry,legalisedOriginGame:Int?=null){
+    private fun prepareGen4ToGen3Transfer(
+        bankFile:File,shown:PokemonEntry,legalisedOriginGame:Int?=null,
+        retainedSourceBinding:PseBankSourceBinding?=null,retainedBank:ByteArray?=null
+    ){
         val file=importedFile?:return showDialog("Gen 4 → Gen 3","Load a valid Generation 3 destination save first.");val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val destination=runCatching{file.readBytes()}.getOrNull()?:return showDialog("Gen 4 → Gen 3","The destination save could not be read.")
         if(!bound()||generationForSize(destination.size)!=3||!gen3SaveValid(destination))return showDialog("Gen 4 → Gen 3","The loaded destination is not a valid bound Generation 3 save.")
-        val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return;val selected=runCatching{bankFile.canonicalFile}.getOrNull()?:return
-        if(selected.parentFile!=root||!selected.extension.equals("pk4",true))return showDialog("Gen 4 → Gen 3","The selected record is outside the Generation 4 PSE Bank.")
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return
+        val selected=runCatching{require(bankFile.absoluteFile==bankFile.canonicalFile);bankFile.canonicalFile}.getOrNull()?:return
+        if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk4",true))return showDialog("Gen 4 → Gen 3","The selected record is outside the Generation 4 PSE Bank.")
+        val sourceBinding=retainedSourceBinding?:PseBankSourceBinding.capture(selected)
+            ?:return showDialog("Gen 4 → Gen 3","The selected Bank identity could not be captured.")
         val bank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Gen 4 → Gen 3","The Bank record could not be read.")
+        if(!sourceBinding.matches(retainedBank?:bank,true)||(retainedBank!=null&&!bank.contentEquals(retainedBank)))
+            return showDialog("Gen 4 → Gen 3","The selected Bank identity changed during Legalise review. Nothing was changed.")
         val source=if(bank.size==136)parsePk4(bank,false)else null
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
             source.tid!=shown.tid||source.sid!=shown.sid)
@@ -11320,7 +11328,7 @@ class MainActivity : Activity() {
             AlertDialog.Builder(this).setTitle("Choose documented Gen 3 origin mapping")
                 .setMessage("$reason Choose the exact title and ID to write. This explicit PSE Legalise change does not verify history; PK3 met location becomes 0 (unspecified). Cancel leaves both files unchanged.")
                 .setItems(choices.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
-                    prepareGen4ToGen3Transfer(bankFile,shown,choices[which].first)
+                    prepareGen4ToGen3Transfer(selected,shown,choices[which].first,sourceBinding,bank)
                 }.setNegativeButton("Cancel",null).show()
             return
         }
@@ -11328,11 +11336,11 @@ class MainActivity : Activity() {
         val originTitle=gen3CompatibleOriginTitle(originGame)
             ?:return showDialog("Gen 4 → Gen 3 blocked","Choose a documented Generation 3 origin title and ID. Nothing was changed.")
         gen4ToGen3PreflightRejection(source,legalisedOriginGame!=null)?.let{return showDialog("Gen 4 → Gen 3 blocked","$it\n\nThe Bank record and destination were left unchanged.")}
-        fun snapshotsMatch()=bound()&&runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false)
+        fun snapshotsMatch()=bound()&&runCatching{file.readBytes().contentEquals(destination)&&sourceBinding.matches(bank,true)}.getOrDefault(false)
         val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 4 → Gen 3").setMessage("Verifying the historical ability slot and native PK3 mapping…").setCancelable(false).create();loading.show()
         loadGen3ToGen4MetaAsync(source,3,4){meta,reason->loading.dismiss();if(!snapshotsMatch())return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 3","The destination or Bank record changed during preparation.");if(meta==null)return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 3 blocked",(reason?:"Conversion metadata could not be verified.")+"\n\nNothing was changed.")
             val plan=Gen4ToGen3Plan(meta,originGame,legalisedOriginGame!=null);val pk3=try{buildGen4ToGen3Pk3(bank,source,destination,plan)}catch(e:Exception){return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 3 blocked",(e.message?:"No safe mapping is available.")+"\n\nNothing was changed.")};val converted=parsePk3(pk3,0,false)?:return@loadGen3ToGen4MetaAsync
-            val prepared=Gen4Gen3Prepared(selected,bank,source,destination,plan,pk3,converted,file,openedUri,openedLabel)
+            val prepared=Gen4Gen3Prepared(selected,bank,sourceBinding,source,destination,plan,pk3,converted,file,openedUri,openedLabel)
             val originDisclosure=if(plan.originLegalised)
                 "Origin Legalise: ${originGameName(source.originGame)} (ID ${source.originGame}) → $originTitle (ID ${plan.originGame}). This is a user-selected provenance edit and does not verify history."
             else "Origin preserved: $originTitle (ID ${plan.originGame})."
@@ -11352,7 +11360,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun gen4ToGen3StillBound(p:Gen4Gen3Prepared)=importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&runCatching{p.destinationFile.readBytes().contentEquals(p.destination)&&p.bankFile.readBytes().contentEquals(p.bankBytes)}.getOrDefault(false)
+    private fun gen4ToGen3StillBound(p:Gen4Gen3Prepared)=importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&runCatching{p.destinationFile.readBytes().contentEquals(p.destination)&&p.sourceBinding.matches(p.bankBytes,true)}.getOrDefault(false)
     private fun chooseGen4ToGen3Destination(p:Gen4Gen3Prepared){
         if(!gen4ToGen3StillBound(p))return showDialog("Gen 4 → Gen 3","The prepared snapshots changed. Reopen PSE Bank.");val pc=gen3PcBuffer(p.destination)?:return showDialog("Gen 4 → Gen 3","PSE could not reconstruct Gen 3 PC storage.");val empty=(0 until 420).filter{gen3DestinationSlotIsStructurallyEmpty(pc,it)};if(empty.isEmpty())return showDialog("Gen 4 → Gen 3","No structurally empty native Gen 3 PC slot is available. Existing or nonzero slot data was left unchanged.");val first=empty.first()
         AlertDialog.Builder(this).setTitle("Choose native Gen 3 destination").setMessage("The reviewed PSE conversion will be written to one structurally empty native PK3 slot. Every nonzero destination record remains unchanged; this does not claim official reverse migration or verified provenance.").setNegativeButton("Cancel",null).setPositiveButton("First structurally empty (Box ${first/30+1} / Slot ${first%30+1})"){_,_->transferGen4BankToGen3(p,first)}.setNeutralButton("Choose Box / Slot"){_,_->showGen4ToGen3BoxPicker(p,pc)}.show()
@@ -11366,11 +11374,12 @@ class MainActivity : Activity() {
         if(!gen4ToGen3StillBound(p))return showDialog("Gen 4 → Gen 3","The prepared snapshots changed. Reopen PSE Bank.");val file=p.destinationFile;val fresh=runCatching{file.readBytes()}.getOrNull()?:return;var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null;var stagedDestination:ByteArray?=null
         var retainedRecovery=false
         try{
-            require(fresh.contentEquals(p.destination)&&generationForSize(fresh.size)==3&&gen3SaveValid(fresh)){"The Gen 3 destination changed or failed validation."};require(target in 0 until 420){"The destination slot is invalid."};val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The PK4 Bank record changed."};val source=parsePk4(bank,false)?:error("The PK4 Bank record is invalid.");require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&source.tid==p.source.tid&&source.sid==p.source.sid){"The selected Pokémon changed."}
+            require(fresh.contentEquals(p.destination)&&generationForSize(fresh.size)==3&&gen3SaveValid(fresh)){"The Gen 3 destination changed or failed validation."};require(target in 0 until 420){"The destination slot is invalid."};require(p.sourceBinding.matches(p.bankBytes,true)){"The PK4 Bank identity changed."};val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The PK4 Bank record changed."};val source=parsePk4(bank,false)?:error("The PK4 Bank record is invalid.");require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&source.tid==p.source.tid&&source.sid==p.source.sid){"The selected Pokémon changed."}
             val pk3=buildGen4ToGen3Pk3(bank,source,fresh,p.plan);val converted=parsePk3(pk3,0,false)?:error("The refreshed PK3 could not be parsed.");require(pk3.contentEquals(p.pk3)&&sameGen4ToGen3Pk3(converted,p.converted)){"The prepared conversion changed before writing."}
             val save=fresh.copyOf();val pc=gen3PcBuffer(save)?:error("Could not reconstruct Gen 3 PC storage.");val beforePc=pc.copyOf();val off=4+target*80;require(gen3DestinationSlotIsStructurallyEmpty(pc,target)){"The destination slot is no longer structurally empty. Existing slot data was not overwritten."};pk3.copyInto(pc,off);val staged=parsePk3(pc,off,false)?:error("The staged PK3 could not be parsed.");require(sameGen4ToGen3Pk3(staged,converted)){"The staged PK3 changed."};require(pc.indices.all{it in off until off+80||pc[it]==beforePc[it]}){"Unrelated Gen 3 PC data changed."}
             writeGen1ToGen3PcAndDexFrozen(save,pc,converted.species);require(gen3SaveValid(save)&&gen2ToGen3DexRegistered(save,converted.species)){"The staged Gen 3 checksums or Pokédex mirrors failed verification."}
             val map=gen3ActiveSectionMap(fresh)?:error("Could not map the original Gen 3 sections.");val allowed=HashSet<Int>();var cursor=0;for(id in 5..13){val base=map[id];val len=gen3SectionLengths[id];val a=maxOf(off,cursor);val z=minOf(off+80,cursor+len);for(i in a until z)allowed.add(base+i-cursor);allowed.add(base+0xFF6);allowed.add(base+0xFF7);cursor+=len};val layout=gen3PokedexLayout(fresh)?:error("Could not map Gen 3 Pokédex mirrors.");val dexByte=(converted.species-1)/8;for(base in layout.mirrors)allowed.add(base+dexByte);for(base in intArrayOf(layout.section0,layout.section1,layout.seenSection)){allowed.add(base+0xFF6);allowed.add(base+0xFF7)};require(save.indices.all{it in allowed||save[it]==fresh[it]}){"The conversion changed data outside the selected PK3, Pokédex mirrors and required section checksums."}
+            require(p.sourceBinding.matches(p.bankBytes,true)){"The PK4 Bank identity changed before retained recovery."}
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen4ToGen3_",".backup",backupsDir());backup=recovery
             recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The recovery backup did not verify."}
             retainGen2ToGen3SafetyBackup(recovery,fresh)
@@ -11378,7 +11387,7 @@ class MainActivity : Activity() {
             bankCopy.writeBytes(p.bankBytes);require(bankCopy.readBytes().contentEquals(p.bankBytes)){"The Bank recovery snapshot did not verify."}
             require(isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(p.bankBytes)&&gen4ToGen3StillBound(p)){"The retained snapshots, destination identity or Bank record changed before writing."}
             stagedDestination=save.copyOf();writeStarted=true;file.writeBytes(save);val written=file.readBytes();require(written.contentEquals(save)&&gen3SaveValid(written)&&gen2ToGen3DexRegistered(written,converted.species)){"The persisted Gen 3 save failed verification."};require(written.indices.all{it in allowed||written[it]==fresh[it]}){"The reopened save changed outside the reviewed scope."};val vpc=gen3PcBuffer(written)?:error("Could not reopen Gen 3 PC storage.");val actual=vpc.copyOfRange(off,off+80);val q=parsePk3(actual,0,false)?:error("The persisted PK3 could not be parsed.");require(actual.contentEquals(pk3)&&sameGen4ToGen3Pk3(q,staged)){"The exact native PK3 did not persist."}
-            require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&p.bankFile.readBytes().contentEquals(p.bankBytes)&&file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(p.bankBytes)){"The source identity, PK4 Bank record, verified Gen 3 destination or retained recovery snapshots changed before cleanup."}
+            require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&p.sourceBinding.matches(p.bankBytes,true)&&file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(p.bankBytes)){"The source identity, PK4 Bank record, verified Gen 3 destination or retained recovery snapshots changed before cleanup."}
             deleteAttempted=true;require(p.bankFile.delete()&&!p.bankFile.exists()){"The PK4 Bank record could not be removed after destination verification."}
             require(!p.bankFile.exists()&&importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&file.readBytes().contentEquals(save)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(p.bankBytes)){"The verified Gen 3 destination identity, removed Gen 4 Bank path or retained recovery snapshots changed after Bank cleanup."}
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
@@ -11403,7 +11412,7 @@ class MainActivity : Activity() {
                     p.bankFile.writeBytes(p.bankBytes)
                 }
                 val restored=p.bankFile.readBytes();val parsed=parsePk4(restored,false)
-                restored.contentEquals(p.bankBytes)&&parsed!=null&&parsed.checksumValid&&
+                p.sourceBinding.matches(p.bankBytes,true)&&restored.contentEquals(p.bankBytes)&&parsed!=null&&parsed.checksumValid&&
                     parsed.pid==p.source.pid&&parsed.species==p.source.species&&parsed.tid==p.source.tid&&parsed.sid==p.source.sid
             }.getOrDefault(false)
             val saveRestored=runCatching{
