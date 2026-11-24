@@ -82,7 +82,7 @@ internal fun buildPseGen4ToGen3Review(
 
 internal fun buildPseGen4ToGen7Review(
     pidNote:String,sourceAbility:Int,sourceAbilityNumber:Int,verifiedAbility:Int,
-    markingNote:String,oldMet:String,oldEgg:String,trainerName:String,trainerGender:Int
+    markingNote:String,oldMet:String,oldEgg:String,trainerName:String,trainerGender:String
 ):String=buildString{
     append("PSE Bank conversion preview; this does not claim an official Pokémon Bank transaction or provenance.\n\n")
     append("Preserved: species/form, TID/SID, nickname and OT, EXP, verified ability, nature, gender, shiny state, moves, current PP, PP Ups, IVs, EVs, friendship, Pokérus, Ball, language, source title, met level/date and fateful marker.\n")
