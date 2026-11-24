@@ -11636,11 +11636,9 @@ class MainActivity : Activity() {
         fun bound()=importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel
         if(!gen4ToGen5StillBound(p))return showDialog(title,"The destination or Bank record changed. Reopen PSE Bank.")
         val file=p.destinationFile
-        val destinationBinding=if(p.sourceGeneration==3)PseBankDestinationBinding.capture(file)else null
-        if(p.sourceGeneration==3&&(destinationBinding==null||!destinationBinding.matches(p.destination,bound())))return showDialog(title,"The destination identity changed after review. Reopen PSE Bank. Nothing was changed.")
-        fun destinationMatches(expected:ByteArray)=if(p.sourceGeneration==3){
-            destinationBinding?.matches(expected,bound())==true
-        }else bound()&&runCatching{file.readBytes().contentEquals(expected)}.getOrDefault(false)
+        val destinationBinding=PseBankDestinationBinding.capture(file)
+        if(destinationBinding==null||!destinationBinding.matches(p.destination,bound()))return showDialog(title,"The destination identity changed after review. Reopen PSE Bank. Nothing was changed.")
+        fun destinationMatches(expected:ByteArray)=destinationBinding.matches(expected,bound())
         val original=runCatching{file.readBytes()}.getOrNull()?:return showDialog(title,"The destination could not be read.")
         var writeStarted=false;var bankDeleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null;var stagedDestination:ByteArray?=null
         var retainedRecovery=false
