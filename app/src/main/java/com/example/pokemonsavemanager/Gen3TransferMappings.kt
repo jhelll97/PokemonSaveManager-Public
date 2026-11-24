@@ -1,5 +1,8 @@
 package com.example.pokemonsavemanager
 
+import android.app.Activity
+import android.app.AlertDialog
+
 internal fun gen3CompatibleOriginTitle(id:Int):String?=when(id){
     1->"Pokémon Sapphire"
     2->"Pokémon Ruby"
@@ -35,3 +38,18 @@ internal fun canonicalGen3AbilityId(species:Int,slot:Int):Int? {
     return abilities.getOrNull(slot-1)?.takeIf{it in 1..77}
         ?:abilities.firstOrNull{it in 1..77}
 }
+
+internal fun showPseGen3BallLegaliseDialog(activity:Activity,targetGeneration:Int,onConfirm:()->Unit){
+    AlertDialog.Builder(activity)
+        .setTitle("Gen 3 → Gen $targetGeneration")
+        .setMessage("This PK3 stores ball ID 0, which has no native Generation $targetGeneration ball mapping. PSE can map it to Poké Ball ID 4 only after your explicit choice. This changes destination metadata and does not claim official migration, legality certification or verified provenance. Cancel leaves the Bank record and destination unchanged.")
+        .setNegativeButton("Cancel",null)
+        .setPositiveButton("Poké Ball"){_,_->onConfirm()}
+        .show()
+}
+
+internal fun pseGen3BallReviewLine(sourceBall:Int,destinationBall:Int,targetGeneration:Int):String=
+    if(sourceBall==destinationBall)
+        "Ball: exact Generation 3 ball ID $sourceBall is preserved in Generation $targetGeneration.\n"
+    else
+        "Ball Legalise: source PK3 ball ID $sourceBall → Poké Ball ID $destinationBall. This is the explicit destination-metadata change reviewed above; the source PK3 remains unchanged.\n"

@@ -13074,7 +13074,10 @@ class MainActivity : Activity() {
                 3->{
                     val source=parsePk3(bank,0,false)?:error("The PK3 Bank record is invalid.")
                     require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&
-                        source.tid==p.source.tid&&source.sid==p.source.sid){"The selected PK3 no longer matches the reviewed Pokémon."}
+                        source.tid==p.source.tid&&source.sid==p.source.sid&&
+                        (source.ball==p.source.ball||(source.ball==0&&p.source.ball==4))){
+                        "The selected PK3 no longer matches the reviewed Pokémon."
+                    }
                     sourcePpUps=gen3MovePpUps(bank);p.pk6
                 }
                 4->{
@@ -48425,7 +48428,9 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun prepareGen3ToGen6Transfer(bankFile:File,shown:PokemonEntry,legalisePid:Boolean=false){
+    private fun prepareGen3ToGen6Transfer(
+        bankFile:File,shown:PokemonEntry,legalisePid:Boolean=false,legaliseBall:Boolean=false
+    ){
         val file=importedFile?:return showDialog("Gen 3 → Gen 6","Load a valid Generation 6 destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
@@ -48443,18 +48448,28 @@ class MainActivity : Activity() {
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
             source.tid!=shown.tid||source.sid!=shown.sid)
             return showDialog("Gen 3 → Gen 6","The selected Bank record changed or failed its PK3 checksum.")
-        val needsPidLegalise=((source.pid.toInt() and 1)+1)!=source.abilityNumber
+        if(legaliseBall&&source.ball!=0)
+            return showDialog("Gen 3 → Gen 6","The selected PK3 no longer matches the reviewed Pokémon.")
+        if(source.ball==0&&!legaliseBall){
+            showPseGen3BallLegaliseDialog(this,6){
+                if(!sourceBinding.matches(bank,true))showDialog("Gen 3 → Gen 6","The selected Bank identity changed after Legalise review. Nothing was changed.")
+                else prepareGen3ToGen6Transfer(bankFile,shown,legalisePid=legalisePid,legaliseBall=true)
+            }
+            return
+        }
+        val conversionSource=if(legaliseBall)source.copy(ball=4) else source
+        val needsPidLegalise=((conversionSource.pid.toInt() and 1)+1)!=conversionSource.abilityNumber
         if(needsPidLegalise&&!legalisePid){
             AlertDialog.Builder(this).setTitle("Legalise Gen 3 ability PID")
                 .setMessage("The saved PK3 ability flag conflicts with PID parity. PSE can preserve the recorded ability slot, nature, gender and shiny state by changing the PID. The final native PK6 PID is shown for review before writing.")
                 .setNegativeButton("Cancel",null)
                 .setPositiveButton("Legalise PID"){_,_->
                     if(!sourceBinding.matches(bank,true))showDialog("Gen 3 → Gen 6","The selected Bank identity changed after Legalise review. Nothing was changed.")
-                    else prepareGen3ToGen6Transfer(bankFile,shown,true)
+                    else prepareGen3ToGen6Transfer(bankFile,shown,legalisePid=true,legaliseBall=legaliseBall)
                 }.show()
             return
         }
-        gen3ToGen4PreflightRejection(source,legalisePid)?.let{
+        gen3ToGen4PreflightRejection(conversionSource,legalisePid)?.let{
             return showDialog("Gen 3 → Gen 6 blocked","$it\n\nThe Bank record and destination were left unchanged.")
         }
         if(source.moves.indices.any{source.moves[it]==0&&source.movePP[it]!=0})
@@ -48477,7 +48492,7 @@ class MainActivity : Activity() {
         val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 3 → Gen 6")
             .setMessage("Resolving exact Generation 5 and Generation 6 ability mappings and preparing a verified native PK6…")
             .setCancelable(false).create();loading.show()
-        loadGen3ToGen4MetaAsync(source,5,3){meta5,reason5->
+        loadGen3ToGen4MetaAsync(conversionSource,5,3){meta5,reason5->
             if(!snapshotsMatch()){
                 if(loading.isShowing)loading.dismiss()
                 return@loadGen3ToGen4MetaAsync showDialog("Gen 3 → Gen 6","The destination or Bank record changed during preparation. Nothing was changed.")
@@ -48487,16 +48502,16 @@ class MainActivity : Activity() {
                 return@loadGen3ToGen4MetaAsync showDialog("Gen 3 → Gen 6 blocked",
                     (reason5?:"Generation 5 ability data could not be verified.")+"\n\nNothing was changed.")
             }
-            loadGen3ToGen7TransferMetaAsync(source,6){meta6->
+            loadGen3ToGen7TransferMetaAsync(conversionSource,6){meta6->
                 if(loading.isShowing)loading.dismiss()
                 if(!snapshotsMatch())return@loadGen3ToGen7TransferMetaAsync showDialog("Gen 3 → Gen 6","The destination or Bank record changed during preparation. Nothing was changed.")
                 if(meta6==null||meta6.abilityId!=meta5.abilityId)
                     return@loadGen3ToGen7TransferMetaAsync showDialog("Gen 3 → Gen 6 blocked",
                         "The recorded ability slot does not have one exact unchanged mapping through Generations 5 and 6. Nothing was changed.")
-                val plan=try{makeGen3ToGen4Plan(source,meta5,legalisePid)}catch(e:Exception){
+                val plan=try{makeGen3ToGen4Plan(conversionSource,meta5,legalisePid)}catch(e:Exception){
                     return@loadGen3ToGen7TransferMetaAsync showDialog("Gen 3 → Gen 6 blocked",e.message?:"No safe PID and ability mapping is available.")
                 }
-                val pk4=try{buildGen3ToGen4Pk4(bank,source,destination,plan,false)}catch(e:Exception){
+                val pk4=try{buildGen3ToGen4Pk4(bank,conversionSource,destination,plan,false)}catch(e:Exception){
                     return@loadGen3ToGen7TransferMetaAsync showDialog("Gen 3 → Gen 6 blocked",e.message?:"The PK4 conversion bridge could not be prepared.")
                 }
                 val bridge4=parsePk4(pk4,false)
@@ -48512,7 +48527,7 @@ class MainActivity : Activity() {
                 val converted=parsePk6(pk6,0,PK6_STORED_SIZE,false,721)
                     ?:return@loadGen3ToGen7TransferMetaAsync showDialog("Gen 3 → Gen 6","The prepared PK6 could not be reopened.")
                 val prepared=Gen5Gen6Prepared(
-                    sourceGeneration=3,bankFile=selected,bankBytes=bank,source=source,
+                    sourceGeneration=3,bankFile=selected,bankBytes=bank,source=conversionSource,
                     destination=destination,trainer=trainer,pk6=pk6,converted=converted,
                     destinationFile=file,sourceUri=openedUri,sourceLabel=openedLabel,
                     sourceBinding=sourceBinding
@@ -48523,7 +48538,8 @@ class MainActivity : Activity() {
                 val oldMet=if(source.metLocation==0)"none" else "#${source.metLocation}"
                 val preview=buildString{
                     append("PSE Bank conversion preview\n\n")
-                    append("Preserved: species, TID/SID, nickname and OT, EXP, ability slot, nature, gender, shiny state, moves, current PP, PP Ups, IVs, EVs, friendship, Pokérus, Ball, language and source title.\n")
+                    append("Preserved: species, TID/SID, nickname and OT, EXP, ability slot, nature, gender, shiny state, moves, current PP, PP Ups, IVs, EVs, friendship, Pokérus, language and source title.\n")
+                    append(pseGen3BallReviewLine(source.ball,conversionSource.ball,6))
                     append("$pidNote\n")
                     append("Ability: source ability #${source.ability} in slot ${source.abilityNumber} → verified Gen 6 ability #${meta6.abilityId}.\n")
                     append("Required format changes: held items and Eggs are blocked; Gen 3 met location $oldMet, original met/egg details, markings, contest data, ribbons and event marker are not represented. Native PK6 uses transfer marker 30001, conversion date 20${plan.metYear.toString().padStart(2,'0')}-${plan.metMonth.toString().padStart(2,'0')}-${plan.metDay.toString().padStart(2,'0')}, current handler ${trainer.trainerName} (${trainer.gender}), empty relearn/geographic fields and Egg location 0.\n\n")
