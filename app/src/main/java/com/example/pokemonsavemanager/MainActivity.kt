@@ -11550,9 +11550,11 @@ class MainActivity : Activity() {
         if(!bound()||!gen5ChecksumTableValid(destination,profile)||(0 until 24).any{!gen5BoxChecksumValid(destination,it,profile)})
             return showDialog("Gen 4 → Gen 5","The loaded destination is not a valid, checksum-clean Generation 5 save.")
         val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return
-        val selected=runCatching{bankFile.canonicalFile}.getOrNull()?:return
-        if(selected.parentFile!=root||!selected.extension.equals("pk4",true))
+        val selected=runCatching{require(bankFile.absoluteFile==bankFile.canonicalFile);bankFile.canonicalFile}.getOrNull()?:return
+        if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk4",true))
             return showDialog("Gen 4 → Gen 5","The selected record is outside the Generation 4 PSE Bank.")
+        val sourceBinding=PseBankSourceBinding.capture(selected)
+            ?:return showDialog("Gen 4 → Gen 5","The selected Bank identity could not be captured.")
         val bank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Gen 4 → Gen 5","The Bank record could not be read.")
         val source=if(bank.size==136)parsePk4(bank,false)else null
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
@@ -11566,7 +11568,7 @@ class MainActivity : Activity() {
         loading.show()
         loadGen3ToGen4MetaAsync(source,5,4){meta,reason->
             loading.dismiss()
-            if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false))
+            if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&sourceBinding.matches(bank,true)}.getOrDefault(false))
                 return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 5","The destination or Bank record changed during preparation. Nothing was changed.")
             if(meta==null)return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 5 blocked",
                 (reason?:"Generation 5 conversion data could not be verified.")+"\n\nNothing was changed.")
@@ -11577,7 +11579,8 @@ class MainActivity : Activity() {
             val prepared=Gen4Gen5Prepared(
                 sourceGeneration=4,bankFile=selected,bankBytes=bank,source=source,
                 destination=destination,meta=meta,pk5=pk5,converted=converted,
-                destinationFile=file,sourceUri=openedUri,sourceLabel=openedLabel
+                destinationFile=file,sourceUri=openedUri,sourceLabel=openedLabel,
+                sourceBinding=sourceBinding
             )
             val pidNotice=if(converted.pid==source.pid)"PID preserved." else "PID adjustment: ${source.pid.toString(16).uppercase().padStart(8,'0')} → ${converted.pid.toString(16).uppercase().padStart(8,'0')} so the Generation 5 ability slot agrees with its PID; TID/SID, ability, nature and shiny state are preserved. Review before continuing."
             val originTitle=gen4CompatibleOriginTitle(source.originGame)?:return@loadGen3ToGen4MetaAsync showDialog("Gen 4 → Gen 5 blocked","The source origin is no longer a documented native Generation 3–4 title. Nothing was changed.")
@@ -11677,6 +11680,7 @@ class MainActivity : Activity() {
             require(gen5BoxChecksumValid(save,box,profile)&&gen5ChecksumTableValid(save,profile)&&gen1ToGen5DexRegistered(save,profile,staged)){
                 "The staged Generation 5 save, Pokédex or checksum table could not be verified."
             }
+            require(genToGen5BankStillBound(p)){"The Gen ${p.sourceGeneration} Bank identity changed before retained recovery."}
             val recovery=File.createTempFile(backupGameName(file)+"_PreGen${p.sourceGeneration}ToGen5_",".backup",backupsDir());backup=recovery
             recovery.writeBytes(original);require(recovery.readBytes().contentEquals(original)){"The Generation 5 recovery backup did not verify."}
             retainGen6ToGen5SafetyBackup(recovery,original)
