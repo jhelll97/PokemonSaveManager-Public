@@ -11348,17 +11348,13 @@ class MainActivity : Activity() {
                 "Origin Legalise: ${originGameName(source.originGame)} (ID ${source.originGame}) → $originTitle (ID ${plan.originGame}). This is a user-selected provenance edit and does not verify history."
             else "Origin preserved: $originTitle (ID ${plan.originGame})."
             val sourcePpUps=gen4Pk4PpUps(bank)
-            val preview=buildString{
-                append("PSE Bank conversion preview\n\n")
-                append("Native PK3 values: PID ${"%08X".format(converted.pid)}, species #${converted.species}, nickname “${converted.nickname}”, OT “${converted.otName}”, TID/SID ${converted.tid}/${converted.sid}, EXP ${converted.experience}.\n")
-                append("Nature #${converted.nature}, gender #${source.gender}, shiny ${converted.shiny}, ability #${source.ability} in slot ${converted.abilityNumber}.\n")
-                append("Moves: ${converted.moves.joinToString("/")}. Current PP: ${converted.movePP.joinToString("/")}. PP Ups: ${sourcePpUps.joinToString("/")}.\n")
-                append("IVs: ${converted.ivs.joinToString("/")}. EVs: ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}). Friendship ${converted.friendship}; Pokérus strain ${converted.pokerusStrain}/days ${converted.pokerusDays}; Ball #${converted.ball}; met level ${converted.metLevel}; markings 0x${converted.markingValue.toString(16).uppercase()}.\n")
-                append(originDisclosure).append("\n")
-                append("Destination format changes: met location becomes 0 (unspecified); Gen 4 migration date ${source.metYear.toString().padStart(4,'0')}-${source.metMonth.toString().padStart(2,'0')}-${source.metDay.toString().padStart(2,'0')} is omitted because PK3 has no date fields.\n")
-                append("Held items, forms, Eggs, fateful encounters and other unsupported records remain blocked, so none are silently discarded. This is a reviewed backward PSE conversion and does not claim official reverse-migration provenance.\n\n")
-                append("The source save stays unchanged. The exact PK4 Bank record remains until a Keep-pinned destination backup, one native PK3, unchanged unrelated PC data, Pokédex mirrors, affected section checksums and reopened destination all verify. The Keep-pinned destination backup and independent exact Bank snapshot stay byte-bound before writing and through cleanup. If failure happens before PSE writes or deletes a side, PSE verifies that side stayed exact instead of claiming restoration; after a PSE mutation, it restores and reopens that side independently.")
-            }
+            val preview=buildPseGen4ToGen3Review(
+                converted.pid,converted.species,converted.nickname,converted.otName,converted.tid,converted.sid,
+                converted.experience,converted.nature,source.gender,converted.shiny,source.ability,converted.abilityNumber,
+                converted.moves,converted.movePP,sourcePpUps,converted.ivs,converted.evs,converted.friendship,
+                converted.pokerusStrain,converted.pokerusDays,converted.ball,converted.metLevel,converted.markingValue,
+                originDisclosure,source.metYear,source.metMonth,source.metDay
+            )
             AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{meta.speciesName}} • Gen 4 → Gen 3").setMessage(preview).setNegativeButton("Cancel",null).setPositiveButton("Review destination"){_,_->if(snapshotsMatch())chooseGen4ToGen3Destination(prepared)else showDialog("Gen 4 → Gen 3","The destination or Bank record changed after review.")}.show()
         }
     }
@@ -37993,14 +37989,10 @@ class MainActivity : Activity() {
                 "PID changes $oldPid → $newPid only as required to preserve the verified ability slot, nature, gender and shiny state through the native formats."
             val oldMet=if(source.metLocation==0)"none" else "#${source.metLocation}"
             val oldEgg=if(source.eggLocation==0)"none" else "#${source.eggLocation}"
-            val preview=buildString{
-                append("PSE Bank conversion preview; this does not claim an official Pokémon Bank transaction or provenance.\n\n")
-                append("Preserved: species/form, TID/SID, nickname and OT, EXP, verified ability, nature, gender, shiny state, moves, current PP, PP Ups, IVs, EVs, friendship, Pokérus, Ball, language, source title, met level/date and fateful marker.\n")
-                append("$pidNote\nAbility: source ability #${source.ability} in slot ${source.abilityNumber} remains verified ability #${meta.abilityId}.\n")
-                append("Markings: $markingNote.\n")
-                append("Required format changes: Gen 4 met location $oldMet becomes native transfer marker 30001; Egg location $oldEgg becomes 0. Current handler becomes ${trainer.trainerName} (${trainer.gender}); relearn moves, geographic fields, Resort state and Hyper Training start empty.\n\n")
-                append("Held items, Eggs and unsupported values are blocked instead of discarded. The source save stays unchanged. The exact Gen 4 Bank record remains until a retained recovery backup, chosen PK7 slot, Pokédex update, block CRCs, save signature and reopened destination all verify.")
-            }
+            val preview=buildPseGen4ToGen7Review(
+                pidNote,source.ability,source.abilityNumber,meta.abilityId,markingNote,
+                oldMet,oldEgg,trainer.trainerName,trainer.gender
+            )
             AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{meta.speciesName}} • Gen 4 → Gen 7").setMessage(preview)
                 .setNegativeButton("Cancel",null).setPositiveButton("Choose Gen 7 destination"){_,_->
                     if(!snapshotsMatch())showDialog("Gen 4 → Gen 7","The destination or Bank record changed after review. Nothing was changed.")
