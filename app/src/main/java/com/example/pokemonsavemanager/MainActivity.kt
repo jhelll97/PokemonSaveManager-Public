@@ -59440,19 +59440,7 @@ class MainActivity : Activity() {
         if(importedFile?.absolutePath!=openedFile.absolutePath)return showDialog("Gen 2 → Gen 3","The active save changed before destination selection. Reopen PSE Bank. Nothing was changed.")
         val pc=gen3PcBuffer(destination)?:return showDialog("Gen 2 → Gen 3","PSE could not read Gen 3 PC storage.");val empties=(0 until 420).filter{gen3DestinationSlotIsStructurallyEmpty(pc,it)};if(empties.isEmpty())return showDialog("Gen 2 → Gen 3","No structurally empty native Gen 3 PC slot is available. Existing or nonzero slot data was left unchanged.");val first=empties.first()
         val sourcePpUps=gen2BankToGen3PpUps(bankBytes)
-        val preview=buildString{
-            append("PSE Bank conversion preview\n\n")
-            append(gen2ToGen3LegaliseChanges(plan)).append("\n\n")
-            append("First structurally empty destination: Box ${first/30+1}, Slot ${first%30+1}; Choose Box / Slot can select another structurally empty slot. Every nonzero destination record remains unchanged.\n")
-            append("Preserved: species, nickname, original OT/TID, EXP, level, moves, current PP (${converted.movePP.joinToString("/")}), PP Ups (${sourcePpUps.joinToString("/")}), happiness ${converted.friendship}, Pokérus strain ${converted.pokerusStrain}/days ${converted.pokerusDays}, and shiny state (${converted.shiny}).\n")
-            append("PID: ${"%08X".format(converted.pid)}; SID becomes 0; nature #${converted.nature} is EXP mod 25; gender becomes #${plan.gender}; ability slot becomes ${converted.abilityNumber}.\n")
-            append("IVs: deterministic Gen 3 mapping ${converted.ivs.joinToString("/")}. EVs: Gen 2 Stat Exp ÷ 257, with the single Special budget split across SpA/SpD and total capped at 510; final ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")
-            append("Native values: no held item, Poké Ball, met level ${converted.metLevel}, origin #${converted.originGame}, language #${converted.language}, met location 0, and male OT-gender default.\n")
-            if(source.heldItem!=0)append("Held item #${source.heldItem} is explicitly removed because Gen 2 and Gen 3 item IDs are not interchangeable.\n")
-            if(source.caughtData!=0)append("Packed Gen 2 caught/met value 0x${source.caughtData.toString(16).uppercase().padStart(4,'0')} is omitted because it has no exact PK3 representation.\n")
-            append("Egg and unsupported native fields remain empty. This is a reviewed PSE native PK3 conversion and does not claim official migration provenance.\n\n")
-            append("The source save stays unchanged. The exact Bank record remains until a Keep-pinned destination backup, native PK3, current PP and PP Ups, Pokédex mirrors, affected Gen 3 checksums and reopened destination all verify. The retained destination backup and independent Bank recovery snapshot stay byte-exact through Bank cleanup; failure restores the destination and Bank record independently.")
-        }
+        val preview=buildPseGen2ToGen3Review(gen2ToGen3LegaliseChanges(plan),first,source,converted,sourcePpUps,plan.gender)
         AlertDialog.Builder(this).setTitle("PSE Convert "+(source.nickname.ifBlank{GEN2_NATIONAL_NAMES.getOrElse(source.species-1){"Pokémon"}})+" to Gen 3").setMessage(preview).setPositiveButton("First structurally empty (Box ${first/30+1} / Slot ${first%30+1})"){_,_->if(choiceConsumed){showDialog("Gen 2 → Gen 3","This destination choice was already submitted. Reopen PSE Bank.");return@setPositiveButton};choiceConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton};transferGen2BankToGen3(bankFile,source,bankBytes,destination,meta,plan,pk3,converted,first,openedFile,openedUri,openedLabel)}.setNeutralButton("Choose Box / Slot"){_,_->if(choiceConsumed){showDialog("Gen 2 → Gen 3","This destination choice was already submitted. Reopen PSE Bank.");return@setNeutralButton};choiceConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return@setNeutralButton};showGen2ToGen3BoxPicker(bankFile,source,bankBytes,destination,meta,plan,pk3,converted,pc,openedFile,openedUri,openedLabel)}.setNegativeButton("Cancel",null).show()
     }
 
@@ -59893,20 +59881,7 @@ class MainActivity : Activity() {
         val profile=detectGen4Profile(p.destination)?:return showDialog("Gen 2 → Gen 4","The prepared destination is no longer a valid Gen 4 save.")
         if(target !in 0 until 540||!gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,target))return showDialog("Gen 2 → Gen 4","The chosen destination is no longer structurally empty. Nonzero records were left unchanged.")
         val source=p.source;val converted=p.converted;var transferConsumed=false
-        val preview=buildString{
-            append("PSE Bank conversion preview\n\n")
-            append(gen2ToGen4LegaliseChanges(p.plan)).append("\n\n")
-            append("Chosen destination: Box ${target/30+1}, Slot ${target%30+1}.\n")
-            append("The chosen slot is structurally empty; nonzero destination records remain unchanged.\n")
-            append("Preserved: species, nickname, original OT/TID, EXP, level, moves, current PP (${converted.movePP.joinToString("/")}), PP Ups (${p.sourcePpUps.joinToString("/")}), happiness ${converted.friendship}, Pokérus strain ${converted.pokerusStrain}/days ${converted.pokerusDays}, and shiny state (${converted.shiny}).\n")
-            append("PID: ${"%08X".format(converted.pid)}; SID becomes 0; nature #${converted.nature} is EXP mod 25; gender becomes #${converted.gender}; ability #${converted.ability}, slot ${converted.abilityNumber}.\n")
-            append("IVs: deterministic Gen 4 mapping ${converted.ivs.joinToString("/")}. EVs: Gen 2 Stat Exp ÷ 257, with the single Special budget split across SpA/SpD and total capped at 510; final ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")
-            append("Native values: no held item, Poké Ball, met level ${converted.metLevel}, origin #${converted.originGame}, language #${converted.language}, and male OT-gender default.\n")
-            if(source.heldItem!=0)append("Held item #${source.heldItem} is explicitly removed because Gen 2 and Gen 4 item IDs are not interchangeable.\n")
-            if(source.caughtData!=0)append("Packed Gen 2 caught/met value 0x${source.caughtData.toString(16).uppercase().padStart(4,'0')} is omitted because it has no exact PK4 representation.\n")
-            append("Egg and unsupported native fields remain empty. This is a reviewed PSE native PK4 conversion and does not claim official migration or verified provenance.\n\n")
-            append("The source save stays unchanged. The exact Bank record remains until a Keep-pinned destination backup, native PK4, current PP and PP Ups, Pokédex registration, Gen 4 checksums and reopened destination all verify. Failure restores the destination and Bank record independently.")
-        }
+        val preview=buildPseGen2ToGen4Review(gen2ToGen4LegaliseChanges(p.plan),target,source,converted,p.sourcePpUps)
         AlertDialog.Builder(this).setTitle("PSE Convert "+(source.nickname.ifBlank{GEN2_NATIONAL_NAMES.getOrElse(source.species-1){"Pokémon"}})+" to Gen 4")
             .setMessage(preview).setNegativeButton("Cancel",null).setPositiveButton("Transfer to Box ${target/30+1} / Slot ${target%30+1}"){_,_->
                 if(transferConsumed){showDialog("Gen 2 → Gen 4","This transfer was already submitted. Reopen PSE Bank.");return@setPositiveButton};transferConsumed=true
@@ -60274,19 +60249,7 @@ private data class Gen2ToGen5LegalisePlan(
     private fun reviewGen2ToGen5Destination(p:Gen2Gen5Prepared,target:Int){
         if(!gen2ToGen5StillBound(p)||!gen5DestinationSlotIsStructurallyEmpty(p.destination,target))return showDialog("Gen 2 → Gen 5","The destination, Bank record or selected slot changed. Reopen PSE Bank. Nothing was changed.")
         val source=p.source;val converted=p.converted;var transferConsumed=false
-        val preview=buildString{
-            append("PSE Bank conversion preview\n\n")
-            append(gen2ToGen5LegaliseChanges(p.plan)).append("\n\n")
-            append("Selected destination: Box ${target/30+1}, Slot ${target%30+1}. The slot is structurally empty; nonzero destination records remain unchanged.\n")
-            append("Preserved: species, nickname, original OT/TID, EXP, level, moves, current PP (${converted.movePP.joinToString("/")}), PP Ups (${p.sourcePpUps.joinToString("/")}), happiness ${converted.friendship}, Pokérus strain ${converted.pokerusStrain}/days ${converted.pokerusDays}, and shiny state (${converted.shiny}).\n")
-            append("PID: ${"%08X".format(converted.pid)}; SID becomes 0; nature #${converted.nature} is EXP mod 25; gender becomes #${converted.gender}; ability #${converted.ability}, slot ${converted.abilityNumber}.\n")
-            append("IVs: deterministic Gen 5 mapping ${converted.ivs.joinToString("/")}. EVs: Gen 2 Stat Exp ÷ 257, with the single Special budget split across SpA/SpD and total capped at 510; final ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")
-            append("Native values: no held item, Poké Ball, met level ${converted.metLevel}, origin #${converted.originGame}, and OT gender #${converted.otGender}.\n")
-            if(source.heldItem!=0)append("Held item #${source.heldItem} is explicitly removed because Gen 2 and Gen 5 item IDs are not interchangeable.\n")
-            if(source.caughtData!=0)append("Packed Gen 2 caught location/time 0x${source.caughtData.toString(16).uppercase().padStart(4,'0')} is omitted; only its recorded OT gender is preserved when present.\n")
-            append("Egg and unsupported native fields remain empty. This is a reviewed PSE native PK5 conversion and does not claim official migration or verified provenance.\n\n")
-            append("The source save stays unchanged. The exact Bank record remains until a Keep-pinned destination backup, native PK5, current PP and PP Ups, Pokédex registration, Gen 5 checksums and reopened destination all verify. Failure restores the destination and Bank record independently.")
-        }
+        val preview=buildPseGen2ToGen5Review(gen2ToGen5LegaliseChanges(p.plan),target,source,converted,p.sourcePpUps)
         AlertDialog.Builder(this).setTitle("PSE Convert "+(source.nickname.ifBlank{GEN2_NATIONAL_NAMES.getOrElse(source.species-1){"Pokémon"}})+" to Gen 5")
             .setMessage(preview).setPositiveButton("Transfer"){_,_->
                 if(transferConsumed){showDialog("Gen 2 → Gen 5","This transfer was already submitted. Reopen PSE Bank.");return@setPositiveButton};transferConsumed=true
@@ -60680,18 +60643,7 @@ private data class Gen2ToGen5LegalisePlan(
         val first=(0 until info.second).firstOrNull{gen6DestinationSlotIsStructurallyEmpty(data,info.first,info.second,info.third,it)}
             ?:return showDialog("Gen 2 → Gen 6","No structurally empty Gen 6 PC box slot was found. Nonzero destination records were left unchanged.")
         val ppUps=gen2BankToGen6PpUps(bankBytes);val ec=readU32LE(decryptPk6IfNeeded(pk6),0)
-        val preview=buildString{
-            append("PSE Bank conversion preview\n\n")
-            append(gen2ToGen6LegaliseChanges(plan)).append("\n\n")
-            append("Preserved: species, nickname, original OT/TID, EXP, level, moves, current PP (${converted.movePP.joinToString("/")}), PP Ups (${ppUps.joinToString("/")}), happiness ${converted.friendship}, Pokérus strain ${converted.pokerusStrain}/days ${converted.pokerusDays}, and shiny state (${converted.shiny}).\n")
-            append("Encryption constant: ${"%08X".format(ec)}. PID: ${"%08X".format(converted.pid)}; SID becomes 0; nature #${converted.nature} is EXP mod 25; gender becomes #${converted.gender}; ability #${converted.ability}, slot ${converted.abilityNumber}.\n")
-            append("IVs: deterministic Gen 6 mapping ${converted.ivs.joinToString("/")}. EVs: Gen 2 Stat Exp ÷ 257, with the single Special budget split across SpA/SpD and total capped at 510; final ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")
-            append("Destination trainer “${gen6Pk6HandlerName(pk6)}” becomes current handler. Native values: language #${converted.language}, no held item, Poké Ball, met level ${converted.metLevel}, PSE Johto marker #${converted.metLocation}, origin #${converted.originGame}, and no met date.\n")
-            if(source.heldItem!=0)append("Held item #${source.heldItem} is explicitly removed because Gen 2 and Gen 6 item IDs are not interchangeable.\n")
-            if(source.caughtData!=0)append("Gen 2 caught/met value 0x${source.caughtData.toString(16).uppercase().padStart(4,'0')} is omitted because it has no exact PK6 representation.\n")
-            append("Egg, geographic, relearn, ribbon, marking and other unsupported fields remain empty; OT gender defaults to male because Gen 2 does not encode it in this Bank record.\n\n")
-            append("This is a reviewed PSE native PK6 conversion and does not claim official migration provenance. The source save stays unchanged. The exact Bank record remains until a Keep-pinned destination backup, native PK6, PP Ups, Pokédex registration, Gen 6 checksums and reopened destination all verify.")
-        }
+        val preview=buildPseGen2ToGen6Review(gen2ToGen6LegaliseChanges(plan),source,converted,ppUps,"%08X".format(ec),gen6Pk6HandlerName(pk6))
         val box=first/30+1;val slot=first%30+1
         AlertDialog.Builder(this).setTitle("PSE Convert ${source.nickname.ifBlank{"Pokémon #${source.species}"}} to Gen 6").setMessage(preview)
             .setPositiveButton("First Structurally Empty ($box/$slot)"){_,_->
@@ -61070,18 +61022,7 @@ private data class Gen2ToGen5LegalisePlan(
         val first=(0 until info.second).firstOrNull{gen6DestinationSlotIsStructurallyEmpty(data,info.first,info.second,info.third,it)}
             ?:return showDialog("Gen 2 → Gen 7","No structurally empty Gen 7 PC box slot was found. Nonzero destination records were left unchanged.")
         val ppUps=gen2BankToGen7PpUps(bankBytes);val decrypted=decryptPk6IfNeeded(pk7);val ec=readU32LE(decrypted,0)
-        val preview=buildString{
-            append("PSE Bank conversion preview\n\n")
-            append(gen2ToGen7LegaliseChanges(plan)).append("\n\n")
-            append("Preserved: species, nickname, original OT/TID, EXP, level, moves, current PP (${converted.movePP.joinToString("/")}), PP Ups (${ppUps.joinToString("/")}), happiness ${converted.friendship}, Pokérus strain ${converted.pokerusStrain}/days ${converted.pokerusDays}, and shiny state (${converted.shiny}).\n")
-            append("Encryption constant: ${"%08X".format(ec)}. PID: ${"%08X".format(converted.pid)}; SID becomes 0; nature #${converted.nature} is EXP mod 25; gender becomes #${converted.gender}; ability #${converted.ability}, slot ${converted.abilityNumber}.\n")
-            append("IVs: deterministic Gen 7 mapping ${converted.ivs.joinToString("/")}, including ${if(source.species==251)5 else 3} required flawless values while preserving gender and shiny state. EVs: Gen 2 Stat Exp ÷ 257, with the single Special budget split across SpA/SpD and total capped at 510; final ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")
-            append("Destination trainer “${gen6Pk6HandlerName(pk7)}” becomes current handler. Native values: language #${converted.language}, no held item, Poké Ball, met level ${converted.metLevel}, PSE Johto marker #${converted.metLocation}, origin #${converted.originGame}, and no met date. Celebi alone receives the fateful-encounter flag (${converted.fatefulEncounter}).\n")
-            if(source.heldItem!=0)append("Held item #${source.heldItem} is explicitly removed because Gen 2 and Gen 7 item IDs are not interchangeable.\n")
-            if(source.caughtData!=0)append("Gen 2 caught/met value 0x${source.caughtData.toString(16).uppercase().padStart(4,'0')} is omitted because it has no exact PK7 representation.\n")
-            append("Egg, geographic, relearn, ribbon, marking and Hyper Training fields remain empty; OT gender defaults to male because Gen 2 does not encode it in this Bank record.\n\n")
-            append("This is a reviewed PSE native PK7 conversion and does not claim official migration provenance. The source save stays unchanged. The exact Bank record remains until a Keep-pinned destination backup, native PK7, PP Ups, Pokédex registration, Gen 7 checksums and reopened destination all verify.")
-        }
+        val preview=buildPseGen2ToGen7Review(gen2ToGen7LegaliseChanges(plan),source,converted,ppUps,"%08X".format(ec),gen6Pk6HandlerName(pk7))
         val box=first/30+1;val slot=first%30+1
         AlertDialog.Builder(this).setTitle("PSE Convert ${source.nickname.ifBlank{"Pokémon #${source.species}"}} to Gen 7")
             .setMessage(preview)
