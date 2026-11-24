@@ -1,5 +1,6 @@
 package com.example.pokemonsavemanager
 
+import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
 import java.io.File
@@ -60,8 +61,16 @@ internal class PseBankDestinationBinding private constructor(
         }
     }.getOrDefault(false)
 
+    private fun pathMissing():Boolean=try {
+        Os.lstat(file.path)
+        false
+    } catch (error:ErrnoException) {
+        error.errno==OsConstants.ENOENT
+    }
+
     fun absent(bound:Boolean):Boolean=runCatching {
-        bound&&parentMatches()&&file.absoluteFile==file.canonicalFile&&file.canonicalPath==identity&&!file.exists()
+        bound&&parentMatches()&&file.absoluteFile==file.canonicalFile&&file.canonicalPath==identity&&
+            pathMissing()&&parentMatches()&&file.absoluteFile==file.canonicalFile&&file.canonicalPath==identity
     }.getOrDefault(false)
 }
 
