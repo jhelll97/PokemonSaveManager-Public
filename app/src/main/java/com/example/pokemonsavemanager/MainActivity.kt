@@ -13025,7 +13025,7 @@ class MainActivity : Activity() {
             currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel
         if(!gen5ToGen6StillBound(p))return showDialog(title,"The destination or Bank record changed. Reopen PSE Bank.")
         val file=p.destinationFile
-        val bindDestination=p.sourceGeneration in 3..4
+        val bindDestination=p.sourceGeneration in 3..5
         val destinationBinding=if(bindDestination)PseBankDestinationBinding.capture(file)else null
         if(bindDestination&&(destinationBinding==null||!destinationBinding.matches(p.destination,bound())))
             return showDialog(title,"The destination identity changed after review. Reopen PSE Bank. Nothing was changed.")
