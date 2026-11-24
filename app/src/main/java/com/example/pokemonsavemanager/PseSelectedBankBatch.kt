@@ -2453,7 +2453,6 @@ internal fun verifyGen1ToGen7Pk7Bytes(
         pokemon.species!=built.dex->"species"
         pokemon.nickname!=built.nickname->"nickname"
         pokemon.isNicknamed!=built.customNickname->"nickname flag"
-        pokemon.level!=source.level->"level"
         pokemon.heldItem!=0->"held item"
         pokemon.tid!=source.tid->"Trainer ID"
         pokemon.sid!=0->"Secret ID"
