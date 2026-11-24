@@ -37441,6 +37441,7 @@ class MainActivity : Activity() {
         if(destinationBinding==null||!destinationBinding.matches(p.destination,importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel))return showDialog("Gen 7 → Gen 6","The destination identity changed after review. Reopen PSE Bank. Nothing was changed.")
         val fresh=runCatching{file.readBytes()}.getOrNull()?:return showDialog("Gen 7 → Gen 6","The destination save could not be read. Nothing was changed.");p.submitted=true;var writeStarted=false;var deleteAttempted=false;var backup:File?=null;var bankRecovery:File?=null
         var stagedDestination:ByteArray?=null
+        var bankRecoveryBinding:PseBankSourceBinding?=null
         var retainedRecovery=false
         try{
             require(destinationBinding.matches(p.destination,importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel)&&fresh.contentEquals(p.destination)&&generationForSize(fresh.size)==6){"The prepared Gen 6 destination changed."};require(gen6BoxChecksumValid(fresh)&&gen6BlockChecksumValid(fresh,20)){"The destination storage or Pokédex checksum changed."};val info=boxStorageInfo(fresh)?:error("PSE could not resolve native Gen 6 PC storage.");require(target in 0 until info.second){"The selected Gen 6 slot is invalid."};val off=info.first+target*PK6_STORED_SIZE;require(gen6DestinationSlotIsStructurallyEmpty(fresh,info.first,info.second,info.third,target)){"The selected Gen 6 slot is no longer structurally empty. Nonzero destination records were left unchanged."}
@@ -37448,24 +37449,31 @@ class MainActivity : Activity() {
             val work=fresh.copyOf();pk6.copyInto(work,off);val staged=parsePk6(work,off,PK6_STORED_SIZE,false,721)?:error("The staged PK6 could not be parsed.");require(sameGen6ToGen7Pk7(staged,p.converted)&&staged.markingValue==p.converted.markingValue&&gen6Pk6PpUps(pk6).contentEquals(gen6Pk6PpUps(bank))){"The staged PK6 differs from the reviewed conversion."}
             val allowed=HashSet<Int>();for(i in off until off+PK6_STORED_SIZE)allowed.add(i);val bit=staged.species-1;val bd=bit ushr 3;val shift=staged.gender.coerceIn(0,1) or ((if(staged.shiny)1 else 0) shl 1);allowed.add(0x15000+0x08+bd);allowed.add(0x15000+0x08+0x60*(1+shift)+bd);for(i in 5..8)allowed.add(0x15000+0x08+0x60*i+bd);val boxBlock=if(work.size==SIZE_G6_XY)53 else 56;for(id in intArrayOf(20,boxBlock)){val c=gen6ChecksumOffset(work,id);allowed.add(c);allowed.add(c+1)}
             registerGen6Dex(work,staged.species,staged.gender,staged.shiny,staged.language);updateGen6BoxChecksum(work);updateGen6DexChecksum(work);require(work.indices.all{it in allowed||work[it]==fresh[it]}){"The conversion changed data outside the reviewed PK6, Pokédex flags and native checksums."};require(gen6BoxChecksumValid(work)&&gen6BlockChecksumValid(work,20)&&gen6DexCaught(work,staged.species)){"The staged Gen 6 save failed storage, Pokédex or checksum verification."}
-            val recovery=File.createTempFile(backupGameName(file)+"_PreGen7ToGen6_",".backup",backupsDir());backup=recovery;recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The exact Gen 6 recovery backup did not verify."};retainGenToGen6SafetyBackup(recovery,fresh);val bankCopy=File.createTempFile("PSE_G7ToG6_BankRecovery_",".tmp",bankDir());bankRecovery=bankCopy;bankCopy.writeBytes(p.bankBytes);require(bankCopy.readBytes().contentEquals(p.bankBytes)){"The Bank recovery snapshot did not verify."};require(gen7ToGen6SnapshotsMatch(p,false)&&destinationBinding.matches(fresh,importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&bankCopy.readBytes().contentEquals(p.bankBytes)){"The source identity, snapshots or retained recovery files changed before writing."}
+            val recovery=File.createTempFile(backupGameName(file)+"_PreGen7ToGen6_",".backup",backupsDir());backup=recovery;recovery.writeBytes(fresh);require(recovery.readBytes().contentEquals(fresh)){"The exact Gen 6 recovery backup did not verify."};retainGenToGen6SafetyBackup(recovery,fresh)
+            val bankRoot=bankDir();require(bankRoot.absoluteFile==bankRoot.canonicalFile&&bankRoot.isDirectory){"The canonical PSE Bank recovery folder is unavailable."}
+            val bankCopy=File.createTempFile("PSE_G7ToG6_BankRecovery_",".tmp",bankRoot);bankRecovery=bankCopy
+            require(bankCopy.absoluteFile==bankCopy.canonicalFile&&bankCopy.parentFile==bankRoot){"The PK7 Bank recovery snapshot path could not be bound."}
+            val bankCopyBinding=PseBankSourceBinding.capture(bankCopy)?:error("The PK7 Bank recovery snapshot identity could not be captured.")
+            bankRecoveryBinding=bankCopyBinding
+            bankCopy.writeBytes(p.bankBytes);require(bankCopyBinding.matches(p.bankBytes,true)){"The Bank recovery snapshot did not verify."}
+            require(gen7ToGen6SnapshotsMatch(p,false)&&destinationBinding.matches(fresh,importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel)&&isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&bankCopyBinding.matches(p.bankBytes,true)){"The source identity, snapshots or retained recovery files changed before writing."}
             stagedDestination=work.copyOf()
             writeStarted=true;file.writeBytes(work);val written=file.readBytes();require(destinationBinding.matches(work,importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel)&&written.contentEquals(work)&&written.indices.all{it in allowed||written[it]==fresh[it]}){"The persisted Gen 6 save differs from the reviewed write scope."};require(gen6BoxChecksumValid(written)&&gen6BlockChecksumValid(written,20)&&gen6DexCaught(written,staged.species)){"The persisted Gen 6 save failed checksum or Pokédex validation."};val actual=written.copyOfRange(off,off+PK6_STORED_SIZE);val reopened=parsePk6(actual,0,PK6_STORED_SIZE,false,721)?:error("The persisted PK6 could not be parsed.");require(actual.contentEquals(pk6)&&sameGen6ToGen7Pk7(reopened,p.converted)&&reopened.markingValue==p.converted.markingValue&&gen6Pk6PpUps(actual).contentEquals(gen6Pk6PpUps(bank))){"The exact converted PK6 did not persist after reopening."}
             require(destinationBinding.matches(work,importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel)&&p.sourceBinding.matches(p.bankBytes,true)&&
                 isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&
-                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                bankCopyBinding.matches(p.bankBytes,true)){
                 "The Gen 7 Bank record, destination identity or retained recovery snapshots changed before cleanup."
             }
             deleteAttempted=true
             require(p.bankFile.delete()&&!p.bankFile.exists()){"The Gen 7 Bank record could not be removed after destination verification."}
             require(!p.bankFile.exists()&&destinationBinding.matches(work,importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel)&&
                 isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&
-                bankCopy.readBytes().contentEquals(p.bankBytes)){
+                bankCopyBinding.matches(p.bankBytes,true)){
                 "The verified Gen 6 destination, removed Gen 7 Bank path or retained recovery snapshots changed after Bank cleanup."
             }
-            retainedRecovery=!cleanupExactBankRecoverySnapshots(
+            retainedRecovery=!(bankCopyBinding.matches(p.bankBytes,true)&&cleanupExactBankRecoverySnapshots(
                 listOf(bankCopy),listOf(p.bankBytes)
-            )
+            ))
             requireNativeBankWithdrawalPostCleanup(
                 generation=6,
                 destinationBound=destinationBinding.matches(work,importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel),
@@ -37499,7 +37507,7 @@ class MainActivity : Activity() {
             }.getOrDefault(false)
             val bankRecoveryClean=if(bankRestored&&destinationRestored){
                 bankRecovery?.let{
-                    cleanupExactBankRecoverySnapshots(listOf(it),listOf(p.bankBytes))
+                    bankRecoveryBinding?.matches(p.bankBytes,true)==true&&cleanupExactBankRecoverySnapshots(listOf(it),listOf(p.bankBytes))
                 }?:true
             }else false
             val recovery=when{
