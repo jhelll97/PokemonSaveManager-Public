@@ -37598,7 +37598,7 @@ class MainActivity : Activity() {
     }
 
     private data class Gen5Gen4Prepared(
-        val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry,val destination:ByteArray,
+        val bankFile:File,val bankBytes:ByteArray,val sourceBinding:PseBankSourceBinding,val source:PokemonEntry,val destination:ByteArray,
         val meta:Gen3ToGen4Meta,val originGame:Int,val originLegalised:Boolean,val pk4:ByteArray,val converted:PokemonEntry,val destinationFile:File,
         val sourceUri:Uri?,val sourceLabel:String?
     )
@@ -37675,7 +37675,10 @@ class MainActivity : Activity() {
         return encrypted
     }
 
-    private fun prepareGen5ToGen4Transfer(bankFile:File,shown:PokemonEntry,requestedOriginGame:Int?=null){
+    private fun prepareGen5ToGen4Transfer(
+        bankFile:File,shown:PokemonEntry,requestedOriginGame:Int?=null,
+        retainedSourceBinding:PseBankSourceBinding?=null
+    ){
         val file=importedFile?:return showDialog("Gen 5 → Gen 4","Load a valid Generation 4 destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
@@ -37684,8 +37687,10 @@ class MainActivity : Activity() {
         val validation=gen4Validation(destination,profile)
         if(!bound()||!validation.generalChecksum||!validation.storageChecksum||validation.badPk4!=0)
             return showDialog("Gen 5 → Gen 4","The loaded destination is not a valid, checksum-clean Generation 4 save.")
-        val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return;val selected=runCatching{bankFile.canonicalFile}.getOrNull()?:return
-        if(selected.parentFile!=root||!selected.extension.equals("pk5",true))return showDialog("Gen 5 → Gen 4","The selected record is outside the Generation 5 PSE Bank.")
+        val root=runCatching{bankDir().canonicalFile}.getOrNull()?:return;val selected=runCatching{require(bankFile.absoluteFile==bankFile.canonicalFile);bankFile.canonicalFile}.getOrNull()?:return
+        if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk5",true))return showDialog("Gen 5 → Gen 4","The selected record is outside the Generation 5 PSE Bank.")
+        val sourceBinding=retainedSourceBinding?:PseBankSourceBinding.capture(selected)
+        if(sourceBinding==null)return showDialog("Gen 5 → Gen 4","The selected Bank identity could not be captured.")
         val bank=runCatching{selected.readBytes()}.getOrNull()?:return showDialog("Gen 5 → Gen 4","The Bank record could not be read.")
         val source=if(bank.size==136)parsePk5(bank,false)else null
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
@@ -37703,7 +37708,7 @@ class MainActivity : Activity() {
             AlertDialog.Builder(this).setTitle("Choose Gen 4-compatible origin")
                 .setMessage("Origin game ID ${source.originGame} is not a documented native Gen 4-compatible title. Choose the exact title to write in PK4. This is an explicit PSE Legalise change, not official provenance; cancelling leaves the Bank record and destination unchanged.")
                 .setItems(choices.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
-                    prepareGen5ToGen4Transfer(bankFile,shown,choices[which].first)
+                    prepareGen5ToGen4Transfer(selected,source,choices[which].first,sourceBinding)
                 }
                 .setNegativeButton("Cancel",null).show()
             return
@@ -37711,14 +37716,14 @@ class MainActivity : Activity() {
         if(gen4CompatibleOriginTitle(originGame)==null)
             return showDialog("Gen 5 → Gen 4 blocked","Choose a documented native Gen 4-compatible origin title.")
         gen5ToGen4PreflightRejection(source,originLegalised)?.let{return showDialog("Gen 5 → Gen 4 blocked","$it\n\nThe Bank record and destination were left unchanged.")}
-        fun snapshotsMatch()=bound()&&runCatching{file.readBytes().contentEquals(destination)&&selected.readBytes().contentEquals(bank)}.getOrDefault(false)
+        fun snapshotsMatch()=bound()&&runCatching{file.readBytes().contentEquals(destination)&&sourceBinding.matches(bank,true)}.getOrDefault(false)
         val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 5 → Gen 4").setMessage("Verifying the historical ability, PID-derived fields and native PK4 mapping…").setCancelable(false).create();loading.show()
         loadGen3ToGen4MetaAsync(source,4,5){meta,reason->
             loading.dismiss();if(!snapshotsMatch())return@loadGen3ToGen4MetaAsync showDialog("Gen 5 → Gen 4","The destination or Bank record changed during preparation.")
             if(meta==null)return@loadGen3ToGen4MetaAsync showDialog("Gen 5 → Gen 4 blocked",(reason?:"Generation 4 conversion data could not be verified.")+"\n\nNothing was changed.")
             val pk4=try{buildGen5ToGen4Pk4(bank,source,destination,meta,originGame,originLegalised)}catch(e:Exception){return@loadGen3ToGen4MetaAsync showDialog("Gen 5 → Gen 4 blocked",(e.message?:"No safe mapping is available.")+"\n\nNothing was changed.")}
             val converted=parsePk4(pk4,false)?:return@loadGen3ToGen4MetaAsync showDialog("Gen 5 → Gen 4","The prepared PK4 could not be re-read.")
-            val prepared=Gen5Gen4Prepared(selected,bank,source,destination,meta,originGame,originLegalised,pk4,converted,file,openedUri,openedLabel)
+            val prepared=Gen5Gen4Prepared(selected,bank,sourceBinding,source,destination,meta,originGame,originLegalised,pk4,converted,file,openedUri,openedLabel)
             val pidNotice=if(converted.pid==source.pid)"PID preserved." else "PID adjustment: ${source.pid.toString(16).uppercase().padStart(8,'0')} → ${converted.pid.toString(16).uppercase().padStart(8,'0')} so Generation 4 PID-derived nature and ability slot remain valid; nature, ability, shiny state and TID/SID are preserved. Review before continuing."
             val originTitle=gen4CompatibleOriginTitle(originGame)?:return@loadGen3ToGen4MetaAsync showDialog("Gen 5 → Gen 4 blocked","The reviewed origin mapping is no longer destination-valid. Nothing was changed.")
             val originNotice=if(originLegalised)"Origin Legalise: game ID ${source.originGame} → $originTitle (ID $originGame); this is a user-selected provenance change, not verified history." else "Origin preserved: $originTitle (ID ${source.originGame})."
@@ -37730,7 +37735,7 @@ class MainActivity : Activity() {
 
     private fun gen5ToGen4StillBound(p:Gen5Gen4Prepared):Boolean=
         importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
-            runCatching{p.destinationFile.readBytes().contentEquals(p.destination)&&p.bankFile.readBytes().contentEquals(p.bankBytes)}.getOrDefault(false)
+            runCatching{p.destinationFile.readBytes().contentEquals(p.destination)&&p.sourceBinding.matches(p.bankBytes,true)}.getOrDefault(false)
 
     private fun chooseGen5ToGen4Destination(p:Gen5Gen4Prepared){
         if(!gen5ToGen4StillBound(p))return showDialog("Gen 5 → Gen 4","The prepared snapshots changed. Reopen PSE Bank.")
@@ -37764,7 +37769,7 @@ class MainActivity : Activity() {
             require(fresh.contentEquals(p.destination)&&target in 0 until 540){"The destination changed or the selected slot is invalid."}
             val profile=detectGen4Profile(fresh)?:error("The destination is no longer a valid Gen 4 save.")
             val before=gen4Validation(fresh,profile);require(before.generalChecksum&&before.storageChecksum&&before.badPk4==0){"The fresh Gen 4 destination failed validation."}
-            val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The selected Gen 5 Bank bytes changed after review."}
+            val bank=p.bankFile.readBytes();require(p.sourceBinding.matches(p.bankBytes,true)&&bank.contentEquals(p.bankBytes)){"The selected Gen 5 Bank identity or bytes changed after review."}
             val source=parsePk5(bank,false)?:error("The selected Gen 5 Bank record is invalid.")
             require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&source.tid==p.source.tid&&source.sid==p.source.sid){"The selected Gen 5 Pokémon changed after review."}
             val refreshedPk4=buildGen5ToGen4Pk4(bank,source,fresh,p.meta,p.originGame,p.originLegalised);val refreshed=parsePk4(refreshedPk4,false)?:error("The refreshed PK4 could not be parsed.")
@@ -37796,7 +37801,7 @@ class MainActivity : Activity() {
             val actualOff=gen4BoxSlotOffset(written,wp,target);val actual=written.copyOfRange(actualOff,actualOff+136);val reopened=parsePk4(actual,false)?:error("The persisted PK4 could not be reopened.")
             require(actual.contentEquals(refreshedPk4)&&sameGen5ToGen4Pk4(reopened,staged)&&gen4Pk4PpUps(actual).contentEquals(gen5Pk5PpUps(bank))){"The exact reviewed PK4 did not persist."}
             require(importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
-                p.bankFile.readBytes().contentEquals(p.bankBytes)&&file.readBytes().contentEquals(work)&&
+                p.sourceBinding.matches(p.bankBytes,true)&&file.readBytes().contentEquals(work)&&
                 isBackupKept(recovery)&&recovery.readBytes().contentEquals(fresh)&&
                 bankCopy.readBytes().contentEquals(p.bankBytes)){
                 "The source identity, Gen 5 Bank record, verified Gen 4 destination or retained recovery snapshots changed before Bank cleanup."
@@ -37830,7 +37835,7 @@ class MainActivity : Activity() {
                     p.bankFile.writeBytes(p.bankBytes)
                 }
                 val restored=p.bankFile.readBytes();val parsed=parsePk5(restored,false)
-                restored.contentEquals(p.bankBytes)&&parsed!=null&&parsed.checksumValid&&
+                p.sourceBinding.matches(p.bankBytes,true)&&restored.contentEquals(p.bankBytes)&&parsed!=null&&parsed.checksumValid&&
                     parsed.pid==p.source.pid&&parsed.species==p.source.species&&
                     parsed.tid==p.source.tid&&parsed.sid==p.source.sid
             }.getOrDefault(false)
