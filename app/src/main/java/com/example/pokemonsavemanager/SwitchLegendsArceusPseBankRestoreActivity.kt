@@ -142,6 +142,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 result.onSuccess { prepared ->
                     readyDestinations = prepared.destinations
+                    review.text = "Choose destination (${prepared.destinations.size} empty) & review"
                     firstEmpty.text = "Review first empty: Pasture ${prepared.destinations.first().pasture}, slot ${prepared.destinations.first().position}"
                     conversionEffects = prepared.effects
                     registerConvertedObtained = prepared.registerObtained
@@ -575,6 +576,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 )
                 readyPlan = null
                 readyDestinations = emptyList()
+                review.text = "Choose destination & review"
                 firstEmpty.text = "Review first empty slot"
                 setBusy(false)
             }
