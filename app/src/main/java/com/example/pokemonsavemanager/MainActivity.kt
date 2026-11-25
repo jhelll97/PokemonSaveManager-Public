@@ -48767,7 +48767,7 @@ class MainActivity : Activity() {
                     p.sourceBinding.matches(p.bankBytes,true)
             }.getOrDefault(false)
 
-    private fun prepareGen3ForwardTransfer(bankFile:File,shown:PokemonEntry){
+    private fun prepareGen3ForwardTransfer(bankFile:File,shown:PokemonEntry,legaliseBall:Boolean=false){
         val file=importedFile?:return showDialog("Gen 3 → Gen 7","Load a Pokémon Sun, Moon, Ultra Sun or Ultra Moon save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
@@ -48788,7 +48788,17 @@ class MainActivity : Activity() {
         if(source==null||!source.checksumValid||source.pid!=shown.pid||source.species!=shown.species||
             source.tid!=shown.tid||source.sid!=shown.sid)
             return showDialog("Gen 3 → Gen 7","The selected Bank record changed or failed its PK3 checksum.")
-        gen3ToGen7PreflightRejection(source)?.let{
+        if(legaliseBall&&source.ball!=0)
+            return showDialog("Gen 3 → Gen 7","The source PK3 no longer matches the reviewed Pokémon.")
+        if(source.ball==0&&!legaliseBall){
+            showPseGen3BallLegaliseDialog(this,7){
+                if(!sourceBinding.matches(bank,true))showDialog("Gen 3 → Gen 7","The selected Bank identity changed after Legalise review. Nothing was changed.")
+                else prepareGen3ForwardTransfer(bankFile,shown,true)
+            }
+            return
+        }
+        val conversionSource=if(legaliseBall)source.copy(ball=4) else source
+        gen3ToGen7PreflightRejection(conversionSource)?.let{
             return showDialog("Gen 3 → Gen 7 blocked","$it\n\nThe Bank record and destination were left unchanged.")
         }
         val destination=runCatching{file.readBytes()}.getOrNull()
@@ -48807,23 +48817,24 @@ class MainActivity : Activity() {
         val loading=AlertDialog.Builder(this).setTitle("Prepare Gen 3 → Gen 7")
             .setMessage("Resolving the exact ability mapping and preparing a reviewed native PK7…")
             .setCancelable(false).create();loading.show()
-        loadGen3ToGen7TransferMetaAsync(source){meta->
+        loadGen3ToGen7TransferMetaAsync(conversionSource){meta->
             if(loading.isShowing)loading.dismiss()
             if(!snapshotsMatch())return@loadGen3ToGen7TransferMetaAsync showDialog("Gen 3 → Gen 7","The destination or Bank record changed during preparation. Nothing was changed.")
             if(meta==null)return@loadGen3ToGen7TransferMetaAsync showDialog("Gen 3 → Gen 7 blocked",
                 "PSE could not verify the species and ability conversion data. The Gen 3 Bank entry and destination were not changed.")
-            val pk7=try{buildGen3ToGen7Pk7(bank,source,destination,trainer,meta)}catch(e:Exception){
+            val pk7=try{buildGen3ToGen7Pk7(bank,conversionSource,destination,trainer,meta)}catch(e:Exception){
                 return@loadGen3ToGen7TransferMetaAsync showDialog("Gen 3 → Gen 7 blocked",e.message?:"PSE could not create the PK7 conversion.")
             }
             val converted=parsePk6(pk7,0,PK6_STORED_SIZE,false,807)
                 ?:return@loadGen3ToGen7TransferMetaAsync showDialog("Gen 3 → Gen 7","The prepared PK7 could not be reopened.")
-            val prepared=Gen3Gen7Prepared(selected,bank,source,destination,trainer,meta,pk7,converted,file,openedUri,openedLabel,sourceBinding)
+            val prepared=Gen3Gen7Prepared(selected,bank,conversionSource,destination,trainer,meta,pk7,converted,file,openedUri,openedLabel,sourceBinding)
             val oldPid="%08X".format(source.pid);val newPid="%08X".format(converted.pid)
             val pidNote=if(source.pid==converted.pid)"PID remains $oldPid." else
                 "PID changes $oldPid → $newPid only to preserve the reviewed ${if(source.shiny)"shiny" else "non-shiny"} state under the Gen 7 threshold."
             val preview=buildString{
                 append("PSE Bank conversion preview\n\n")
-                append("Preserved: species, TID/SID, nickname and OT, EXP, nature, gender, shiny state, moves, current PP, PP Ups, IVs, EVs, Pokérus, Ball, language and source title.\n")
+                append("Preserved: species, TID/SID, nickname and OT, EXP, nature, gender, shiny state, moves, current PP, PP Ups, IVs, EVs, Pokérus, language and source title.\n")
+                append(pseGen3BallReviewLine(source.ball,conversionSource.ball,7))
                 append("$pidNote\n")
                 append("Ability: source slot ${source.abilityNumber}, ability #${source.ability} → verified Gen 7 ability #${meta.abilityId}.\n")
                 append("Required Gen 7 changes: held items and Eggs are blocked; current handler becomes ${trainer.trainerName} (${trainer.gender}); current-handler friendship starts at species base friendship ${meta.baseFriendship}; original OT friendship remains ${source.friendship}; met location becomes transfer marker 30001 with today's conversion date; Egg location, relearn moves and geographic fields start empty. Gen 3 contest data, ribbons, markings, original met/egg details and event marker are not represented by this bounded PK7 conversion.\n\n")
@@ -48911,7 +48922,10 @@ class MainActivity : Activity() {
             val bank=p.bankFile.readBytes();require(bank.contentEquals(p.bankBytes)){"The Gen 3 Bank record changed."}
             val source=if(bank.size==80)parsePk3(bank,0,false)else null
             require(source!=null&&source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&
-                source.tid==p.source.tid&&source.sid==p.source.sid){"The source PK3 no longer matches the reviewed Pokémon."}
+                source.tid==p.source.tid&&source.sid==p.source.sid&&
+                (source.ball==p.source.ball||(source.ball==0&&p.source.ball==4))){
+                "The source PK3 no longer matches the reviewed Pokémon."
+            }
             val pk7=p.pk7
             val reviewed=parsePk6(pk7,0,PK6_STORED_SIZE,false,807)
                 ?:error("The reviewed PK7 could not be reopened before writing.")
