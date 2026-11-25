@@ -930,9 +930,15 @@ This label is derived from the same ordered native destination list used by the 
 
 After source, Bank and destination validation, the Let's Go `Review first empty slot` action now names the exact next native storage slot it will bind to the existing cancellable restore review. The adjacent status continues to show the same destination, and the action label resets after a completed or failed copy transaction instead of presenting a stale slot.
 
-The label is derived from the already staged append-only native plan. The transaction still requires the complete 260-byte destination record to remain zero-filled, preserves the native storage count, partner and party pointers, exact native or explicitly Legalised PB7 data, optional reviewed caught registration, block CRC updates, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. A full storage pool or protected nonzero next record remains blocked. This implementation is pending its own automatic Android compile before the feature is called validated.
+The label is derived from the already staged append-only native plan. The transaction still requires the complete 260-byte destination record to remain zero-filled, preserves the native storage count, partner and party pointers, exact native or explicitly Legalised PB7 data, optional reviewed caught registration, block CRC updates, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. A full storage pool or protected nonzero next record remains blocked. Commit `56c47db06a1a68081fb3888f0ca637cf3511ac1f` passed automatic Android build run `45644569000`, attempt 1, and was reported by exact Slack event `1795621061.661879`; the Let's Go exact append-only destination label is validated.
 
-Next bounded feature: after this Let's Go label is automatically compiled, continue supported-game PSE Bank work with one concrete restore-review improvement grounded in the existing safe transaction paths.
+## Sword/Shield empty-destination count picker label
+
+After source, Bank and destination validation, the Sword/Shield full destination-picker action now shows the exact number of currently validated empty native PC-box slots. This gives the user the capacity result at the action that opens the existing explicit Box/Slot picker, while the adjacent deterministic first-empty shortcut remains available. The count label resets after a completed or failed copy transaction instead of presenting stale capacity.
+
+The count is derived from the same validated native destination list consumed by the picker. Destination ordering and selection remain unchanged, and the transaction still rechecks the chosen slot immediately before staging, preserves exact native or explicitly Legalised PK8 data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. Full capacity remains safely blocked before either destination action is enabled. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after this Sword/Shield picker count is automatically compiled, add the same validated empty-slot count to the BDSP full destination-picker action without changing destination selection or transaction semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
