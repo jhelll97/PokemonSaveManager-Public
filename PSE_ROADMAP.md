@@ -888,9 +888,15 @@ This display-only preview is derived from the same ordered native destination li
 
 Scarlet/Violet PSE Bank restore now shows the exact deterministic Box and Slot targeted by `Review first empty slot` as soon as source, Bank and destination validation completes. The full empty-slot count and full Box/Slot picker remain visible, and clicking either action still enters the existing destination-bound, cancellable review before any write.
 
-This display-only preview is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot, preserves exact native or explicitly Legalised PK9 staging, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+This display-only preview is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot, preserves exact native or explicitly Legalised PK9 staging, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. Commit `15b138fca0abdddbae7a9ce542cf7a24e559927e` passed automatic Android build run `45625881372`, attempt 1, and was reported by exact Slack event `1795614667.110299`; the Scarlet/Violet first-empty destination preview is validated.
 
-Next bounded feature: after this Scarlet/Violet preview is automatically compiled, expose the same exact first-empty Box/Slot preview on the Legends: Z-A PSE Bank restore screen while retaining its full picker and existing safety boundaries.
+## Legends: Z-A first-empty destination preview
+
+Legends: Z-A PSE Bank restore now shows the exact deterministic Box and Slot targeted by `Review first empty slot` as soon as source, Bank and destination validation completes. The full empty-slot count and full Box/Slot picker remain visible, and clicking either action still enters the existing destination-bound, cancellable review before any write.
+
+This display-only preview is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot, preserves exact native or explicitly Legalised PA9 body and slot-footer staging, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after this Legends: Z-A preview is automatically compiled, continue supported-game PSE Bank work with one destination-selection improvement grounded in the implemented restore screens and preserving every existing safety boundary.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

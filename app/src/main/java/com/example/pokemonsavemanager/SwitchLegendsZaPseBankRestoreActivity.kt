@@ -154,6 +154,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                     status.text = "Native source and Bank integrity verified\n" +
                         "${ScarletVioletSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n" +
                         "${prepared.destinations.size} empty native destination slots available\n" +
+                        "First empty shortcut target: Box ${prepared.destinations.first().box}, slot ${prepared.destinations.first().position}\n" +
                         "Bank source SHA-256: ${prepared.sourceBankHash}\nPrepared PA9 SHA-256: ${prepared.nativeRecordHash}" +
                         if (prepared.effects.isEmpty()) "" else "\n\n${conversionSourceName()} -> Legends: Z-A Legalise effects\n• " +
                             prepared.effects.joinToString("\n• ")
