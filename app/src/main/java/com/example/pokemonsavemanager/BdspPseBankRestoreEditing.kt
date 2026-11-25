@@ -87,7 +87,8 @@ object BdspPseBankRestoreEditing {
         bankRecord: ByteArray,
         box: Int,
         position: Int,
-        registerCaughtEnglish: Boolean = false
+        registerCaughtEnglish: Boolean = false,
+        caughtLanguageIndex: Int = 1
     ): BdspPseBankRestoreCopyPlan {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
@@ -105,7 +106,7 @@ object BdspPseBankRestoreEditing {
         val edited = original.copyOf()
         supplied.copyInto(edited, recordOffset)
         val dexRegistration = if (registerCaughtEnglish) {
-            registerCaughtEnglishDex(original, edited, pokemon)
+            registerCaughtLanguageDex(original, edited, pokemon, caughtLanguageIndex)
         } else null
         refreshDigest(edited)
         verify(
@@ -209,13 +210,17 @@ object BdspPseBankRestoreEditing {
         }) { "An unrelated BDSP save byte changed." }
     }
 
-    private fun registerCaughtEnglishDex(
+    private fun registerCaughtLanguageDex(
         original: ByteArray,
         edited: ByteArray,
-        pokemon: BdspPokemonRead
+        pokemon: BdspPokemonRead,
+        languageIndex: Int
     ): BdspPseBankDexRegistration {
         require(pokemon.species in 1..493 && pokemon.form == 0) {
             "Only a reviewed default-form BDSP species can receive this native Pokédex registration."
+        }
+        require(languageIndex in BdspPokedexEditing.languages.indices) {
+            "The reviewed native Pokédex language is unsupported."
         }
         val beforeDex = BdspPokedexReadOnly.read(original)
         val before = beforeDex.entry(pokemon.species)
@@ -242,7 +247,7 @@ object BdspPseBankRestoreEditing {
             writeU32(edited, variantOffset, 1L)
             touched += variantOffset
         }
-        writeU32(edited, languageOffset, before.rawLanguageFlags or (1L shl 1))
+        writeU32(edited, languageOffset, before.rawLanguageFlags or (1L shl languageIndex))
 
         var nextFormOffset = 493 * 4 * 5
         dexFormCounts.forEach { (species, count) ->
@@ -272,7 +277,7 @@ object BdspPseBankRestoreEditing {
             }
         }
         return BdspPseBankDexRegistration(
-            pokemon.species, variants, 1, touched.sorted()
+            pokemon.species, variants, languageIndex, touched.sorted()
         )
     }
 

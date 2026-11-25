@@ -161,21 +161,43 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
             val result = runCatching {
                 val source = readSource()
                 val hash = expectedHash ?: error("Reopen the source from PSE.")
+                val bankEntry = bankFile()
                 val bank = readBankRecord()
+                val native = bankEntry.name.startsWith("switch_bdsp_") &&
+                    bankEntry.extension.equals("pb8", true)
+                val nativePokemon = if (native) {
+                    BdspPseBankRestoreEditing.inspectBankRecord(bank)
+                } else null
+                val nativeLanguageIndex = when (nativePokemon?.languageId) {
+                    1 -> 0
+                    2 -> 1
+                    3 -> 2
+                    4 -> 3
+                    5 -> 4
+                    7 -> 5
+                    8 -> 6
+                    9 -> 7
+                    10 -> 8
+                    else -> null
+                }
                 BdspPseBankRestoreEditing.stage(
                     source, hash, bank, destination.box, destination.position,
-                    registerCaughtEnglish = bankFile().extension.equals("pk8", true) ||
-                        bankFile().extension.equals("pa8", true) ||
-                        bankFile().extension.equals("pk9", true) ||
-                        bankFile().extension.equals("pa9", true) ||
-                        bankFile().extension.equals("pb7", true) ||
-                        bankFile().extension.equals("pk7", true) ||
-                        bankFile().extension.equals("pse1", true) ||
-                        bankFile().extension.equals("pse2", true) ||
-                        bankFile().extension.equals("pk3", true) ||
-                        bankFile().extension.equals("pk4", true) ||
-                        bankFile().extension.equals("pk5", true) ||
-                        bankFile().extension.equals("pk6", true)
+                    registerCaughtEnglish =
+                        (nativePokemon != null && nativePokemon.form == 0 &&
+                            nativeLanguageIndex != null) ||
+                            bankEntry.extension.equals("pk8", true) ||
+                            bankEntry.extension.equals("pa8", true) ||
+                            bankEntry.extension.equals("pk9", true) ||
+                            bankEntry.extension.equals("pa9", true) ||
+                            bankEntry.extension.equals("pb7", true) ||
+                            bankEntry.extension.equals("pk7", true) ||
+                            bankEntry.extension.equals("pse1", true) ||
+                            bankEntry.extension.equals("pse2", true) ||
+                            bankEntry.extension.equals("pk3", true) ||
+                            bankEntry.extension.equals("pk4", true) ||
+                            bankEntry.extension.equals("pk5", true) ||
+                            bankEntry.extension.equals("pk6", true),
+                    caughtLanguageIndex = nativeLanguageIndex ?: 1
                 )
             }
             runOnUiThread {
@@ -414,7 +436,8 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
         val effects = if (conversionEffects.isEmpty()) "" else
             "\n\nExplicit PSE conversion Legalise effects\n• " + conversionEffects.joinToString("\n• ")
         val dexReview = plan.dexRegistration?.let { registration ->
-            "\nDestination caught registration: species #${registration.speciesId}, English, offsets " +
+            "\nDestination caught registration: species #${registration.speciesId}, " +
+                BdspPokedexEditing.languages[registration.languageIndex] + ", offsets " +
                 registration.touchedOffsets.joinToString { "0x${it.toString(16).uppercase()}" }
         } ?: ""
         val dexScope = plan.dexRegistration?.let { registration ->
@@ -520,8 +543,11 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
                         (if (conversionEffects.isEmpty()) "PSE Bank restore saved and reopened successfully.\n"
                         else "PSE conversion saved and reopened successfully.\n") +
                             "Box ${plan.box}, slot ${plan.position} • SHA-256: ${plan.editedSha256}\n" +
-                            (if (plan.dexRegistration == null) "" else
-                                "Caught, gender/shiny, language, form, and applicable Spinda registration reopened exactly.\n") +
+                            (plan.dexRegistration?.let { registration ->
+                                "Caught, gender/shiny, " +
+                                    BdspPokedexEditing.languages[registration.languageIndex] +
+                                    " language, form, and applicable Spinda registration reopened exactly.\n"
+                            } ?: "") +
                             "Recovery backup: $backupName\nOriginal source and Bank entry unchanged."
                     },
                     onFailure = {
