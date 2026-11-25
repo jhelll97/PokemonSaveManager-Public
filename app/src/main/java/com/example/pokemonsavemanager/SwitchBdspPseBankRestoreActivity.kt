@@ -235,7 +235,8 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
 
     private fun readBankSource(): ByteArray {
         val entry = bankFile()
-        if ((entry.name.startsWith("pse1_") && entry.extension.equals("pse1", true)) ||
+        if ((entry.name.startsWith("switch_bdsp_") && entry.extension.equals("pb8", true)) ||
+            (entry.name.startsWith("pse1_") && entry.extension.equals("pse1", true)) ||
             entry.extension.equals("pse2", true) ||
             entry.extension.equals("pk3", true) ||
             entry.extension.equals("pk4", true) ||
@@ -248,7 +249,7 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
             (entry.name.startsWith("switch_sv_") && entry.extension.equals("pk9", true)) ||
             (entry.name.startsWith("switch_za_") && entry.extension.equals("pa9", true))) {
             require(!expectedBankSourceHash.isNullOrBlank()) {
-                "The reviewed cross-title Bank identity is missing. Reopen PSE Bank."
+                "The reviewed PSE Bank identity is missing. Reopen PSE Bank."
             }
         }
         val bytes = entry.readBytes()

@@ -4841,12 +4841,18 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound) return
         val directory = File(filesDir, "pse_bank").canonicalFile
         val entry = file.canonicalFile
-        val parsed = runCatching {
+        val opened = runCatching {
             require(entry.parentFile == directory && entry.name.startsWith("switch_bdsp_") && entry.extension == "pb8") {
                 "This is not a BDSP Bank entry."
             }
-            BdspPokemonReadOnly.read(entry.readBytes())
-        }.getOrElse { BdspSlotRead.Invalid(it.message ?: "The Bank entry could not be read.") }
+            val bytes = entry.readBytes()
+            bytes to BdspPokemonReadOnly.read(bytes)
+        }.getOrElse {
+            ByteArray(0) to BdspSlotRead.Invalid(
+                it.message ?: "The Bank entry could not be read."
+            )
+        }
+        val parsed = opened.second
         if (parsed !is BdspSlotRead.Pokemon) {
             AlertDialog.Builder(this).setTitle("Unreadable PSE Bank entry")
                 .setMessage((parsed as? BdspSlotRead.Invalid)?.reason ?: "The Bank entry is empty.")
@@ -4854,6 +4860,7 @@ class SwitchReadOnlyActivity : Activity() {
             return
         }
         val p = parsed.value
+        val openedHash = BdspPseBankRestoreEditing.sha256(opened.first)
         val detail = buildString {
             append("${SwordShieldSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form}\n")
             append("Nickname: ${p.nickname.ifBlank { "None" }}\nCached level: ${p.cachedLevel}\n")
@@ -4874,13 +4881,18 @@ class SwitchReadOnlyActivity : Activity() {
                     require(entry.parentFile == directory && entry.name.startsWith("switch_bdsp_") && entry.extension == "pb8") {
                         "This is not a current BDSP Bank entry."
                     }
-                    require(BdspPokemonReadOnly.read(entry.readBytes()) is BdspSlotRead.Pokemon) {
+                    val current = entry.readBytes()
+                    require(BdspPseBankRestoreEditing.sha256(current) == openedHash) {
+                        "The BDSP Bank entry changed. Reopen PSE Bank."
+                    }
+                    require(BdspPokemonReadOnly.read(current) is BdspSlotRead.Pokemon) {
                         "The Bank record is invalid and cannot be restored."
                     }
                     dialog.dismiss()
                     startActivity(Intent(this, SwitchBdspPseBankRestoreActivity::class.java).setData(source)
                         .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
                         .putExtra("pse.bank.entry", entry.name)
+                        .putExtra("pse.bank.sha256", openedHash)
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
                 } catch (error: Exception) {
                     AlertDialog.Builder(this).setTitle("Could not prepare Bank restore")
