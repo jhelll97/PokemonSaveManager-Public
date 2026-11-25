@@ -960,9 +960,15 @@ The count is derived from the same validated native destination list consumed by
 
 After source, Bank and destination validation, the Legends: Z-A full destination-picker action now shows the exact number of currently validated empty native PC-box slots. This gives the user the capacity result at the action that opens the existing explicit Box/Slot picker, while the adjacent deterministic first-empty shortcut remains available. The count label resets after a completed or failed copy transaction instead of presenting stale capacity.
 
-The count is derived from the same validated native destination list consumed by the picker. Destination ordering and selection remain unchanged, and the transaction still rechecks the chosen slot immediately before staging, preserves exact native or explicitly Legalised PA9 body and slot-footer data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. Full capacity remains safely blocked before either destination action is enabled. This implementation is pending its own automatic Android compile before the feature is called validated.
+The count is derived from the same validated native destination list consumed by the picker. Destination ordering and selection remain unchanged, and the transaction still rechecks the chosen slot immediately before staging, preserves exact native or explicitly Legalised PA9 body and slot-footer data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. Full capacity remains safely blocked before either destination action is enabled. Commit `f0b74f7de9b0632014887bd2f03efa24d4f990e1` passed automatic Android build run `45656336449`, attempt 1, and was reported by exact Slack event `1795625602.882069`; the Legends: Z-A empty-destination count picker label is validated.
 
-Next bounded feature: after this Legends: Z-A picker count is automatically compiled, inspect the supported-game restore screens for the next concrete review improvement while preserving their existing safe destination selection and transaction semantics.
+## Sword/Shield exact verified-copy inspection target
+
+After a Sword/Shield restore copy is written, reopened and verified, the visible inspection action now names the exact Box and Slot that the completed transaction used. A failed or unverified copy keeps the inspection action hidden and clears the target-specific label, so the UI cannot present an unverified destination as inspectable.
+
+The label is derived from the same immutable reviewed plan whose edited save hash is bound to the verified copy. Inspection still reopens that exact URI and hash, while the transaction continues to preserve exact native or explicitly Legalised PK8 data, the chosen empty native slot, optional reviewed Pokédex registration, native footer integrity, retained recovery, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after this Sword/Shield verified-copy target label is automatically compiled, add the same exact completed Box/Slot label to the BDSP verified-copy inspection action without changing transaction or reopen semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
