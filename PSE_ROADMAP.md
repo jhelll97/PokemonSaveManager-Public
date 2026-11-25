@@ -1140,9 +1140,15 @@ The row and column are derived only for display from the selected immutable dest
 
 The Scarlet/Violet slot picker and final review already show Box, Slot, row and column, but the preparation status displayed while binding the selected destination to the review fell back to Box and Slot only. That status now retains the same native five-row, six-column coordinates, keeping the exact reviewed location visible during preparation.
 
-The row and column are derived only for display from the selected immutable destination's one-based native Slot before the existing preparation worker runs. The selected destination, source and Bank identity checks, Legalise disclosure, native PK9 and reviewed Pokédex byte scope, native footer integrity, recovery, persisted reopen verification, failure handling and cleanup remain unchanged. This implementation is pending its own automatic Android compile before the feature is called validated.
+The row and column are derived only for display from the selected immutable destination's one-based native Slot before the existing preparation worker runs. The selected destination, source and Bank identity checks, Legalise disclosure, native PK9 and reviewed Pokédex byte scope, native footer integrity, recovery, persisted reopen verification, failure handling and cleanup remain unchanged. Commit `d958d071bf1659eb965099ae2bfbf05cf790d113` passed automatic Android build run `45720194021`, attempt 1, and was reported by exact Slack event `1795649423.467899`; the Scarlet/Violet destination-binding grid coordinates are validated.
 
-Next bounded feature: after the Scarlet/Violet destination-binding coordinates are automatically compiled, retain Legends: Z-A's reviewed row and column in the destination-binding status without changing its reviewed destination or transaction semantics.
+## Legends: Z-A destination-binding grid coordinates
+
+The Legends: Z-A slot picker and final review already show Box, Slot, row and column, but the preparation status displayed while binding the selected destination to the review fell back to Box and Slot only. That status now retains the same native five-row, six-column coordinates, keeping the exact reviewed location visible during preparation.
+
+The row and column are derived only for display from the selected immutable destination's one-based native Slot before the existing preparation worker runs. The selected destination, source and Bank identity checks, Legalise disclosure, native PA9 and reviewed Pokédex byte scope, slot-footer preservation, save revision, native footer integrity, recovery, persisted reopen verification, failure handling and cleanup remain unchanged. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after the Legends: Z-A destination-binding coordinates are automatically compiled, inspect Let's Go's linear native storage labels for the next concrete destination-location or capacity omission while preserving its next-unused record and transaction semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
