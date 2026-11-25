@@ -147,6 +147,7 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
                 result.onSuccess { prepared ->
                     val plan = prepared.plan
                     readyPlan = plan
+                    review.text = "Review first empty: storage slot ${plan.storageIndex + 1}"
                     conversionEffects = prepared.bank.effects
                     bankSourceSha256 = prepared.bank.sourceSha256
                     destinationVersion = prepared.version
@@ -537,6 +538,7 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
                     }
                 )
                 readyPlan = null
+                review.text = "Review first empty slot"
                 setBusy(false)
             }
         }

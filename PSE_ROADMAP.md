@@ -924,9 +924,15 @@ This label is derived from the same ordered native destination list used by the 
 
 After source, Bank and destination validation, the Legends: Z-A `Review first empty slot` button now names the exact deterministic Box and Slot it will bind to the existing cancellable restore review. The adjacent status preview and full Box/Slot picker remain available, and the shortcut label resets after a completed or failed copy transaction instead of presenting a stale destination.
 
-This label is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot immediately before staging, preserves exact native or explicitly Legalised PA9 body and slot-footer data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+This label is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot immediately before staging, preserves exact native or explicitly Legalised PA9 body and slot-footer data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. Commit `ac33b215784535b561c96485aa955e3142369967` passed automatic Android build run `45641963019`, attempt 1, and was reported by exact Slack event `1795620052.031309`; the Legends: Z-A exact first-empty shortcut label is validated.
 
-Next bounded feature: after this Legends: Z-A label is automatically compiled, expose Let's Go's exact append-only native storage slot in its first-empty review action while retaining the existing zero-filled-record and capacity protections.
+## Let's Go exact append-only destination label
+
+After source, Bank and destination validation, the Let's Go `Review first empty slot` action now names the exact next native storage slot it will bind to the existing cancellable restore review. The adjacent status continues to show the same destination, and the action label resets after a completed or failed copy transaction instead of presenting a stale slot.
+
+The label is derived from the already staged append-only native plan. The transaction still requires the complete 260-byte destination record to remain zero-filled, preserves the native storage count, partner and party pointers, exact native or explicitly Legalised PB7 data, optional reviewed caught registration, block CRC updates, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. A full storage pool or protected nonzero next record remains blocked. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after this Let's Go label is automatically compiled, continue supported-game PSE Bank work with one concrete restore-review improvement grounded in the existing safe transaction paths.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
