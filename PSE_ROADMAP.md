@@ -978,9 +978,15 @@ The label is derived from the same immutable reviewed plan whose edited save has
 
 After a Legends: Arceus restore copy is written, reopened and verified, the visible inspection action now names the exact Pasture and Slot that the completed transaction used. A failed or unverified copy keeps the inspection action hidden and clears the target-specific label, so the UI cannot present an unverified destination as inspectable.
 
-The label is derived from the same immutable reviewed plan whose edited save hash is bound to the verified copy. Inspection still reopens that exact URI and hash, while the transaction continues to preserve exact native or explicitly Legalised PA8 data, the chosen empty native slot, optional reviewed obtained registration, save integrity, retained recovery, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+The label is derived from the same immutable reviewed plan whose edited save hash is bound to the verified copy. Inspection still reopens that exact URI and hash, while the transaction continues to preserve exact native or explicitly Legalised PA8 data, the chosen empty native slot, optional reviewed obtained registration, save integrity, retained recovery, unchanged source and Bank checks, and failed-copy cleanup. Commit `8b9a3d8f384cfffae63be462d9fe148b220bceb3` passed automatic Android build run `45663879710`, attempt 1, and was reported by exact Slack event `1795628092.405009`; the Legends: Arceus exact verified-copy inspection target is validated.
 
-Next bounded feature: after this Legends: Arceus verified-copy target label is automatically compiled, add the same exact completed Box/Slot label to the Scarlet/Violet verified-copy inspection action without changing transaction or reopen semantics.
+## Scarlet/Violet exact verified-copy inspection target
+
+After a Scarlet/Violet restore copy is written, reopened and verified, the visible inspection action now names the exact Box and Slot that the completed transaction used. A failed or unverified copy keeps the inspection action hidden and clears the target-specific label, so the UI cannot present an unverified destination as inspectable.
+
+The label is derived from the same immutable reviewed plan whose edited save hash is bound to the verified copy. Inspection still reopens that exact URI and hash, while the transaction continues to preserve exact native or explicitly Legalised PK9 data, the chosen empty native slot, optional reviewed Pokédex registration, native footer integrity, retained recovery, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after this Scarlet/Violet verified-copy target label is automatically compiled, add the same exact completed Box/Slot label to the Legends: Z-A verified-copy inspection action without changing transaction or reopen semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
