@@ -2141,6 +2141,52 @@ internal fun buildGen3ToGen7Pk7Bytes(
     return BuiltGen3ToGen7Pk7(encrypt(pk),pid,custom,expectedNickname,expectedMoves,expectedMovePp,expectedEvs,expectedIvs,expectedGender,trainerName,baseFriendship,abilityId)
 }
 
+private fun gen3ToGen7Pk7Mismatch(
+    built:BuiltGen3ToGen7Pk7,
+    source:MainActivity.PokemonEntry,
+    pokemon:MainActivity.PokemonEntry,
+    handlerName:String,
+    verifiedRaw:ByteArray,
+    ppUps:IntArray
+):String?=when {
+    !pokemon.checksumValid->"PK7 checksum"
+    pokemon.species!=source.species->"species"
+    pokemon.tid!=source.tid->"Trainer ID"
+    pokemon.sid!=source.sid->"Secret ID"
+    pokemon.shiny!=source.shiny->"shiny state"
+    pokemon.experience!=source.experience->"experience"
+    pokemon.ability!=built.abilityId->"ability"
+    pokemon.abilityNumber!=source.abilityNumber->"ability slot"
+    pokemon.pid!=built.pid->"PID"
+    pokemon.nature!=source.nature->"nature"
+    pokemon.gender!=built.expectedGender->"gender"
+    pokemon.nickname!=built.expectedNickname->"nickname"
+    pokemon.isNicknamed!=built.customNickname->"nickname flag"
+    pokemon.otName!=source.otName->"Original Trainer name"
+    handlerName!=built.trainerName->"current handler name"
+    !pokemon.evs.contentEquals(built.expectedEvs)->"EVs"
+    !pokemon.moves.contentEquals(built.expectedMoves)->"moves"
+    !pokemon.movePP.contentEquals(built.expectedMovePp)->"move PP"
+    !pokemon.ivs.contentEquals(built.expectedIvs)->"IVs"
+    pokemon.currentHandler!=1->"current handler"
+    pokemon.friendship!=built.baseFriendship->"current handler friendship"
+    pokemon.pokerusDays!=(source.pokerusDays and 0xF)||pokemon.pokerusStrain!=(source.pokerusStrain and 0xF)->"Pokérus"
+    pokemon.isEgg->"Egg flag"
+    pokemon.heldItem!=0->"held item"
+    pokemon.eggLocation!=0->"Egg location"
+    pokemon.metLocation!=30001->"met location"
+    pokemon.ball!=source.ball->"Ball"
+    pokemon.metLevel!=source.metLevel->"met level"
+    pokemon.originGame!=source.originGame->"origin game"
+    pokemon.language!=source.language->"language"
+    verifiedRaw.size<=0xCA->"decrypted PK7 metadata length"
+    (verifiedRaw[0x93].toInt() and 0xFF)!=1->"raw current handler"
+    (verifiedRaw[0xA2].toInt() and 0xFF)!=built.baseFriendship->"raw current handler friendship"
+    (verifiedRaw[0xCA].toInt() and 0xFF)!=source.friendship.coerceIn(0,255)->"raw Original Trainer friendship"
+    (0..3).any { i->(verifiedRaw[0x66+i].toInt() and 3)!=if(built.expectedMoves[i]==0)0 else ppUps[i] }->"PP-Up data"
+    else->null
+}
+
 internal fun verifyGen3ToGen7Pk7Bytes(
     built:BuiltGen3ToGen7Pk7,
     source:MainActivity.PokemonEntry,
@@ -2150,22 +2196,8 @@ internal fun verifyGen3ToGen7Pk7Bytes(
     ppUps:IntArray
 ):ByteArray {
     val pokemon=converted?:error("The converted PK7 could not be parsed.")
-    val rawMetadataValid=(verifiedRaw[0x93].toInt() and 0xFF)==1&&
-        (verifiedRaw[0xA2].toInt() and 0xFF)==built.baseFriendship&&
-        (verifiedRaw[0xCA].toInt() and 0xFF)==source.friendship.coerceIn(0,255)&&
-        (0..3).all { i->(verifiedRaw[0x66+i].toInt() and 3)==if(built.expectedMoves[i]==0)0 else ppUps[i] }
-    require(pokemon.checksumValid&&pokemon.species==source.species&&pokemon.tid==source.tid&&pokemon.sid==source.sid&&pokemon.shiny==source.shiny&&
-        pokemon.experience==source.experience&&pokemon.ability==built.abilityId&&pokemon.abilityNumber==source.abilityNumber.coerceIn(1,2)&&
-        pokemon.pid==built.pid&&pokemon.nature==source.nature.coerceIn(0,24)&&pokemon.gender==built.expectedGender&&
-        pokemon.nickname==built.expectedNickname&&pokemon.isNicknamed==built.customNickname&&pokemon.otName==source.otName&&
-        handlerName==built.trainerName&&pokemon.evs.contentEquals(built.expectedEvs)&&pokemon.moves.contentEquals(built.expectedMoves)&&
-        pokemon.movePP.contentEquals(built.expectedMovePp)&&pokemon.ivs.contentEquals(built.expectedIvs)&&pokemon.currentHandler==1&&
-        pokemon.friendship==built.baseFriendship&&pokemon.pokerusDays==(source.pokerusDays and 0xF)&&
-        pokemon.pokerusStrain==(source.pokerusStrain and 0xF)&&!pokemon.isEgg&&pokemon.heldItem==0&&pokemon.eggLocation==0&&
-        pokemon.metLocation==30001&&pokemon.ball==source.ball&&pokemon.metLevel==source.metLevel&&pokemon.originGame==source.originGame&&
-        pokemon.language==source.language&&rawMetadataValid){
-        "The converted PK7 failed round-trip verification."
-    }
+    val mismatch=gen3ToGen7Pk7Mismatch(built,source,pokemon,handlerName,verifiedRaw,ppUps)
+    require(mismatch==null){"The converted PK7 failed $mismatch verification."}
     return built.encrypted
 }
 
