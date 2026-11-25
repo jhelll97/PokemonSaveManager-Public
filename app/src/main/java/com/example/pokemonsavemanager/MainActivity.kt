@@ -12499,7 +12499,7 @@ class MainActivity : Activity() {
         p.isEgg->"Egg state cannot be represented safely by this backward conversion."
         p.heldItem!=0->"Held item #${p.heldItem} uses a Generation 5 item ID and has no verified Generation 2 mapping."
         p.fatefulEncounter->"Fateful-event provenance cannot be represented in Generation 2."
-        p.moves.any{it !in 0..251}&&!allowReviewedMoveRemoval->"At least one move did not exist in Generation 2. Review and explicitly accept its removal before conversion."
+        p.moves.any{it !in 0..251}&&!allowReviewedMoveRemoval->"Unsupported destination moves remain blocked until the exact slot/ID/PP/PP-Up removal plan is shown and explicitly accepted."
         p.moves.indices.any{i->p.moves[i]==0&&p.movePP[i]!=0}->"An empty move slot contains PP data that Generation 2 cannot preserve."
         p.moves.indices.any{i->p.moves[i]!=0&&p.movePP[i] !in 0..63}->"A move has invalid current PP."
         p.language!=2->"Only English source text has a verified mapping to the native Generation 2 character table."
