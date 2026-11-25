@@ -832,9 +832,15 @@ Existing content-addressed PA9 identity, explicitly selected empty native PC-box
 
 Sword/Shield PSE Bank restore now offers a separate `Review first empty slot` action after source, Bank and destination validation. The shortcut selects the first native empty PC-box destination in deterministic Box/Slot order and enters the existing destination-bound review; the review still names the exact Box and Slot and remains cancellable before any new-copy write. The existing full Box/Slot picker remains available.
 
-The shortcut reuses the same empty-slot recheck, byte-exact PK8 staging, optional reviewed Pokédex registration, native SHA-256 footer refresh, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. It never overwrites an occupied slot or removes the Bank entry. This implementation is pending its own automatic Android compile before the feature is called validated.
+The shortcut reuses the same empty-slot recheck, byte-exact PK8 staging, optional reviewed Pokédex registration, native SHA-256 footer refresh, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. It never overwrites an occupied slot or removes the Bank entry. Commit `a942c76bba98c16f4d7b3a2a28ddd8ce6f99e873` passed automatic Android build run `45605124307`, attempt 1, and was reported by exact Slack event `1795606895.188899`; the Sword/Shield first-empty review shortcut is validated.
 
-Next bounded feature: after this Sword/Shield shortcut is automatically compiled, extend the same reviewable first-empty-slot option to the Let's Go PSE Bank restore while preserving its exact PB7 record, size record, partner and party pointers, Pokédex registration, CRC updates, recovery, reopen verification and rollback boundaries.
+## Let's Go first-empty PSE Bank restore review
+
+Let's Go PSE Bank restore now exposes its deterministic next-unused native storage destination as `Review first empty slot` after source, Bank and destination validation. Let's Go storage is append-only: the native storage count identifies the sole safe next record, and staging still requires that complete 260-byte record to be zero-filled. The status and cancellable final review continue to name the exact native storage slot before any new-copy write.
+
+The existing transaction still preserves the exact native or explicitly Legalised PB7, two-byte storage count, partner and party pointers, optional reviewed Pokédex registration, block 4, 8 and 9 CRC updates, unchanged source and Bank checks, retained recovery, persisted reopen verification and failed-copy cleanup. A full storage pool or protected nonzero next record remains blocked. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after this Let's Go review action is automatically compiled, add the same deterministic first-empty review shortcut to the BDSP PSE Bank restore while preserving exact PB8 bytes, the chosen empty PC-box slot, reviewed Pokédex registration, save integrity, recovery, reopen verification and rollback boundaries.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

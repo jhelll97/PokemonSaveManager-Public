@@ -76,7 +76,7 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
         }
         root.addView(status)
         review = Button(this).apply {
-            text = "Review restore to new copy"
+            text = "Review first empty slot"
             isEnabled = false
             setOnClickListener { readyPlan?.let { showReview(it) } }
         }
