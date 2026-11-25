@@ -14,6 +14,7 @@ data class LetsGoPseBankDexRegistration(
 
 /** Restores one checksum-valid native PB7 Bank record into a reviewed new Let's Go save copy. */
 object LetsGoPseBankRestoreEditing {
+    const val STORAGE_CAPACITY = 1000
     private const val DEX = 0x2A00
     private const val DEX_BLOCK_LENGTH = 0x20E8
     private const val DEX_CRC_OFFSET = 0xB863A
@@ -67,7 +68,7 @@ object LetsGoPseBankRestoreEditing {
         val beforeStorage = LetsGoStorageReadOnly.read(original)
         val pokemon = inspectBankRecord(supplied)
         val index = beforeStorage.count
-        require(index in 0 until 1000) { "The native Let's Go storage pool is full." }
+        require(index in 0 until STORAGE_CAPACITY) { "The native Let's Go storage pool is full." }
         val recordOffset = STORAGE_RECORDS + index * LetsGoPokemonReadOnly.RECORD_SIZE
         require(original.copyOfRange(recordOffset, recordOffset + LetsGoPokemonReadOnly.RECORD_SIZE)
             .all { it == 0.toByte() }) {

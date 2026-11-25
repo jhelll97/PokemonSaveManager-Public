@@ -147,7 +147,7 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
                 result.onSuccess { prepared ->
                     val plan = prepared.plan
                     readyPlan = plan
-                    review.text = "Review first empty: storage slot ${plan.storageIndex + 1}"
+                    review.text = "Review first empty: storage slot ${plan.storageIndex + 1} of ${LetsGoPseBankRestoreEditing.STORAGE_CAPACITY}"
                     conversionEffects = prepared.bank.effects
                     bankSourceSha256 = prepared.bank.sourceSha256
                     destinationVersion = prepared.version
@@ -157,7 +157,7 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
                     } ?: "English"
                     status.text = "${prepared.version.displayName} source and Bank integrity verified\n" +
                         "${LetsGoSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n" +
-                        "Destination: storage slot ${plan.storageIndex + 1}\n" +
+                        "Destination: storage slot ${plan.storageIndex + 1} of ${LetsGoPseBankRestoreEditing.STORAGE_CAPACITY}\n" +
                         (if (plan.caughtRegistrationReviewed)
                             "Native caught registration: $caughtLanguage (${if (plan.addedCaughtRegistration) "added" else "already complete"})\n"
                         else "") +
@@ -434,7 +434,7 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
                 "${LetsGoSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form} • Level ${p.cachedLevel}\n" +
                     "Nickname: ${p.nickname.ifBlank { "None" }} • Shiny: ${if (p.shiny) "Yes" else "No"}\n" +
                     "OT ${p.originalTrainer} • TID ${p.tid} / SID ${p.sid}\nMoves: $moves\n\n" +
-                    "Destination: native storage slot ${plan.storageIndex + 1}\n" +
+                    "Destination: native storage slot ${plan.storageIndex + 1} of ${LetsGoPseBankRestoreEditing.STORAGE_CAPACITY}\n" +
                     "Allowed byte scope: one previously empty 260-byte PB7 record at 0x${plan.recordOffset.toString(16).uppercase()}, " +
                     "the two-byte storage count, block 8 and block 9 CRCs$dexScope. Existing Pokémon, party pointers, partner pointer, and every unrelated byte remain exact.$dexReview " +
                     "PSE verifies the unchanged source and Bank entry, retains a verified recovery backup, reopens the persisted copy, and removes a failed copy when possible. " +
@@ -520,7 +520,7 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 verifiedCopy = result.getOrNull()?.let { uri to plan.editedSha256 }
                 inspectCopy.text = if (verifiedCopy != null) {
-                    "Inspect verified copy: storage slot ${plan.storageIndex + 1}"
+                    "Inspect verified copy: storage slot ${plan.storageIndex + 1} of ${LetsGoPseBankRestoreEditing.STORAGE_CAPACITY}"
                 } else {
                     "Inspect verified copy"
                 }
@@ -528,7 +528,7 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
                 status.text = result.fold(
                     onSuccess = {
                         "PSE Bank restore saved and reopened successfully.\n" +
-                            "Storage slot ${plan.storageIndex + 1} • SHA-256: ${plan.editedSha256}\n" +
+                            "Storage slot ${plan.storageIndex + 1} of ${LetsGoPseBankRestoreEditing.STORAGE_CAPACITY} • SHA-256: ${plan.editedSha256}\n" +
                             (if (plan.caughtRegistrationReviewed)
                                 "Native caught registration: " +
                                     (plan.caughtLanguageIndex?.let { LetsGoPokedexEditing.languages[it] } ?: "English") +

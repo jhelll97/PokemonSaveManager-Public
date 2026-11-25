@@ -1146,9 +1146,15 @@ The row and column are derived only for display from the selected immutable dest
 
 The Legends: Z-A slot picker and final review already show Box, Slot, row and column, but the preparation status displayed while binding the selected destination to the review fell back to Box and Slot only. That status now retains the same native five-row, six-column coordinates, keeping the exact reviewed location visible during preparation.
 
-The row and column are derived only for display from the selected immutable destination's one-based native Slot before the existing preparation worker runs. The selected destination, source and Bank identity checks, Legalise disclosure, native PA9 and reviewed Pokédex byte scope, slot-footer preservation, save revision, native footer integrity, recovery, persisted reopen verification, failure handling and cleanup remain unchanged. This implementation is pending its own automatic Android compile before the feature is called validated.
+The row and column are derived only for display from the selected immutable destination's one-based native Slot before the existing preparation worker runs. The selected destination, source and Bank identity checks, Legalise disclosure, native PA9 and reviewed Pokédex byte scope, slot-footer preservation, save revision, native footer integrity, recovery, persisted reopen verification, failure handling and cleanup remain unchanged. Commit `7c37bbc0b6673ad3c12800a347901a253a977c71` passed automatic Android build run `45722143745`, attempt 1, and was reported by exact Slack event `1795650328.327739`; the Legends: Z-A destination-binding grid coordinates are validated.
 
-Next bounded feature: after the Legends: Z-A destination-binding coordinates are automatically compiled, inspect Let's Go's linear native storage labels for the next concrete destination-location or capacity omission while preserving its next-unused record and transaction semantics.
+## Let's Go native storage capacity labels
+
+Let's Go uses one append-only native storage pool of 1,000 records, and the existing restore transaction already derives the sole safe next destination from its native storage count. The review action, preparation status, cancellable final disclosure, verified-copy inspection action and completion status previously named only that one-based slot ordinal. They now retain the same destination as `storage slot N of 1000`, making its position within the native capacity explicit throughout review and completion.
+
+The shared capacity constant also governs the existing full-pool rejection, so the displayed limit cannot drift from the write boundary. The transaction still requires the complete next 260-byte record to be zero-filled, preserves the native storage count, partner and party pointers, exact native or explicitly Legalised PB7 data, optional reviewed caught registration, block CRCs, exact source and Bank identity, retained recovery, persisted reopen verification and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after the Let's Go capacity labels are automatically compiled, inspect the remaining supported Bank destination review surfaces for one concrete location or capacity omission while preserving their native slot-selection and transaction semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
