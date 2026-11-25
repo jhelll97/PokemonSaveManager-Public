@@ -1110,9 +1110,15 @@ The row and column are derived only for display from the immutable reviewed plan
 
 Scarlet/Violet's final review shows the selected Box, Slot, row and column, but the reopened-copy button and successful-save result previously fell back to Box and Slot only. Both post-verification labels now retain the same native five-row, six-column coordinates, so the persisted destination can be matched directly to the in-game PC layout when inspection begins.
 
-The row and column are derived only for display from the immutable reviewed plan's one-based native Slot after the existing save-and-reopen transaction returns. The destination, native PK9 and reviewed Pokédex byte scope, native footer integrity, recovery backup, persisted reopen verification, unchanged source and Bank checks, failure handling and cleanup remain unchanged. This implementation is pending its own automatic Android compile before the feature is called validated.
+The row and column are derived only for display from the immutable reviewed plan's one-based native Slot after the existing save-and-reopen transaction returns. The destination, native PK9 and reviewed Pokédex byte scope, native footer integrity, recovery backup, persisted reopen verification, unchanged source and Bank checks, failure handling and cleanup remain unchanged. Commit `2dad458ab8f545db3801439a12c0cc19fc60b832` passed automatic Android build run `45712157359`, attempt 1, and was reported by exact Slack event `1795645673.058179`; the Scarlet/Violet verified-copy grid coordinates are validated.
 
-Next bounded feature: after the Scarlet/Violet verified-copy coordinates are automatically compiled, add the same post-verification row and column detail to Legends: Z-A without changing its reviewed destination or transaction semantics.
+## Legends: Z-A verified-copy grid coordinates
+
+Legends: Z-A's final review shows the selected Box, Slot, row and column, but the reopened-copy button and successful-save result previously fell back to Box and Slot only. Both post-verification labels now retain the same native five-row, six-column coordinates, so the persisted destination can be matched directly to the in-game PC layout when inspection begins.
+
+The row and column are derived only for display from the immutable reviewed plan's one-based native Slot after the existing save-and-reopen transaction returns. The destination, native PA9 and reviewed Pokédex byte scope, slot-footer preservation, save revision, native footer integrity, recovery backup, persisted reopen verification, unchanged source and Bank checks, failure handling and cleanup remain unchanged. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after the Legends: Z-A verified-copy coordinates are automatically compiled, retain Sword/Shield's reviewed row and column in the destination-binding status without changing its reviewed destination or transaction semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
