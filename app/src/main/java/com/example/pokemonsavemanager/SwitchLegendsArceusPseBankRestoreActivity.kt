@@ -141,15 +141,18 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 result.onSuccess { prepared ->
+                    val firstDestination = prepared.destinations.first()
+                    val firstZeroBased = firstDestination.position - 1
+                    val firstGrid = "row ${firstZeroBased / 6 + 1}, column ${firstZeroBased % 6 + 1}"
                     readyDestinations = prepared.destinations
                     review.text = "Choose destination (${prepared.destinations.size} empty) & review"
-                    firstEmpty.text = "Review first empty: Pasture ${prepared.destinations.first().pasture}, slot ${prepared.destinations.first().position}"
+                    firstEmpty.text = "Review first empty: Pasture ${firstDestination.pasture}, slot ${firstDestination.position} • $firstGrid"
                     conversionEffects = prepared.effects
                     registerConvertedObtained = prepared.registerObtained
                     status.text = "Native source and Bank integrity verified\n" +
                         "${LegendsArceusSpeciesNames.name(prepared.pokemon.species)} (#${prepared.pokemon.species}) • EXP ${prepared.pokemon.experience}\n" +
                         "${prepared.destinations.size} empty native destination slots available\n" +
-                        "First empty shortcut target: Pasture ${prepared.destinations.first().pasture}, slot ${prepared.destinations.first().position}\n" +
+                        "First empty shortcut target: Pasture ${firstDestination.pasture}, slot ${firstDestination.position} • $firstGrid\n" +
                         "Source SHA-256: ${expectedHash}\nBank source SHA-256: ${prepared.sourceBankHash}\n" +
                         "Prepared PA8 SHA-256: ${prepared.nativeRecordHash}" +
                         if (prepared.effects.isEmpty()) "" else "\n\nPSE conversion Legalise effects\n• " +
