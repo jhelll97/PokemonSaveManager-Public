@@ -918,9 +918,15 @@ This label is derived from the same ordered native destination list used by the 
 
 After source, Bank and destination validation, the Scarlet/Violet `Review first empty slot` button now names the exact deterministic Box and Slot it will bind to the existing cancellable restore review. The adjacent status preview and full Box/Slot picker remain available, and the shortcut label resets after a completed or failed copy transaction instead of presenting a stale destination.
 
-This label is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot immediately before staging, preserves exact native or explicitly Legalised PK9 data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+This label is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot immediately before staging, preserves exact native or explicitly Legalised PK9 data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. Commit `e6d2cd07deb11b687ed2201296667240d70dae92` passed automatic Android build run `45639574874`, attempt 1, and was reported by exact Slack event `1795619230.748279`; the Scarlet/Violet exact first-empty shortcut label is validated.
 
-Next bounded feature: after this Scarlet/Violet label is automatically compiled, expose the exact first-empty Box/Slot in the Legends: Z-A shortcut label while retaining its status preview, full picker and existing safety boundaries.
+## Legends: Z-A exact first-empty shortcut label
+
+After source, Bank and destination validation, the Legends: Z-A `Review first empty slot` button now names the exact deterministic Box and Slot it will bind to the existing cancellable restore review. The adjacent status preview and full Box/Slot picker remain available, and the shortcut label resets after a completed or failed copy transaction instead of presenting a stale destination.
+
+This label is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot immediately before staging, preserves exact native or explicitly Legalised PA9 body and slot-footer data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after this Legends: Z-A label is automatically compiled, expose Let's Go's exact append-only native storage slot in its first-empty review action while retaining the existing zero-filled-record and capacity protections.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
