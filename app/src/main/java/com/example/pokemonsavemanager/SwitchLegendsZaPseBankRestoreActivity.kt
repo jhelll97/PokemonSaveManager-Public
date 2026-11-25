@@ -192,7 +192,10 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         destinations: List<LegendsZaPseBankDestination>
     ) {
         if (busy) return
-        val labels = destinations.map { "Slot ${it.position}" }.toTypedArray()
+        val labels = destinations.map {
+            val zeroBased = it.position - 1
+            "Slot ${it.position} • row ${zeroBased / 6 + 1}, column ${zeroBased % 6 + 1}"
+        }.toTypedArray()
         AlertDialog.Builder(this).setTitle("Box $box • choose empty slot")
             .setItems(labels) { _, index -> prepareDestinationReview(destinations[index]) }
             .setNegativeButton("Back") { _, _ -> showDestinationBoxPicker() }

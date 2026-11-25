@@ -1020,9 +1020,15 @@ The row and column are a display-only derivation from the same one-based native 
 
 The Scarlet/Violet empty-slot picker already groups the validated destination list by Box and shows each Box's exact empty-slot count. Each listed empty Slot now also names its native five-row, six-column grid coordinates, so the user can match the picker entry directly to the in-game PC layout before opening the existing cancellable restore review.
 
-The row and column are a display-only derivation from the same one-based native Slot number, and the selected item still passes the original destination object without reordering or remapping it. The transaction continues to recheck that exact slot, preserve exact native or explicitly Legalised PK9 data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+The row and column are a display-only derivation from the same one-based native Slot number, and the selected item still passes the original destination object without reordering or remapping it. The transaction continues to recheck that exact slot, preserve exact native or explicitly Legalised PK9 data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. Commit `8f9c0de639640d42cc7364db573fb4399c81e0a9` passed automatic Android build run `45681258626`, attempt 1, and was reported by exact Slack event `1795634227.136089`; the Scarlet/Violet native destination grid coordinates are validated.
 
-Next bounded feature: after these Scarlet/Violet grid coordinates are automatically compiled, add the same native row and column detail to the Legends: Z-A empty-slot picker without changing destination ordering or transaction semantics.
+## Legends: Z-A native destination grid coordinates
+
+The Legends: Z-A empty-slot picker already groups the validated destination list by Box and shows each Box's exact empty-slot count. Each listed empty Slot now also names its native five-row, six-column grid coordinates, so the user can match the picker entry directly to the in-game PC layout before opening the existing cancellable restore review.
+
+The row and column are a display-only derivation from the same one-based native Slot number, and the selected item still passes the original destination object without reordering or remapping it. The transaction continues to recheck that exact slot, preserve exact native or explicitly Legalised PA9 data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after these Legends: Z-A grid coordinates are automatically compiled, add the same row and column detail to the Sword/Shield first-empty shortcut label and status without changing its selected destination or transaction semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
