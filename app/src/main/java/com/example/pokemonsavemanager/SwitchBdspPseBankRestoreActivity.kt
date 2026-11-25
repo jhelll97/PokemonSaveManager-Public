@@ -118,6 +118,7 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 result.onSuccess { prepared ->
                     readyDestinations = prepared.destinations
+                    review.text = "Choose destination (${prepared.destinations.size} empty) & review"
                     firstEmpty.text = "Review first empty: Box ${prepared.destinations.first().box}, slot ${prepared.destinations.first().position}"
                     conversionEffects = prepared.effects
                     status.text = "Native source and Bank integrity verified\n" +
@@ -571,6 +572,7 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
                 )
                 readyPlan = null
                 readyDestinations = emptyList()
+                review.text = "Choose destination & review"
                 firstEmpty.text = "Review first empty slot"
                 setBusy(false)
             }
