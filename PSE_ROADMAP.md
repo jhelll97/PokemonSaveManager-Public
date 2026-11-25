@@ -1062,9 +1062,15 @@ The row and column are derived only for display from the same first destination 
 
 The Sword/Shield final cancellable restore review already names the exact native Box and Slot bound to the immutable reviewed plan. Its Destination line now also shows that Slot's native five-row, six-column grid coordinates, allowing the user to verify the in-game PC location immediately before choosing a new copy.
 
-The row and column are a display-only derivation from the reviewed plan's one-based native Slot number. The plan, selected destination, Legalise disclosures, caught registration review, allowed byte scope, footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, cancellation path and failed-copy cleanup remain unchanged. This implementation is pending its own automatic Android compile before the feature is called validated.
+The row and column are a display-only derivation from the reviewed plan's one-based native Slot number. The plan, selected destination, Legalise disclosures, caught registration review, allowed byte scope, footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, cancellation path and failed-copy cleanup remain unchanged. Commit `5aba7b89f8ee1548aa59f07499950e097541491e` passed automatic Android build run `45697073959`, attempt 1, and was reported by exact Slack event `1795639708.659349`; the Sword/Shield final-review grid coordinates are validated.
 
-Next bounded feature: after the Sword/Shield final-review coordinates are automatically compiled, add the same row and column detail to the BDSP final cancellable restore review without changing its selected destination or transaction semantics.
+## BDSP final-review grid coordinates
+
+The BDSP final cancellable restore review already names the exact native Box and Slot bound to the immutable reviewed plan. Its Destination line now also shows that Slot's native five-row, six-column grid coordinates, allowing the user to verify the in-game PC location immediately before choosing a new copy.
+
+The row and column are a display-only derivation from the reviewed plan's one-based native Slot number. The plan, selected destination, Legalise disclosures, caught registration review, allowed byte scope, whole-file MD5 integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, cancellation path and failed-copy cleanup remain unchanged. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after the BDSP final-review coordinates are automatically compiled, add the same row and column detail to the Legends: Arceus final cancellable restore review without changing its selected destination or transaction semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
