@@ -56,7 +56,8 @@ object LetsGoPseBankRestoreEditing {
         source: ByteArray,
         expectedSha256: String,
         bankRecord: ByteArray,
-        registerCaughtEnglish: Boolean = false
+        registerCaughtEnglish: Boolean = false,
+        caughtLanguageIndex: Int = 1
     ): LetsGoPseBankRestoreCopyPlan {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
@@ -79,7 +80,7 @@ object LetsGoPseBankRestoreEditing {
         writeBlockCrc(edited, META_BLOCK, STORAGE_META, STORAGE_META_LENGTH)
         writeBlockCrc(edited, RECORD_BLOCK, STORAGE_RECORDS, STORAGE_RECORDS_LENGTH)
         val (completed, dexRegistration) = if (registerCaughtEnglish) {
-            stageCaughtEnglishRegistration(edited, pokemon)
+            stageCaughtLanguageRegistration(edited, pokemon, caughtLanguageIndex)
         } else edited to null
         verify(original, completed, supplied, index, dexRegistration)
         return LetsGoPseBankRestoreCopyPlan(
@@ -176,15 +177,18 @@ object LetsGoPseBankRestoreEditing {
         }) { "An unrelated Let's Go save byte changed." }
     }
 
-    private fun stageCaughtEnglishRegistration(
+    private fun stageCaughtLanguageRegistration(
         source: ByteArray,
-        pokemon: LetsGoPokemonRead
+        pokemon: LetsGoPokemonRead,
+        languageIndex: Int
     ): Pair<ByteArray, LetsGoPseBankDexRegistration> {
         require(pokemon.gender in 0..2) {
-            "The converted PB7 gender cannot be represented in the native Let's Go Pokédex."
+            "The reviewed PB7 gender cannot be represented in the native Let's Go Pokédex."
+        }
+        require(languageIndex in LetsGoPokedexEditing.languages.indices) {
+            "The reviewed native Pokédex language is unsupported."
         }
         val variant = (if (pokemon.gender == 1) 1 else 0) + (if (pokemon.shiny) 2 else 0)
-        val languageIndex = 1
         val bit = pokemon.species - 1
         val seenOffset = DEX + 0xF0 + variant * 0x8C + (bit ushr 3)
         val displayedOffset = DEX + 0xF0 + (variant + 4) * 0x8C + (bit ushr 3)
@@ -259,6 +263,7 @@ class LetsGoPseBankRestoreCopyPlan internal constructor(
         touchedOffsets = LinkedHashSet(dexRegistration.touchedOffsets)
     )
     val caughtRegistrationReviewed: Boolean = this.dexRegistration != null
+    val caughtLanguageIndex: Int? = this.dexRegistration?.languageIndex
     val addedCaughtRegistration: Boolean = this.dexRegistration?.changed == true
     val sourceSha256: String = LetsGoPseBankRestoreEditing.sha256(this.original)
     val bankSha256: String = LetsGoPseBankRestoreEditing.sha256(this.bankRecord)

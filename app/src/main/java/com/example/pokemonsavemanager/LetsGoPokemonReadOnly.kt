@@ -12,7 +12,8 @@ data class LetsGoPokemonRead(
     val originalTrainer: String,
     val tid: Int, val sid: Int, val pid: Long, val encryptionConstant: Long,
     val shiny: Boolean, val isEgg: Boolean, val fatefulEncounter: Boolean, val isPartnerForm: Boolean,
-    val moves: List<LetsGoMoveRead>, val ivs: List<Int>, val awakened: List<Int>
+    val languageId: Int, val moves: List<LetsGoMoveRead>, val ivs: List<Int>,
+    val awakened: List<Int>
 )
 
 sealed class LetsGoSlotRead {
@@ -65,6 +66,7 @@ object LetsGoPokemonReadOnly {
             currentFriendship, currentHandler, plain[0xDE].toInt() and 255, text(plain, 0xB0), tid, sid, pid, ec,
             shinyXor < 16, iv32 and 0x40000000L != 0L, plain[0x1D].toInt() and 1 != 0,
             (species == 25 && form == 8) || (species == 133 && form == 1),
+            plain[0xE3].toInt() and 255,
             Collections.unmodifiableList((0..3).map {
                 LetsGoMoveRead(
                     u16(plain, 0x5A + it * 2),

@@ -101,22 +101,42 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
                 }
                 val verified = LetsGoSaveValidation.inspect(source) as? LetsGoValidation.Verified
                     ?: error("A validated native Let's Go destination is required.")
+                val bankEntry = bankFile()
                 val bank = prepareBankRecord(verified.version)
+                val native = bankEntry.name.startsWith("switch_lgpe_") &&
+                    bankEntry.extension.equals("pb7", true)
+                val nativePokemon = if (native) {
+                    LetsGoPseBankRestoreEditing.inspectBankRecord(bank.nativeRecord)
+                } else null
+                val nativeLanguageIndex = when (nativePokemon?.languageId) {
+                    1 -> 0
+                    2 -> 1
+                    3 -> 2
+                    4 -> 3
+                    5 -> 4
+                    7 -> 5
+                    8 -> 6
+                    9 -> 7
+                    10 -> 8
+                    else -> null
+                }
                 PreparedLetsGoRestore(
                     LetsGoPseBankRestoreEditing.stage(
                         source, hash, bank.nativeRecord,
-                        registerCaughtEnglish = bankFile().extension.equals("pse1", true) ||
-                            bankFile().extension.equals("pse2", true) ||
-                            bankFile().extension.equals("pk3", true) ||
-                            bankFile().extension.equals("pk4", true) ||
-                            bankFile().extension.equals("pk5", true) ||
-                            bankFile().extension.equals("pk6", true) ||
-                            bankFile().extension.equals("pk7", true) ||
-                            bankFile().extension.equals("pk8", true) ||
-                            bankFile().extension.equals("pb8", true) ||
-                            bankFile().extension.equals("pa8", true) ||
-                            bankFile().extension.equals("pk9", true) ||
-                            bankFile().extension.equals("pa9", true)
+                        registerCaughtEnglish = nativeLanguageIndex != null ||
+                            bankEntry.extension.equals("pse1", true) ||
+                            bankEntry.extension.equals("pse2", true) ||
+                            bankEntry.extension.equals("pk3", true) ||
+                            bankEntry.extension.equals("pk4", true) ||
+                            bankEntry.extension.equals("pk5", true) ||
+                            bankEntry.extension.equals("pk6", true) ||
+                            bankEntry.extension.equals("pk7", true) ||
+                            bankEntry.extension.equals("pk8", true) ||
+                            bankEntry.extension.equals("pb8", true) ||
+                            bankEntry.extension.equals("pa8", true) ||
+                            bankEntry.extension.equals("pk9", true) ||
+                            bankEntry.extension.equals("pa9", true),
+                        caughtLanguageIndex = nativeLanguageIndex ?: 1
                     ),
                     bank,
                     verified.version
@@ -131,11 +151,14 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
                     bankSourceSha256 = prepared.bank.sourceSha256
                     destinationVersion = prepared.version
                     val p = plan.pokemon
+                    val caughtLanguage = plan.caughtLanguageIndex?.let {
+                        LetsGoPokedexEditing.languages[it]
+                    } ?: "English"
                     status.text = "${prepared.version.displayName} source and Bank integrity verified\n" +
                         "${LetsGoSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n" +
                         "Destination: storage slot ${plan.storageIndex + 1}\n" +
                         (if (plan.caughtRegistrationReviewed)
-                            "Native caught registration: English (${if (plan.addedCaughtRegistration) "added" else "already complete"})\n"
+                            "Native caught registration: $caughtLanguage (${if (plan.addedCaughtRegistration) "added" else "already complete"})\n"
                         else "") +
                         "Source SHA-256: ${plan.sourceSha256}\n" +
                         "Bank source SHA-256: ${prepared.bank.sourceSha256}\n" +
@@ -396,11 +419,14 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
         val title = if (conversionEffects.isEmpty())
             "Restore this Bank Pokémon to a new copy?"
         else "Legalise and restore this Pokémon?"
+        val caughtLanguage = plan.caughtLanguageIndex?.let {
+            LetsGoPokedexEditing.languages[it]
+        } ?: "English"
         val dexReview = if (plan.caughtRegistrationReviewed)
-            "\nNative caught registration: English (${if (plan.addedCaughtRegistration) "will be added" else "already complete"})."
+            "\nNative caught registration: $caughtLanguage (${if (plan.addedCaughtRegistration) "will be added" else "already complete"})."
         else ""
         val dexScope = if (plan.caughtRegistrationReviewed)
-            ", the matching native seen/caught English registration bytes and block 4 CRC"
+            ", the matching native seen/caught $caughtLanguage registration bytes and block 4 CRC"
         else ""
         AlertDialog.Builder(this).setTitle(title)
             .setMessage(
@@ -498,7 +524,9 @@ class SwitchLetsGoPseBankRestoreActivity : Activity() {
                         "PSE Bank restore saved and reopened successfully.\n" +
                             "Storage slot ${plan.storageIndex + 1} • SHA-256: ${plan.editedSha256}\n" +
                             (if (plan.caughtRegistrationReviewed)
-                                "Native caught registration: English (${if (plan.addedCaughtRegistration) "added" else "already complete"})\n"
+                                "Native caught registration: " +
+                                    (plan.caughtLanguageIndex?.let { LetsGoPokedexEditing.languages[it] } ?: "English") +
+                                    " (${if (plan.addedCaughtRegistration) "added" else "already complete"})\n"
                             else "") +
                             "Recovery backup: $backupName\nOriginal source and Bank entry unchanged.\n" +
                             "Bank source SHA-256: ${bankSourceSha256 ?: "unavailable"}"
