@@ -241,6 +241,8 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
 
     private fun readBankSource(): ByteArray {
         val entry = bankFile()
+        val native = entry.name.startsWith("switch_pla_") &&
+            entry.extension.equals("pa8", true)
         val gen1 = entry.name.startsWith("pse1_") &&
             entry.extension.equals("pse1", true)
         val gen2 = entry.extension.equals("pse2", true)
@@ -258,7 +260,10 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
             entry.extension.equals("pk9", true)
         val legendsZa = entry.name.startsWith("switch_za_") &&
             entry.extension.equals("pa9", true)
-        if (gen1 || gen2 || gen3 || gen4 || gen5 || gen6 || entry.extension.equals("pk7", true) || letsGo || bdsp || swordShield || scarletViolet || legendsZa) {
+        if (native || gen1 || gen2 || gen3 || gen4 || gen5 || gen6 ||
+            entry.extension.equals("pk7", true) || letsGo || bdsp ||
+            swordShield || scarletViolet || legendsZa
+        ) {
             require(!expectedBankSourceHash.isNullOrBlank()) {
                 "The reviewed PSE Bank hash is missing. Reopen PSE Bank."
             }
