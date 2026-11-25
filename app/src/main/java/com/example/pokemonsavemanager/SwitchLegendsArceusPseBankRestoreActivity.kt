@@ -455,6 +455,8 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         setBusy(true)
         var dispatched = false
         val p = plan.pokemon
+        val destinationZeroBased = plan.position - 1
+        val destinationGrid = "row ${destinationZeroBased / 6 + 1}, column ${destinationZeroBased % 6 + 1}"
         val moves = p.moves.filter { it.id != 0 }.joinToString { "#${it.id} (PP ${it.pp})" }.ifBlank { "None" }
         val formatNote = if (plan.partyTailBytes == 0) {
             "The complete 360-byte stored PA8 is written unchanged."
@@ -481,7 +483,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 "${LegendsArceusSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form} • EXP ${p.experience}\n" +
                     "Nickname: ${p.nickname.ifBlank { "None" }} • Shiny: ${if (p.shiny) "Yes" else "No"}\n" +
                     "OT ${p.originalTrainer} • TID ${p.tid} / SID ${p.sid}\nMoves: $moves\n\n" +
-                    "Destination: native Pasture ${plan.pasture}, slot ${plan.position}\n" +
+                    "Destination: native Pasture ${plan.pasture}, slot ${plan.position} • $destinationGrid\n" +
                     "$formatNote\n\n" +
                     "Allowed native byte scope: one previously empty 360-byte PA8 pasture slot at 0x${plan.absoluteOffset.toString(16).uppercase()}, " +
                     "the reviewed native Hisui obtained word when required, and the native SHA-256 footer. Every existing pasture slot, all party data, and all unrelated bytes remain exact." +
