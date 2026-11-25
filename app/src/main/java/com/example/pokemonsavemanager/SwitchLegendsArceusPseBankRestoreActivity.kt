@@ -561,6 +561,11 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 verifiedCopy = result.getOrNull()?.let { uri to plan.editedSha256 }
+                inspectCopy.text = if (verifiedCopy != null) {
+                    "Inspect verified copy: Pasture ${plan.pasture}, slot ${plan.position}"
+                } else {
+                    "Inspect verified copy"
+                }
                 inspectCopy.visibility = if (verifiedCopy != null) android.view.View.VISIBLE else android.view.View.GONE
                 status.text = result.fold(
                     onSuccess = {
