@@ -748,9 +748,15 @@ Generation 4 restores to Legends: Arceus now classify every selected PK4 entry a
 
 Route inspection confirmed that the Generation 5 Bank screen already computes, rechecks and passes the exact reviewed PK5 SHA through its explicit cancellable Legalise handoff. The Legends: Arceus restore boundary accepted that hash and compared it when present, but did not require the hash before reading the PK5 source.
 
-Generation 5 restores to Legends: Arceus now classify every selected PK5 entry as a reviewed source and require its SHA before any source read or conversion. This implementation is pending its own automatic Android compile before the route is called validated. Existing conversion review, selected empty pasture slot, native PA8 checksum and Pokédex updates, retained recovery, persisted reopen verification, cleanup-last ordering and two-sided failure handling remain unchanged. PSE continues to make no claim of official transfer, HOME movement, legality certification or verified provenance.
+Generation 5 restores to Legends: Arceus now classify every selected PK5 entry as a reviewed source and require its SHA before any source read or conversion. Commit `6e959fcec6f76b009815150cff55dfda2253914e` received a successful automatic Android compile in Actions run `45574635849`, attempt 1, reported by exact Slack validation event `1795595331.700999`. Existing conversion review, selected empty pasture slot, native PA8 checksum and Pokédex updates, retained recovery, persisted reopen verification, cleanup-last ordering and two-sided failure handling remain unchanged. PSE continues to make no claim of official transfer, HOME movement, legality certification or verified provenance.
 
-Next bounded repair: inspect the Generation 6 PK6 -> Legends: Arceus PA8 route for the same missing restore-side reviewed-source requirement while preserving the established Legalise and one-empty-slot transaction boundary.
+## Generation 6 -> Legends: Arceus reviewed-source requirement repair
+
+Route inspection confirmed that the Generation 6 Bank screen already computes, rechecks and passes the exact reviewed PK6 SHA through its explicit cancellable Legalise handoff. The Legends: Arceus restore boundary accepted that hash and compared it when present, but did not require the hash before reading the PK6 source.
+
+Generation 6 restores to Legends: Arceus now classify every selected PK6 entry as a reviewed source and require its SHA before any source read or conversion. This implementation is pending its own automatic Android compile before the route is called validated. Existing conversion review, selected empty pasture slot, native PA8 checksum and Pokédex updates, retained recovery, persisted reopen verification, cleanup-last ordering and two-sided failure handling remain unchanged. PSE continues to make no claim of official transfer, HOME movement, legality certification or verified provenance.
+
+Next bounded repair: re-inventory the remaining Legends: Arceus source matrix after completing the Generation 1-6 reviewed-source requirement pass, selecting the next concrete converter or destination-transaction gap while preserving explicit Legalise disclosure and the established one-empty-slot safety boundary.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
