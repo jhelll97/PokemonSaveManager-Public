@@ -543,6 +543,8 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
         setBusy(true)
         var dispatched = false
         val p = plan.pokemon
+        val destinationZeroBased = plan.position - 1
+        val destinationGrid = "row ${destinationZeroBased / 6 + 1}, column ${destinationZeroBased % 6 + 1}"
         val moves = p.moves.filter { it.id != 0 }.joinToString { "#${it.id} (PP ${it.pp})" }.ifBlank { "None" }
         val effects = if (conversionEffects.isEmpty()) "" else
             "\n\nExplicit PSE conversion Legalise effects\n• " + conversionEffects.joinToString("\n• ")
@@ -569,7 +571,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                 "${ScarletVioletSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form} • Level ${p.cachedLevel}\n" +
                     "Nickname: ${p.nickname.ifBlank { "None" }} • Shiny: ${if (p.shiny) "Yes" else "No"}\n" +
                     "OT ${p.originalTrainer} • TID ${p.tid} / SID ${p.sid}\nMoves: $moves\n\n" +
-                    "Destination: native Box ${plan.box}, slot ${plan.position}\n" +
+                    "Destination: native Box ${plan.box}, slot ${plan.position} • $destinationGrid\n" +
                     "Allowed native byte scope: one previously empty 344-byte PK9 PC-box slot at 0x${plan.absoluteOffset.toString(16).uppercase()}, " +
                     "the reviewed native Pokédex fields when required, and the native SHA-256 footer. Every existing PC-box slot, all party data, ride Pokémon data, and all unrelated bytes remain exact." +
                     dexScope + " PSE verifies the unchanged source and Bank entry, retains a verified recovery backup, reopens the persisted copy, and removes a failed copy when possible. " +

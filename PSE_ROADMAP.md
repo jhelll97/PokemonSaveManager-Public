@@ -1074,9 +1074,15 @@ The row and column are a display-only derivation from the reviewed plan's one-ba
 
 The Legends: Arceus final cancellable restore review already names the exact native Pasture and Slot bound to the immutable reviewed plan. Its Destination line now also shows that Slot's native five-row, six-column grid coordinates, allowing the user to verify the in-game Pasture location immediately before choosing a new copy.
 
-The row and column are a display-only derivation from the reviewed plan's one-based native Slot number. The plan, selected destination, Legalise disclosures, allowed byte scope, optional reviewed Pokédex registration, footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, cancellation path and failed-copy cleanup remain unchanged. This implementation is pending its own automatic Android compile before the feature is called validated.
+The row and column are a display-only derivation from the reviewed plan's one-based native Slot number. The plan, selected destination, Legalise disclosures, allowed byte scope, optional reviewed Pokédex registration, footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, cancellation path and failed-copy cleanup remain unchanged. Commit `5093354eea9cf6be965caf8cffacd0a601f994d0` passed automatic Android build run `45700905046`, attempt 1, and was reported by exact Slack event `1795641208.605619`; the Legends: Arceus final-review grid coordinates are validated.
 
-Next bounded feature: after the Legends: Arceus final-review coordinates are automatically compiled, add the same row and column detail to the Scarlet/Violet final cancellable restore review without changing its selected destination or transaction semantics.
+## Scarlet/Violet final-review grid coordinates
+
+The Scarlet/Violet final cancellable restore review already names the exact native Box and Slot bound to the immutable reviewed plan. Its Destination line now also shows that Slot's native five-row, six-column grid coordinates, allowing the user to verify the in-game PC location immediately before choosing a new copy.
+
+The row and column are a display-only derivation from the reviewed plan's one-based native Slot number. The plan, selected destination, Legalise disclosures, caught registration review, allowed byte scope, footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, cancellation path and failed-copy cleanup remain unchanged. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after the Scarlet/Violet final-review coordinates are automatically compiled, add the same row and column detail to the Legends: Z-A final cancellable restore review without changing its selected destination or transaction semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
