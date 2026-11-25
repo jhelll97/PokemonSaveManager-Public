@@ -802,9 +802,17 @@ Route inspection confirmed that converted sources restored into Brilliant Diamon
 
 Native BDSP restores now read and preserve the exact PB8 language ID at native offset `0xE2` and stage matching caught, gender/shiny, base-form, applicable Spinda-pattern and language registration for checksum-valid, non-Egg default-form records. Native language IDs 1, 2, 3, 4, 5, 7, 8, 9 and 10 map to Japanese, English, French, Italian, German, Spanish, Korean, Simplified Chinese and Traditional Chinese flags. The final review and completion result disclose the exact language and reviewed Pokédex offsets. Native nonzero forms and unknown language IDs remain transferable byte-exact with Pokédex bytes unchanged; Eggs and unsupported records retain their existing safe blocks.
 
-Existing content-addressed PB8 identity, explicitly selected empty native PC-box slot, exact record bytes, whole-file MD5, retained recovery, persisted reopen verification, unchanged Bank source and failed-copy cleanup remain unchanged. This native PSE restore makes no claim of official trade, HOME movement, encounter history, legality certification or verified provenance. This implementation is pending its own automatic Android compile before the route is called validated.
+Existing content-addressed PB8 identity, explicitly selected empty native PC-box slot, exact record bytes, whole-file MD5, retained recovery, persisted reopen verification, unchanged Bank source and failed-copy cleanup remain unchanged. This native PSE restore makes no claim of official trade, HOME movement, encounter history, legality certification or verified provenance. Commit `30e91a4ed450fc66d9ee34ee29c332e460ac28aa` passed automatic Android build run `45595392474`, attempt 1, and was reported by exact Slack event `1795603205.559909`; the native BDSP caught-registration repair is validated.
 
-Next bounded repair: after this native BDSP caught-registration transaction is automatically compiled, inspect Legends: Arceus, Scarlet/Violet and Legends: Z-A native restore registration behavior before selecting another title-specific route gap.
+## Native Legends: Arceus Bank restore obtained-registration repair
+
+Route inspection confirmed that converted sources restored into Legends: Arceus stage the destination species' obtained count, while a native `switch_pla_*.pa8` restore wrote the exact selected PA8 into its chosen empty pasture slot without applying the matching destination Pokédex registration.
+
+Native PA8 restores now request the existing species-level Hisui Pokédex record when that record is allocated in the destination save. The transaction changes only that entry's `NumObtained` field from zero to one; an already obtained entry leaves every Pokédex byte unchanged. A native species without an allocated destination record remains transferable byte-exact with the Pokédex unchanged instead of fabricating a record or normalizing its form. Existing Egg, noble and invalid-profile blocks remain in place.
+
+Existing content-addressed PA8 identity, explicitly selected empty native pasture slot, exact 360-byte native core, party-tail preservation, native SHA-256 footer refresh, retained recovery, persisted reopen verification, unchanged Bank source and failed-copy cleanup remain unchanged. This native PSE restore makes no claim of official trade, HOME movement, encounter history, legality certification or verified provenance. This implementation is pending its own automatic Android compile before the route is called validated.
+
+Next bounded repair: after this native Legends: Arceus obtained-registration transaction is automatically compiled, inspect Scarlet/Violet and Legends: Z-A native restore registration behavior before selecting another title-specific route gap.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

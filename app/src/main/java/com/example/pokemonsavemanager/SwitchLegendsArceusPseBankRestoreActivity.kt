@@ -96,27 +96,35 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 val bankSource = readBankSource()
                 val bankSourceHash = LegendsArceusPseBankRestoreEditing.sha256(bankSource)
                 expectedBankSourceHash = bankSourceHash
+                val bankEntry = bankFile()
                 val prepared = prepareBankRecord(bankSource, source)
                 val pokemon = LegendsArceusPseBankRestoreEditing.inspectBankRecord(prepared.first)
                 val destinations = LegendsArceusPseBankRestoreEditing.emptyDestinations(source)
                 require(destinations.isNotEmpty()) {
                     "All 960 native Legends: Arceus pasture slots are occupied."
                 }
+                val native = bankEntry.name.startsWith("switch_pla_") &&
+                    bankEntry.extension.equals("pa8", true)
+                val nativeHasDexRecord = native &&
+                    LegendsArceusPokedexReadOnly.read(source).entries.any {
+                        it.speciesId == pokemon.species
+                    }
                 LegendsArceusBankPreparation(
                     pokemon, destinations, bankSourceHash,
                     LegendsArceusPseBankRestoreEditing.sha256(prepared.first), prepared.second,
-                    bankFile().extension.equals("pk7", true) ||
-                        bankFile().extension.equals("pb7", true) ||
-                        bankFile().extension.equals("pk8", true) ||
-                        bankFile().extension.equals("pb8", true) ||
-                        bankFile().extension.equals("pk9", true) ||
-                        bankFile().extension.equals("pa9", true) ||
-                        bankFile().extension.equals("pse1", true) ||
-                        bankFile().extension.equals("pse2", true) ||
-                        bankFile().extension.equals("pk3", true) ||
-                        bankFile().extension.equals("pk4", true) ||
-                        bankFile().extension.equals("pk5", true) ||
-                        bankFile().extension.equals("pk6", true)
+                    nativeHasDexRecord ||
+                        bankEntry.extension.equals("pk7", true) ||
+                        bankEntry.extension.equals("pb7", true) ||
+                        bankEntry.extension.equals("pk8", true) ||
+                        bankEntry.extension.equals("pb8", true) ||
+                        bankEntry.extension.equals("pk9", true) ||
+                        bankEntry.extension.equals("pa9", true) ||
+                        bankEntry.extension.equals("pse1", true) ||
+                        bankEntry.extension.equals("pse2", true) ||
+                        bankEntry.extension.equals("pk3", true) ||
+                        bankEntry.extension.equals("pk4", true) ||
+                        bankEntry.extension.equals("pk5", true) ||
+                        bankEntry.extension.equals("pk6", true)
                 )
             }
             runOnUiThread {
