@@ -1092,9 +1092,15 @@ The row and column are a display-only derivation from the reviewed plan's one-ba
 
 Inspection found that Sword/Shield's final review shows the selected Box, Slot, row and column, but the reopened-copy button and successful-save result fell back to Box and Slot only. Both post-verification labels now retain the same native five-row, six-column coordinates, so the persisted destination can be matched directly to the in-game PC layout when inspection begins.
 
-The row and column are derived only for display from the immutable reviewed plan's one-based native Slot after the existing save-and-reopen transaction returns. The destination, native PK8 and Pokédex byte scope, footer integrity, recovery backup, persisted reopen verification, unchanged source and Bank checks, failure handling and cleanup remain unchanged. This implementation is pending its own automatic Android compile before the feature is called validated.
+The row and column are derived only for display from the immutable reviewed plan's one-based native Slot after the existing save-and-reopen transaction returns. The destination, native PK8 and Pokédex byte scope, footer integrity, recovery backup, persisted reopen verification, unchanged source and Bank checks, failure handling and cleanup remain unchanged. Commit `96a153cb453f519fd95b08798d4db2de35d006ee` passed automatic Android build run `45706633313`, attempt 1, and was reported by exact Slack event `1795643388.623189`; the Sword/Shield verified-copy grid coordinates are validated.
 
-Next bounded feature: after the Sword/Shield verified-copy coordinates are automatically compiled, add the same post-verification row and column detail to BDSP without changing its reviewed destination or transaction semantics.
+## BDSP verified-copy grid coordinates
+
+BDSP's final review shows the selected Box, Slot, row and column, but the reopened-copy button and successful-save result previously fell back to Box and Slot only. Both post-verification labels now retain the same native five-row, six-column coordinates, so the persisted destination can be matched directly to the in-game PC layout when inspection begins.
+
+The row and column are derived only for display from the immutable reviewed plan's one-based native Slot after the existing save-and-reopen transaction returns. The destination, native PB8 and Pokédex byte scope, whole-file MD5 integrity, recovery backup, persisted reopen verification, unchanged source and Bank checks, failure handling and cleanup remain unchanged. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after the BDSP verified-copy coordinates are automatically compiled, add the same post-verification row and column detail to Legends: Arceus without changing its reviewed destination or transaction semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
