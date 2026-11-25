@@ -1008,9 +1008,15 @@ The row and column are a display-only derivation from the same one-based native 
 
 The BDSP empty-slot picker already groups the validated destination list by Box and shows each Box's exact empty-slot count. Each listed empty Slot now also names its native five-row, six-column grid coordinates, so the user can match the picker entry directly to the in-game PC layout before opening the existing cancellable restore review.
 
-The row and column are a display-only derivation from the same one-based native Slot number, and the selected item still passes the original destination object without reordering or remapping it. The transaction continues to recheck that exact slot, preserve exact native or explicitly Legalised PB8 data, optional reviewed Pokédex registration, save integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+The row and column are a display-only derivation from the same one-based native Slot number, and the selected item still passes the original destination object without reordering or remapping it. The transaction continues to recheck that exact slot, preserve exact native or explicitly Legalised PB8 data, optional reviewed Pokédex registration, save integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. Commit `422e9713b77a3ae1894de0d6b98311117a201dd4` passed automatic Android build run `45675654044`, attempt 1, and was reported by exact Slack event `1795632255.211219`; the BDSP native destination grid coordinates are validated.
 
-Next bounded feature: after these BDSP grid coordinates are automatically compiled, add the same native row and column detail to the Legends: Arceus empty-slot picker without changing destination ordering or transaction semantics.
+## Legends: Arceus native destination grid coordinates
+
+The Legends: Arceus empty-slot picker already groups the validated destination list by Pasture and shows each Pasture's exact empty-slot count. Each listed empty Slot now also names its native five-row, six-column grid coordinates, so the user can match the picker entry directly to the in-game pasture layout before opening the existing cancellable restore review.
+
+The row and column are a display-only derivation from the same one-based native Slot number, and the selected item still passes the original destination object without reordering or remapping it. The transaction continues to recheck that exact slot, preserve exact native or explicitly Legalised PA8 data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after these Legends: Arceus grid coordinates are automatically compiled, add the same native row and column detail to the Scarlet/Violet empty-slot picker without changing destination ordering or transaction semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
