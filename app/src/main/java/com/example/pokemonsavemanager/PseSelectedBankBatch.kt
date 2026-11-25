@@ -2654,21 +2654,44 @@ internal fun verifyGen1ToGen6Pk6Bytes(
     ppUps:IntArray
 ):ByteArray {
     val pokemon=converted?:error("The converted PK6 could not be parsed.")
-    require(
-        pokemon.checksumValid&&pokemon.species==built.dex&&pokemon.tid==source.tid&&pokemon.sid==0&&
-            pokemon.nickname==built.nickname&&pokemon.isNicknamed==built.customNickname&&pokemon.otName==source.otName&&
-            pokemon.experience==source.experience&&pokemon.ability==abilityId&&pokemon.abilityNumber==1&&
-            pokemon.gender==built.gender&&pokemon.nature==built.nature&&pokemon.shiny==built.shiny&&
-            pokemon.friendship==baseFriendship&&pokemon.language==built.language&&pokemon.heldItem==0&&
-            pokemon.ball==4&&pokemon.originGame==35&&pokemon.metLocation==30013&&
-            pokemon.metLevel==source.level.coerceIn(1,100)&&pokemon.metYear==built.metYear&&
-            pokemon.metMonth==built.metMonth&&pokemon.metDay==built.metDay&&pokemon.currentHandler==1&&
-            handlerName==built.trainerName&&pokemon.moves.contentEquals(source.moves)&&
-            pokemon.movePP.contentEquals(source.movePP)&&ppUps.contentEquals(source.movePpUps)&&
-            pokemon.evs.contentEquals(built.evs)&&pokemon.ivs.contentEquals(built.ivs)&&pokemon.eggLocation==0&&
-            !pokemon.isEgg&&pokemon.relearnMoves.all { it==0 }&&pokemon.country==0&&pokemon.region==0&&
-            pokemon.consoleRegion==0
-    ){"The converted PK6 failed identity or converted-field verification."}
+    val mismatch=when {
+        !pokemon.checksumValid->"PK6 checksum"
+        pokemon.species!=built.dex->"species"
+        pokemon.tid!=source.tid->"Trainer ID"
+        pokemon.sid!=0->"Secret ID"
+        pokemon.nickname!=built.nickname->"nickname"
+        pokemon.isNicknamed!=built.customNickname->"nickname flag"
+        pokemon.otName!=source.otName->"Original Trainer name"
+        pokemon.experience!=source.experience->"experience"
+        pokemon.ability!=abilityId->"ability"
+        pokemon.abilityNumber!=1->"ability slot"
+        pokemon.gender!=built.gender->"gender"
+        pokemon.nature!=built.nature->"nature"
+        pokemon.shiny!=built.shiny->"shiny state"
+        pokemon.friendship!=baseFriendship->"friendship"
+        pokemon.language!=built.language->"language"
+        pokemon.heldItem!=0->"held item"
+        pokemon.ball!=4->"Poké Ball"
+        pokemon.originGame!=35->"origin game"
+        pokemon.metLocation!=30013->"met location"
+        pokemon.metLevel!=source.level.coerceIn(1,100)->"met level"
+        pokemon.metYear!=built.metYear||pokemon.metMonth!=built.metMonth||pokemon.metDay!=built.metDay->"met date"
+        pokemon.currentHandler!=1->"current handler"
+        handlerName!=built.trainerName->"current handler name"
+        !pokemon.moves.contentEquals(source.moves)->"moves"
+        !pokemon.movePP.contentEquals(source.movePP)->"move PP"
+        !ppUps.contentEquals(source.movePpUps)->"PP-Up data"
+        !pokemon.evs.contentEquals(built.evs)->"EVs"
+        !pokemon.ivs.contentEquals(built.ivs)->"IVs"
+        pokemon.eggLocation!=0->"Egg location"
+        pokemon.isEgg->"Egg flag"
+        pokemon.relearnMoves.any { it!=0 }->"relearn moves"
+        pokemon.country!=0->"country"
+        pokemon.region!=0->"region"
+        pokemon.consoleRegion!=0->"console region"
+        else->null
+    }
+    require(mismatch==null){"The converted PK6 failed $mismatch verification."}
     return built.encrypted
 }
 
