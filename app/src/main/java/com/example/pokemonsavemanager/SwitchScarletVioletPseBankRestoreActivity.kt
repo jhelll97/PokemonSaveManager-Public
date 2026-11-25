@@ -170,16 +170,19 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 result.onSuccess { prepared ->
+                    val firstDestination = prepared.destinations.first()
+                    val firstZeroBased = firstDestination.position - 1
+                    val firstGrid = "row ${firstZeroBased / 6 + 1}, column ${firstZeroBased % 6 + 1}"
                     readyDestinations = prepared.destinations
                     review.text = "Choose destination (${prepared.destinations.size} empty) & review"
-                    firstEmpty.text = "Review first empty: Box ${prepared.destinations.first().box}, slot ${prepared.destinations.first().position}"
+                    firstEmpty.text = "Review first empty: Box ${firstDestination.box}, slot ${firstDestination.position} • $firstGrid"
                     conversionEffects = prepared.effects
                     registerGen7Caught = prepared.registerCaught
                     registerCaughtLanguageIndex = prepared.caughtLanguageIndex
                     status.text = "Native source and Bank integrity verified\n" +
                         "${ScarletVioletSpeciesNames.name(prepared.pokemon.species)} (#${prepared.pokemon.species}) • Level ${prepared.pokemon.cachedLevel}\n" +
                         "${prepared.destinations.size} empty native destination slots available\n" +
-                        "First empty shortcut target: Box ${prepared.destinations.first().box}, slot ${prepared.destinations.first().position}\n" +
+                        "First empty shortcut target: Box ${firstDestination.box}, slot ${firstDestination.position} • $firstGrid\n" +
                         "Source SHA-256: ${expectedHash}\nBank source SHA-256: ${prepared.sourceBankHash}\n" +
                         "Prepared PK9 SHA-256: ${prepared.nativeRecordHash}" +
                         if (prepared.effects.isEmpty()) "" else "\n\nPSE conversion Legalise effects\n• " +

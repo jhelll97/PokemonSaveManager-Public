@@ -1044,9 +1044,15 @@ The row and column are derived only for display from the same first destination 
 
 The Legends: Arceus first-empty shortcut button and preparation status already name the exact Pasture and Slot selected from the validated ordered destination list. Both now also show that Slot's native five-row, six-column grid coordinates, so the shortcut target can be matched directly to the in-game pasture layout before the existing cancellable review opens.
 
-The row and column are derived only for display from the same first destination object's one-based native Slot number. The shortcut still passes that unchanged destination object into the existing review, which rechecks the exact empty slot and preserves native or explicitly Legalised PA8 data, optional reviewed Pokédex registration, footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+The row and column are derived only for display from the same first destination object's one-based native Slot number. The shortcut still passes that unchanged destination object into the existing review, which rechecks the exact empty slot and preserves native or explicitly Legalised PA8 data, optional reviewed Pokédex registration, footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. Commit `229e4ee9bc2ca7c34aabebb1323e0446bce7aaeb` passed automatic Android build run `45690461162`, attempt 1, and was reported by exact Slack event `1795637241.104869`; the Legends: Arceus first-empty grid coordinates are validated.
 
-Next bounded feature: after the Legends: Arceus first-empty coordinates are automatically compiled, add the same row and column detail to the Scarlet/Violet first-empty shortcut label and status without changing its selected destination or transaction semantics.
+## Scarlet/Violet first-empty grid coordinates
+
+The Scarlet/Violet first-empty shortcut button and preparation status already name the exact Box and Slot selected from the validated ordered destination list. Both now also show that Slot's native five-row, six-column grid coordinates, so the shortcut target can be matched directly to the in-game PC layout before the existing cancellable review opens.
+
+The row and column are derived only for display from the same first destination object's one-based native Slot number. The shortcut still passes that unchanged destination object into the existing review, which rechecks the exact empty slot and preserves native or explicitly Legalised PK9 data, optional reviewed Pokédex registration, footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after the Scarlet/Violet first-empty coordinates are automatically compiled, add the same row and column detail to the Legends: Z-A first-empty shortcut label and status without changing its selected destination or transaction semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
