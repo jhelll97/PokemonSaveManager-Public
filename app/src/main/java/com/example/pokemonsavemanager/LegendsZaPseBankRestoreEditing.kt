@@ -13,6 +13,7 @@ internal data class LegendsZaPseCaughtRegistration(
     val form: Int,
     val gender: Int,
     val shiny: Boolean,
+    val languageIndex: Int,
     val absoluteOffset: Int,
     val touchedRanges: List<IntRange>,
     val changed: Boolean
@@ -207,10 +208,25 @@ object LegendsZaPseBankRestoreEditing {
         pokemon: LegendsZaPokemonRead
     ): LegendsZaPseCaughtRegistration {
         require(pokemon.form in 0..31) {
-            "The converted PA9 form cannot be represented in the native Z-A Pokédex bitfield."
+            "The restored PA9 form cannot be represented in the native Z-A Pokédex bitfield."
         }
         require(pokemon.gender in 0..2) {
-            "The converted PA9 gender cannot be represented in the native Z-A Pokédex."
+            "The restored PA9 gender cannot be represented in the native Z-A Pokédex."
+        }
+        val languageIndex = when (pokemon.language) {
+            1 -> 0
+            2 -> 1
+            3 -> 2
+            4 -> 3
+            5 -> 4
+            7 -> 5
+            8 -> 6
+            9 -> 7
+            10 -> 8
+            11 -> 9
+            else -> throw IllegalArgumentException(
+                "The restored PA9 language cannot be represented in the native Z-A Pokédex."
+            )
         }
         val beforeDex = LegendsZaPokedexReadOnly.read(source)
         val target = beforeDex.sections.asSequence().flatMap { section ->
@@ -229,7 +245,7 @@ object LegendsZaPseBankRestoreEditing {
         val touched = mutableListOf(0..3, 4..7, 8..9, 0xB..0xB)
         writeU32(record, 0, entry.caughtForms or formBit)
         writeU32(record, 4, entry.seenForms or formBit)
-        writeU16(record, 8, entry.languageFlags or (1 shl 1))
+        writeU16(record, 8, entry.languageFlags or (1 shl languageIndex))
         record[0xB] = (entry.genderFlags or genderBit).toByte()
         if (pokemon.shiny) {
             writeU32(record, 0xC, entry.shinyForms or formBit)
@@ -239,11 +255,11 @@ object LegendsZaPseBankRestoreEditing {
         val changed = !write.bytes.contentEquals(source)
         if (changed) LegendsZaPokedexEditing.verify(
             source, write.bytes, section, entry.number, pokemon.form, pokemon.gender,
-            pokemon.shiny, LegendsZaDexEditMode.CAUGHT, 1, write.absoluteOffset, touched
+            pokemon.shiny, LegendsZaDexEditMode.CAUGHT, languageIndex, write.absoluteOffset, touched
         )
         return LegendsZaPseCaughtRegistration(
             write.bytes, section, entry.number, pokemon.form, pokemon.gender, pokemon.shiny,
-            write.absoluteOffset, touched.toList(), changed
+            languageIndex, write.absoluteOffset, touched.toList(), changed
         )
     }
 
@@ -280,6 +296,9 @@ class LegendsZaPseBankRestoreCopyPlan internal constructor(
     val addedCaughtRegistration: Boolean = registration?.changed == true
     val dexSection: LegendsZaDexSection? = registration?.section
     val dexNumber: Int? = registration?.number
+    val dexLanguageName: String? = registration?.let {
+        LegendsZaPokedexEditing.languageNames[it.languageIndex]
+    }
     val dexAbsoluteRanges: List<IntRange> = registration?.absoluteRanges?.toList() ?: emptyList()
     val sourceSha256 = LegendsZaPseBankRestoreEditing.sha256(this.original)
     val bankSha256 = LegendsZaPseBankRestoreEditing.sha256(this.bankRecord)

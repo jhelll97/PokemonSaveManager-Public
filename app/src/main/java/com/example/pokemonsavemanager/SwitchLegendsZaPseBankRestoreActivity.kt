@@ -96,13 +96,33 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                 val bankSource = readBankSource()
                 val bankSourceHash = LegendsZaPseBankRestoreEditing.sha256(bankSource)
                 expectedBankSourceHash = bankSourceHash
+                val bankEntry = bankFile()
                 val prepared = prepareBankRecord(bankSource, source)
                 val pokemon = LegendsZaPseBankRestoreEditing.inspectBankRecord(prepared.first)
-                if (prepared.second.isNotEmpty()) require(
-                    pokemon.species in LegendsZaPokedexReadOnly.supportedSpecies(source)
-                ) {
+                val bankExtension = bankEntry.extension
+                val converted = bankExtension.equals("pse1", true) ||
+                    bankExtension.equals("pse2", true) ||
+                    bankExtension.equals("pk3", true) ||
+                    bankExtension.equals("pk4", true) ||
+                    bankExtension.equals("pk5", true) ||
+                    bankExtension.equals("pk6", true) ||
+                    bankExtension.equals("pk7", true) ||
+                    bankExtension.equals("pb7", true) ||
+                    bankExtension.equals("pk8", true) ||
+                    bankExtension.equals("pb8", true) ||
+                    bankExtension.equals("pa8", true) ||
+                    bankExtension.equals("pk9", true)
+                val supportedSpecies = LegendsZaPokedexReadOnly.supportedSpecies(source)
+                if (converted) require(pokemon.species in supportedSpecies) {
                     "Species #${pokemon.species} is not present in this Legends: Z-A save's native Pokédex table."
                 }
+                val native = bankEntry.name.startsWith("switch_za_") &&
+                    bankExtension.equals("pa9", true)
+                val nativeLanguageSupported = pokemon.language in
+                    setOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11)
+                val registerNativeCaught = native && pokemon.species in supportedSpecies &&
+                    pokemon.form in 0..31 && pokemon.gender in 0..2 &&
+                    nativeLanguageSupported
                 val destinations = LegendsZaPseBankRestoreEditing.emptyDestinations(source)
                 require(destinations.isNotEmpty()) {
                     "All 960 native Legends: Z-A PC-box slots are occupied."
@@ -110,18 +130,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                 LegendsZaBankPreparation(
                     pokemon, destinations, bankSourceHash,
                     LegendsZaPseBankRestoreEditing.sha256(prepared.first), prepared.second,
-                    bankFile().extension.equals("pse1", true) ||
-                        bankFile().extension.equals("pse2", true) ||
-                        bankFile().extension.equals("pk3", true) ||
-                        bankFile().extension.equals("pk4", true) ||
-                        bankFile().extension.equals("pk5", true) ||
-                        bankFile().extension.equals("pk6", true) ||
-                        bankFile().extension.equals("pk7", true) ||
-                        bankFile().extension.equals("pb7", true) ||
-                        bankFile().extension.equals("pk8", true) ||
-                        bankFile().extension.equals("pb8", true) ||
-                        bankFile().extension.equals("pa8", true) ||
-                        bankFile().extension.equals("pk9", true)
+                    converted || registerNativeCaught
                 )
             }
             runOnUiThread {
@@ -504,10 +513,11 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                     if (range.first == range.last) "0x${range.first.toString(16).uppercase()}"
                     else "0x${range.first.toString(16).uppercase()}–0x${range.last.toString(16).uppercase()}"
                 }
-                " plus Z-A Pokédex #${plan.dexNumber} (${plan.dexSection?.displayName}) native caught/default-form, " +
-                    "gender, shiny when applicable, and English fields at $ranges"
+                " plus Z-A Pokédex #${plan.dexNumber} (${plan.dexSection?.displayName}) native caught form ${p.form}, " +
+                    "gender, shiny when applicable, and ${plan.dexLanguageName} language fields at $ranges"
             }
-            else -> " while the complete existing Z-A caught registration remains exact"
+            else -> " while the complete existing Z-A caught form ${p.form}, gender, shiny, and " +
+                "${plan.dexLanguageName}-language registration remains exact"
         }
         AlertDialog.Builder(this).setTitle(
             if (conversionEffects.isEmpty()) "Restore this Bank Pokémon to a new copy?"
