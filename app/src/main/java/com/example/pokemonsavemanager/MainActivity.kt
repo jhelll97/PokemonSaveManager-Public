@@ -46634,7 +46634,13 @@ class MainActivity : Activity() {
                 val name=prettyApiName(speciesJson.optString("name","Pokemon"))
                 val baseFriendship=speciesJson.optInt("base_happiness",70).coerceIn(0,255)
                 val genderRate=speciesJson.optInt("gender_rate",-1)
-                val wantedSlot=p.abilityNumber.coerceIn(1,2)
+                val wantedSlot=p.abilityNumber
+                if(wantedSlot !in 1..2)
+                    throw IllegalStateException("The source PK3 ability slot is not representable.")
+                val sourceAbility=canonicalGen3AbilityId(p.species,wantedSlot)
+                    ?:throw IllegalStateException("Canonical Generation 3 ability-slot data is unavailable for species #${p.species} in source slot $wantedSlot.")
+                if(sourceAbility!=p.ability)
+                    throw IllegalStateException("The PK3 has ability #${p.ability} in slot $wantedSlot, but canonical Generation 3 data assigns ability #$sourceAbility to that slot.")
                 fun generationNumber(name:String):Int=when(name.substringAfter("generation-","")){
                     "i"->1;"ii"->2;"iii"->3;"iv"->4;"v"->5;"vi"->6;"vii"->7;"viii"->8;"ix"->9;else->Int.MAX_VALUE
                 }
