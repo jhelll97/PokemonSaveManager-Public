@@ -36287,7 +36287,7 @@ class MainActivity : Activity() {
             val ids=listOf(1,2,3,4,5,7,8,10,11,12,15)
             val choices=ids.map{it to requireNotNull(gen4CompatibleOriginTitle(it))}
             AlertDialog.Builder(this).setTitle("Choose documented Gen 4 origin mapping")
-                .setMessage("Origin ${originGameName(source.originGame)} (ID ${source.originGame}) has no documented native PK4 mapping. Choose the exact title and ID before bridge validation. This explicit PSE Legalise choice changes provenance and does not verify history. Cancel leaves both files unchanged.")
+                .setMessage("Origin ${originGameName(source.originGame)} (ID ${source.originGame}) has no documented native PK4 mapping. Choose the exact title and ID to write. This explicit PSE Legalise choice changes provenance and does not verify history. Cancel leaves both files unchanged.")
                 .setItems(choices.map{"${it.second} • ID ${it.first}"}.toTypedArray()){_,which->
                     val (id,title)=choices[which];prepareGen6ToGen4Transfer(selected,source,Gen6Gen5Plan(id,"user-selected $title (ID $id)",true),sourceBinding)
                 }.setNegativeButton("Cancel",null).show()
