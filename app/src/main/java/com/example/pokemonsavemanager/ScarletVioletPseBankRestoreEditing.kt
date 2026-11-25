@@ -98,12 +98,14 @@ object ScarletVioletPseBankRestoreEditing {
         source: ByteArray,
         expectedSha256: String,
         bankRecord: ByteArray,
-        registerCaught: Boolean = false
+        registerCaught: Boolean = false,
+        caughtLanguageIndex: Int = 1
     ): ScarletVioletPseBankRestoreCopyPlan {
         val destination = emptyDestinations(source).firstOrNull()
             ?: throw IllegalArgumentException("All 960 native Scarlet/Violet PC-box slots are occupied.")
         return stage(
-            source, expectedSha256, bankRecord, destination.box, destination.position, registerCaught
+            source, expectedSha256, bankRecord, destination.box, destination.position,
+            registerCaught, caughtLanguageIndex
         )
     }
 
@@ -113,7 +115,8 @@ object ScarletVioletPseBankRestoreEditing {
         bankRecord: ByteArray,
         box: Int,
         position: Int,
-        registerCaught: Boolean = false
+        registerCaught: Boolean = false,
+        caughtLanguageIndex: Int = 1
     ): ScarletVioletPseBankRestoreCopyPlan {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
@@ -130,7 +133,7 @@ object ScarletVioletPseBankRestoreEditing {
             original, box, position, supplied
         )
         val dexRegistration = if (registerCaught) {
-            stageCaughtRegistration(written.bytes, pokemon)
+            stageCaughtRegistration(written.bytes, pokemon, caughtLanguageIndex)
         } else null
         val edited = dexRegistration?.bytes ?: written.bytes
         verify(
@@ -196,10 +199,14 @@ object ScarletVioletPseBankRestoreEditing {
 
     private fun stageCaughtRegistration(
         source: ByteArray,
-        pokemon: ScarletVioletPokemonRead
+        pokemon: ScarletVioletPokemonRead,
+        languageIndex: Int
     ): ScarletVioletPseDexRegistration? {
         require(pokemon.form in 0..31 && pokemon.gender in 0..2) {
-            "The converted PK9 form or gender is outside the reviewed Pokédex range."
+            "The restored PK9 form or gender is outside the reviewed Pokédex range."
+        }
+        require(languageIndex in ScarletVioletPokedexEditing.languageNames.indices) {
+            "The restored PK9 language is outside the reviewed Pokédex range."
         }
         val beforeDex = ScarletVioletPokedexReadOnly.read(source)
         val target = beforeDex.regions.asSequence().flatMap { region ->
@@ -221,7 +228,6 @@ object ScarletVioletPseBankRestoreEditing {
         val record = originalRecord.copyOf()
         val formBit = 1L shl pokemon.form
         val genderBit = 1 shl pokemon.gender
-        val languageIndex = 1
         val touched = mutableListOf<IntRange>()
         if (modern) {
             writeU32(record, 0, before.obtainedForms!! or formBit)

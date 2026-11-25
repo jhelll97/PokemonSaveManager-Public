@@ -18,7 +18,8 @@ private data class ScarletVioletBankPreparation(
     val sourceBankHash: String,
     val nativeRecordHash: String,
     val effects: List<String>,
-    val registerCaught: Boolean
+    val registerCaught: Boolean,
+    val caughtLanguageIndex: Int
 )
 
 /** Restores one native PK9 or explicitly reviewed cross-generation conversion into a new save copy. */
@@ -31,6 +32,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
     private var expectedBankSourceHash: String? = null
     private var conversionEffects: List<String> = emptyList()
     private var registerGen7Caught = false
+    private var registerCaughtLanguageIndex = 1
     private var readyDestinations: List<ScarletVioletPseBankDestination> = emptyList()
     private var readyPlan: ScarletVioletPseBankRestoreCopyPlan? = null
     private var pendingPlan: ScarletVioletPseBankRestoreCopyPlan? = null
@@ -96,10 +98,11 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                 val bankSource = readBankSource()
                 val bankSourceHash = ScarletVioletPseBankRestoreEditing.sha256(bankSource)
                 expectedBankSourceHash = bankSourceHash
+                val bankEntry = bankFile()
                 val prepared = prepareBankRecord(bankSource, source)
                 val pokemon = ScarletVioletPseBankRestoreEditing.inspectBankRecord(prepared.first)
-                val bankExtension = bankFile().extension
-                if (bankExtension.equals("pse1", true) ||
+                val bankExtension = bankEntry.extension
+                val converted = bankExtension.equals("pse1", true) ||
                     bankExtension.equals("pse2", true) ||
                     bankExtension.equals("pk3", true) ||
                     bankExtension.equals("pk4", true) ||
@@ -110,11 +113,38 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                     bankExtension.equals("pb8", true) ||
                     bankExtension.equals("pk7", true) ||
                     bankExtension.equals("pa8", true) ||
-                    bankExtension.equals("pa9", true)) {
-                    require(pokemon.species in ScarletVioletPokedexReadOnly.supportedSpecies(source)) {
+                    bankExtension.equals("pa9", true)
+                val supportedSpecies = ScarletVioletPokedexReadOnly.supportedSpecies(source)
+                if (converted) {
+                    require(pokemon.species in supportedSpecies) {
                         "Species #${pokemon.species} is not present in this Scarlet/Violet save's native Pokédex table."
                     }
                 }
+                val native = bankEntry.name.startsWith("switch_sv_") &&
+                    bankExtension.equals("pk9", true)
+                val nativeLanguageIndex = when (pokemon.language) {
+                    1 -> 0
+                    2 -> 1
+                    3 -> 2
+                    4 -> 3
+                    5 -> 4
+                    7 -> 5
+                    8 -> 6
+                    9 -> 7
+                    10 -> 8
+                    else -> null
+                }
+                val nativeDex = if (native && pokemon.species in supportedSpecies) {
+                    ScarletVioletPokedexReadOnly.read(source)
+                } else null
+                val nativeDexEntry = nativeDex?.regions?.asSequence()?.flatMap { region ->
+                    region.entries.asSequence()
+                }?.firstOrNull { it.speciesId == pokemon.species }
+                val nativeStateSupported = nativeDex?.layout != ScarletVioletDexLayout.ORIGINAL ||
+                    nativeDexEntry?.rawState?.let { it in 0L..3L } == true
+                val registerNativeCaught = nativeDexEntry != null &&
+                    pokemon.form in 0..31 && pokemon.gender in 0..2 &&
+                    nativeLanguageIndex != null && nativeStateSupported
                 val destinations = ScarletVioletPseBankRestoreEditing.emptyDestinations(source)
                 require(destinations.isNotEmpty()) {
                     "All 960 native Scarlet/Violet PC-box slots are occupied."
@@ -122,18 +152,8 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                 ScarletVioletBankPreparation(
                     pokemon, destinations, bankSourceHash,
                     ScarletVioletPseBankRestoreEditing.sha256(prepared.first), prepared.second,
-                    bankExtension.equals("pse1", true) ||
-                        bankExtension.equals("pse2", true) ||
-                        bankExtension.equals("pk3", true) ||
-                        bankExtension.equals("pk4", true) ||
-                        bankExtension.equals("pk5", true) ||
-                        bankExtension.equals("pk6", true) ||
-                        bankExtension.equals("pb7", true) ||
-                        bankExtension.equals("pk8", true) ||
-                        bankExtension.equals("pb8", true) ||
-                        bankExtension.equals("pk7", true) ||
-                        bankExtension.equals("pa8", true) ||
-                        bankExtension.equals("pa9", true)
+                    converted || registerNativeCaught,
+                    if (registerNativeCaught) nativeLanguageIndex!! else 1
                 )
             }
             runOnUiThread {
@@ -142,6 +162,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                     readyDestinations = prepared.destinations
                     conversionEffects = prepared.effects
                     registerGen7Caught = prepared.registerCaught
+                    registerCaughtLanguageIndex = prepared.caughtLanguageIndex
                     status.text = "Native source and Bank integrity verified\n" +
                         "${ScarletVioletSpeciesNames.name(prepared.pokemon.species)} (#${prepared.pokemon.species}) • Level ${prepared.pokemon.cachedLevel}\n" +
                         "${prepared.destinations.size} empty native destination slots available\n" +
@@ -198,7 +219,8 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                 val bank = readBankRecord(source)
                 ScarletVioletPseBankRestoreEditing.stage(
                     source, hash, bank, destination.box, destination.position,
-                    registerCaught = registerGen7Caught
+                    registerCaught = registerGen7Caught,
+                    caughtLanguageIndex = registerCaughtLanguageIndex
                 )
             }
             runOnUiThread {
@@ -503,18 +525,19 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
         val moves = p.moves.filter { it.id != 0 }.joinToString { "#${it.id} (PP ${it.pp})" }.ifBlank { "None" }
         val effects = if (conversionEffects.isEmpty()) "" else
             "\n\nExplicit PSE conversion Legalise effects\n• " + conversionEffects.joinToString("\n• ")
+        val caughtLanguage = ScarletVioletPokedexEditing.languageNames[registerCaughtLanguageIndex]
         val dexScope = when {
             plan.addedCaughtRegistration -> {
                 val ranges = plan.dexAbsoluteRanges.joinToString { range ->
                     if (range.first == range.last) "0x${range.first.toString(16).uppercase()}"
                     else "0x${range.first.toString(16).uppercase()}-0x${range.last.toString(16).uppercase()}"
                 }
-                " The same reviewed transaction registers form 0 as caught with the converted gender, " +
-                    "shiny state, and English language in the native Pokédex fields at ${ranges}. " +
+                " The same reviewed transaction registers form ${p.form} as caught with the restored gender, " +
+                    "shiny state, and ${caughtLanguage} language in the native Pokédex fields at ${ranges}. " +
                     "Display selections, unrelated forms, regional entries, and unknown bits remain exact."
             }
             registerGen7Caught ->
-                " This species already has the complete native caught, form, gender, shiny, and English-language registration, so those fields remain exact."
+                " This species already has the complete native caught, form, gender, shiny, and ${caughtLanguage}-language registration, so those fields remain exact."
             else -> ""
         }
         AlertDialog.Builder(this).setTitle(
