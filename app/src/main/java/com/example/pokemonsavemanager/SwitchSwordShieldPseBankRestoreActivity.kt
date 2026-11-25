@@ -36,6 +36,7 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
     private var busy = false
     private lateinit var status: TextView
     private lateinit var review: Button
+    private lateinit var firstEmpty: Button
     private lateinit var inspectCopy: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -73,6 +74,16 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
             setOnClickListener { showDestinationBoxPicker() }
         }
         root.addView(review)
+        firstEmpty = Button(this).apply {
+            text = "Review first empty slot"
+            isEnabled = false
+            setOnClickListener {
+                readyDestinations.firstOrNull()?.let { destination ->
+                    prepareDestinationReview(destination)
+                }
+            }
+        }
+        root.addView(firstEmpty)
         inspectCopy = Button(this).apply {
             text = "Inspect verified copy"
             visibility = android.view.View.GONE
@@ -124,6 +135,7 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
     private fun setBusy(value: Boolean) {
         busy = value
         review.isEnabled = !value && readyDestinations.isNotEmpty()
+        firstEmpty.isEnabled = !value && readyDestinations.isNotEmpty()
         inspectCopy.isEnabled = !value && verifiedCopy != null
     }
 
