@@ -12925,57 +12925,6 @@ class MainActivity : Activity() {
         else->null
     }
 
-    private fun gen5ToGen6Pk6Mismatch(
-        q:PokemonEntry,
-        p:PokemonEntry,
-        pid:Long,
-        handlerName:String,
-        expectedHandlerName:String,
-        markingValue:Int,
-        actualPpUps:IntArray,
-        expectedPpUps:IntArray
-    ):String?=when{
-        !q.checksumValid->"PK6 checksum"
-        q.isEgg->"Egg flag"
-        q.species!=p.species->"species"
-        q.pid!=pid->"PID"
-        q.tid!=p.tid->"Trainer ID"
-        q.sid!=p.sid->"Secret ID"
-        q.nickname!=p.nickname->"nickname"
-        q.isNicknamed!=p.isNicknamed->"nickname flag"
-        q.otName!=p.otName->"Original Trainer name"
-        q.experience!=p.experience->"experience"
-        q.ability!=p.ability->"ability"
-        q.abilityNumber!=p.abilityNumber->"ability slot"
-        q.nature!=p.nature->"nature"
-        q.gender!=p.gender->"gender"
-        q.form!=p.form->"form"
-        q.shiny!=p.shiny->"shiny state"
-        q.fatefulEncounter!=p.fatefulEncounter->"fateful encounter"
-        q.heldItem!=0->"held item"
-        q.friendship!=p.friendship->"current handler friendship"
-        q.currentHandler!=1->"current handler"
-        handlerName!=expectedHandlerName->"current handler name"
-        !q.moves.contentEquals(p.moves)->"moves"
-        !q.movePP.contentEquals(p.movePP)->"move PP"
-        !actualPpUps.contentEquals(expectedPpUps)->"PP-Up data"
-        q.markingValue!=markingValue->"markings"
-        !q.evs.contentEquals(p.evs)->"EVs"
-        !q.ivs.contentEquals(p.ivs)->"IVs"
-        q.pokerusDays!=p.pokerusDays||q.pokerusStrain!=p.pokerusStrain->"Pokérus"
-        q.relearnMoves.any{it!=0}->"relearn moves"
-        q.eggLocation!=0->"Egg location"
-        q.metLocation!=30001->"met location"
-        q.ball!=p.ball->"Ball"
-        q.metLevel!=p.metLevel->"met level"
-        q.otGender!=p.otGender->"Original Trainer gender"
-        q.originGame!=p.originGame->"origin game"
-        q.language!=p.language->"language"
-        q.eggYear!=p.eggYear||q.eggMonth!=p.eggMonth||q.eggDay!=p.eggDay->"Egg date"
-        q.metYear!=p.metYear||q.metMonth!=p.metMonth||q.metDay!=p.metDay->"met date"
-        else->null
-    }
-
     private fun buildGen5ToGen6Pk6(
         raw:ByteArray,p:PokemonEntry,destination:ByteArray,trainer:TrainerData,targetGeneration:Int=6
     ):ByteArray{
