@@ -8036,12 +8036,18 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound) return
         val directory = File(filesDir, "pse_bank").canonicalFile
         val entry = file.canonicalFile
-        val parsed = runCatching {
+        val opened = runCatching {
             require(entry.parentFile == directory && entry.name.startsWith("switch_sv_") && entry.extension == "pk9") {
                 "This is not a Scarlet/Violet Bank entry."
             }
-            ScarletVioletPokemonReadOnly.read(entry.readBytes())
-        }.getOrElse { ScarletVioletSlotRead.Invalid(it.message ?: "The Bank entry could not be read.") }
+            val bytes = entry.readBytes()
+            bytes to ScarletVioletPokemonReadOnly.read(bytes)
+        }.getOrElse {
+            ByteArray(0) to ScarletVioletSlotRead.Invalid(
+                it.message ?: "The Bank entry could not be read."
+            )
+        }
+        val parsed = opened.second
         if (parsed !is ScarletVioletSlotRead.Pokemon) {
             AlertDialog.Builder(this).setTitle("Unreadable PSE Bank entry")
                 .setMessage((parsed as? ScarletVioletSlotRead.Invalid)?.reason ?: "The Bank entry is empty.")
@@ -8049,6 +8055,7 @@ class SwitchReadOnlyActivity : Activity() {
             return
         }
         val p = parsed.value
+        val openedHash = ScarletVioletPseBankRestoreEditing.sha256(opened.first)
         val detail = buildString {
             append("${ScarletVioletSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form}\n")
             append("Nickname: ${p.nickname.ifBlank { "None" }}\n")
@@ -8070,13 +8077,22 @@ class SwitchReadOnlyActivity : Activity() {
                     require(entry.parentFile == directory && entry.name.startsWith("switch_sv_") && entry.extension == "pk9") {
                         "This is not a current Scarlet/Violet Bank entry."
                     }
-                    require(ScarletVioletPokemonReadOnly.read(entry.readBytes()) is ScarletVioletSlotRead.Pokemon) {
+                    val current = entry.readBytes()
+                    require(
+                        ScarletVioletPseBankRestoreEditing.sha256(current) == openedHash
+                    ) {
+                        "The Scarlet/Violet Bank entry changed. Reopen PSE Bank."
+                    }
+                    require(
+                        ScarletVioletPokemonReadOnly.read(current) is ScarletVioletSlotRead.Pokemon
+                    ) {
                         "The Bank record is invalid and cannot be restored."
                     }
                     dialog.dismiss()
                     startActivity(Intent(this, SwitchScarletVioletPseBankRestoreActivity::class.java).setData(source)
                         .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
                         .putExtra("pse.bank.entry", entry.name)
+                        .putExtra("pse.bank.sha256", openedHash)
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
                 } catch (error: Exception) {
                     AlertDialog.Builder(this).setTitle("Could not prepare Bank restore")
