@@ -142,6 +142,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 result.onSuccess { prepared ->
                     readyDestinations = prepared.destinations
+                    firstEmpty.text = "Review first empty: Pasture ${prepared.destinations.first().pasture}, slot ${prepared.destinations.first().position}"
                     conversionEffects = prepared.effects
                     registerConvertedObtained = prepared.registerObtained
                     status.text = "Native source and Bank integrity verified\n" +
@@ -574,6 +575,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 )
                 readyPlan = null
                 readyDestinations = emptyList()
+                firstEmpty.text = "Review first empty slot"
                 setBusy(false)
             }
         }
