@@ -563,9 +563,11 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
+                val destinationZeroBased = plan.position - 1
+                val destinationGrid = "row ${destinationZeroBased / 6 + 1}, column ${destinationZeroBased % 6 + 1}"
                 verifiedCopy = result.getOrNull()?.let { uri to plan.editedSha256 }
                 inspectCopy.text = if (verifiedCopy != null) {
-                    "Inspect verified copy: Box ${plan.box}, slot ${plan.position}"
+                    "Inspect verified copy: Box ${plan.box}, slot ${plan.position} • $destinationGrid"
                 } else {
                     "Inspect verified copy"
                 }
@@ -574,7 +576,7 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
                     onSuccess = {
                         (if (conversionEffects.isEmpty()) "PSE Bank restore saved and reopened successfully.\n"
                         else "PSE conversion saved and reopened successfully.\n") +
-                            "Box ${plan.box}, slot ${plan.position} • SHA-256: ${plan.editedSha256}\n" +
+                            "Box ${plan.box}, slot ${plan.position} • $destinationGrid • SHA-256: ${plan.editedSha256}\n" +
                             (if (plan.dexRegistrations.isEmpty()) "" else
                                 "Caught registration reopened in " +
                                     plan.dexRegistrations.joinToString { it.region.displayName } + ".\n") +
