@@ -996,9 +996,15 @@ The label is derived from the same immutable reviewed plan whose edited save has
 
 After a Let's Go restore copy is written, reopened and verified, the visible inspection action now names the exact append-only native storage slot that the completed transaction used. A failed or unverified copy keeps the inspection action hidden and clears the target-specific label, so the UI cannot present an unverified destination as inspectable.
 
-The label is derived from the same immutable reviewed plan whose edited save hash is bound to the verified copy. Inspection still reopens that exact URI and hash, while the transaction continues to require the complete destination record to remain zero-filled, preserve the native storage count, partner and party pointers, exact native or explicitly Legalised PB7 data, optional reviewed caught registration, block CRCs, retained recovery, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+The label is derived from the same immutable reviewed plan whose edited save hash is bound to the verified copy. Inspection still reopens that exact URI and hash, while the transaction continues to require the complete destination record to remain zero-filled, preserve the native storage count, partner and party pointers, exact native or explicitly Legalised PB7 data, optional reviewed caught registration, block CRCs, retained recovery, unchanged source and Bank checks, and failed-copy cleanup. Commit `d0a4bd4da57dd3494dd325111d83cd636b1bdd1d` passed automatic Android build run `45670981041`, attempt 1, and was reported by exact Slack event `1795630506.950729`; the Let's Go exact verified-copy inspection target is validated.
 
-Next bounded feature: after this Let's Go verified-copy target label is automatically compiled, inspect the supported-game restore screens for the next concrete review improvement while preserving their existing verified-copy and transaction semantics.
+## Sword/Shield native destination grid coordinates
+
+The Sword/Shield empty-slot picker already groups the validated destination list by Box and shows each Box's exact empty-slot count. Each listed empty Slot now also names its native five-row, six-column grid coordinates, so the user can match the picker entry directly to the in-game PC layout before opening the existing cancellable restore review.
+
+The row and column are a display-only derivation from the same one-based native Slot number, and the selected item still passes the original destination object without reordering or remapping it. The transaction continues to recheck that exact slot, preserve exact native or explicitly Legalised PK8 data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after these Sword/Shield grid coordinates are automatically compiled, add the same native row and column detail to the BDSP empty-slot picker without changing destination ordering or transaction semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
