@@ -990,9 +990,15 @@ The label is derived from the same immutable reviewed plan whose edited save has
 
 After a Legends: Z-A restore copy is written, reopened and verified, the visible inspection action now names the exact Box and Slot that the completed transaction used. A failed or unverified copy keeps the inspection action hidden and clears the target-specific label, so the UI cannot present an unverified destination as inspectable.
 
-The label is derived from the same immutable reviewed plan whose edited save hash is bound to the verified copy. Inspection still reopens that exact URI and hash, while the transaction continues to preserve exact native or explicitly Legalised PA9 body and slot-footer data, the chosen empty native slot, optional reviewed Pokédex registration, native footer integrity, retained recovery, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+The label is derived from the same immutable reviewed plan whose edited save hash is bound to the verified copy. Inspection still reopens that exact URI and hash, while the transaction continues to preserve exact native or explicitly Legalised PA9 body and slot-footer data, the chosen empty native slot, optional reviewed Pokédex registration, native footer integrity, retained recovery, unchanged source and Bank checks, and failed-copy cleanup. Commit `85dd76d8830cb71f1c2cc03aa1d74cb99141dcde` passed automatic Android build run `45668750467`, attempt 1, and was reported by exact Slack event `1795629578.581999`; the Legends: Z-A exact verified-copy inspection target is validated.
 
-Next bounded feature: after this Legends: Z-A verified-copy target label is automatically compiled, inspect the supported-game restore screens for the next concrete review improvement while preserving their existing verified-copy and transaction semantics.
+## Let's Go exact verified-copy inspection target
+
+After a Let's Go restore copy is written, reopened and verified, the visible inspection action now names the exact append-only native storage slot that the completed transaction used. A failed or unverified copy keeps the inspection action hidden and clears the target-specific label, so the UI cannot present an unverified destination as inspectable.
+
+The label is derived from the same immutable reviewed plan whose edited save hash is bound to the verified copy. Inspection still reopens that exact URI and hash, while the transaction continues to require the complete destination record to remain zero-filled, preserve the native storage count, partner and party pointers, exact native or explicitly Legalised PB7 data, optional reviewed caught registration, block CRCs, retained recovery, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after this Let's Go verified-copy target label is automatically compiled, inspect the supported-game restore screens for the next concrete review improvement while preserving their existing verified-copy and transaction semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
