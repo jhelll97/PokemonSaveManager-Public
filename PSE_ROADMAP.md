@@ -912,9 +912,15 @@ This label is derived from the same ordered native destination list used by the 
 
 After source, Bank and destination validation, the Legends: Arceus `Review first empty slot` button now names the exact deterministic Pasture and Slot it will bind to the existing cancellable restore review. The adjacent status preview and full Pasture/Slot picker remain available, and the shortcut label resets after a completed or failed copy transaction instead of presenting a stale destination.
 
-This label is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot immediately before staging, preserves exact native or explicitly Legalised PA8 data, optional reviewed obtained registration, save integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+This label is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot immediately before staging, preserves exact native or explicitly Legalised PA8 data, optional reviewed obtained registration, save integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. Commit `9a85b8ee3d6c8f2c4ebee01a78f78e497f0b654d` passed automatic Android build run `45637148743`, attempt 1, and was reported by exact Slack event `1795618462.455749`; the Legends: Arceus exact first-empty shortcut label is validated.
 
-Next bounded feature: after this Legends: Arceus label is automatically compiled, expose the exact first-empty Box/Slot in the Scarlet/Violet shortcut label while retaining its status preview, full picker and existing safety boundaries.
+## Scarlet/Violet exact first-empty shortcut label
+
+After source, Bank and destination validation, the Scarlet/Violet `Review first empty slot` button now names the exact deterministic Box and Slot it will bind to the existing cancellable restore review. The adjacent status preview and full Box/Slot picker remain available, and the shortcut label resets after a completed or failed copy transaction instead of presenting a stale destination.
+
+This label is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot immediately before staging, preserves exact native or explicitly Legalised PK9 data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after this Scarlet/Violet label is automatically compiled, expose the exact first-empty Box/Slot in the Legends: Z-A shortcut label while retaining its status preview, full picker and existing safety boundaries.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

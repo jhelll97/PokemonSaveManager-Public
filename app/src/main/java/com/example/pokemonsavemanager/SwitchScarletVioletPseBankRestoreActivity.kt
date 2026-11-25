@@ -171,6 +171,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 result.onSuccess { prepared ->
                     readyDestinations = prepared.destinations
+                    firstEmpty.text = "Review first empty: Box ${prepared.destinations.first().box}, slot ${prepared.destinations.first().position}"
                     conversionEffects = prepared.effects
                     registerGen7Caught = prepared.registerCaught
                     registerCaughtLanguageIndex = prepared.caughtLanguageIndex
@@ -664,6 +665,7 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                 )
                 readyPlan = null
                 readyDestinations = emptyList()
+                firstEmpty.text = "Review first empty slot"
                 setBusy(false)
             }
         }
