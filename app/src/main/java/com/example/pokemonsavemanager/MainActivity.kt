@@ -12925,6 +12925,57 @@ class MainActivity : Activity() {
         else->null
     }
 
+    private fun gen5ToGen6Pk6Mismatch(
+        q:PokemonEntry,
+        p:PokemonEntry,
+        pid:Long,
+        handlerName:String,
+        expectedHandlerName:String,
+        markingValue:Int,
+        actualPpUps:IntArray,
+        expectedPpUps:IntArray
+    ):String?=when{
+        !q.checksumValid->"PK6 checksum"
+        q.isEgg->"Egg flag"
+        q.species!=p.species->"species"
+        q.pid!=pid->"PID"
+        q.tid!=p.tid->"Trainer ID"
+        q.sid!=p.sid->"Secret ID"
+        q.nickname!=p.nickname->"nickname"
+        q.isNicknamed!=p.isNicknamed->"nickname flag"
+        q.otName!=p.otName->"Original Trainer name"
+        q.experience!=p.experience->"experience"
+        q.ability!=p.ability->"ability"
+        q.abilityNumber!=p.abilityNumber->"ability slot"
+        q.nature!=p.nature->"nature"
+        q.gender!=p.gender->"gender"
+        q.form!=p.form->"form"
+        q.shiny!=p.shiny->"shiny state"
+        q.fatefulEncounter!=p.fatefulEncounter->"fateful encounter"
+        q.heldItem!=0->"held item"
+        q.friendship!=p.friendship->"current handler friendship"
+        q.currentHandler!=1->"current handler"
+        handlerName!=expectedHandlerName->"current handler name"
+        !q.moves.contentEquals(p.moves)->"moves"
+        !q.movePP.contentEquals(p.movePP)->"move PP"
+        !actualPpUps.contentEquals(expectedPpUps)->"PP-Up data"
+        q.markingValue!=markingValue->"markings"
+        !q.evs.contentEquals(p.evs)->"EVs"
+        !q.ivs.contentEquals(p.ivs)->"IVs"
+        q.pokerusDays!=p.pokerusDays||q.pokerusStrain!=p.pokerusStrain->"Pokérus"
+        q.relearnMoves.any{it!=0}->"relearn moves"
+        q.eggLocation!=0->"Egg location"
+        q.metLocation!=30001->"met location"
+        q.ball!=p.ball->"Ball"
+        q.metLevel!=p.metLevel->"met level"
+        q.otGender!=p.otGender->"Original Trainer gender"
+        q.originGame!=p.originGame->"origin game"
+        q.language!=p.language->"language"
+        q.eggYear!=p.eggYear||q.eggMonth!=p.eggMonth||q.eggDay!=p.eggDay->"Egg date"
+        q.metYear!=p.metYear||q.metMonth!=p.metMonth||q.metDay!=p.metDay->"met date"
+        else->null
+    }
+
     private fun buildGen5ToGen6Pk6(
         raw:ByteArray,p:PokemonEntry,destination:ByteArray,trainer:TrainerData,targetGeneration:Int=6
     ):ByteArray{
@@ -12961,7 +13012,11 @@ class MainActivity : Activity() {
         writeU16LE(out,0xD8,0);writeU16LE(out,0xDA,30001);out[0xDC]=p.ball.toByte()
         out[0xDD]=((p.metLevel and 0x7F) or ((p.otGender and 1) shl 7)).toByte();out[0xDF]=p.originGame.toByte();out[0xE3]=p.language.toByte()
         updatePk6Checksum(out);val encrypted=encryptPk6(out);val q=parsePk6(encrypted,0,PK6_STORED_SIZE,false,721)?:error("The converted PK6 could not be parsed.")
-        require(q.checksumValid&&!q.isEgg&&q.species==p.species&&q.pid==pid&&q.tid==p.tid&&q.sid==p.sid&&q.nickname==p.nickname&&q.isNicknamed==p.isNicknamed&&q.otName==p.otName&&q.experience==p.experience&&q.ability==p.ability&&q.abilityNumber==p.abilityNumber&&q.nature==p.nature&&q.gender==p.gender&&q.form==p.form&&q.shiny==p.shiny&&q.fatefulEncounter==p.fatefulEncounter&&q.heldItem==0&&q.friendship==p.friendship&&q.currentHandler==1&&gen6Pk6HandlerName(encrypted)==trainer.trainerName&&q.markingValue==gen5ToGen6Markings(p.markingValue)&&q.moves.contentEquals(p.moves)&&q.movePP.contentEquals(p.movePP)&&gen6Pk6PpUps(encrypted).contentEquals(ups)&&q.evs.contentEquals(p.evs)&&q.ivs.contentEquals(p.ivs)&&q.pokerusDays==p.pokerusDays&&q.pokerusStrain==p.pokerusStrain&&q.relearnMoves.all{it==0}&&q.eggLocation==0&&q.metLocation==30001&&q.ball==p.ball&&q.metLevel==p.metLevel&&q.otGender==p.otGender&&q.originGame==p.originGame&&q.language==p.language&&q.eggYear==p.eggYear&&q.eggMonth==p.eggMonth&&q.eggDay==p.eggDay&&q.metYear==p.metYear&&q.metMonth==p.metMonth&&q.metDay==p.metDay){"The converted PK6 did not preserve every reviewed field."}
+        val mismatch=gen5ToGen6Pk6Mismatch(
+            q,p,pid,gen6Pk6HandlerName(encrypted),trainer.trainerName,gen5ToGen6Markings(p.markingValue),
+            gen6Pk6PpUps(encrypted),ups
+        )
+        require(mismatch==null){"The converted PK6 failed $mismatch verification."}
         return encrypted
     }
 
