@@ -35410,7 +35410,7 @@ class MainActivity : Activity() {
     private fun gen7ToGen2Blocker(p:PokemonEntry,confirmedFormPlan:Gen7ToOlderFormPlan?=null):String?=when{
         !p.checksumValid->"The source PK7 checksum is invalid."
         p.species !in 1..251->"Species #${p.species} did not exist in Generation 2."
-        p.form!=0&&confirmedFormPlan!=gen7ToOlderBaseFormPlan(p)->"This form has no reviewed native Generation 2 base-form mapping."
+        p.form!=0&&confirmedFormPlan!=gen7ToOlderBaseFormPlan(p)->"Selected form has no reviewed Gen 1/2 base mapping. Documented Alolan/Pikachu forms open a cancellable Legalise review."
         p.isEgg->"Egg state cannot be represented safely by this backward conversion."
         p.heldItem!=0->"Held item #${p.heldItem} uses a Generation 7 item ID and has no verified Generation 2 mapping."
         p.fatefulEncounter->"Fateful-event provenance cannot be represented in Generation 2."
