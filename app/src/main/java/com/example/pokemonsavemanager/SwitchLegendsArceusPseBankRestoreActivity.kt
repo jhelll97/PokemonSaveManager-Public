@@ -147,6 +147,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                     status.text = "Native source and Bank integrity verified\n" +
                         "${LegendsArceusSpeciesNames.name(prepared.pokemon.species)} (#${prepared.pokemon.species}) • EXP ${prepared.pokemon.experience}\n" +
                         "${prepared.destinations.size} empty native destination slots available\n" +
+                        "First empty shortcut target: Pasture ${prepared.destinations.first().pasture}, slot ${prepared.destinations.first().position}\n" +
                         "Source SHA-256: ${expectedHash}\nBank source SHA-256: ${prepared.sourceBankHash}\n" +
                         "Prepared PA8 SHA-256: ${prepared.nativeRecordHash}" +
                         if (prepared.effects.isEmpty()) "" else "\n\nPSE conversion Legalise effects\n• " +

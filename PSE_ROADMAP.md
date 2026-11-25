@@ -876,9 +876,15 @@ This display-only preview is derived from the same ordered native destination li
 
 BDSP PSE Bank restore now shows the exact deterministic Box and Slot targeted by `Review first empty slot` as soon as source, Bank and destination validation completes. The full empty-slot count and full Box/Slot picker remain visible, and clicking either action still enters the existing destination-bound, cancellable review before any write.
 
-This display-only preview is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot, preserves exact native or explicitly Legalised PB8 staging, optional reviewed Pokédex registration, save integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+This display-only preview is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot, preserves exact native or explicitly Legalised PB8 staging, optional reviewed Pokédex registration, save integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. Commit `49b8b7facd2170bf63a264c9808ca7899c61cdd5` passed automatic Android build run `45621644911`, attempt 1, and was reported by exact Slack event `1795613132.147879`; the BDSP first-empty destination preview is validated.
 
-Next bounded feature: after this BDSP preview is automatically compiled, expose the same exact first-empty Pasture/Slot preview on the Legends: Arceus PSE Bank restore screen while retaining its full picker and existing safety boundaries.
+## Legends: Arceus first-empty destination preview
+
+Legends: Arceus PSE Bank restore now shows the exact deterministic Pasture and Slot targeted by `Review first empty slot` as soon as source, Bank and destination validation completes. The full empty-slot count and full Pasture/Slot picker remain visible, and clicking either action still enters the existing destination-bound, cancellable review before any write.
+
+This display-only preview is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot, preserves exact native or explicitly Legalised PA8 staging, optional reviewed obtained registration, save integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after this Legends: Arceus preview is automatically compiled, expose the same exact first-empty Box/Slot preview on the Scarlet/Violet PSE Bank restore screen while retaining its full picker and existing safety boundaries.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
