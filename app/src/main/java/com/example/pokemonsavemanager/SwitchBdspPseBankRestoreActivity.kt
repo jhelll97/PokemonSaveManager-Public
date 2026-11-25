@@ -177,7 +177,9 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
     private fun prepareDestinationReview(destination: BdspPseBankDestination) {
         if (busy || destination !in readyDestinations) return
         setBusy(true)
-        status.text = "Binding Box ${destination.box}, slot ${destination.position} to the restore review…"
+        val destinationZeroBased = destination.position - 1
+        val destinationGrid = "row ${destinationZeroBased / 6 + 1}, column ${destinationZeroBased % 6 + 1}"
+        status.text = "Binding Box ${destination.box}, slot ${destination.position} • $destinationGrid to the restore review…"
         worker.execute {
             val result = runCatching {
                 val source = readSource()

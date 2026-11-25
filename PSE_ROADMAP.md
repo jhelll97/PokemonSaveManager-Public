@@ -1122,9 +1122,15 @@ The row and column are derived only for display from the immutable reviewed plan
 
 The Sword/Shield slot picker and final review already show Box, Slot, row and column, but the preparation status displayed while binding the selected destination to the review fell back to Box and Slot only. That status now retains the same native five-row, six-column coordinates, keeping the exact reviewed location visible during preparation.
 
-The row and column are derived only for display from the selected immutable destination's one-based native Slot before the existing preparation worker runs. The selected destination, source and Bank identity checks, Legalise disclosure, native PK8 and Pokédex byte scope, footer integrity, recovery, persisted reopen verification, failure handling and cleanup remain unchanged. This implementation is pending its own automatic Android compile before the feature is called validated.
+The row and column are derived only for display from the selected immutable destination's one-based native Slot before the existing preparation worker runs. The selected destination, source and Bank identity checks, Legalise disclosure, native PK8 and Pokédex byte scope, footer integrity, recovery, persisted reopen verification, failure handling and cleanup remain unchanged. Commit `30c310c8531dc9605ee7dc3529579e53cf981dd2` passed automatic Android build run `45715101842`, attempt 1, and was reported by exact Slack event `1795646903.466169`; the Sword/Shield destination-binding grid coordinates are validated.
 
-Next bounded feature: after the Sword/Shield destination-binding coordinates are automatically compiled, retain BDSP's reviewed row and column in the destination-binding status without changing its reviewed destination or transaction semantics.
+## BDSP destination-binding grid coordinates
+
+The BDSP slot picker and final review already show Box, Slot, row and column, but the preparation status displayed while binding the selected destination to the review fell back to Box and Slot only. That status now retains the same native five-row, six-column coordinates, keeping the exact reviewed location visible during preparation.
+
+The row and column are derived only for display from the selected immutable destination's one-based native Slot before the existing preparation worker runs. The selected destination, source and Bank identity checks, Legalise disclosure, native PB8 and Pokédex byte scope, whole-file MD5 integrity, recovery, persisted reopen verification, failure handling and cleanup remain unchanged. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after the BDSP destination-binding coordinates are automatically compiled, retain Legends: Arceus's reviewed row and column in the destination-binding status without changing its reviewed destination or transaction semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
