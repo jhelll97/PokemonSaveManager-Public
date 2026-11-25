@@ -9856,12 +9856,18 @@ class SwitchReadOnlyActivity : Activity() {
         if (session !== bound) return
         val directory = File(filesDir, "pse_bank").canonicalFile
         val entry = file.canonicalFile
-        val parsed = runCatching {
+        val opened = runCatching {
             require(entry.parentFile == directory && entry.name.startsWith("switch_za_") && entry.extension == "pa9") {
                 "This is not a Legends: Z-A Bank entry."
             }
-            LegendsZaPokemonReadOnly.read(entry.readBytes())
-        }.getOrElse { LegendsZaSlotRead.Invalid(it.message ?: "The Bank entry could not be read.") }
+            val bytes = entry.readBytes()
+            bytes to LegendsZaPokemonReadOnly.read(bytes)
+        }.getOrElse {
+            ByteArray(0) to LegendsZaSlotRead.Invalid(
+                it.message ?: "The Bank entry could not be read."
+            )
+        }
+        val parsed = opened.second
         if (parsed !is LegendsZaSlotRead.Pokemon) {
             AlertDialog.Builder(this).setTitle("Unreadable PSE Bank entry")
                 .setMessage((parsed as? LegendsZaSlotRead.Invalid)?.reason ?: "The Bank entry is empty.")
@@ -9869,6 +9875,7 @@ class SwitchReadOnlyActivity : Activity() {
             return
         }
         val p = parsed.value
+        val openedHash = LegendsZaPseBankRestoreEditing.sha256(opened.first)
         val detail = buildString {
             append("${ScarletVioletSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form}\n")
             append("Nickname: ${p.nickname.ifBlank { "None" }}\n")
@@ -9890,13 +9897,18 @@ class SwitchReadOnlyActivity : Activity() {
                     require(entry.parentFile == directory && entry.name.startsWith("switch_za_") && entry.extension == "pa9") {
                         "This is not a current Legends: Z-A Bank entry."
                     }
-                    require(LegendsZaPokemonReadOnly.read(entry.readBytes()) is LegendsZaSlotRead.Pokemon) {
+                    val current = entry.readBytes()
+                    require(LegendsZaPseBankRestoreEditing.sha256(current) == openedHash) {
+                        "The Legends: Z-A Bank entry changed. Reopen PSE Bank."
+                    }
+                    require(LegendsZaPokemonReadOnly.read(current) is LegendsZaSlotRead.Pokemon) {
                         "The Bank record is invalid and cannot be restored."
                     }
                     dialog.dismiss()
                     startActivity(Intent(this, SwitchLegendsZaPseBankRestoreActivity::class.java).setData(source)
                         .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
                         .putExtra("pse.bank.entry", entry.name)
+                        .putExtra("pse.bank.sha256", openedHash)
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
                 } catch (error: Exception) {
                     AlertDialog.Builder(this).setTitle("Could not prepare Bank restore")
