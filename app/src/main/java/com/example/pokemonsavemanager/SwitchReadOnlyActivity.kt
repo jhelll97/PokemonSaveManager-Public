@@ -7720,6 +7720,7 @@ class SwitchReadOnlyActivity : Activity() {
                             .setData(source)
                             .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
                             .putExtra("pse.bank.entry", entry.name)
+                            .putExtra("pse.bank.sha256", hash)
                             .putExtra("pse.bank.legalise", true)
                             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     )

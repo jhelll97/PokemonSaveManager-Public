@@ -293,6 +293,11 @@ class SwitchScarletVioletPseBankRestoreActivity : Activity() {
                     "The reviewed Let's Go Bank hash is missing. Reopen PSE Bank."
                 }
             }
+            entry.name.startsWith("switch_swsh_") && entry.extension.equals("pk8", true) -> {
+                require(!expectedBankSourceHash.isNullOrBlank()) {
+                    "The reviewed Sword/Shield Bank hash is missing. Reopen PSE Bank."
+                }
+            }
             entry.extension.equals("pk7", true) -> {
                 require(!expectedBankSourceHash.isNullOrBlank()) {
                     "The reviewed Gen 7 Bank hash is missing. Reopen PSE Bank."
