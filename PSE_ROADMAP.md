@@ -1026,9 +1026,15 @@ The row and column are a display-only derivation from the same one-based native 
 
 The Legends: Z-A empty-slot picker already groups the validated destination list by Box and shows each Box's exact empty-slot count. Each listed empty Slot now also names its native five-row, six-column grid coordinates, so the user can match the picker entry directly to the in-game PC layout before opening the existing cancellable restore review.
 
-The row and column are a display-only derivation from the same one-based native Slot number, and the selected item still passes the original destination object without reordering or remapping it. The transaction continues to recheck that exact slot, preserve exact native or explicitly Legalised PA9 data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+The row and column are a display-only derivation from the same one-based native Slot number, and the selected item still passes the original destination object without reordering or remapping it. The transaction continues to recheck that exact slot, preserve exact native or explicitly Legalised PA9 data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. Commit `b4aee0fda16de7b3814fa366e0946c171014d1d1` passed automatic Android build run `45683997535`, attempt 1, and was reported by exact Slack event `1795634986.392899`; the Legends: Z-A native destination grid coordinates are validated.
 
-Next bounded feature: after these Legends: Z-A grid coordinates are automatically compiled, add the same row and column detail to the Sword/Shield first-empty shortcut label and status without changing its selected destination or transaction semantics.
+## Sword/Shield first-empty grid coordinates
+
+The Sword/Shield first-empty shortcut button and preparation status already name the exact Box and Slot selected from the validated ordered destination list. Both now also show that Slot's native five-row, six-column grid coordinates, so the shortcut target can be matched directly to the in-game PC layout before the existing cancellable review opens.
+
+The row and column are derived only for display from the same first destination object's one-based native Slot number. The shortcut still passes that unchanged destination object into the existing review, which rechecks the exact empty slot and preserves native or explicitly Legalised PK8 data, optional reviewed Pokédex registration, footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after the Sword/Shield first-empty coordinates are automatically compiled, add the same row and column detail to the BDSP first-empty shortcut label and status without changing its selected destination or transaction semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
