@@ -48022,11 +48022,8 @@ class MainActivity : Activity() {
                     "A hidden or unsupported ability slot cannot be mapped safely."
                 }
                 val sourceAbility=if(sourceGeneration==3){
-                    val sourceAbilities=canonicalGen3SpeciesAbilities(p.species)
-                        ?:error("Canonical Generation 3 ability-slot data is unavailable for species #${p.species}.")
-                    val ability=sourceAbilities.getOrElse(wanted-1){0}.takeIf{it!=0}
-                        ?: (if(wanted==2)sourceAbilities.firstOrNull()?.takeIf{it!=0} else null)
-                        ?:error("Species #${p.species} has no Generation 3 ability in source slot $wanted.")
+                    val ability=canonicalGen3AbilityId(p.species,wanted)
+                        ?:error("Canonical Generation 3 ability-slot data is unavailable for species #${p.species} in source slot $wanted.")
                     require(ability==p.ability){
                         "The PK3 has ability #${p.ability} in slot $wanted, but canonical Generation 3 data assigns ability #$ability to that slot."
                     }
