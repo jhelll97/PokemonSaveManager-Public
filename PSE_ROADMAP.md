@@ -900,9 +900,15 @@ This display-only preview is derived from the same ordered native destination li
 
 After source, Bank and destination validation, the Sword/Shield `Review first empty slot` button now names the exact deterministic Box and Slot it will bind to the existing cancellable restore review. The adjacent status preview and full Box/Slot picker remain available, and the shortcut label resets after a completed or failed copy transaction instead of presenting a stale destination.
 
-This label is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot immediately before staging, preserves exact native or explicitly Legalised PK8 data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+This label is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot immediately before staging, preserves exact native or explicitly Legalised PK8 data, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. Commit `304605cd0bf3cb55cf6adb694f1326258113b8c6` passed automatic Android build run `45631358134`, attempt 1, and was reported by exact Slack event `1795616766.747449`; the Sword/Shield exact first-empty shortcut label is validated.
 
-Next bounded feature: after this Sword/Shield label is automatically compiled, expose the exact first-empty Box/Slot in the BDSP shortcut label while retaining its status preview, full picker and existing safety boundaries.
+## BDSP exact first-empty shortcut label
+
+After source, Bank and destination validation, the BDSP `Review first empty slot` button now names the exact deterministic Box and Slot it will bind to the existing cancellable restore review. The adjacent status preview and full Box/Slot picker remain available, and the shortcut label resets after a completed or failed copy transaction instead of presenting a stale destination.
+
+This label is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot immediately before staging, preserves exact native or explicitly Legalised PB8 data, optional reviewed Pokédex registration, save integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after this BDSP label is automatically compiled, expose the exact first-empty Pasture/Slot in the Legends: Arceus shortcut label while retaining its status preview, full picker and existing safety boundaries.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

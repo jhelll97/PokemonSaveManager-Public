@@ -118,6 +118,7 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 result.onSuccess { prepared ->
                     readyDestinations = prepared.destinations
+                    firstEmpty.text = "Review first empty: Box ${prepared.destinations.first().box}, slot ${prepared.destinations.first().position}"
                     conversionEffects = prepared.effects
                     status.text = "Native source and Bank integrity verified\n" +
                         "${SwordShieldSpeciesNames.name(prepared.pokemon.species)} (#${prepared.pokemon.species}) • Level ${prepared.pokemon.cachedLevel}\n" +
@@ -570,6 +571,7 @@ class SwitchBdspPseBankRestoreActivity : Activity() {
                 )
                 readyPlan = null
                 readyDestinations = emptyList()
+                firstEmpty.text = "Review first empty slot"
                 setBusy(false)
             }
         }
