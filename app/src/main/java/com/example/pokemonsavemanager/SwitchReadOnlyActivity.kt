@@ -8952,6 +8952,7 @@ class SwitchReadOnlyActivity : Activity() {
                                     .setData(source)
                                     .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
                                     .putExtra("pse.bank.entry", selected.name)
+                                    .putExtra("pse.bank.sha256", openedHash)
                                     .putExtra("pse.bank.legalise", true)
                                     .putExtra("pse.gen5.friendship", metadata.baseFriendship)
                                     .putExtra("pse.gen5.gender_rate", metadata.genderRate)
