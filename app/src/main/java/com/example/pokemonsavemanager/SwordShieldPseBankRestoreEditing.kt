@@ -89,7 +89,8 @@ object SwordShieldPseBankRestoreEditing {
         box: Int,
         position: Int,
         registerCaughtEnglish: Boolean = false,
-        requireCaughtEnglishRecord: Boolean = true
+        requireCaughtEnglishRecord: Boolean = true,
+        caughtLanguageIndex: Int = 1
     ): SwordShieldPseBankRestoreCopyPlan {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
@@ -106,7 +107,9 @@ object SwordShieldPseBankRestoreEditing {
             original, box, position, supplied
         )
         val (edited, dexRegistrations) = if (registerCaughtEnglish) {
-            registerCaughtEnglishDex(written.bytes, pokemon, requireCaughtEnglishRecord)
+            registerCaughtLanguageDex(
+                written.bytes, pokemon, requireCaughtEnglishRecord, caughtLanguageIndex
+            )
         } else written.bytes to emptyList()
         verify(
             original, edited, supplied, box, position, written.absoluteOffset,
@@ -211,17 +214,20 @@ object SwordShieldPseBankRestoreEditing {
         }) { "An unrelated encrypted container byte changed." }
     }
 
-    private fun registerCaughtEnglishDex(
+    private fun registerCaughtLanguageDex(
         source: ByteArray,
         pokemon: SwordShieldPokemonRead,
-        requireAllocatedRecord: Boolean
+        requireAllocatedRecord: Boolean,
+        languageIndex: Int
     ): Pair<ByteArray, List<SwordShieldPseBankDexRegistration>> {
         require(pokemon.form == 0) {
             "Only the reviewed base form can receive the verified native Pokédex mapping."
         }
         val variant = pokemon.gender.coerceIn(0, 1) + if (pokemon.shiny) 2 else 0
         val formIndex = 0
-        val languageIndex = 1
+        require(languageIndex in SwordShieldPokedexEditing.languages.indices) {
+            "The reviewed native Pokédex language is unsupported."
+        }
         val allocated = SwordShieldPokedexReadOnly.read(source).regions
         val matches = allocated.flatMap { region ->
             region.entries.filter { it.speciesId == pokemon.species }.map { region to it.number }

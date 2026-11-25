@@ -161,27 +161,50 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
             val result = runCatching {
                 val source = readSource()
                 val hash = expectedHash ?: error("Reopen the source from PSE.")
+                val bankEntry = bankFile()
                 val bank = readBankRecord()
+                val native = bankEntry.name.startsWith("switch_swsh_") &&
+                    bankEntry.extension.equals("pk8", true)
+                val nativePokemon = if (native) {
+                    SwordShieldPseBankRestoreEditing.inspectBankRecord(bank)
+                } else null
+                val nativeLanguageIndex = when (nativePokemon?.languageId) {
+                    1 -> 0
+                    2 -> 1
+                    3 -> 2
+                    4 -> 3
+                    5 -> 4
+                    7 -> 5
+                    8 -> 6
+                    9 -> 7
+                    10 -> 8
+                    else -> null
+                }
                 SwordShieldPseBankRestoreEditing.stage(
                     source, hash, bank, destination.box, destination.position,
-                    registerCaughtEnglish = bankFile().extension.equals("pb7", true) ||
-                        bankFile().extension.equals("pb8", true) ||
-                        bankFile().extension.equals("pa8", true) ||
-                        bankFile().extension.equals("pk9", true) ||
-                        bankFile().extension.equals("pa9", true) ||
-                        bankFile().extension.equals("pk7", true) ||
-                        bankFile().extension.equals("pse1", true) ||
-                        bankFile().extension.equals("pse2", true) ||
-                        bankFile().extension.equals("pk3", true) ||
-                        bankFile().extension.equals("pk4", true) ||
-                        bankFile().extension.equals("pk5", true) ||
-                        bankFile().extension.equals("pk6", true),
+                    registerCaughtEnglish =
+                        (nativePokemon != null && !nativePokemon.isEgg &&
+                            nativePokemon.form == 0 && nativeLanguageIndex != null) ||
+                            bankEntry.extension.equals("pb7", true) ||
+                            bankEntry.extension.equals("pb8", true) ||
+                            bankEntry.extension.equals("pa8", true) ||
+                            bankEntry.extension.equals("pk9", true) ||
+                            bankEntry.extension.equals("pa9", true) ||
+                            bankEntry.extension.equals("pk7", true) ||
+                            bankEntry.extension.equals("pse1", true) ||
+                            bankEntry.extension.equals("pse2", true) ||
+                            bankEntry.extension.equals("pk3", true) ||
+                            bankEntry.extension.equals("pk4", true) ||
+                            bankEntry.extension.equals("pk5", true) ||
+                            bankEntry.extension.equals("pk6", true),
                     requireCaughtEnglishRecord =
-                        !bankFile().extension.equals("pb7", true) &&
-                            !bankFile().extension.equals("pb8", true) &&
-                            !bankFile().extension.equals("pa8", true) &&
-                            !bankFile().extension.equals("pk9", true) &&
-                            !bankFile().extension.equals("pa9", true)
+                        !native &&
+                            !bankEntry.extension.equals("pb7", true) &&
+                            !bankEntry.extension.equals("pb8", true) &&
+                            !bankEntry.extension.equals("pa8", true) &&
+                            !bankEntry.extension.equals("pk9", true) &&
+                            !bankEntry.extension.equals("pa9", true),
+                    caughtLanguageIndex = nativeLanguageIndex ?: 1
                 )
             }
             runOnUiThread {
@@ -418,7 +441,9 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
             "\n\nExplicit PSE conversion Legalise effects\n• " + conversionEffects.joinToString("\n• ")
         val dexReview = if (plan.dexRegistrations.isEmpty()) "" else
             "\nDestination caught registration: " + plan.dexRegistrations.joinToString { registration ->
-                "${registration.region.displayName} #${registration.number} (English, 0x${registration.absoluteOffset.toString(16).uppercase()})"
+                "${registration.region.displayName} #${registration.number} (" +
+                    SwordShieldPokedexEditing.languages[registration.languageIndex] +
+                    ", 0x${registration.absoluteOffset.toString(16).uppercase()})"
             }
         val dexScope = if (plan.dexRegistrations.isEmpty()) "" else
             " plus ${plan.dexRegistrations.size} matched native 0x30 regional Pokédex record" +
