@@ -966,9 +966,15 @@ The count is derived from the same validated native destination list consumed by
 
 After a Sword/Shield restore copy is written, reopened and verified, the visible inspection action now names the exact Box and Slot that the completed transaction used. A failed or unverified copy keeps the inspection action hidden and clears the target-specific label, so the UI cannot present an unverified destination as inspectable.
 
-The label is derived from the same immutable reviewed plan whose edited save hash is bound to the verified copy. Inspection still reopens that exact URI and hash, while the transaction continues to preserve exact native or explicitly Legalised PK8 data, the chosen empty native slot, optional reviewed Pokédex registration, native footer integrity, retained recovery, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+The label is derived from the same immutable reviewed plan whose edited save hash is bound to the verified copy. Inspection still reopens that exact URI and hash, while the transaction continues to preserve exact native or explicitly Legalised PK8 data, the chosen empty native slot, optional reviewed Pokédex registration, native footer integrity, retained recovery, unchanged source and Bank checks, and failed-copy cleanup. Commit `88303e9ddaeef6b4bc08b27c3684ab90ba223867` passed automatic Android build run `45659185682`, attempt 1, and was reported by exact Slack event `1795626263.213789`; the Sword/Shield exact verified-copy inspection target is validated.
 
-Next bounded feature: after this Sword/Shield verified-copy target label is automatically compiled, add the same exact completed Box/Slot label to the BDSP verified-copy inspection action without changing transaction or reopen semantics.
+## BDSP exact verified-copy inspection target
+
+After a BDSP restore copy is written, reopened and verified, the visible inspection action now names the exact Box and Slot that the completed transaction used. A failed or unverified copy keeps the inspection action hidden and clears the target-specific label, so the UI cannot present an unverified destination as inspectable.
+
+The label is derived from the same immutable reviewed plan whose edited save hash is bound to the verified copy. Inspection still reopens that exact URI and hash, while the transaction continues to preserve exact native or explicitly Legalised PB8 data, the chosen empty native slot, optional reviewed Pokédex registration, save integrity, retained recovery, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after this BDSP verified-copy target label is automatically compiled, add the same exact completed Pasture/Slot label to the Legends: Arceus verified-copy inspection action without changing transaction or reopen semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
