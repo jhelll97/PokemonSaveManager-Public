@@ -1032,9 +1032,15 @@ The row and column are a display-only derivation from the same one-based native 
 
 The Sword/Shield first-empty shortcut button and preparation status already name the exact Box and Slot selected from the validated ordered destination list. Both now also show that Slot's native five-row, six-column grid coordinates, so the shortcut target can be matched directly to the in-game PC layout before the existing cancellable review opens.
 
-The row and column are derived only for display from the same first destination object's one-based native Slot number. The shortcut still passes that unchanged destination object into the existing review, which rechecks the exact empty slot and preserves native or explicitly Legalised PK8 data, optional reviewed Pokédex registration, footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+The row and column are derived only for display from the same first destination object's one-based native Slot number. The shortcut still passes that unchanged destination object into the existing review, which rechecks the exact empty slot and preserves native or explicitly Legalised PK8 data, optional reviewed Pokédex registration, footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. Commit `58ae041d9a0833e767b3c4149ec4d3472a0ab620` passed automatic Android build run `45686110931`, attempt 1, and was reported by exact Slack event `1795635748.789689`; the Sword/Shield first-empty grid coordinates are validated.
 
-Next bounded feature: after the Sword/Shield first-empty coordinates are automatically compiled, add the same row and column detail to the BDSP first-empty shortcut label and status without changing its selected destination or transaction semantics.
+## BDSP first-empty grid coordinates
+
+The BDSP first-empty shortcut button and preparation status already name the exact Box and Slot selected from the validated ordered destination list. Both now also show that Slot's native five-row, six-column grid coordinates, so the shortcut target can be matched directly to the in-game PC layout before the existing cancellable review opens.
+
+The row and column are derived only for display from the same first destination object's one-based native Slot number. The shortcut still passes that unchanged destination object into the existing review, which rechecks the exact empty slot and preserves native or explicitly Legalised PB8 data, optional reviewed Pokédex registration, save integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after the BDSP first-empty coordinates are automatically compiled, add the same row and column detail to the Legends: Arceus first-empty shortcut label and status without changing its selected destination or transaction semantics.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
