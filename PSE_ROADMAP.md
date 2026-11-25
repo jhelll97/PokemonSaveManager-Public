@@ -862,9 +862,17 @@ The shortcut reuses the same final empty-slot recheck, exact native or explicitl
 
 Legends: Z-A PSE Bank restore now offers a separate `Review first empty slot` action after source, Bank and destination validation. The shortcut selects the first native empty PC-box destination in deterministic Box/Slot order and enters the existing destination-bound review; the review still names the exact Box and Slot and remains cancellable before any new-copy write. The existing full Box/Slot picker remains available.
 
-The shortcut reuses the same final empty-slot recheck, exact native or explicitly Legalised PA9 body and destination slot-footer staging, optional reviewed Pokédex registration, native footer integrity refresh, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. It never overwrites an occupied slot or removes the Bank entry. This implementation is pending its own automatic Android compile before the feature is called validated.
+The shortcut reuses the same final empty-slot recheck, exact native or explicitly Legalised PA9 body and destination slot-footer staging, optional reviewed Pokédex registration, native footer integrity refresh, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. It never overwrites an occupied slot or removes the Bank entry. Commit `e962573a029c40309294abf1066725b946406ac1` passed automatic Android build run `45616003401`, attempt 1, and was reported by exact Slack event `1795611235.138059`; the Legends: Z-A first-empty review shortcut is validated.
 
-Next bounded feature: after this Legends: Z-A shortcut is automatically compiled, inspect the Generation 7 same-generation PSE Bank withdrawal destination picker for the same reviewable first-empty option while preserving exact PK7 bytes, explicit Box/Slot disclosure, checksums, retained two-sided recovery, persisted reopen verification and rollback boundaries.
+Generation 7 same-generation withdrawal source inspection confirmed that its existing destination dialog already offers `First structurally empty` with exact Box/Slot disclosure alongside `Choose Box / Slot`, followed by a cancellable no-conversion review. Its exact PK7 bytes, structural-empty recheck, checksums, retained two-sided recovery, persisted reopen verification and rollback therefore need no duplicate implementation.
+
+## Sword/Shield first-empty destination preview
+
+Sword/Shield PSE Bank restore now shows the exact deterministic Box and Slot targeted by `Review first empty slot` as soon as source, Bank and destination validation completes. The full empty-slot count and full Box/Slot picker remain visible, and clicking either action still enters the existing destination-bound, cancellable review before any write.
+
+This display-only preview is derived from the same ordered native destination list used by the shortcut. The transaction still rechecks the selected slot, preserves exact native or explicitly Legalised PK8 staging, optional reviewed Pokédex registration, native footer integrity, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after this Sword/Shield preview is automatically compiled, expose the same exact first-empty Box/Slot preview on the BDSP PSE Bank restore screen while retaining its full picker and existing safety boundaries.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

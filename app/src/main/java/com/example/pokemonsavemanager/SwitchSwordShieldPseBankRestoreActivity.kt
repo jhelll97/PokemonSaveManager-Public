@@ -122,6 +122,7 @@ class SwitchSwordShieldPseBankRestoreActivity : Activity() {
                     status.text = "Native source and Bank integrity verified\n" +
                         "${SwordShieldSpeciesNames.name(prepared.pokemon.species)} (#${prepared.pokemon.species}) • Level ${prepared.pokemon.cachedLevel}\n" +
                         "${prepared.destinations.size} empty native destination slots available\n" +
+                        "First empty shortcut target: Box ${prepared.destinations.first().box}, slot ${prepared.destinations.first().position}\n" +
                         "Source SHA-256: ${expectedHash}\nBank source SHA-256: ${prepared.sourceBankHash}\n" +
                         "Prepared PK8 SHA-256: ${prepared.nativeRecordHash}" +
                         if (prepared.effects.isEmpty()) "" else "\n\nPSE conversion Legalise effects\n• " +
