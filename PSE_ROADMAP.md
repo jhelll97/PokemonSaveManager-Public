@@ -844,9 +844,15 @@ The existing transaction still preserves the exact native or explicitly Legalise
 
 BDSP PSE Bank restore now offers a separate `Review first empty slot` action after source, Bank and destination validation. The shortcut selects the first native empty PC-box destination in deterministic Box/Slot order and enters the existing destination-bound review; the review still names the exact Box and Slot and remains cancellable before any new-copy write. The existing full Box/Slot picker remains available.
 
-The shortcut reuses the same final empty-slot recheck, exact native or explicitly Legalised PB8 staging, optional reviewed Pokédex registration, save-integrity refresh, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. It never overwrites an occupied slot or removes the Bank entry. This implementation is pending its own automatic Android compile before the feature is called validated.
+The shortcut reuses the same final empty-slot recheck, exact native or explicitly Legalised PB8 staging, optional reviewed Pokédex registration, save-integrity refresh, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. It never overwrites an occupied slot or removes the Bank entry. Commit `3bb1da66b45dc64a0119c4cba969ae43fc92124d` passed automatic Android build run `45609735404`, attempt 1, and was reported by exact Slack event `1795608878.016569`; the BDSP first-empty review shortcut is validated.
 
-Next bounded feature: after this BDSP shortcut is automatically compiled, add the same deterministic first-empty review option to the Legends: Arceus PSE Bank restore while preserving exact PA8 bytes, the chosen empty pasture slot, reviewed Pokédex registration, save integrity, recovery, reopen verification and rollback boundaries.
+## Legends: Arceus first-empty PSE Bank restore shortcut
+
+Legends: Arceus PSE Bank restore now offers a separate `Review first empty slot` action after source, Bank and destination validation. The shortcut selects the first native empty pasture destination in deterministic Pasture/Slot order and enters the existing destination-bound review; the review still names the exact Pasture and Slot and remains cancellable before any new-copy write. The existing full Pasture/Slot picker remains available.
+
+The shortcut reuses the same final empty-slot recheck, exact native or explicitly Legalised PA8 staging, optional reviewed obtained registration, save-integrity refresh, retained recovery, persisted reopen verification, unchanged source and Bank checks, and failed-copy cleanup. It never overwrites an occupied slot or removes the Bank entry. This implementation is pending its own automatic Android compile before the feature is called validated.
+
+Next bounded feature: after this Legends: Arceus shortcut is automatically compiled, add the same deterministic first-empty review option to the Scarlet/Violet PSE Bank restore while preserving exact PK9 bytes, the chosen empty PC-box slot, reviewed Pokédex registration, native footer integrity, recovery, reopen verification and rollback boundaries.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
