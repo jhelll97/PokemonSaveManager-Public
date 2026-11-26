@@ -1830,7 +1830,15 @@ Supported-title Bank review found that same-generation PSE1 withdrawal already r
 
 The native Gen 1 route now inserts one final cancellable review after box selection. It shows the exact `Box N of 12`, `Slot N of 20` location within the native 240-slot PC, states every represented Generation 1 field retained unchanged, names the limited record, Seen/Caught and checksum scope, and rechecks the same loaded destination identity and bytes, canonical exact Bank record and unchanged next-slot position before entering the existing transaction. Existing records remain untouched; retained recovery, persisted reopen verification, cleanup-last Bank removal and two-sided failure handling remain unchanged.
 
-This change is pending its own automatic Android compile before the native Generation 1 Bank withdrawal exact destination review is called validated.
+Commit `f23284957969924654afd1095e3fe4ae3da90883` passed automatic Android build run `45904926672`, attempt 1, and was reported by exact Slack event `1795732691.819069`; the native Generation 1 Bank withdrawal exact destination review is validated.
+
+## Native Generation 5 Bank batch exact destination review
+
+Supported-title Bank review found that same-generation PK5 multi-withdrawal already binds every canonical checksum-valid 136-byte Bank record and a checksum-clean Black, White, Black 2 or White 2 destination, offers only one native box with enough structurally empty slots for the complete ordered selection, copies every PK5 byte-for-byte, limits changes to those slots and required native checksum fields, retains exact destination and per-record Bank recovery, reopens every persisted PK5 and removes Bank sources last with independent recovery on failure. Selecting a listed box still entered the batch transaction immediately without one final accepted review naming each selected Pokemon's exact native slot.
+
+The native Gen 5 batch route now inserts one final cancellable review after box selection. It lists every selected Bank record in order with its exact `Box N of 24`, `Slot N of 30` destination, states that each complete PK5 remains unchanged, names the limited box CRC and checksum-table scope, and rechecks the same destination identity and bytes, every canonical exact Bank record and every reviewed structurally empty slot before entering the unchanged batch transaction. Existing and nonzero records remain untouched; retained recovery, persisted reopen verification, cleanup-last Bank removal and independent failure handling remain unchanged.
+
+This change is pending its own automatic Android compile before the native Generation 5 Bank batch exact destination review is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
