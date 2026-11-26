@@ -25,6 +25,9 @@ internal data class LegendsZaPseCaughtRegistration(
 
 /** Restores one checksum-valid native PA9 Bank record into a reviewed new Legends: Z-A save copy. */
 object LegendsZaPseBankRestoreEditing {
+    const val BOX_COUNT = 32
+    const val SLOTS_PER_BOX = 30
+    const val STORAGE_CAPACITY = BOX_COUNT * SLOTS_PER_BOX
     private const val MAX_FILE_SIZE = 0x309FB3
     private const val FOOTER_SIZE = 32
 
@@ -87,7 +90,7 @@ object LegendsZaPseBankRestoreEditing {
 
     fun emptyDestinations(source: ByteArray): List<LegendsZaPseBankDestination> {
         val storage = LegendsZaStorageReadOnly.read(source.copyOf())
-        return (0 until 32).flatMap { box ->
+        return (0 until BOX_COUNT).flatMap { box ->
             storage.box(box).filter { it.read is LegendsZaSlotRead.Empty }
                 .map { LegendsZaPseBankDestination(box + 1, it.position) }
         }
@@ -100,7 +103,9 @@ object LegendsZaPseBankRestoreEditing {
         registerCaught: Boolean = false
     ): LegendsZaPseBankRestoreCopyPlan {
         val destination = emptyDestinations(source).firstOrNull()
-            ?: throw IllegalArgumentException("All 960 native Legends: Z-A PC-box slots are occupied.")
+            ?: throw IllegalArgumentException(
+                "All $STORAGE_CAPACITY native Legends: Z-A PC-box slots are occupied."
+            )
         return stage(
             source, expectedSha256, bankRecord, destination.box, destination.position, registerCaught
         )
@@ -117,7 +122,7 @@ object LegendsZaPseBankRestoreEditing {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
-        require(box in 1..32 && position in 1..30) {
+        require(box in 1..BOX_COUNT && position in 1..SLOTS_PER_BOX) {
             "The selected Legends: Z-A PC-box destination is outside native storage."
         }
         val before = LegendsZaStorageReadOnly.read(original)
@@ -183,7 +188,8 @@ object LegendsZaPseBankRestoreEditing {
 
         val beforeBlocks = LegendsZaSaveValidation.readPokemonBlocks(original)
         val afterBlocks = LegendsZaSaveValidation.readPokemonBlocks(edited)
-        val relativeOffset = ((box - 1) * 30 + position - 1) * LegendsZaStorageReadOnly.BOX_STRIDE
+        val relativeOffset = ((box - 1) * SLOTS_PER_BOX + position - 1) *
+            LegendsZaStorageReadOnly.BOX_STRIDE
         require(afterBlocks.boxes.copyOfRange(relativeOffset, relativeOffset + bankRecord.size)
             .contentEquals(bankRecord)) { "The native PSE Bank bytes were not preserved exactly." }
         require(beforeBlocks.party.contentEquals(afterBlocks.party)) {

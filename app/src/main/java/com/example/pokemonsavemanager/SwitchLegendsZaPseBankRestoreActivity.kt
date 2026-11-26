@@ -136,7 +136,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                     nativeLanguageSupported
                 val destinations = LegendsZaPseBankRestoreEditing.emptyDestinations(source)
                 require(destinations.isNotEmpty()) {
-                    "All 960 native Legends: Z-A PC-box slots are occupied."
+                    "All ${LegendsZaPseBankRestoreEditing.STORAGE_CAPACITY} native Legends: Z-A PC-box slots are occupied."
                 }
                 LegendsZaBankPreparation(
                     pokemon, destinations, bankSourceHash,
@@ -152,14 +152,14 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                     val firstGrid = "row ${firstZeroBased / 6 + 1}, column ${firstZeroBased % 6 + 1}"
                     readyDestinations = prepared.destinations
                     review.text = "Choose destination (${prepared.destinations.size} empty) & review"
-                    firstEmpty.text = "Review first empty: Box ${firstDestination.box}, slot ${firstDestination.position} • $firstGrid"
+                    firstEmpty.text = "Review first empty: Box ${firstDestination.box} of ${LegendsZaPseBankRestoreEditing.BOX_COUNT}, slot ${firstDestination.position} of ${LegendsZaPseBankRestoreEditing.SLOTS_PER_BOX} • $firstGrid"
                     conversionEffects = prepared.effects
                     registerGen7Caught = prepared.registerCaught
                     val p = prepared.pokemon
                     status.text = "Native source and Bank integrity verified\n" +
                         "${ScarletVioletSpeciesNames.name(p.species)} (#${p.species}) • Level ${p.cachedLevel}\n" +
                         "${prepared.destinations.size} empty native destination slots available\n" +
-                        "First empty shortcut target: Box ${firstDestination.box}, slot ${firstDestination.position} • $firstGrid\n" +
+                        "First empty shortcut target: Box ${firstDestination.box} of ${LegendsZaPseBankRestoreEditing.BOX_COUNT}, slot ${firstDestination.position} of ${LegendsZaPseBankRestoreEditing.SLOTS_PER_BOX} • $firstGrid\n" +
                         "Bank source SHA-256: ${prepared.sourceBankHash}\nPrepared PA9 SHA-256: ${prepared.nativeRecordHash}" +
                         if (prepared.effects.isEmpty()) "" else "\n\n${conversionSourceName()} -> Legends: Z-A Legalise effects\n• " +
                             prepared.effects.joinToString("\n• ")
@@ -180,7 +180,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         if (busy || readyDestinations.isEmpty()) return
         val boxes = readyDestinations.groupBy { it.box }.toSortedMap()
         val labels = boxes.map { (box, slots) ->
-            "Box $box • ${slots.size} empty slot${if (slots.size == 1) "" else "s"}"
+            "Box $box of ${LegendsZaPseBankRestoreEditing.BOX_COUNT} • ${slots.size} empty slot${if (slots.size == 1) "" else "s"}"
         }.toTypedArray()
         AlertDialog.Builder(this).setTitle("Choose Legends: Z-A Box")
             .setItems(labels) { _, index ->
@@ -197,9 +197,11 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         if (busy) return
         val labels = destinations.map {
             val zeroBased = it.position - 1
-            "Slot ${it.position} • row ${zeroBased / 6 + 1}, column ${zeroBased % 6 + 1}"
+            "Slot ${it.position} of ${LegendsZaPseBankRestoreEditing.SLOTS_PER_BOX} • row ${zeroBased / 6 + 1}, column ${zeroBased % 6 + 1}"
         }.toTypedArray()
-        AlertDialog.Builder(this).setTitle("Box $box • choose empty slot")
+        AlertDialog.Builder(this).setTitle(
+            "Box $box of ${LegendsZaPseBankRestoreEditing.BOX_COUNT} • choose empty slot"
+        )
             .setItems(labels) { _, index -> prepareDestinationReview(destinations[index]) }
             .setNegativeButton("Back") { _, _ -> showDestinationBoxPicker() }
             .show()
@@ -210,7 +212,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
         setBusy(true)
         val destinationZeroBased = destination.position - 1
         val destinationGrid = "row ${destinationZeroBased / 6 + 1}, column ${destinationZeroBased % 6 + 1}"
-        status.text = "Binding Box ${destination.box}, slot ${destination.position} • $destinationGrid to the restore review…"
+        status.text = "Binding Box ${destination.box} of ${LegendsZaPseBankRestoreEditing.BOX_COUNT}, slot ${destination.position} of ${LegendsZaPseBankRestoreEditing.SLOTS_PER_BOX} • $destinationGrid to the restore review…"
         worker.execute {
             val result = runCatching {
                 val source = readSource()
@@ -552,7 +554,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                 "${ScarletVioletSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form} • Level ${p.cachedLevel}\n" +
                     "Nickname: ${p.nickname.ifBlank { "None" }} • Shiny: ${if (p.shiny) "Yes" else "No"} • Alpha: ${if (p.isAlpha) "Yes" else "No"}\n" +
                     "OT ${p.originalTrainer} • TID ${p.tid} / SID ${p.sid}\nMoves: $moves\n\n" +
-                    "Destination: native Box ${plan.box}, slot ${plan.position} • $destinationGrid\n" +
+                    "Destination: native Box ${plan.box} of ${LegendsZaPseBankRestoreEditing.BOX_COUNT}, slot ${plan.position} of ${LegendsZaPseBankRestoreEditing.SLOTS_PER_BOX} • $destinationGrid\n" +
                     "Allowed native byte scope: the 344-byte PA9 body of one previously empty PC-box slot at 0x${plan.absoluteOffset.toString(16).uppercase()}" +
                     dexScope + " plus the native SHA-256 footer. Mega, Alpha, display and unknown Pokédex fields, the target slot's 64-byte native footer, every existing PC-box slot, all party data, the save revision, and all unrelated bytes remain exact. " +
                     "PSE verifies the unchanged source and Bank entry, retains a verified recovery backup, reopens the persisted copy, and removes a failed copy when possible. " +
@@ -640,7 +642,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                 val destinationGrid = "row ${destinationZeroBased / 6 + 1}, column ${destinationZeroBased % 6 + 1}"
                 verifiedCopy = result.getOrNull()?.let { uri to plan.editedSha256 }
                 inspectCopy.text = if (verifiedCopy != null) {
-                    "Inspect verified copy: Box ${plan.box}, slot ${plan.position} • $destinationGrid"
+                    "Inspect verified copy: Box ${plan.box} of ${LegendsZaPseBankRestoreEditing.BOX_COUNT}, slot ${plan.position} of ${LegendsZaPseBankRestoreEditing.SLOTS_PER_BOX} • $destinationGrid"
                 } else {
                     "Inspect verified copy"
                 }
@@ -649,7 +651,7 @@ class SwitchLegendsZaPseBankRestoreActivity : Activity() {
                     onSuccess = {
                         (if (conversionEffects.isEmpty()) "PSE Bank restore saved and reopened successfully.\n"
                         else "${conversionSourceName()} -> Legends: Z-A PSE conversion saved and reopened successfully.\n") +
-                            "Box ${plan.box}, slot ${plan.position} • $destinationGrid • SHA-256: ${plan.editedSha256}\n" +
+                            "Box ${plan.box} of ${LegendsZaPseBankRestoreEditing.BOX_COUNT}, slot ${plan.position} of ${LegendsZaPseBankRestoreEditing.SLOTS_PER_BOX} • $destinationGrid • SHA-256: ${plan.editedSha256}\n" +
                             "Recovery backup: $backupName\nOriginal source and Bank entry unchanged."
                     },
                     onFailure = {
