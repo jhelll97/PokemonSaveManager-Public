@@ -1528,7 +1528,9 @@ Re-inventory found that the implemented PK3 -> PK7 conversion already binds the 
 
 Route-scoped Generation 7 Box and Slot constants now govern capacity verification, chooser bounds, slot-grid placement, selected-slot validation, transaction entry, completion reporting and every visible destination capacity label for this single-transfer route. The prepared transaction retains both the original reviewed PK3 and its explicit Legalised conversion source so the final exact-slot review repeats the ball mapping without rewriting provenance. The unchanged conversion disclosure is externalized into a top-level review builder to preserve `MainActivity` class-size margin. Existing and nonzero PC data remain unchanged; the route retains exact destination and Bank recovery snapshots, reopens the persisted PK7, Pokédex state and checksums, removes the Bank source only after verification, and preserves independent two-sided rollback. Cancel at the destination chooser or final review leaves both sides byte-exact.
 
-This implementation is pending its own automatic Android compile before the feature is called validated.
+Commit `6441f5ed303c7ab69a2ab6a76b54076b6dba1667` was rejected by automatic Android build run `45820368538`, attempt 1, and exact Slack event `1795696561.559849`: Kotlin code generation reported that `MainActivity.class` exceeded the JVM class-size limit. The single correction moves the newly added destination-choice, exact-slot review and Box / Slot dialog rendering into a top-level helper while retaining the same source binding, native-capacity checks, explicit ball Legalise disclosure, selected-slot recheck, cancellable flow and transaction boundary.
+
+This correction is pending its own automatic Android compile before the feature is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

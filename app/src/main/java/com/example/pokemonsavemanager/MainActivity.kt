@@ -27,9 +27,9 @@ import java.util.Locale
 import org.json.JSONObject
 import org.json.JSONArray
 
-private const val GEN7_PC_BOX_COUNT = 32
-private const val GEN7_PC_SLOTS_PER_BOX = 30
-private const val GEN7_PC_CAPACITY = GEN7_PC_BOX_COUNT * GEN7_PC_SLOTS_PER_BOX
+internal const val GEN7_PC_BOX_COUNT = 32
+internal const val GEN7_PC_SLOTS_PER_BOX = 30
+internal const val GEN7_PC_CAPACITY = GEN7_PC_BOX_COUNT * GEN7_PC_SLOTS_PER_BOX
 private const val GEN6_PC_BOX_COUNT = 31
 private const val GEN6_PC_SLOTS_PER_BOX = 30
 private const val GEN6_PC_CAPACITY = GEN6_PC_BOX_COUNT * GEN6_PC_SLOTS_PER_BOX
@@ -344,7 +344,7 @@ private fun gen2ToGen7CapacityLabel(kind:Int,index:Int):String=when(kind){
     else -> error("Unknown Gen 2 to Gen 7 capacity label")
 }
 
-private fun gen3ToGen7CapacityLabel(kind:Int,index:Int):String=when(kind){
+internal fun gen3ToGen7CapacityLabel(kind:Int,index:Int):String=when(kind){
     0 -> "First structurally empty • Box ${index/GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_BOX_COUNT • Slot ${index%GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_SLOTS_PER_BOX"
     1 -> "Box ${index+1} of $GEN7_PC_BOX_COUNT"
     2 -> "Box ${index+1} of $GEN7_PC_BOX_COUNT • choose structurally empty slot"
@@ -47170,7 +47170,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private data class Gen3ToGen7TransferMeta(
+    internal data class Gen3ToGen7TransferMeta(
         val speciesName:String,
         val baseFriendship:Int,
         val genderRate:Int,
@@ -49311,14 +49311,14 @@ class MainActivity : Activity() {
         showBank()
     }
 
-    private data class Gen3Gen7Prepared(
+    internal data class Gen3Gen7Prepared(
         val bankFile:File,val bankBytes:ByteArray,val originalSource:PokemonEntry,val source:PokemonEntry,
         val destination:ByteArray,val trainer:TrainerData,val meta:Gen3ToGen7TransferMeta,
         val pk7:ByteArray,val converted:PokemonEntry,val destinationFile:File,
         val sourceUri:Uri?,val sourceLabel:String?,val sourceBinding:PseBankSourceBinding
     )
 
-    private fun gen3ToGen7StillBound(p:Gen3Gen7Prepared):Boolean=
+    internal fun gen3ToGen7StillBound(p:Gen3Gen7Prepared):Boolean=
         importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&
             currentSourceLabel==p.sourceLabel&&runCatching{
                 p.destinationFile.readBytes().contentEquals(p.destination)&&
@@ -49396,58 +49396,6 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun chooseGen3ToGen7Destination(p:Gen3Gen7Prepared){
-        if(!gen3ToGen7StillBound(p))return showDialog("Gen 3 → Gen 7","The destination or Bank record changed. Reopen PSE Bank.")
-        val info=boxStorageInfo(p.destination)?:return
-        if(info.second!=GEN7_PC_CAPACITY)return showDialog("Gen 3 → Gen 7","The native Generation 7 PC capacity could not be verified. Nothing was changed.")
-        val first=(0 until GEN7_PC_CAPACITY).firstOrNull{
-            gen6DestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,it)
-        }?:return showDialog("Gen 3 → Gen 7",gen3ToGen7CapacityLabel(5,0))
-        var choiceConsumed=false
-        AlertDialog.Builder(this).setTitle("Choose native Gen 7 destination")
-            .setMessage("Choose the exact structurally empty PK7 slot across $GEN7_PC_BOX_COUNT Boxes × $GEN7_PC_SLOTS_PER_BOX slots ($GEN7_PC_CAPACITY total). PSE will update the Pokédex and required checksums; Cancel leaves both sides unchanged.")
-            .setItems(arrayOf(gen3ToGen7CapacityLabel(0,first),"Choose Box / Slot • $GEN7_PC_BOX_COUNT × $GEN7_PC_SLOTS_PER_BOX")){_,which->
-                if(choiceConsumed||!gen3ToGen7StillBound(p)){showDialog("Gen 3 → Gen 7","The destination or Bank record changed, or this selection was already submitted. Reopen PSE Bank.");return@setItems}
-                choiceConsumed=true;if(which==0)reviewGen3ToGen7Destination(p,first)else showGen3ToGen7BoxPicker(p)
-            }.setNegativeButton("Cancel",null).show()
-    }
-
-    private fun reviewGen3ToGen7Destination(p:Gen3Gen7Prepared,target:Int){
-        if(!gen3ToGen7StillBound(p))return showDialog("Gen 3 → Gen 7","The destination or Bank record changed before final review. Reopen PSE Bank.")
-        val info=boxStorageInfo(p.destination)?:return
-        if(info.second!=GEN7_PC_CAPACITY||target !in 0 until GEN7_PC_CAPACITY||!gen6DestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,target))return showDialog("Gen 3 → Gen 7","The selected destination is invalid or no longer structurally empty. Existing or nonzero slot data was left unchanged.")
-        val preview=buildPseGen3ToGen7Review(p.originalSource,p.source,p.converted,p.meta.speciesName,p.meta.abilityId,p.meta.baseFriendship,p.trainer.trainerName,p.trainer.gender,gen3ToGen7CapacityLabel(6,target))
-        var transferConsumed=false
-        AlertDialog.Builder(this).setTitle("${p.source.nickname.ifBlank{p.meta.speciesName}} • Gen 3 → Gen 7").setMessage(preview)
-            .setPositiveButton("Transfer • Box ${target/GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_BOX_COUNT / Slot ${target%GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_SLOTS_PER_BOX"){_,_->
-                val current=runCatching{p.destinationFile.readBytes()}.getOrNull();val selectedSlotStillEmpty=current?.let{bytes->val currentInfo=boxStorageInfo(bytes);currentInfo!=null&&currentInfo.second==GEN7_PC_CAPACITY&&target in 0 until GEN7_PC_CAPACITY&&gen6DestinationSlotIsStructurallyEmpty(bytes,currentInfo.first,currentInfo.second,currentInfo.third,target)}==true
-                if(transferConsumed||!gen3ToGen7StillBound(p)||!selectedSlotStillEmpty){showDialog("Gen 3 → Gen 7","The destination identity, Bank record or selected slot changed, or this transfer was already submitted. Nothing was changed.");return@setPositiveButton}
-                transferConsumed=true;transferGen3BankToGen7(p,target)
-            }.setNegativeButton("Cancel",null).show()
-    }
-
-    private fun showGen3ToGen7BoxPicker(p:Gen3Gen7Prepared){
-        if(!gen3ToGen7StillBound(p))return showDialog("Gen 3 → Gen 7","The destination or Bank record changed. Reopen PSE Bank.")
-        val info=boxStorageInfo(p.destination)?:return
-        if(info.second!=GEN7_PC_CAPACITY)return showDialog("Gen 3 → Gen 7","The native Generation 7 PC capacity could not be verified. Nothing was changed.")
-        val boxes=(0 until GEN7_PC_BOX_COUNT).filter{box->(0 until GEN7_PC_SLOTS_PER_BOX).any{slot->
-            gen6DestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*GEN7_PC_SLOTS_PER_BOX+slot)
-        }}
-        if(boxes.isEmpty())return showDialog("Gen 3 → Gen 7",gen3ToGen7CapacityLabel(5,0))
-        var boxConsumed=false
-        AlertDialog.Builder(this).setTitle("Choose Gen 7 destination box • $GEN7_PC_BOX_COUNT total")
-            .setItems(boxes.map{box->val count=(0 until GEN7_PC_SLOTS_PER_BOX).count{slot->gen6DestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*GEN7_PC_SLOTS_PER_BOX+slot)};gen3ToGen7CapacityLabel(1,box)+" • $count structurally empty"}.toTypedArray()){_,which->
-                if(boxConsumed||!gen3ToGen7StillBound(p)){showDialog("Gen 3 → Gen 7","The destination or Bank record changed, or this box selection was already submitted. Reopen PSE Bank.");return@setItems}
-                val box=boxes[which];boxConsumed=true
-                val slots=(0 until GEN7_PC_SLOTS_PER_BOX).filter{slot->
-                    gen6DestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*GEN7_PC_SLOTS_PER_BOX+slot)
-                }
-                AlertDialog.Builder(this).setTitle(gen3ToGen7CapacityLabel(2,box))
-                    .setItems(slots.map{gen3ToGen7CapacityLabel(3,it)}.toTypedArray()){_,slotIndex->reviewGen3ToGen7Destination(p,box*GEN7_PC_SLOTS_PER_BOX+slots[slotIndex])}
-                    .setNegativeButton("Back"){_,_->showGen3ToGen7BoxPicker(p)}.setNeutralButton("Cancel",null).show()
-            }.setNegativeButton("Back"){_,_->if(!boxConsumed)chooseGen3ToGen7Destination(p)}.setNeutralButton("Cancel",null).show()
-    }
-
     private fun retainGen3ToGen7SafetyBackup(file:File,expected:ByteArray){
         val checks=validateGen7CoreChecksums(expected)
         require(file.isFile&&file.readBytes().contentEquals(expected)&&
@@ -49464,7 +49412,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun transferGen3BankToGen7(p:Gen3Gen7Prepared,target:Int){
+    internal fun transferGen3BankToGen7(p:Gen3Gen7Prepared,target:Int){
         fun bound()=importedFile?.absolutePath==p.destinationFile.absolutePath&&
             currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel
         if(!gen3ToGen7StillBound(p))return showDialog("Gen 3 → Gen 7","The destination or Bank record changed. Reopen PSE Bank.")
@@ -54779,7 +54727,7 @@ class MainActivity : Activity() {
         val built=buildGen1ToGen6Pk6Bytes(bankBytes,p,GEN1_BANK_FILE_SIZE,destination.size,SIZE_G6_XY,SIZE_G6_ORAS,trainer.gameId,trainer.trainerName,trainer.gender,meta.baseFriendship,meta.abilityId,meta.genderRate,dex,PK6_STORED_SIZE,defaultName,destinationLanguage,{gen1WouldBeShinyInGen2(it)},{pid,tid,shiny->forceTransferShinyState(pid,tid,shiny)},{data,offset,length,text->writeGen6String(data,offset,length,text)},{updatePk6Checksum(it)},{encryptPk6(it)})
         return verifyGen1ToGen6Pk6Bytes(built,p,parsePk6(built.encrypted,0,PK6_STORED_SIZE,false,721),meta.baseFriendship,meta.abilityId,gen6Pk6HandlerName(built.encrypted),gen6Pk6PpUps(built.encrypted))
     }
-    private fun gen6DestinationSlotIsStructurallyEmpty(data:ByteArray,boxOffset:Int,slotCount:Int,maxSpecies:Int,global:Int):Boolean{
+    internal fun gen6DestinationSlotIsStructurallyEmpty(data:ByteArray,boxOffset:Int,slotCount:Int,maxSpecies:Int,global:Int):Boolean{
         if(global !in 0 until slotCount)return false
         val off=boxOffset+global*PK6_STORED_SIZE
         if(off<0||off+PK6_STORED_SIZE>data.size)return false
@@ -66879,7 +66827,7 @@ private data class Gen2ToGen5LegalisePlan(
         }
     }
 
-    private fun boxStorageInfo(data: ByteArray): Triple<Int, Int, Int>? = when (data.size) {
+    internal fun boxStorageInfo(data: ByteArray): Triple<Int, Int, Int>? = when (data.size) {
         SIZE_G6_XY -> Triple(BOX_OFFSET_XY, 31 * 30, 721)
         SIZE_G6_ORAS -> Triple(BOX_OFFSET_ORAS, 31 * 30, 721)
         SIZE_G7_SM -> Triple(BOX_OFFSET_SM, 32 * 30, 807)
@@ -68930,7 +68878,7 @@ private data class Gen2ToGen5LegalisePlan(
         return String.format(Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
     }
 
-    private fun showDialog(title: String, message: String) {
+    internal fun showDialog(title: String, message: String) {
         android.app.AlertDialog.Builder(this)
             .setTitle(title)
             .setMessage(message)
