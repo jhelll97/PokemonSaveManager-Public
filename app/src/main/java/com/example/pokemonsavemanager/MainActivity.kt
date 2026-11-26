@@ -36443,15 +36443,15 @@ class MainActivity : Activity() {
 
 
 
-    private data class Gen7Gen4Prepared(
+    internal data class Gen7Gen4Prepared(
         val bankFile:File,val bankBytes:ByteArray,val sourceBinding:PseBankSourceBinding,val source:PokemonEntry,val destination:ByteArray,
         val plan5:Gen6Gen5Plan,val pk6:ByteArray,val converted6:PokemonEntry,
         val pk5:ByteArray,val converted5:PokemonEntry,val meta4:Gen3ToGen4Meta,
         val pk4:ByteArray,val converted4:PokemonEntry,val destinationFile:File,
-        val sourceUri:Uri?,val sourceLabel:String?,val omitted:String
+        val sourceUri:Uri?,val sourceLabel:String?,val omitted:String,val markingNote:String
     )
 
-    private fun gen7ToGen4StillBound(p:Gen7Gen4Prepared):Boolean=
+    internal fun gen7ToGen4StillBound(p:Gen7Gen4Prepared):Boolean=
         importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
             runCatching{p.destinationFile.readBytes().contentEquals(p.destination)&&p.sourceBinding.matches(p.bankBytes,true)}.getOrDefault(false)
 
@@ -36537,7 +36537,7 @@ class MainActivity : Activity() {
             val omitted=gen6ToGen5OmittedMetadata(pk6,converted6)
             val reviewedOriginTitle=gen4CompatibleOriginTitle(plan.originGame)
                 ?:return@loadGen3ToGen4MetaAsync showDialog("Gen 7 → Gen 4 blocked","The reviewed origin title and ID are no longer destination-valid. Nothing was changed.")
-            val prepared=Gen7Gen4Prepared(selected,bank,sourceBinding,source,destination,plan,pk6,converted6,pk5,converted5,meta4,pk4,converted4,file,openedUri,openedLabel,omitted)
+            val prepared=Gen7Gen4Prepared(selected,bank,sourceBinding,source,destination,plan,pk6,converted6,pk5,converted5,meta4,pk4,converted4,file,openedUri,openedLabel,omitted,markingNote)
             val pidNote=if(converted4.pid==source.pid)"PID remains ${"%08X".format(source.pid)}." else
                 "PID changes ${"%08X".format(source.pid)} → ${"%08X".format(converted4.pid)} only to preserve shiny state, nature, gender and the verified normal ability slot under Generation 5/4 PID rules."
             val originNote=if(plan.legalised)"Origin Legalise: ${originGameName(source.originGame)} (ID ${source.originGame}) → $reviewedOriginTitle (ID ${plan.originGame}). This is a user-selected provenance edit and does not verify history." else "Origin preserved: $reviewedOriginTitle (ID ${plan.originGame})."
@@ -36551,34 +36551,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun chooseGen7ToGen4Destination(p:Gen7Gen4Prepared){
-        if(!gen7ToGen4StillBound(p))return showDialog("Gen 7 → Gen 4","The prepared snapshots changed. Reopen PSE Bank.")
-        val profile=detectGen4Profile(p.destination)?:return
-        val empty=(0 until GEN4_PC_CAPACITY).filter{gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,it)}
-        if(empty.isEmpty())return showDialog("Gen 7 → Gen 4",gen7ToGen4CapacityLabel(5,0))
-        val first=empty.first()
-        AlertDialog.Builder(this).setTitle("Choose native Gen 4 destination")
-            .setMessage("The reviewed PSE conversion will write one native PK4 only into a structurally empty slot and update the Pokédex and active block CRCs. Every nonzero destination record remains unchanged; this does not claim official migration or verified provenance.")
-            .setItems(arrayOf(gen7ToGen4CapacityLabel(0,first),"Choose Box / Slot • $GEN4_PC_BOX_COUNT Boxes × $GEN4_PC_SLOTS_PER_BOX slots")){_,which->
-                if(!gen7ToGen4StillBound(p))showDialog("Gen 7 → Gen 4","The prepared snapshots changed. Reopen PSE Bank.")
-                else if(which==0)transferGen7BankToGen4(p,first)else showGen7ToGen4BoxPicker(p)
-            }.setNegativeButton("Cancel",null).show()
-    }
-
-    private fun showGen7ToGen4BoxPicker(p:Gen7Gen4Prepared){
-        if(!gen7ToGen4StillBound(p))return showDialog("Gen 7 → Gen 4","The prepared snapshots changed. Reopen PSE Bank.")
-        val profile=detectGen4Profile(p.destination)?:return
-        val boxes=(0 until GEN4_PC_BOX_COUNT).filter{b->(0 until GEN4_PC_SLOTS_PER_BOX).any{s->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,b*GEN4_PC_SLOTS_PER_BOX+s)}}
-        AlertDialog.Builder(this).setTitle("Choose Gen 4 destination box")
-            .setItems(boxes.map{gen7ToGen4CapacityLabel(1,it)}.toTypedArray()){_,w->
-                val b=boxes[w];val slots=(0 until GEN4_PC_SLOTS_PER_BOX).filter{s->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,b*GEN4_PC_SLOTS_PER_BOX+s)}
-                AlertDialog.Builder(this).setTitle(gen7ToGen4CapacityLabel(2,b))
-                    .setItems(slots.map{gen7ToGen4CapacityLabel(3,it)}.toTypedArray()){_,sw->transferGen7BankToGen4(p,b*GEN4_PC_SLOTS_PER_BOX+slots[sw])}
-                    .setNegativeButton("Cancel",null).show()
-            }.setNegativeButton("Cancel",null).show()
-    }
-
-    private fun transferGen7BankToGen4(p:Gen7Gen4Prepared,target:Int){
+    internal fun transferGen7BankToGen4(p:Gen7Gen4Prepared,target:Int){
         if(!gen7ToGen4StillBound(p))return showDialog("Gen 7 → Gen 4","The prepared snapshots changed. Reopen PSE Bank.")
         val file=p.destinationFile
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel
