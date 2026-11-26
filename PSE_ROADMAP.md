@@ -1512,6 +1512,14 @@ Route-scoped Generation 7 Box and Slot constants now govern capacity verificatio
 
 Commit `d391f84bc68d04362ce47132023a58710b3ed4d9` was rejected by automatic Android build run `45814210450`, attempt 1, and exact Slack event `1795694072.739289`: Kotlin code generation reported that `MainActivity.class` exceeded the JVM class-size limit. The single correction moves the unchanged Gen 1 -> Gen 7 review disclosure and legalisation summary into a top-level review builder so the destination and transaction behavior remain unchanged while the activity bytecode is reduced.
 
+Commit `6ac6117561765ee5042ef2b8f8ba8730fe61266a` passed automatic Android build run `45815187082`, attempt 1, and was reported by exact Slack event `1795695067.480909`; the Generation 1 -> Generation 7 native destination capacity and exact-slot review flow is validated.
+
+## Generation 2 -> Generation 7 native destination capacity and review
+
+Re-inventory found that the implemented PSE2 -> PK7 conversion already binds the exact selected Gen 2 Bank record and Sun, Moon, Ultra Sun or Ultra Moon destination, blocks unsupported data, requires explicit cancellable Legalise review, offers a First Structurally Empty or Box / Slot choice, preserves current PP and PP Ups, updates native Pokédex state plus PC and Pokédex checksums, and verifies the exact converted PK7 after persistence. Its chooser accepted any storage count returned by the general layout resolver, its picker included full boxes, its labels omitted the native capacity totals, and either destination choice proceeded directly to persistence without repeating the exact selected location in the final conversion review. The route now lists only boxes with structurally empty slots, requires and shows `Box N of 32`, `Slot N of 30`, the complete 960-slot capacity, and inserts an explicit cancellable review of the exact selected location before either destination choice can transfer.
+
+Route-scoped Generation 7 Box and Slot constants now govern capacity verification, chooser bounds, slot-grid placement, selected-slot validation, transaction entry and every visible destination capacity label for this single-transfer route. The external review builder receives the already constructed route label so it exposes the same capacity context without adding review text back to `MainActivity`. The transaction still leaves existing and nonzero PC data unchanged, retains exact destination and Bank recovery snapshots, reopens the persisted PK7, PP Ups, Pokédex state and checksums, removes the Bank source only after verification, and preserves independent two-sided rollback.
+
 This implementation is pending its own automatic Android compile before the feature is called validated. Next bounded feature: continue the destination-chooser inventory with one implemented route that still omits concrete native Box or Slot capacity context.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair

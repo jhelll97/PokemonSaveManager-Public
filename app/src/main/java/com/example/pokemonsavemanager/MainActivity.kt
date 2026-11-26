@@ -333,6 +333,17 @@ private fun gen1ToGen7CapacityLabel(kind:Int,index:Int):String=when(kind){
     else -> error("Unknown Gen 1 to Gen 7 capacity label")
 }
 
+private fun gen2ToGen7CapacityLabel(kind:Int,index:Int):String=when(kind){
+    0 -> "First structurally empty • Box ${index/GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_BOX_COUNT • Slot ${index%GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_SLOTS_PER_BOX"
+    1 -> "Box ${index+1} of $GEN7_PC_BOX_COUNT"
+    2 -> "Box ${index+1} of $GEN7_PC_BOX_COUNT • choose structurally empty slot"
+    3 -> "Slot ${index+1} of $GEN7_PC_SLOTS_PER_BOX"
+    4 -> "PSE converted Gen 2 → Gen 7 to Box ${index/GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_BOX_COUNT • Slot ${index%GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_SLOTS_PER_BOX and verified"
+    5 -> "All $GEN7_PC_CAPACITY native Generation 7 PC slots are unavailable. Existing or nonzero destination records and the Gen 2 Bank source were left unchanged."
+    6 -> "Chosen destination: Box ${index/GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_BOX_COUNT, Slot ${index%GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_SLOTS_PER_BOX, within the native $GEN7_PC_CAPACITY-slot PC."
+    else -> error("Unknown Gen 2 to Gen 7 capacity label")
+}
+
 private fun gen5ToGen4CapacityLabel(kind:Int,index:Int):String=when(kind){
     0 -> "First structurally empty • Box ${index/GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_BOX_COUNT • Slot ${index%GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_SLOTS_PER_BOX"
     1 -> "Box ${index+1} of $GEN4_PC_BOX_COUNT"
@@ -61804,25 +61815,38 @@ private data class Gen2ToGen5LegalisePlan(
         var choiceConsumed=false
         val data=runCatching{openedFile.readBytes()}.getOrNull()?:return
         val checks=validateGen7CoreChecksums(data)
-        if(!data.contentEquals(preparedDestination)||generationForSize(data.size)!=7||!checks.first)
-            return showDialog("Gen 2 → Gen 7","The destination changed or failed validation. Nothing was changed.")
+        if(!data.contentEquals(preparedDestination)||generationForSize(data.size)!=7||!checks.first)return showDialog("Gen 2 → Gen 7","The destination changed or failed validation. Nothing was changed.")
         val info=boxStorageInfo(data)?:return
-        val first=(0 until info.second).firstOrNull{gen6DestinationSlotIsStructurallyEmpty(data,info.first,info.second,info.third,it)}
-            ?:return showDialog("Gen 2 → Gen 7","No structurally empty Gen 7 PC box slot was found. Nonzero destination records were left unchanged.")
-        val ppUps=gen2BankToGen7PpUps(bankBytes);val decrypted=decryptPk6IfNeeded(pk7);val ec=readU32LE(decrypted,0)
-        val preview=buildPseGen2ToGen7Review(gen2ToGen7LegaliseChanges(plan),source,converted,ppUps,"%08X".format(ec),gen6Pk6HandlerName(pk7))
-        val box=first/30+1;val slot=first%30+1
-        AlertDialog.Builder(this).setTitle("PSE Convert ${source.nickname.ifBlank{"Pokémon #${source.species}"}} to Gen 7")
-            .setMessage(preview)
-            .setPositiveButton("First Structurally Empty ($box/$slot)"){_,_->
+        if(info.second!=GEN7_PC_CAPACITY)return showDialog("Gen 2 → Gen 7","The native Generation 7 PC capacity could not be verified. Nothing was changed.")
+        val first=(0 until GEN7_PC_CAPACITY).firstOrNull{gen6DestinationSlotIsStructurallyEmpty(data,info.first,info.second,info.third,it)}
+            ?:return showDialog("Gen 2 → Gen 7",gen2ToGen7CapacityLabel(5,0))
+        AlertDialog.Builder(this).setTitle("Choose native Gen 7 destination")
+            .setMessage("Choose the exact structurally empty PK7 slot across $GEN7_PC_BOX_COUNT Boxes × $GEN7_PC_SLOTS_PER_BOX slots ($GEN7_PC_CAPACITY total). Cancel leaves the destination and Bank record byte-exact.")
+            .setPositiveButton(gen2ToGen7CapacityLabel(0,first)){_,_->
                 if(choiceConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 7","The original destination or Bank snapshots changed, or this choice was already used. Reopen PSE Bank.");return@setPositiveButton}
-                choiceConsumed=true;transferGen2BankToGen7(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,first,openedFile,binding)
+                choiceConsumed=true;reviewGen2ToGen7Destination(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,first,openedFile,binding)
             }
-            .setNeutralButton("Choose Box / Slot"){_,_->
+            .setNeutralButton("Choose Box / Slot • $GEN7_PC_BOX_COUNT × $GEN7_PC_SLOTS_PER_BOX"){_,_->
                 if(choiceConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 7","The original destination or Bank snapshots changed, or this choice was already used. Reopen PSE Bank.");return@setNeutralButton}
                 choiceConsumed=true;showGen2ToGen7BoxPicker(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,openedFile,binding)
-            }
-            .setNegativeButton("Cancel",null).show()
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun reviewGen2ToGen7Destination(bankFile:File,source:Gen2Pokemon,bankBytes:ByteArray,preparedDestination:ByteArray,trainer:TrainerData,meta:Gen1ToGen7TransferMeta,plan:Gen2ToGen7LegalisePlan,pk7:ByteArray,converted:PokemonEntry,target:Int,openedFile:File,binding:Gen2Gen7SingleBinding){
+        fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==binding.uri&&currentSourceLabel==binding.label
+        fun snapshotsMatch()=!binding.submitted&&bound()&&preparedDestination.contentEquals(binding.destination)&&bankBytes.contentEquals(binding.bank)&&runCatching{openedFile.readBytes().contentEquals(binding.destination)&&bankFile.readBytes().contentEquals(binding.bank)}.getOrDefault(false)
+        if(!snapshotsMatch())return showDialog("Gen 2 → Gen 7","The destination identity or original snapshots changed before final review. Reopen PSE Bank. Nothing was changed.")
+        val data=runCatching{openedFile.readBytes()}.getOrNull()?:return;val info=boxStorageInfo(data)?:return
+        if(info.second!=GEN7_PC_CAPACITY||target !in 0 until GEN7_PC_CAPACITY||!gen6DestinationSlotIsStructurallyEmpty(data,info.first,info.second,info.third,target))return showDialog("Gen 2 → Gen 7","The selected destination is invalid or no longer structurally empty. Nonzero destination records were left unchanged.")
+        val ppUps=gen2BankToGen7PpUps(bankBytes);val ec=readU32LE(decryptPk6IfNeeded(pk7),0)
+        val preview=buildPseGen2ToGen7Review(gen2ToGen7LegaliseChanges(plan),gen2ToGen7CapacityLabel(6,target),source,converted,ppUps,"%08X".format(ec),gen6Pk6HandlerName(pk7))
+        var transferConsumed=false
+        AlertDialog.Builder(this).setTitle("PSE Convert ${source.nickname.ifBlank{"Pokémon #${source.species}"}} to Gen 7").setMessage(preview)
+            .setPositiveButton("Transfer • Box ${target/GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_BOX_COUNT / Slot ${target%GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_SLOTS_PER_BOX"){_,_->
+                val current=runCatching{openedFile.readBytes()}.getOrNull();val selectedSlotStillEmpty=current?.let{bytes->val currentInfo=boxStorageInfo(bytes);currentInfo!=null&&currentInfo.second==GEN7_PC_CAPACITY&&target in 0 until GEN7_PC_CAPACITY&&gen6DestinationSlotIsStructurallyEmpty(bytes,currentInfo.first,currentInfo.second,currentInfo.third,target)}==true
+                if(transferConsumed||!snapshotsMatch()||!selectedSlotStillEmpty){showDialog("Gen 2 → Gen 7","The destination identity, Bank record or selected slot changed, or this transfer was already submitted. Nothing was changed.");return@setPositiveButton}
+                transferConsumed=true;transferGen2BankToGen7(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,target,openedFile,binding)
+            }.setNegativeButton("Cancel",null).show()
     }
 
     private fun showGen2ToGen7BoxPicker(bankFile:File,source:Gen2Pokemon,bankBytes:ByteArray,preparedDestination:ByteArray,trainer:TrainerData,meta:Gen1ToGen7TransferMeta,plan:Gen2ToGen7LegalisePlan,pk7:ByteArray,converted:PokemonEntry,openedFile:File,binding:Gen2Gen7SingleBinding){
@@ -61831,8 +61855,8 @@ private data class Gen2ToGen5LegalisePlan(
         if(!snapshotsMatch())return showDialog("Gen 2 → Gen 7","The destination identity or original snapshots changed, or this transfer was already submitted. Reopen PSE Bank. Nothing was changed.")
         var boxConsumed=false
         if(importedFile?.absolutePath!=openedFile.absolutePath)return showDialog("Gen 2 → Gen 7","The active save changed after destination selection. Reopen PSE Bank. Nothing was changed.")
-        val file=openedFile;val data=runCatching{file.readBytes()}.getOrNull()?:return;if(!data.contentEquals(preparedDestination))return showDialog("Gen 2 → Gen 7","The destination changed. Nothing was written.");val(boxOffset,slotCount,maxSpecies)=boxStorageInfo(data)?:return;val labels=ArrayList<String>();for(box in 0 until slotCount/30){val empty=(0 until 30).count{slot->gen6DestinationSlotIsStructurallyEmpty(data,boxOffset,slotCount,maxSpecies,box*30+slot)};labels.add("Box ${box+1} • $empty structurally empty slot${if(empty==1)"" else "s"}")}
-        AlertDialog.Builder(this).setTitle("Choose Gen 7 Box").setItems(labels.toTypedArray()){_,boxIndex->if(boxConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 7","The original destination or Bank snapshots changed, or this box choice was already used. Reopen PSE Bank.");return@setItems};if((0 until 30).none{slot->gen6DestinationSlotIsStructurallyEmpty(data,boxOffset,slotCount,maxSpecies,boxIndex*30+slot)})showDialog("Box ${boxIndex+1}","This box has no structurally empty slot. Nonzero records remain unchanged; choose another box.")else{boxConsumed=true;showGen2ToGen7SlotGrid(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,boxIndex,file,binding)}}.setNegativeButton("Back"){_,_->if(boxConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 7","The original destination or Bank snapshots changed, or this box choice was already used. Reopen PSE Bank.");return@setNegativeButton};boxConsumed=true;chooseGen2ToGen7Destination(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,file,binding)}.show()
+        val file=openedFile;val data=runCatching{file.readBytes()}.getOrNull()?:return;if(!data.contentEquals(preparedDestination))return showDialog("Gen 2 → Gen 7","The destination changed. Nothing was written.");val(boxOffset,slotCount,maxSpecies)=boxStorageInfo(data)?:return;if(slotCount!=GEN7_PC_CAPACITY)return showDialog("Gen 2 → Gen 7","The native Generation 7 PC capacity could not be verified. Nothing was changed.");val boxes=(0 until GEN7_PC_BOX_COUNT).filter{box->(0 until GEN7_PC_SLOTS_PER_BOX).any{slot->gen6DestinationSlotIsStructurallyEmpty(data,boxOffset,slotCount,maxSpecies,box*GEN7_PC_SLOTS_PER_BOX+slot)}};val labels=boxes.map{box->val empty=(0 until GEN7_PC_SLOTS_PER_BOX).count{slot->gen6DestinationSlotIsStructurallyEmpty(data,boxOffset,slotCount,maxSpecies,box*GEN7_PC_SLOTS_PER_BOX+slot)};gen2ToGen7CapacityLabel(1,box)+" • $empty structurally empty slot${if(empty==1)"" else "s"}"}
+        AlertDialog.Builder(this).setTitle("Choose Gen 7 Box • $GEN7_PC_BOX_COUNT total").setItems(labels.toTypedArray()){_,which->if(boxConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 7","The original destination or Bank snapshots changed, or this box choice was already used. Reopen PSE Bank.");return@setItems};boxConsumed=true;showGen2ToGen7SlotGrid(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,boxes[which],file,binding)}.setNegativeButton("Back"){_,_->if(boxConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 7","The original destination or Bank snapshots changed, or this box choice was already used. Reopen PSE Bank.");return@setNegativeButton};boxConsumed=true;chooseGen2ToGen7Destination(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,file,binding)}.show()
     }
 
     private fun showGen2ToGen7SlotGrid(bankFile:File,source:Gen2Pokemon,bankBytes:ByteArray,preparedDestination:ByteArray,trainer:TrainerData,meta:Gen1ToGen7TransferMeta,plan:Gen2ToGen7LegalisePlan,pk7:ByteArray,converted:PokemonEntry,boxIndex:Int,openedFile:File,binding:Gen2Gen7SingleBinding){
@@ -61841,9 +61865,9 @@ private data class Gen2ToGen5LegalisePlan(
         if(!snapshotsMatch())return showDialog("Gen 2 → Gen 7","The destination identity or original snapshots changed, or this transfer was already submitted. Reopen PSE Bank. Nothing was changed.")
         var gridConsumed=false
         if(importedFile?.absolutePath!=openedFile.absolutePath)return showDialog("Gen 2 → Gen 7","The active save changed after destination selection. Reopen PSE Bank. Nothing was changed.")
-        val file=openedFile;val data=runCatching{file.readBytes()}.getOrNull()?:return;if(!data.contentEquals(preparedDestination))return showDialog("Gen 2 → Gen 7","The destination changed. Nothing was written.");val(boxOffset,slotCount,maxSpecies)=boxStorageInfo(data)?:return;if(boxIndex !in 0 until slotCount/30)return;val wrapper=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(12),dp(8),dp(12),dp(8))};addMutedLine(wrapper,"Tap a structurally empty Gen 7 slot. Nonzero records are disabled and remain unchanged.");val grid=GridLayout(this).apply{columnCount=6;rowCount=5;alignmentMode=GridLayout.ALIGN_BOUNDS;useDefaultMargins=false};val cellWidth=((resources.displayMetrics.widthPixels-dp(90))/6).coerceAtLeast(dp(42))
-        for(slot in 0 until 30){val global=boxIndex*30+slot;val occupied=!gen6DestinationSlotIsStructurallyEmpty(data,boxOffset,slotCount,maxSpecies,global);val cell=TextView(this).apply{text=if(occupied)"●\n${slot+1}" else "○\n${slot+1}";gravity=Gravity.CENTER;textSize=13f;setTextColor(if(occupied)Color.rgb(105,105,105)else TEXT);setBackgroundColor(if(occupied)Color.rgb(35,35,35)else Color.rgb(55,55,55));isEnabled=!occupied;if(!occupied)setOnClickListener{if(gridConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 7","The original destination or Bank snapshots changed, or this slot choice was already used. Reopen PSE Bank.");return@setOnClickListener};gridConsumed=true;transferGen2BankToGen7(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,global,file,binding)}};grid.addView(cell,GridLayout.LayoutParams().apply{width=cellWidth;height=dp(58);setMargins(dp(2),dp(2),dp(2),dp(2))})}
-        wrapper.addView(grid);AlertDialog.Builder(this).setTitle("Box ${boxIndex+1} • choose Gen 7 slot").setView(wrapper).setNegativeButton("Back"){_,_->if(gridConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 7","The original destination or Bank snapshots changed, or this slot choice was already used. Reopen PSE Bank.");return@setNegativeButton};gridConsumed=true;showGen2ToGen7BoxPicker(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,file,binding)}.setNeutralButton("Cancel",null).show()
+        val file=openedFile;val data=runCatching{file.readBytes()}.getOrNull()?:return;if(!data.contentEquals(preparedDestination))return showDialog("Gen 2 → Gen 7","The destination changed. Nothing was written.");val(boxOffset,slotCount,maxSpecies)=boxStorageInfo(data)?:return;if(slotCount!=GEN7_PC_CAPACITY||boxIndex !in 0 until GEN7_PC_BOX_COUNT)return showDialog("Gen 2 → Gen 7","The native Generation 7 PC capacity or selected box could not be verified. Nothing was changed.");val wrapper=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(12),dp(8),dp(12),dp(8))};addMutedLine(wrapper,"Tap a structurally empty Gen 7 slot. Nonzero records are disabled and remain unchanged. $GEN7_PC_BOX_COUNT Boxes × $GEN7_PC_SLOTS_PER_BOX slots ($GEN7_PC_CAPACITY total).");val grid=GridLayout(this).apply{columnCount=6;rowCount=5;alignmentMode=GridLayout.ALIGN_BOUNDS;useDefaultMargins=false};val cellWidth=((resources.displayMetrics.widthPixels-dp(90))/6).coerceAtLeast(dp(42))
+        for(slot in 0 until GEN7_PC_SLOTS_PER_BOX){val global=boxIndex*GEN7_PC_SLOTS_PER_BOX+slot;val occupied=!gen6DestinationSlotIsStructurallyEmpty(data,boxOffset,slotCount,maxSpecies,global);val cell=TextView(this).apply{text=if(occupied)"●\n${slot+1}" else "○\n${slot+1}";gravity=Gravity.CENTER;textSize=13f;setTextColor(if(occupied)Color.rgb(105,105,105)else TEXT);setBackgroundColor(if(occupied)Color.rgb(35,35,35)else Color.rgb(55,55,55));isEnabled=!occupied;if(!occupied)setOnClickListener{if(gridConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 7","The original destination or Bank snapshots changed, or this slot choice was already used. Reopen PSE Bank.");return@setOnClickListener};gridConsumed=true;reviewGen2ToGen7Destination(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,global,file,binding)}};grid.addView(cell,GridLayout.LayoutParams().apply{width=cellWidth;height=dp(58);setMargins(dp(2),dp(2),dp(2),dp(2))})}
+        wrapper.addView(grid);AlertDialog.Builder(this).setTitle(gen2ToGen7CapacityLabel(2,boxIndex)).setView(wrapper).setNegativeButton("Back"){_,_->if(gridConsumed||!snapshotsMatch()){showDialog("Gen 2 → Gen 7","The original destination or Bank snapshots changed, or this slot choice was already used. Reopen PSE Bank.");return@setNegativeButton};gridConsumed=true;showGen2ToGen7BoxPicker(bankFile,source,bankBytes,preparedDestination,trainer,meta,plan,pk7,converted,file,binding)}.setNeutralButton("Cancel",null).show()
     }
 
     private fun transferGen2BankToGen7(bankFile:File,expected:Gen2Pokemon,expectedBank:ByteArray,preparedDestination:ByteArray,trainer:TrainerData,meta:Gen1ToGen7TransferMeta,plan:Gen2ToGen7LegalisePlan,preparedPk7:ByteArray,prepared:PokemonEntry,target:Int,openedFile:File,binding:Gen2Gen7SingleBinding){
@@ -61858,7 +61882,7 @@ private data class Gen2ToGen5LegalisePlan(
             require(fresh.contentEquals(preparedDestination)&&generationForSize(fresh.size)==7){"The Gen 7 destination changed while the conversion was prepared."}
             val checksumState=validateGen7CoreChecksums(fresh);require(checksumState.first){checksumState.second}
             val info=boxStorageInfo(fresh)?:error("PSE could not resolve Gen 7 PC storage.")
-            require(target in 0 until info.second){"Invalid Gen 7 PC slot."}
+            require(info.second==GEN7_PC_CAPACITY&&target in 0 until GEN7_PC_CAPACITY){"The selected Gen 7 slot or native PC capacity is invalid."}
             val off=info.first+target*PK6_STORED_SIZE
             require(gen6DestinationSlotIsStructurallyEmpty(fresh,info.first,info.second,info.third,target)){"The destination slot is no longer structurally empty. Nonzero records were left unchanged."}
             val bank=bankFile.readBytes();require(bank.contentEquals(expectedBank)){"The selected Gen 2 Bank bytes changed after confirmation."}
@@ -61928,7 +61952,7 @@ private data class Gen2ToGen5LegalisePlan(
             showDialog("Gen 2 → Gen 7 failed",(e.message?:"Unknown error")+"\n\n"+recovery+(safetyBackup?.let{"\n\nRecovery backup: "+it.name}?:"")+retainedBankRecovery);return
         }
         val recoveryNotice=BankTransferRecovery.successNotice(retainedRecovery)
-        Toast.makeText(this,"PSE converted Gen 2 → Gen 7 to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show()
+        Toast.makeText(this,gen2ToGen7CapacityLabel(4,target)+recoveryNotice,Toast.LENGTH_LONG).show()
         showBank()
     }
 
