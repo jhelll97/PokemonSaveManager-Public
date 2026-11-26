@@ -46,11 +46,11 @@ internal fun buildPseGen2ToGen4Review(
 }
 
 internal fun buildPseGen2ToGen5Review(
-    legaliseChanges:String,target:Int,source:MainActivity.Gen2Pokemon,converted:MainActivity.PokemonEntry,ppUps:IntArray
+    legaliseChanges:String,destinationLabel:String,source:MainActivity.Gen2Pokemon,converted:MainActivity.PokemonEntry,ppUps:IntArray
 ):String=buildString{
     append("PSE Bank conversion preview\n\n")
     append(legaliseChanges).append("\n\n")
-    append("Selected destination: Box ${target/30+1}, Slot ${target%30+1}. The slot is structurally empty; nonzero destination records remain unchanged.\n")
+    append(destinationLabel).append(" The slot is structurally empty; nonzero destination records remain unchanged.\n")
     appendPseGen2PreservedReview(this,converted,ppUps)
     appendPseGen2PidReview(this,converted)
     append("IVs: deterministic Gen 5 mapping ${converted.ivs.joinToString("/")}. EVs: Gen 2 Stat Exp ÷ 257, with the single Special budget split across SpA/SpD and total capped at 510; final ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")

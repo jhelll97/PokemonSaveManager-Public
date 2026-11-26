@@ -1478,6 +1478,14 @@ Re-inventory found that the implemented PSE1 -> PK5 conversion already binds the
 
 Route-scoped Generation 5 Box and Slot constants now govern storage validation, chooser bounds, selected-slot validation, native record placement and every visible destination capacity label for this single-transfer route. Label construction remains outside `MainActivity` to preserve the validated class-size margin. The transaction still leaves existing and nonzero PC data unchanged, retains exact destination and Bank recovery snapshots, reopens the persisted PK5, PP Ups, Pokédex state and checksums, removes the Bank source only after verification, and preserves independent two-sided rollback.
 
+Commit `26309a63809aaf79c838a5afb778f97634e13053` passed automatic Android build run `45804571844`, attempt 1, and was reported by exact Slack event `1795690577.094039`; the Generation 1 -> Generation 5 native destination capacity labels are validated.
+
+## Generation 2 -> Generation 5 native destination capacity labels
+
+Re-inventory found that the implemented PSE2 -> PK5 conversion already binds the exact selected Gen 2 Bank record and destination, blocks unsupported data, requires explicit cancellable Legalise review before destination selection, writes only one structurally empty native PK5 slot, preserves current PP and PP Ups, updates the required Pokédex state, native box CRC and checksum table, and verifies the exact converted PK5 after persistence. Its review, destination buttons, nested Box/Slot picker, full-capacity block and completion result omitted native capacity totals. They now show `Box N of 24`, `Slot N of 30`, the complete 720-slot capacity and the exact placed location.
+
+Route-scoped Generation 5 Box and Slot constants now govern storage validation, chooser bounds, selected-slot validation, native record placement and every visible destination capacity label for this single-transfer route. The external review builder receives the already constructed route label so it exposes the same capacity context without duplicating storage constants. The transaction still leaves existing and nonzero PC data unchanged, retains exact destination and Bank recovery snapshots, reopens the persisted PK5, PP Ups, Pokédex state and checksums, removes the Bank source only after verification, and preserves independent two-sided rollback.
+
 This implementation is pending its own automatic Android compile before the feature is called validated. Next bounded feature: continue the destination-chooser inventory with one implemented route that still omits concrete native Box or Slot capacity context.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
