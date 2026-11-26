@@ -58866,6 +58866,12 @@ class MainActivity : Activity() {
 
     internal data class Gen2ToGen1LegalisePlan(val originalHappiness:Int,val originalPokerus:Int,val originalCaughtData:Int)
 
+    internal data class Gen2Gen1Prepared(
+        val bankFile:File,val source:Gen2Pokemon,val bankBytes:ByteArray,val destination:ByteArray,
+        val meta:Gen1SpeciesMeta,val legalise:Gen2ToGen1LegalisePlan?,val legaliseSummary:String?,
+        val destinationFile:File,val sourceUri:Uri?,val sourceLabel:String?
+    )
+
     private fun gen2ToGen1LegalisePlan(p:Gen2Pokemon):Gen2ToGen1LegalisePlan? =
         if(!p.isEgg&&p.species in 1..151&&p.moves.all{it in 0..165}&&
             p.heldItem !in GEN2_MAIL_ITEM_IDS&&(p.happiness!=70||p.pokerus!=0||p.caughtData!=0))
@@ -58951,6 +58957,7 @@ class MainActivity : Activity() {
             if(currentBank==null||currentDestination==null||!currentBank.contentEquals(bank)||!currentDestination.contentEquals(destination)){showDialog("Gen 2 → Gen 1","The source or destination changed while conversion data was prepared. Nothing was changed.");return@loadGen1SpeciesMetaAsync}
             val labels=targets.map{"Box ${it.first} • ${it.second} empty slot${if(it.second==1)"" else "s"}"}.toTypedArray()
             destinationPickerOffered=true
+            val prepared=Gen2Gen1Prepared(bankFile,source,bank,destination,meta,legalise,legalise?.let{gen2ToGen1LegaliseChanges(it)},file,openedUri,openedLabel)
             val sourcePpUps=IntArray(4){i->(bank[GEN2_BANK_HEADER_SIZE+23+i].toInt() ushr 6) and 3}
             val destinationStats=gen1CalculatedStats(meta,source.level,source.dvs,source.statExp)
             val catchRateByte=bank[GEN2_BANK_HEADER_SIZE+1].toInt() and 0xFF
@@ -58974,15 +58981,30 @@ class MainActivity : Activity() {
                     if(!bound()||!runCatching{file.readBytes().contentEquals(destination)&&bankFile.readBytes().contentEquals(bank)}.getOrDefault(false)){showDialog("Gen 2 → Gen 1","The destination identity or prepared source changed. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton}
                     AlertDialog.Builder(this).setTitle("Choose Gen 1 destination box")
                         .setItems(labels){_,which->
-                            if(transferConsumed){showDialog("Gen 2 → Gen 1","This transfer was already submitted. Reopen PSE Bank.");return@setItems};transferConsumed=true
+                            if(transferConsumed||which !in targets.indices){showDialog("Gen 2 → Gen 1","This destination choice was already handled or is invalid. Reopen PSE Bank.");return@setItems};transferConsumed=true
                             if(!bound()){showDialog("Gen 2 → Gen 1","The destination identity or prepared source changed. Reopen PSE Bank. Nothing was changed.");return@setItems}
-                            transferGen2BankToGen1(bankFile,source,bank,destination,meta,targets[which].first,file,legalise,openedUri,openedLabel)
+                            val target=targets[which]
+                            reviewGen2ToGen1Destination(prepared,target.first,GEN1_PC_SLOTS_PER_BOX-target.second)
                         }.setNegativeButton("Cancel",null).show()
                 }.show()
         }
     }
 
-    private fun transferGen2BankToGen1(bankFile:File,expected:Gen2Pokemon,expectedBank:ByteArray,preparedDestination:ByteArray,meta:Gen1SpeciesMeta,targetBox:Int,openedFile:File,legalise:Gen2ToGen1LegalisePlan?=null,openedUri:Uri?,openedLabel:String?,routeTitle:String="Gen 2 → Gen 1",successMessage:String?=null){
+    internal fun gen2ToGen1StillBound(p:Gen2Gen1Prepared,targetBox:Int,targetSlot:Int):Boolean{
+        if(targetBox !in 1..GEN1_PC_BOX_COUNT||targetSlot !in 0 until GEN1_PC_SLOTS_PER_BOX)return false
+        if(importedFile?.absolutePath!=p.destinationFile.absolutePath||currentSourceUri!=p.sourceUri||currentSourceLabel!=p.sourceLabel)return false
+        return runCatching{
+            val fresh=p.destinationFile.readBytes();val bank=p.bankFile.readBytes();val base=gen1BoxDataOffset(fresh,targetBox)
+            fresh.contentEquals(p.destination)&&bank.contentEquals(p.bankBytes)&&
+                parseGen2BankPayload(bank)?.let{sameGen2BankRecord(it,p.source)}==true&&
+                verifyGen1SaveIntegrity(fresh).first&&gen1BoxIsWritable(fresh,targetBox)&&
+                base in fresh.indices&&(fresh[base].toInt()and 0xFF)==targetSlot&&
+                (p.legalise==null||p.legalise==gen2ToGen1LegalisePlan(p.source))&&
+                gen2ToGen1Rejection(p.source,p.legalise)==null
+        }.getOrDefault(false)
+    }
+
+    internal fun transferGen2BankToGen1(bankFile:File,expected:Gen2Pokemon,expectedBank:ByteArray,preparedDestination:ByteArray,meta:Gen1SpeciesMeta,targetBox:Int,openedFile:File,legalise:Gen2ToGen1LegalisePlan?=null,openedUri:Uri?,openedLabel:String?,routeTitle:String="Gen 2 → Gen 1",successMessage:String?=null){
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         if(!bound()){showDialog(routeTitle,"The destination identity or prepared source changed. Reopen PSE Bank. Nothing was changed.");return}
         if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog(routeTitle,"The active save changed after destination preparation. Reopen PSE Bank. Nothing was changed.");return}
