@@ -37244,7 +37244,7 @@ class MainActivity : Activity() {
         Toast.makeText(this,gen6ToGen5CapacityLabel(4,target)+recoveryNotice,Toast.LENGTH_LONG).show();showBank()
     }
 
-    private data class Gen6Gen7Prepared(
+    internal data class Gen6Gen7Prepared(
         val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry,val destination:ByteArray,
         val pk7:ByteArray,val converted:PokemonEntry,val destinationFile:File,val sourceUri:Uri?,
         val sourceLabel:String?,val markingNote:String,val originGame:Int,var submitted:Boolean=false,
@@ -37344,47 +37344,10 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 6 → Gen 7").setMessage(preview).setNegativeButton("Cancel",null).setPositiveButton("Choose Gen 7 destination"){_,_->chooseGen6ToGen7Destination(prepared)}.show()
     }
 
-    private fun gen6ToGen7SnapshotsMatch(p:Gen6Gen7Prepared,requireOpen:Boolean=true):Boolean=
+    internal fun gen6ToGen7SnapshotsMatch(p:Gen6Gen7Prepared,requireOpen:Boolean=true):Boolean=
         (!requireOpen||!p.submitted)&&importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&runCatching{p.destinationFile.readBytes().contentEquals(p.destination)&&genToGen7BankStillBound(p)}.getOrDefault(false)
 
-    private fun chooseGen6ToGen7Destination(p:Gen6Gen7Prepared){
-        val title=genToGen7Title(p)
-        if(!gen6ToGen7SnapshotsMatch(p))return showDialog(title,"The destination or Bank record changed. Reopen PSE Bank.")
-        val info=boxStorageInfo(p.destination)?:return
-        if(info.second!=GEN7_PC_CAPACITY)return showDialog(title,"The native Generation 7 PC capacity could not be verified. Nothing was changed.")
-        val empty=(0 until GEN7_PC_CAPACITY).filter{
-            gen6DestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,it)
-        }
-        if(empty.isEmpty())return showDialog(title,gen4To6ToGen7CapacityLabel(p.sourceGeneration,5,0))
-        val first=empty.first()
-        AlertDialog.Builder(this).setTitle("Choose native Gen 7 destination")
-            .setMessage("The reviewed PK7 will be written to one structurally empty slot. PSE will update only that slot, required Pokédex flags, native block CRCs and the save signature. Nonzero destination records remain unchanged.")
-            .setItems(arrayOf(gen4To6ToGen7CapacityLabel(p.sourceGeneration,0,first),"Choose Box / Slot • $GEN7_PC_BOX_COUNT Boxes × $GEN7_PC_SLOTS_PER_BOX slots")){_,which->
-                if(!gen6ToGen7SnapshotsMatch(p))showDialog(title,"The destination or Bank record changed. Reopen PSE Bank.")
-                else if(which==0)transferGen6BankToGen7(p,first)else showGen6ToGen7BoxPicker(p)
-            }.setNegativeButton("Cancel",null).show()
-    }
-
-    private fun showGen6ToGen7BoxPicker(p:Gen6Gen7Prepared){
-        val title=genToGen7Title(p)
-        if(!gen6ToGen7SnapshotsMatch(p))return showDialog(title,"The destination or Bank record changed. Reopen PSE Bank.")
-        val info=boxStorageInfo(p.destination)?:return
-        if(info.second!=GEN7_PC_CAPACITY)return showDialog(title,"The native Generation 7 PC capacity could not be verified. Nothing was changed.")
-        val boxes=(0 until GEN7_PC_BOX_COUNT).filter{box->(0 until GEN7_PC_SLOTS_PER_BOX).any{slot->
-            gen6DestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*GEN7_PC_SLOTS_PER_BOX+slot)
-        }}
-        if(boxes.isEmpty())return showDialog(title,gen4To6ToGen7CapacityLabel(p.sourceGeneration,5,0))
-        AlertDialog.Builder(this).setTitle("Choose Gen 7 destination box").setItems(boxes.map{gen4To6ToGen7CapacityLabel(p.sourceGeneration,1,it)}.toTypedArray()){_,which->
-            val box=boxes[which];val slots=(0 until GEN7_PC_SLOTS_PER_BOX).filter{slot->
-                gen6DestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*GEN7_PC_SLOTS_PER_BOX+slot)
-            }
-            AlertDialog.Builder(this).setTitle(gen4To6ToGen7CapacityLabel(p.sourceGeneration,2,box)).setItems(slots.map{gen4To6ToGen7CapacityLabel(p.sourceGeneration,3,it)}.toTypedArray()){_,slotIndex->
-                transferGen6BankToGen7(p,box*GEN7_PC_SLOTS_PER_BOX+slots[slotIndex])
-            }.setNegativeButton("Cancel",null).show()
-        }.setNegativeButton("Cancel",null).show()
-    }
-
-    private fun transferGen6BankToGen7(p:Gen6Gen7Prepared,target:Int){
+    internal fun transferGen6BankToGen7(p:Gen6Gen7Prepared,target:Int){
         val title=genToGen7Title(p)
         if(!gen6ToGen7SnapshotsMatch(p)||p.submitted)return showDialog(title,"The destination or Bank record changed, or this transfer was already submitted. Reopen PSE Bank.")
         val file=p.destinationFile

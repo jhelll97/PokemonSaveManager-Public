@@ -1574,7 +1574,15 @@ Re-inventory found that the implemented PK4 -> PK5 conversion already binds the 
 
 The Gen 4 route now inserts one final cancellable review after either First Structurally Empty or manual Box / Slot selection. It shows the exact `Box N of 24`, `Slot N of 30` destination within the native 720-slot PC, repeats the exact preserved Ball, reviewed PID decision and verified ability mapping, and rechecks the same bound destination plus structural emptiness before entering the unchanged transaction. The shared Gen 3 exact-slot review remains intact. Existing and nonzero destination slots remain untouched; exact source and destination identity, retained destination and Bank recovery snapshots, scoped Pokédex and checksum updates, persisted reopen verification, cleanup-last source removal and independent two-sided rollback remain unchanged. The shared chooser and picker now live outside `MainActivity` to preserve JVM class-size margin.
 
-This change is pending its own automatic Android compile before the Generation 4 -> Generation 5 exact destination review is called validated.
+Commit `cdfcae60ff893c75748d7272a3081ea53ce839f0` passed automatic Android build run `45836883223`, attempt 1, and was reported by exact Slack event `1795703278.459259`; the Generation 4 -> Generation 5 exact destination review is validated.
+
+## Generation 4 -> Generation 7 exact destination review
+
+Re-inventory found that the implemented PK4 -> PK7 conversion already binds the exact selected Diamond, Pearl, Platinum, HeartGold or SoulSilver Bank record and Sun, Moon, Ultra Sun or Ultra Moon destination, verifies the native PK5 and PK6 bridges, preserves current PP and PP Ups, blocks held items, Eggs and unsupported values, reviews the PID, ability, markings, transfer marker, Egg-location, current-handler, Resort and Hyper Training effects, enforces the native 32 x 30 PC capacity, and verifies the selected PK7, Pokédex state, block CRCs and save signature after persistence. Both structurally empty destination choices still proceeded directly from selection into the transaction without repeating the exact chosen slot and accepted conversion effects.
+
+The Gen 4 route now inserts one final cancellable review after either First Structurally Empty or manual Box / Slot selection. It shows the exact `Box N of 32`, `Slot N of 30` destination within the native 960-slot PC, repeats the exact preserved Ball, reviewed PID decision, verified ability mapping and native marking conversion, and rechecks the same bound destination plus structural emptiness before entering the unchanged transaction. The shared Gen 5 and Gen 6 routes retain their existing handoff. Existing and nonzero destination slots remain untouched; exact source and destination identity, retained destination and Bank recovery snapshots, scoped Pokédex, CRC and signature updates, persisted reopen verification, cleanup-last source removal and independent two-sided rollback remain unchanged. The shared chooser and picker now live outside `MainActivity` to preserve JVM class-size margin.
+
+This change is pending its own automatic Android compile before the Generation 4 -> Generation 7 exact destination review is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
