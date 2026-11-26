@@ -47568,16 +47568,23 @@ class MainActivity : Activity() {
                 }
                 consumed = true
                 val (box, slots) = targets[which]
-                moveSelectedGen3BankPokemon(
-                    selected,
-                    openedDestination,
-                    box,
-                    slots,
-                    openedFile,
-                    openedSourceUri,
-                    openedSourceLabel,
-                    boxNames[box]
-                )
+                val placements=selected.indices.joinToString("\n"){index->
+                    "${index+1}. ${selected[index].pokemon.nickname.ifBlank{"Pokemon #${selected[index].pokemon.species}"}} -> ${boxNames[box]} / Box ${box+1} of ${Gen3SaveState.BOX_COUNT}, Slot ${slots[index]+1} of ${Gen3SaveState.BOX_CAPACITY}"
+                }
+                val review="Final native Gen 3 batch withdrawal review\n\n$placements\n\n"+
+                    "No Pokemon conversion or Legalise change is performed. Every exact checksum-valid 80-byte PK3 is copied byte-for-byte in selection order; existing and nonzero destination records remain unchanged. Only the listed native slots and required PC-storage section checksums may change.\n\n"+
+                    "PSE retains exact destination and per-record Bank recovery data, reopens every persisted PK3, then removes each Bank record last. Cancel leaves the destination and all selected Bank records byte-for-byte unchanged. This is a PSE Bank withdrawal, not an official trade, Pokemon Bank or HOME transaction, legality certification or verified provenance."
+                var submitted=false
+                AlertDialog.Builder(this).setTitle("Review ${selected.size} exact Gen 3 withdrawals")
+                    .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("Withdraw exact PK3 selection"){_,_->
+                        if(submitted){showDialog("Gen 3 Bank multi-withdrawal","This exact destination review was already submitted. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton};submitted=true
+                        val current=runCatching{openedFile.readBytes()}.getOrNull();val currentPc=current?.let{gen3PcBuffer(it)}
+                        val unchanged=current!=null&&current.contentEquals(openedDestination)&&currentPc!=null&&importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedSourceUri&&currentSourceLabel==openedSourceLabel&&
+                            selected.all{item->runCatching{item.sourceBinding.matches(item.bankBytes,true)&&item.bankFile.readBytes().contentEquals(item.bankBytes)}.getOrDefault(false)}&&
+                            slots.all{slot->gen3BankDestinationSlotIsStructurallyEmpty(currentPc,box*Gen3SaveState.BOX_CAPACITY+slot)}
+                        if(!unchanged){showDialog("Gen 3 Bank multi-withdrawal","The destination identity, selected Bank records or reviewed native slots changed. Nothing was changed.");return@setPositiveButton}
+                        moveSelectedGen3BankPokemon(selected,openedDestination,box,slots,openedFile,openedSourceUri,openedSourceLabel,boxNames[box])
+                    }.show()
             }
             .setNegativeButton("Cancel") { _, _ -> consumed = true }
             .setOnCancelListener { consumed = true }
