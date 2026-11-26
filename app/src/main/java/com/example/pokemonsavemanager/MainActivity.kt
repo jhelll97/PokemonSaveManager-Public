@@ -49425,7 +49425,7 @@ class MainActivity : Activity() {
         val labels=arrayOf(nativeGen3WithdrawalCapacityLabel(0,first),"Choose a box / slot")
         AlertDialog.Builder(this).setTitle("Withdraw ${p.nickname.ifBlank{"Pokémon"}} to…")
             .setMessage("This is a PSE Bank withdrawal, not an official trade, Pokémon Bank transaction or provenance claim. No conversion or Legalise change is performed. Choose one structurally empty native PK3 slot; the exact Bank record remains until the destination and retained recovery data verify.")
-            .setItems(labels){_,which->if(which==0) withdrawGen3BankToSlot(selected,p,first,raw,file,openedUri,openedLabel,data) else showGen3BankBoxPicker(selected,p,pc,raw,file,openedUri,openedLabel,data)}
+            .setItems(labels){_,which->if(which==0) reviewGen3BankWithdrawal(selected,p,first,raw,file,openedUri,openedLabel,data) else showGen3BankBoxPicker(selected,p,pc,raw,file,openedUri,openedLabel,data)}
             .setNegativeButton("Cancel",null).show()
     }
 
@@ -49436,12 +49436,22 @@ class MainActivity : Activity() {
             .setItems(boxes.map{b->nativeGen3WithdrawalCapacityLabel(1,b)}.toTypedArray()){_,w->
                 val b=boxes[w]; val empties=(0 until GEN3_PC_SLOTS_PER_BOX).filter{s->gen3BankDestinationSlotIsStructurallyEmpty(pc,b*GEN3_PC_SLOTS_PER_BOX+s)}
                 AlertDialog.Builder(this).setTitle(nativeGen3WithdrawalCapacityLabel(2,b))
-                    .setItems(empties.map{s->nativeGen3WithdrawalCapacityLabel(3,s)}.toTypedArray()){_,sw->withdrawGen3BankToSlot(bankFile,p,b*GEN3_PC_SLOTS_PER_BOX+empties[sw],openedBank,openedFile,openedUri,openedLabel,openedDestination)}
+                    .setItems(empties.map{s->nativeGen3WithdrawalCapacityLabel(3,s)}.toTypedArray()){_,sw->reviewGen3BankWithdrawal(bankFile,p,b*GEN3_PC_SLOTS_PER_BOX+empties[sw],openedBank,openedFile,openedUri,openedLabel,openedDestination)}
                     .setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
     }
 
-    private fun withdrawGen3BankToSlot(bankFile:File,p:PokemonEntry,target:Int,openedBank:ByteArray,openedFile:File,openedUri:Uri?,openedLabel:String?,openedDestination:ByteArray){
+    internal fun gen3BankWithdrawalStillBound(bankFile:File,p:PokemonEntry,target:Int,openedBank:ByteArray,openedFile:File,openedUri:Uri?,openedLabel:String?,openedDestination:ByteArray):Boolean{
+        if(target !in 0 until GEN3_PC_CAPACITY||importedFile?.absolutePath!=openedFile.absolutePath||currentSourceUri!=openedUri||currentSourceLabel!=openedLabel)return false
+        return runCatching{
+            val root=bankDir().canonicalFile;val selected=bankFile.canonicalFile;val destination=openedFile.readBytes();val bank=selected.readBytes();val source=if(bank.size==80)parsePk3(bank,0,false)else null;val pc=gen3PcBuffer(destination)
+            bankFile.absoluteFile==selected&&bankDir().absoluteFile==root&&selected.parentFile==root&&selected.isFile&&selected.extension.equals("pk3",true)&&destination.contentEquals(openedDestination)&&
+                generationForSize(destination.size)==3&&gen3SaveValid(destination)&&bank.contentEquals(openedBank)&&source!=null&&source.checksumValid&&
+                source.pid==p.pid&&source.species==p.species&&source.tid==p.tid&&source.sid==p.sid&&pc!=null&&gen3BankDestinationSlotIsStructurallyEmpty(pc,target)
+        }.getOrDefault(false)
+    }
+
+    internal fun withdrawGen3BankToSlot(bankFile:File,p:PokemonEntry,target:Int,openedBank:ByteArray,openedFile:File,openedUri:Uri?,openedLabel:String?,openedDestination:ByteArray){
         val file=openedFile
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val destinationBinding=PseBankDestinationBinding.capture(file)

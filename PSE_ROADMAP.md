@@ -1798,7 +1798,15 @@ Supported-title Bank review found that the implemented PSE2 -> PK3 conversion al
 
 The Gen 2 route now inserts one final cancellable review after either destination choice. It shows the exact `Box N of 14`, `Slot N of 30` location within the native 420-slot PC, repeats the accepted Legalise effects and every represented PK3 value, confirms that no move is removed or replaced, and rechecks the same destination bytes and identity, exact Bank record, Legalise plan, PP Ups, deterministic PK3 bytes and structurally empty selected slot before entering the unchanged transaction. Existing and nonzero destination records remain untouched; retained destination and Bank recovery snapshots, scoped PC, Pokédex and checksum updates, persisted reopen verification, cleanup-last source removal and independent two-sided rollback remain unchanged.
 
-This change is pending its own automatic Android compile before the Generation 2 -> Generation 3 exact destination, Legalise and mapping review is called validated.
+Commit `75e09ea5d21b00fc84c6f58d92d915afdc54c309` passed automatic Android build run `45898746290`, attempt 1, and was reported by exact Slack event `1795729558.008709`; the Generation 2 -> Generation 3 exact destination, Legalise and mapping review is validated.
+
+## Native Generation 3 Bank withdrawal exact destination review
+
+Supported-title Bank review found that same-generation PK3 withdrawal already requires one canonical checksum-valid 80-byte Bank record and a valid Ruby, Sapphire, Emerald, FireRed or LeafGreen destination, lists only structurally empty native PC slots, copies the exact PK3 byte-for-byte, preserves unrelated PC data, refreshes the required native section checksums, retains exact destination and Bank recovery snapshots, reopens the complete destination and selected record, and removes the Bank source only after successful verification with two-sided recovery on failure. Its first-empty and manual Box/Slot choices still entered that transaction immediately without one final review tying the exact no-conversion effect to the selected native slot.
+
+The native Gen 3 route now inserts one final cancellable review after either destination choice. It shows the exact `Box N of 14`, `Slot N of 30` location within the native 420-slot PC, states that the complete 80-byte PK3 remains unchanged, identifies the exact native fields preserved, names the limited PC-storage checksum scope and rechecks the same loaded destination identity and bytes, canonical Bank record, native PK3 identity and structurally empty selected slot before entering the unchanged transaction. Existing and nonzero records remain untouched; retained recovery, persisted reopen verification, cleanup-last Bank removal and two-sided failure handling remain unchanged.
+
+This change is pending its own automatic Android compile before the native Generation 3 Bank withdrawal exact destination review is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
