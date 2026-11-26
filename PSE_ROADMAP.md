@@ -1822,7 +1822,15 @@ Supported-title Bank review found that same-generation PSE2 withdrawal already r
 
 The native Gen 2 route now inserts one final cancellable review after box selection. It shows the exact `Box N of 14`, `Slot N of 20` location within the native 280-slot PC, states every represented Generation 2 field retained unchanged, names the limited record, Seen/Owned and checksum scope, and rechecks the same loaded destination identity and bytes, canonical exact Bank record and unchanged next-slot position before entering the existing transaction. Existing records remain untouched; retained recovery, persisted reopen verification, cleanup-last Bank removal and two-sided failure handling remain unchanged.
 
-This change is pending its own automatic Android compile before the native Generation 2 Bank withdrawal exact destination review is called validated.
+Commit `62b0f44e64ea6114f012e68a5c2e499d98724957` passed automatic Android build run `45903551457`, attempt 1, and was reported by exact Slack event `1795731914.261869`; the native Generation 2 Bank withdrawal exact destination review is validated.
+
+## Native Generation 1 Bank withdrawal exact destination review
+
+Supported-title Bank review found that same-generation PSE1 withdrawal already requires one canonical exact preserved Bank record and a valid Red, Blue or Yellow destination, lists only initialized native PC boxes with capacity, restores the represented Generation 1 record without conversion, preserves existing box records, updates Seen/Caught registration and the required main checksum, retains exact destination and Bank recovery snapshots, reopens the complete destination and selected record, and removes the Bank source only after successful verification with two-sided recovery on failure. Selecting a listed box still entered that transaction immediately without one final review tying the exact no-conversion effect to the next native slot.
+
+The native Gen 1 route now inserts one final cancellable review after box selection. It shows the exact `Box N of 12`, `Slot N of 20` location within the native 240-slot PC, states every represented Generation 1 field retained unchanged, names the limited record, Seen/Caught and checksum scope, and rechecks the same loaded destination identity and bytes, canonical exact Bank record and unchanged next-slot position before entering the existing transaction. Existing records remain untouched; retained recovery, persisted reopen verification, cleanup-last Bank removal and two-sided failure handling remain unchanged.
+
+This change is pending its own automatic Android compile before the native Generation 1 Bank withdrawal exact destination review is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

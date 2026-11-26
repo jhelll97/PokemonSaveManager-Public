@@ -63347,8 +63347,23 @@ private data class Gen2ToGen5LegalisePlan(
             if(consumed||which !in targets.indices){consumed=true;showDialog("Withdraw","This destination choice was already handled or is invalid. Reopen PSE Bank. Nothing was changed.");return@setItems}
             consumed=true
             if(!bound()){showDialog("Withdraw failed","The loaded Gen 1 save identity changed after the box list opened. Reopen PSE Bank. Nothing was changed.");return@setItems}
-            val box=targets[which].first
-            val fresh=runCatching{file.readBytes()}.getOrElse{showDialog("Withdraw failed","The fresh Gen 1 save could not be read. Nothing was changed.");return@setItems}
+            val box=targets[which].first;val emptyCount=targets[which].second;val reviewedSlot=GEN1_PC_SLOTS_PER_BOX-emptyCount
+            val review="Final native Gen 1 Bank withdrawal review\n\n"+
+                "Chosen destination: Box $box of $GEN1_PC_BOX_COUNT, Slot ${reviewedSlot+1} of $GEN1_PC_SLOTS_PER_BOX, within the native $GEN1_PC_CAPACITY-slot PC. The record is appended only to this initialized box's next available slot; existing records remain unchanged.\n\n"+
+                "No Pokemon conversion or Legalise change is performed. The exact preserved PSE1 boxed record is restored with species #${p.species}, TID ${p.tid}, nickname, OT, experience, level, moves, current PP, PP Ups, Stat Exp, DVs and every represented native Generation 1 field unchanged. The original source save is not edited.\n\n"+
+                "Only the selected native box record, required Seen/Caught registration and main checksum may change. PSE retains and verifies exact destination and Bank recovery data, reopens the destination and exact record, then removes the Bank record last. Cancel leaves the Bank record and destination byte-for-byte unchanged.\n\n"+
+                "This is a PSE Bank withdrawal, not an official trade, Time Capsule or Pokemon Bank transaction, legality certification or verified provenance."
+            var confirmationConsumed=false
+            AlertDialog.Builder(this).setTitle("${p.nickname.ifBlank{"Pokemon #${p.species}"}} • Gen 1 withdrawal")
+                .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("Withdraw • Box $box / Slot ${reviewedSlot+1}"){_,_->
+            if(confirmationConsumed){showDialog("Gen 1 Bank withdrawal","This exact destination confirmation was already submitted. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton};confirmationConsumed=true
+            val fresh=runCatching{file.readBytes()}.getOrElse{showDialog("Withdraw failed","The fresh Gen 1 save could not be read. Nothing was changed.");return@setPositiveButton}
+            val refreshedTarget=availableGen1BoxTargets(fresh).firstOrNull{it.first==box}
+            val reviewedBank=runCatching{selected.readBytes()}.getOrNull()
+            if(!destinationBinding.matches(openedDestination,bound())||!fresh.contentEquals(openedDestination)||refreshedTarget!=(box to emptyCount)||
+                reviewedBank==null||!sourceBinding.matches(openedRaw,true)||!exactBank(reviewedBank)){
+                showDialog("Gen 1 Bank withdrawal","The destination identity, exact Bank record or selected native slot changed after review. Nothing was changed.");return@setPositiveButton
+            }
             var writeStarted=false;var bankDeleteAttempted=false;var safetyBackup:File?=null;var bankRecovery:File?=null
             var backupBinding:PseBankDestinationBinding?=null
             var bankRecoveryBinding:PseBankSourceBinding?=null
@@ -63459,6 +63474,7 @@ private data class Gen2ToGen5LegalisePlan(
                     (safetyBackup?.takeIf{retainedBackup}?.let{"\n\nVerified recovery backup: ${it.name}"}?:"")+
                     (bankRecovery?.takeIf{verifiedBankRecovery&&it.exists()}?.let{"\nVerified Bank recovery snapshot: ${it.name}"}?:""))
             }
+            }.show()
         }.setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
     }
 
