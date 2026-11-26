@@ -1548,6 +1548,14 @@ Re-inventory found that the implemented PK3 -> PK5 conversion already binds the 
 
 The Gen 3 route now inserts one final cancellable review after either destination choice. It shows the exact `Box N of 24`, `Slot N of 30` destination within the native 720-slot PC, repeats the exact source ball, reviewed PID decision and canonical ability mapping, and rechecks the bound destination plus structural emptiness before entering the unchanged transaction. Existing and nonzero slots remain untouched; destination and Bank source binding, represented-field verification, scoped Pokédex and checksum updates, retained recovery, persisted reopen, source cleanup and independent two-sided rollback remain unchanged. The shared Generation 4 -> Generation 5 route keeps its existing behavior.
 
+Commit `aa18b55102ee29f24e054d2902c4ddb02bc926aa` passed automatic Android build run `45827069999`, attempt 1, and was reported by exact Slack event `1795699650.093999`; the Generation 3 -> Generation 5 exact destination review flow is validated.
+
+## Generation 3 -> Generation 4 exact destination and Legalise review
+
+Re-inventory found that the implemented PK3 -> PK4 conversion already binds the exact selected Gen 3 Bank record and Diamond, Pearl, Platinum, HeartGold or SoulSilver destination, verifies canonical ability data and the final native PK4, blocks unsupported fields, and requires explicit cancellable ball ID 0 and ability-parity PID Legalise choices before destination selection. Both structurally empty destination choices still proceeded directly from selection to persistence without repeating the exact selected slot and accepted ball, PID and ability effects.
+
+The route now retains the original reviewed PK3 beside its Legalised conversion source and inserts one final cancellable review after either destination choice. It shows the exact `Box N of 18`, `Slot N of 30` destination within the native 540-slot PC, repeats any ball ID 0 mapping, the reviewed PID decision and canonical ability mapping, and rechecks the bound destination plus structural emptiness before entering the unchanged transaction. Existing and nonzero slots remain untouched; exact Bank and destination identity, represented-field verification, native Pokédex and checksum updates, retained recovery, persisted reopen, cleanup-last source removal and independent two-sided rollback remain unchanged.
+
 This implementation is pending its own automatic Android compile before the feature is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair

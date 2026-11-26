@@ -48599,7 +48599,7 @@ class MainActivity : Activity() {
     )
 
     private data class Gen3Gen4Prepared(
-        val bankFile:File,val bankBytes:ByteArray,val source:PokemonEntry,val sourceBinding:PseBankSourceBinding,val destination:ByteArray,
+        val bankFile:File,val bankBytes:ByteArray,val originalSource:PokemonEntry,val source:PokemonEntry,val sourceBinding:PseBankSourceBinding,val destination:ByteArray,
         val plan:Gen3ToGen4Plan,val pk4:ByteArray,val converted:PokemonEntry,
         val destinationFile:File,val sourceUri:Uri?,val sourceLabel:String?
     )
@@ -48892,7 +48892,7 @@ class MainActivity : Activity() {
             }
             val converted=parsePk4(pk4,false)?:return@loadGen3ToGen4MetaAsync showDialog("Gen 3 → Gen 4","The PK4 conversion could not be prepared.")
             val prepared=Gen3Gen4Prepared(
-                canonical,bank,conversionSource,sourceBinding,destination,plan,pk4,converted,
+                canonical,bank,source,conversionSource,sourceBinding,destination,plan,pk4,converted,
                 file,openedUri,openedLabel
             )
             val oldMet=if(conversionSource.metLocation==0)"none" else "#${conversionSource.metLocation}"
@@ -49164,7 +49164,12 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this).setTitle("Choose native Gen 4 destination")
             .setMessage("PSE will write only to a completely zero-filled, unparsable PK4 slot. Nonzero destination records remain unchanged.")
             .setItems(arrayOf("First structurally empty • Box ${first/30+1} • Slot ${first%30+1}","Choose a box / slot")){_,which->
-                if(which==0)transferGen3BankToGen4(p,first) else showGen3ToGen4BoxPicker(p)
+                if(which==0)showPseGen3ToGen4DestinationReview(
+                    p.originalSource,p.source,p.converted,first,
+                    {
+                        preparedGen3ToGen4StillBound(p)&&runCatching{val current=p.destinationFile.readBytes();val currentProfile=detectGen4Profile(current);currentProfile!=null&&gen4DestinationSlotIsStructurallyEmpty(current,currentProfile,first)}.getOrDefault(false)
+                    },{transferGen3BankToGen4(p,first)}
+                )else showGen3ToGen4BoxPicker(p)
             }.setNegativeButton("Cancel",null).show()
     }
 
@@ -49180,7 +49185,15 @@ class MainActivity : Activity() {
                 val box=boxes[which]
                 val slots=(0 until 30).filter{slot->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,box*30+slot)}
                 AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
-                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->transferGen3BankToGen4(p,box*30+slots[slotIndex])}
+                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
+                        val target=box*GEN4_PC_SLOTS_PER_BOX+slots[slotIndex]
+                        showPseGen3ToGen4DestinationReview(
+                            p.originalSource,p.source,p.converted,target,
+                            {
+                                preparedGen3ToGen4StillBound(p)&&runCatching{val current=p.destinationFile.readBytes();val currentProfile=detectGen4Profile(current);currentProfile!=null&&gen4DestinationSlotIsStructurallyEmpty(current,currentProfile,target)}.getOrDefault(false)
+                            },{transferGen3BankToGen4(p,target)}
+                        )
+                    }
                     .setNegativeButton("Back"){_,_->showGen3ToGen4BoxPicker(p)}.setNeutralButton("Cancel",null).show()
             }.setNegativeButton("Back"){_,_->chooseGen3ToGen4Destination(p)}.setNeutralButton("Cancel",null).show()
     }
