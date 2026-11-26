@@ -1540,7 +1540,15 @@ The Gen 3 route now inserts one final cancellable review after either First Stru
 
 Commit `c3c66585757136856d9e37ab23947a2ff29b5fd7` was rejected by automatic Android build run `45824038361`, attempt 1, and exact Slack event `1795697931.528169`: both new call sites supplied `this` explicitly to a `MainActivity` extension already dispatched on the activity, shifting every argument and producing the reported type mismatches. The single correction removes only those redundant receiver arguments; destination review content, source and slot rechecks, transaction entry and shared-route behavior are unchanged.
 
-This correction is pending its own automatic Android compile before the feature is called validated.
+Commit `c3da7ab57c23391887709b2aac03745f3d44b0df` passed automatic Android build run `45825006645`, attempt 1, and was reported by exact Slack event `1795698596.206099`; the Generation 3 -> Generation 6 exact destination and Legalise review flow is validated.
+
+## Generation 3 -> Generation 5 exact destination review
+
+Re-inventory found that the implemented PK3 -> PK5 conversion already binds the exact selected Gen 3 Bank record and Black, White, Black 2 or White 2 destination, resolves the canonical Generation 3 ability from the stored slot, verifies the native PK4 bridge and final PK5, blocks unsupported fields, preserves current PP and PP Ups, and retains exact destination and Bank recovery through persisted reopen and cleanup. Its shared Gen 3 / Gen 4 destination chooser still sent either First Structurally Empty or manual Box / Slot selection directly into persistence without repeating the exact selected slot and reviewed PID, ability and ball mapping.
+
+The Gen 3 route now inserts one final cancellable review after either destination choice. It shows the exact `Box N of 24`, `Slot N of 30` destination within the native 720-slot PC, repeats the exact source ball, reviewed PID decision and canonical ability mapping, and rechecks the bound destination plus structural emptiness before entering the unchanged transaction. Existing and nonzero slots remain untouched; destination and Bank source binding, represented-field verification, scoped Pokédex and checksum updates, retained recovery, persisted reopen, source cleanup and independent two-sided rollback remain unchanged. The shared Generation 4 -> Generation 5 route keeps its existing behavior.
+
+This implementation is pending its own automatic Android compile before the feature is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

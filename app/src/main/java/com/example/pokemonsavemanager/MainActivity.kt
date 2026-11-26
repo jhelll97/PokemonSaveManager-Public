@@ -215,6 +215,7 @@ private fun gen3Or4ToGen5CapacityLabel(sourceGeneration:Int,kind:Int,index:Int):
     3 -> "Slot ${index+1} of $GEN5_PC_SLOTS_PER_BOX"
     4 -> "PSE converted Gen $sourceGeneration → Gen 5 to Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX and verified"
     5 -> "All $GEN5_PC_CAPACITY native Generation 5 PC slots are unavailable. Nonzero destination records and the Gen $sourceGeneration Bank source were left unchanged."
+    6 -> "Chosen destination: Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT, Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX, within the native $GEN5_PC_CAPACITY-slot PC."
     else -> error("Unknown Gen 3 or Gen 4 to Gen 5 capacity label")
 }
 
@@ -12124,7 +12125,15 @@ class MainActivity : Activity() {
             .setMessage("The reviewed PSE conversion will be written only to a structurally empty PK5 slot. The destination box checksum and Pokédex will be updated, and nonzero records remain unchanged.")
             .setItems(arrayOf(gen3Or4ToGen5CapacityLabel(p.sourceGeneration,0,first),"Choose Box / Slot • $GEN5_PC_BOX_COUNT Boxes × $GEN5_PC_SLOTS_PER_BOX slots")){_,which->
                 if(!gen4ToGen5StillBound(p))showDialog(title,"The destination or Bank record changed. Reopen PSE Bank.")
-                else if(which==0)transferGen4BankToGen5(p,first)else showGen4ToGen5BoxPicker(p)
+                else if(which==0){
+                    if(p.sourceGeneration==3)showPseGen3ToGen5DestinationReview(
+                        p.source,p.converted,gen3Or4ToGen5CapacityLabel(3,6,first),
+                        "Transfer • Box ${first/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT / Slot ${first%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX",
+                        {
+                            gen4ToGen5StillBound(p)&&runCatching{gen5DestinationSlotIsStructurallyEmpty(p.destinationFile.readBytes(),first)}.getOrDefault(false)
+                        },{transferGen4BankToGen5(p,first)}
+                    )else transferGen4BankToGen5(p,first)
+                }else showGen4ToGen5BoxPicker(p)
             }.setNegativeButton("Cancel",null).show()
     }
 
@@ -12140,7 +12149,14 @@ class MainActivity : Activity() {
                 val slots=(0 until GEN5_PC_SLOTS_PER_BOX).filter{slot->gen5DestinationSlotIsStructurallyEmpty(p.destination,box*GEN5_PC_SLOTS_PER_BOX+slot)}
                 AlertDialog.Builder(this).setTitle(gen3Or4ToGen5CapacityLabel(p.sourceGeneration,2,box))
                     .setItems(slots.map{gen3Or4ToGen5CapacityLabel(p.sourceGeneration,3,it)}.toTypedArray()){_,slotIndex->
-                        transferGen4BankToGen5(p,box*GEN5_PC_SLOTS_PER_BOX+slots[slotIndex])
+                        val target=box*GEN5_PC_SLOTS_PER_BOX+slots[slotIndex]
+                        if(p.sourceGeneration==3)showPseGen3ToGen5DestinationReview(
+                            p.source,p.converted,gen3Or4ToGen5CapacityLabel(3,6,target),
+                            "Transfer • Box ${target/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT / Slot ${target%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX",
+                            {
+                                gen4ToGen5StillBound(p)&&runCatching{gen5DestinationSlotIsStructurallyEmpty(p.destinationFile.readBytes(),target)}.getOrDefault(false)
+                            },{transferGen4BankToGen5(p,target)}
+                        )else transferGen4BankToGen5(p,target)
                     }.setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
     }
