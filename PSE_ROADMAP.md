@@ -1538,7 +1538,9 @@ Re-inventory found that the implemented PK3 -> PK6 conversion already binds the 
 
 The Gen 3 route now inserts one final cancellable review after either First Structurally Empty or manual Box / Slot selection. It shows the exact `Box N of 31`, `Slot N of 30` destination, repeats any ball ID 0 mapping, repeats the original-to-native PID decision and verified ability mapping, and rechecks the same bound destination plus structural emptiness before entering the unchanged transaction. Existing and nonzero slots remain untouched; source identity, retained destination and Bank recovery snapshots, scoped Pokédex and checksum updates, persisted reopen verification, source cleanup and independent two-sided rollback remain unchanged. The shared Gen 4 and Gen 5 chooser behavior is unchanged.
 
-This implementation is pending its own automatic Android compile before the feature is called validated.
+Commit `c3c66585757136856d9e37ab23947a2ff29b5fd7` was rejected by automatic Android build run `45824038361`, attempt 1, and exact Slack event `1795697931.528169`: both new call sites supplied `this` explicitly to a `MainActivity` extension already dispatched on the activity, shifting every argument and producing the reported type mismatches. The single correction removes only those redundant receiver arguments; destination review content, source and slot rechecks, transaction entry and shared-route behavior are unchanged.
+
+This correction is pending its own automatic Android compile before the feature is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

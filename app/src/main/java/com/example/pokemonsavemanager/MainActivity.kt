@@ -13525,7 +13525,7 @@ class MainActivity : Activity() {
                 if(!gen5ToGen6StillBound(p))showDialog(title,"The destination or Bank record changed. Reopen PSE Bank.")
                 else if(which==0){
                     if(p.sourceGeneration==3&&p.originalSource!=null)showPseGen3ToGen6DestinationReview(
-                        this,p.originalSource,p.source,p.converted,
+                        p.originalSource,p.source,p.converted,
                         gen3To5ToGen6CapacityLabel(3,6,first),
                         "Transfer • Box ${first/GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_BOX_COUNT / Slot ${first%GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_SLOTS_PER_BOX",
                         {
@@ -13556,7 +13556,7 @@ class MainActivity : Activity() {
                     .setItems(slots.map{gen3To5ToGen6CapacityLabel(p.sourceGeneration,3,it)}.toTypedArray()){_,slotIndex->
                         val target=box*GEN6_PC_SLOTS_PER_BOX+slots[slotIndex]
                         if(p.sourceGeneration==3&&p.originalSource!=null)showPseGen3ToGen6DestinationReview(
-                            this,p.originalSource,p.source,p.converted,
+                            p.originalSource,p.source,p.converted,
                             gen3To5ToGen6CapacityLabel(3,6,target),
                             "Transfer • Box ${target/GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_BOX_COUNT / Slot ${target%GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_SLOTS_PER_BOX",
                             {
