@@ -47504,7 +47504,8 @@ class MainActivity : Activity() {
         chosen: List<File>,
         openedFile: File,
         openedSourceUri: Uri?,
-        openedSourceLabel: String?
+        openedSourceLabel: String?,
+        copyOnly: Boolean = false
     ) {
         val openedDestination = runCatching { openedFile.readBytes() }.getOrNull()
             ?: run {
@@ -47580,15 +47581,17 @@ class MainActivity : Activity() {
             return
         }
         var consumed = false
+        val action=if(copyOnly) "Copy" else "Withdraw"
         AlertDialog.Builder(this)
-            .setTitle("Withdraw ${selected.size} Pokémon to which box?")
+            .setTitle("$action ${selected.size} Pokémon to which box?")
             .setMessage(
                 "This is a PSE Bank withdrawal, not an official trade, Pokémon Bank " +
                     "transaction or provenance claim. No conversion or Legalise change " +
                     "is performed. PSE will copy each exact native PK3 into the listed " +
                     "structurally empty slots in selection order, update only the native " +
-                    "PC checksums, retain verified recovery data, reopen every destination " +
-                    "record, then remove Bank records last."
+                    "PC checksums, retain verified recovery data and reopen every destination " +
+                    if(copyOnly) "record while keeping every Bank original unchanged."
+                    else "record, then remove Bank records last."
             )
             .setItems(targets.map { (box, slots) ->
                 "${boxNames[box]} • Box ${box + 1} • Slots " +
@@ -47608,19 +47611,20 @@ class MainActivity : Activity() {
                 val placements=selected.indices.joinToString("\n"){index->
                     "${index+1}. ${selected[index].pokemon.nickname.ifBlank{"Pokemon #${selected[index].pokemon.species}"}} -> ${boxNames[box]} / Box ${box+1} of ${Gen3SaveState.BOX_COUNT}, Slot ${slots[index]+1} of ${Gen3SaveState.BOX_CAPACITY}"
                 }
-                val review="Final native Gen 3 batch withdrawal review\n\n$placements\n\n"+
+                val review="Final native Gen 3 batch ${if(copyOnly) "copy" else "withdrawal"} review\n\n$placements\n\n"+
                     "No Pokemon conversion or Legalise change is performed. Every exact checksum-valid 80-byte PK3 is copied byte-for-byte in selection order; existing and nonzero destination records remain unchanged. Only the listed native slots and required PC-storage section checksums may change.\n\n"+
-                    "PSE retains exact destination and per-record Bank recovery data, reopens every persisted PK3, then removes each Bank record last. Cancel leaves the destination and all selected Bank records byte-for-byte unchanged. This is a PSE Bank withdrawal, not an official trade, Pokemon Bank or HOME transaction, legality certification or verified provenance."
+                    if(copyOnly) "PSE retains exact destination recovery data, reopens every persisted PK3 and keeps every selected Bank record byte-for-byte unchanged. Cancel leaves both sides unchanged. This is a PSE Bank copy, not an official trade, Pokemon Bank or HOME transaction, legality certification or verified provenance."
+                    else "PSE retains exact destination and per-record Bank recovery data, reopens every persisted PK3, then removes each Bank record last. Cancel leaves the destination and all selected Bank records byte-for-byte unchanged. This is a PSE Bank withdrawal, not an official trade, Pokemon Bank or HOME transaction, legality certification or verified provenance."
                 var submitted=false
-                AlertDialog.Builder(this).setTitle("Review ${selected.size} exact Gen 3 withdrawals")
-                    .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("Withdraw exact PK3 selection"){_,_->
-                        if(submitted){showDialog("Gen 3 Bank multi-withdrawal","This exact destination review was already submitted. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton};submitted=true
+                AlertDialog.Builder(this).setTitle("Review ${selected.size} exact Gen 3 ${if(copyOnly) "copies" else "withdrawals"}")
+                    .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("$action exact PK3 selection"){_,_->
+                        if(submitted){showDialog("Gen 3 Bank batch $action","This exact destination review was already submitted. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton};submitted=true
                         val current=runCatching{openedFile.readBytes()}.getOrNull();val currentPc=current?.let{gen3PcBuffer(it)}
                         val unchanged=current!=null&&current.contentEquals(openedDestination)&&currentPc!=null&&importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedSourceUri&&currentSourceLabel==openedSourceLabel&&
                             selected.all{item->runCatching{item.sourceBinding.matches(item.bankBytes,true)&&item.bankFile.readBytes().contentEquals(item.bankBytes)}.getOrDefault(false)}&&
                             slots.all{slot->gen3BankDestinationSlotIsStructurallyEmpty(currentPc,box*Gen3SaveState.BOX_CAPACITY+slot)}
-                        if(!unchanged){showDialog("Gen 3 Bank multi-withdrawal","The destination identity, selected Bank records or reviewed native slots changed. Nothing was changed.");return@setPositiveButton}
-                        moveSelectedGen3BankPokemon(selected,openedDestination,box,slots,openedFile,openedSourceUri,openedSourceLabel,boxNames[box])
+                        if(!unchanged){showDialog("Gen 3 Bank batch $action","The destination identity, selected Bank records or reviewed native slots changed. Nothing was changed.");return@setPositiveButton}
+                        moveSelectedGen3BankPokemon(selected,openedDestination,box,slots,openedFile,openedSourceUri,openedSourceLabel,boxNames[box],copyOnly)
                     }.show()
             }
             .setNegativeButton("Cancel") { _, _ -> consumed = true }
@@ -47636,7 +47640,8 @@ class MainActivity : Activity() {
         openedFile: File,
         openedSourceUri: Uri?,
         openedSourceLabel: String?,
-        targetBoxName: String
+        targetBoxName: String,
+        copyOnly: Boolean = false
     ) {
         fun destinationBound(): Boolean =
             importedFile?.absolutePath == openedFile.absolutePath &&
@@ -47855,7 +47860,12 @@ class MainActivity : Activity() {
                 }) {
                 "The exact Gen 3 Bank batch did not persist in the destination box."
             }
-            selected.forEachIndexed { index, item ->
+            if(copyOnly){
+                require(selected.indices.all{index->
+                    selected[index].sourceBinding.matches(refreshed[index],true)&&
+                        selected[index].bankFile.readBytes().contentEquals(refreshed[index])
+                }){"A selected Gen 3 Bank original changed during the verified copy."}
+            }else selected.forEachIndexed { index, item ->
                 require(exactBankPathsAbsent(removed.map{it.first}) &&
                     recoverySnapshotsMatch(refreshed)) {
                     "An earlier Gen 3 Bank removal or recovery snapshot changed during cleanup."
@@ -47896,30 +47906,37 @@ class MainActivity : Activity() {
                     "A removed Gen 3 Bank path did not remain absent after cleanup."
                 }
             }
-            require(removed.size == selected.size &&
-                exactBankPathsAbsent(removed.map{it.first}) &&
+            require((copyOnly&&removed.isEmpty()||!copyOnly&&removed.size == selected.size&&
+                exactBankPathsAbsent(removed.map{it.first})) &&
                 destinationBinding.matches(work,destinationBound()) &&
                 openedFile.readBytes().contentEquals(work) &&
                 retainedBinding.matches(fresh,isBackupKept(backup!!)) &&
-                recoverySnapshotsMatch(refreshed)) {
+                recoverySnapshotsMatch(refreshed) &&
+                (!copyOnly||selected.indices.all{index->selected[index].sourceBinding.matches(refreshed[index],true)&&selected[index].bankFile.readBytes().contentEquals(refreshed[index])})) {
                 "The verified Gen 3 destination, removed Bank batch or retained recovery snapshots changed after Bank cleanup."
             }
-            val withdrawalCompletion = finishSelectedGen3BankWithdrawal(
-                bankRecovery,
-                refreshed,
-                selected.size,
-                targetBoxName
-            )
-            requireSelectedNativeBankBatchPostCleanup(
-                3,destinationBinding.matches(work,destinationBound()),!withdrawalCompletion.recoveryClean,bankRecovery,
-                openedFile,work,backup!!,fresh,retainedBinding.matches(fresh,isBackupKept(backup!!)),selected.map{it.bankFile}
-            )
+            val completionMessage=if(copyOnly){
+                val recoveryClean=cleanupExactBankRecoverySnapshots(bankRecovery,refreshed)
+                require(destinationBinding.matches(work,destinationBound())&&openedFile.readBytes().contentEquals(work)&&
+                    retainedBinding.matches(fresh,isBackupKept(backup!!))&&selected.indices.all{index->
+                        selected[index].sourceBinding.matches(refreshed[index],true)&&selected[index].bankFile.readBytes().contentEquals(refreshed[index])
+                    }){"The verified Gen 3 copy, retained backup or Bank originals changed after persistence."}
+                "${selected.size} exact PK3 records copied to $targetBoxName and verified"+
+                    if(recoveryClean) "" else "; exact temporary Bank recovery retained for review"
+            }else{
+                val withdrawalCompletion=finishSelectedGen3BankWithdrawal(bankRecovery,refreshed,selected.size,targetBoxName)
+                requireSelectedNativeBankBatchPostCleanup(
+                    3,destinationBinding.matches(work,destinationBound()),!withdrawalCompletion.recoveryClean,bankRecovery,
+                    openedFile,work,backup!!,fresh,retainedBinding.matches(fresh,isBackupKept(backup!!)),selected.map{it.bankFile}
+                )
+                withdrawalCompletion.message
+            }
 
             selectedBankFiles.clear()
             bankMultiSelectMode = false
             Toast.makeText(
                 this,
-                withdrawalCompletion.message,
+                completionMessage,
                 Toast.LENGTH_LONG
             ).show()
             showGen3PokemonViewer("boxes", targetBox)
@@ -48019,7 +48036,7 @@ class MainActivity : Activity() {
                     "Automatic recovery and all retained recovery snapshots could not be verified. Keep the current destination and Bank files for review."
             }
             showDialog(
-                "Gen 3 Bank multi-withdrawal failed",
+                "Gen 3 Bank batch ${if(copyOnly) "copy" else "withdrawal"} failed",
                 (error.message ?: "Unknown error") + "\n\n" + recovery +
                     (backup?.takeIf { retainedBackup }?.let {
                         "\n\nVerified recovery backup: ${it.name}"
@@ -67808,6 +67825,15 @@ private data class Gen2ToGen5LegalisePlan(
             }
             addButton(root, "👥  Withdraw selected to Gen 3 Party") { reviewBankParty(false) }
             addButton(root, "🛡  Copy selected to Gen 3 Party") { reviewBankParty(true) }
+            addButton(root, "📦  Copy selected to Gen 3 Box") {
+                if(importedFile?.absolutePath!=batchDestination.absolutePath||currentSourceUri!=batchDestinationUri||currentSourceLabel!=batchDestinationLabel){
+                    showDialog("Copy selected to Gen 3 Box","The loaded destination changed. Reopen PSE Bank. Nothing was changed.")
+                }else{
+                    val chosen=selectedBankFiles.map{File(it)}
+                    if(chosen.isEmpty())showDialog("Copy selected to Gen 3 Box","Select one or more Gen 3 Bank Pokémon first.")
+                    else chooseSelectedGen3BankDestination(chosen,batchDestination,batchDestinationUri,batchDestinationLabel,true)
+                }
+            }
         }
         val nav = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL }
         fun bankNavButton(label:String, enabled:Boolean, click:()->Unit): TextView = TextView(this).apply {

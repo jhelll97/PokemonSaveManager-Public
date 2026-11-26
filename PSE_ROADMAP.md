@@ -1870,7 +1870,15 @@ Supported-title Bank review found that same-generation PSE1 multi-withdrawal alr
 
 The native Gen 1 batch route now inserts one final cancellable review after box selection. It lists every selected Bank record in order with its exact `Box N of 12`, `Slot N of 20` destination derived from the unchanged native box count, states that all represented Generation 1 fields remain unchanged, names the limited box, Seen/Caught and checksum scope, and rechecks the same destination identity and bytes, every canonical exact Bank record and the reviewed next-slot sequence before entering the unchanged batch transaction. Existing records remain untouched; retained recovery, persisted reopen verification, cleanup-last Bank removal and independent failure handling remain unchanged.
 
-This change is pending its own automatic Android compile before the native Generation 1 Bank batch exact destination review is called validated.
+Commit `ee07291bb0a6cbcd11af7cbc4d210c8118ff7756` passed automatic Android build run `45912466205`, attempt 1, and was reported by exact Slack event `1795737202.093089`; the native Generation 1 Bank batch exact destination review is validated.
+
+## Native Generation 3 Bank batch copy to PC Box
+
+Supported-title Bank inventory found that Generation 3 multi-selection could withdraw exact PK3 records to a chosen PC Box or copy/withdraw them to the party, but it could not copy a complete selected batch into native PC storage while retaining the Bank originals. The missing PC-copy action forced users to choose destructive withdrawal even when they wanted a verified in-save copy and preserved Bank records.
+
+Generation 3 multi-select now offers `Copy selected to Gen 3 Box`. It reuses the exact ordered structurally empty slot review, byte-for-byte PK3 staging, scoped PC-storage checksum writes, retained destination backup and persisted reopen verification of the withdrawal transaction while skipping every Bank removal. The final cancellable review names each destination Box and Slot and states that all selected PK3 Bank originals remain byte-for-byte unchanged. The transaction rechecks each canonical source before and after persistence, cleans its temporary recovery snapshots only after the destination and originals verify, and restores the destination independently on failure.
+
+This feature is pending its own automatic Android compile before the native Generation 3 Bank batch copy is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
