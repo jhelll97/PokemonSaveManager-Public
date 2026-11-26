@@ -109,6 +109,17 @@ private fun gen7ToGen6CapacityLabel(kind:Int,index:Int):String=when(kind){
     else -> error("Unknown Gen 7 to Gen 6 capacity label")
 }
 
+private fun nativeGen6WithdrawalCapacityLabel(kind:Int,index:Int):String=when(kind){
+    0 -> "First structurally empty • Box ${index/GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_BOX_COUNT • Slot ${index%GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_SLOTS_PER_BOX"
+    1 -> "Box ${index+1} of $GEN6_PC_BOX_COUNT"
+    2 -> "Box ${index+1} of $GEN6_PC_BOX_COUNT • choose slot"
+    3 -> "Slot ${index+1} of $GEN6_PC_SLOTS_PER_BOX"
+    4 -> "Box ${index/GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_BOX_COUNT • Slot ${index%GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_SLOTS_PER_BOX"
+    5 -> "All $GEN6_PC_CAPACITY native Generation 6 PC slots are unavailable. Existing or nonzero slot data was left unchanged."
+    6 -> "Withdrew exact Gen 6 PK6 to Box ${index/GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_BOX_COUNT • Slot ${index%GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_SLOTS_PER_BOX and verified"
+    else -> error("Unknown native Gen 6 withdrawal capacity label")
+}
+
 private fun gen4PcCapacityLabel(kind:Int,index:Int):String=when(kind){
     0 -> "First Empty • Box ${index/GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_BOX_COUNT • Slot ${index%GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_SLOTS_PER_BOX"
     1 -> "Box ${index+1} of $GEN4_PC_BOX_COUNT"
@@ -13365,14 +13376,15 @@ class MainActivity : Activity() {
         if(!gen6BankWithdrawalStillBound(p))
             return showDialog("Gen 6 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
         val info=boxStorageInfo(p.destination)?:return
-        val empty=(0 until info.second).filter{
+        if(info.second!=GEN6_PC_CAPACITY)return showDialog("Gen 6 Bank withdrawal","The native Generation 6 PC capacity could not be verified. Nothing was changed.")
+        val empty=(0 until GEN6_PC_CAPACITY).filter{
             gen6BankDestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,it)
         }
-        if(empty.isEmpty())return showDialog("Gen 6 Bank withdrawal","No structurally empty native Generation 6 PC slot is available. Existing or nonzero slot data was left unchanged.")
+        if(empty.isEmpty())return showDialog("Gen 6 Bank withdrawal",nativeGen6WithdrawalCapacityLabel(5,0))
         val first=empty.first()
         AlertDialog.Builder(this).setTitle("Choose native Gen 6 destination")
             .setMessage("Choose one structurally empty native PK6 slot. PSE will show the exact no-conversion effect and selected Box / Slot before final confirmation; nonzero slot data is preserved.")
-            .setItems(arrayOf("First structurally empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
+            .setItems(arrayOf(nativeGen6WithdrawalCapacityLabel(0,first),"Choose Box / Slot")){_,which->
                 if(!gen6BankWithdrawalStillBound(p))showDialog("Gen 6 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
                 else if(which==0)reviewGen6BankWithdrawal(p,first)else showGen6BankWithdrawalBoxPicker(p)
             }.setNegativeButton("Cancel",null).show()
@@ -13382,19 +13394,20 @@ class MainActivity : Activity() {
         if(!gen6BankWithdrawalStillBound(p))
             return showDialog("Gen 6 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
         val info=boxStorageInfo(p.destination)?:return
-        val boxes=(0 until info.second/30).filter{box->(0 until 30).any{slot->
-            gen6BankDestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*30+slot)
+        if(info.second!=GEN6_PC_CAPACITY)return showDialog("Gen 6 Bank withdrawal","The native Generation 6 PC capacity could not be verified. Nothing was changed.")
+        val boxes=(0 until GEN6_PC_BOX_COUNT).filter{box->(0 until GEN6_PC_SLOTS_PER_BOX).any{slot->
+            gen6BankDestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*GEN6_PC_SLOTS_PER_BOX+slot)
         }}
-        if(boxes.isEmpty())return showDialog("Gen 6 Bank withdrawal","No native Generation 6 PC box contains a structurally empty slot. Existing or nonzero slot data was left unchanged.")
+        if(boxes.isEmpty())return showDialog("Gen 6 Bank withdrawal",nativeGen6WithdrawalCapacityLabel(5,0))
         AlertDialog.Builder(this).setTitle("Choose Gen 6 destination box")
-            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+            .setItems(boxes.map{nativeGen6WithdrawalCapacityLabel(1,it)}.toTypedArray()){_,which->
                 val box=boxes[which]
-                val slots=(0 until 30).filter{slot->
-                    gen6BankDestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*30+slot)
+                val slots=(0 until GEN6_PC_SLOTS_PER_BOX).filter{slot->
+                    gen6BankDestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*GEN6_PC_SLOTS_PER_BOX+slot)
                 }
-                AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
-                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
-                        reviewGen6BankWithdrawal(p,box*30+slots[slotIndex])
+                AlertDialog.Builder(this).setTitle(nativeGen6WithdrawalCapacityLabel(2,box))
+                    .setItems(slots.map{nativeGen6WithdrawalCapacityLabel(3,it)}.toTypedArray()){_,slotIndex->
+                        reviewGen6BankWithdrawal(p,box*GEN6_PC_SLOTS_PER_BOX+slots[slotIndex])
                     }.setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
     }
@@ -13403,10 +13416,10 @@ class MainActivity : Activity() {
         if(!gen6BankWithdrawalStillBound(p))
             return showDialog("Gen 6 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
         val info=boxStorageInfo(p.destination)?:return
-        if(target !in 0 until info.second)return showDialog("Gen 6 Bank withdrawal","The selected destination slot is invalid.")
+        if(info.second!=GEN6_PC_CAPACITY||target !in 0 until GEN6_PC_CAPACITY)return showDialog("Gen 6 Bank withdrawal","The selected destination slot or native PC capacity is invalid.")
         if(!gen6BankDestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,target))
-            return showDialog("Gen 6 Bank withdrawal","Box ${target/30+1} • Slot ${target%30+1} is no longer structurally empty. Existing slot data was left unchanged.")
-        val review="Selected destination: Box ${target/30+1} • Slot ${target%30+1}.\n\n"+
+            return showDialog("Gen 6 Bank withdrawal",nativeGen6WithdrawalCapacityLabel(4,target)+" is no longer structurally empty. Existing slot data was left unchanged.")
+        val review="Selected destination: ${nativeGen6WithdrawalCapacityLabel(4,target)}.\n\n"+
             "This is a PSE Bank withdrawal, not an official trade, Pokémon Bank transaction or provenance claim. No conversion or Legalise change is performed. The exact 232-byte PK6 Bank record is copied byte-for-byte, so species, encryption constant, PID, TID/SID, nickname, OT and handler data, experience, ability, nature, gender/form, shiny state, moves, PP, PP Ups, relearn moves, IVs, EVs, friendship, affection, Pokérus, Ball, origin, locations, dates, ribbons and every stored PK6 byte remain unchanged. The source save is not edited.\n\n"+
             "Only the selected structurally empty PK6 slot and the native PC storage checksum may change. Existing destination Pokémon, nonzero slot data and all other save bytes must remain identical. A verified retained recovery backup is required. The Bank record is removed only after the exact slot and native checksums persist and reopen successfully; any failure restores or preserves both destination and Bank record."
         AlertDialog.Builder(this).setTitle("${p.source.nickname.ifBlank{"Pokémon #${p.source.species}"}} • Gen 6 withdrawal")
@@ -13436,7 +13449,7 @@ class MainActivity : Activity() {
             require(original.contentEquals(p.destination)&&generationForSize(original.size)==6){"The prepared Generation 6 destination changed."}
             require(gen6BoxChecksumValid(original)&&gen6BlockChecksumValid(original,20)){"The destination storage or Pokédex checksum changed."}
             val info=boxStorageInfo(original)?:error("PSE could not resolve native Generation 6 PC storage.")
-            require(target in 0 until info.second){"The selected Generation 6 slot is invalid."}
+            require(info.second==GEN6_PC_CAPACITY&&target in 0 until GEN6_PC_CAPACITY){"The selected Generation 6 slot or native PC capacity is invalid."}
             val offset=info.first+target*PK6_STORED_SIZE
             require(gen6BankDestinationSlotIsStructurallyEmpty(original,info.first,info.second,info.third,target)){"The selected Generation 6 slot is no longer structurally empty. Existing slot data was not overwritten."}
             val bank=p.bankFile.readBytes();require(sourceBinding.matches(p.bankBytes,true)&&bank.contentEquals(p.bankBytes)){"The selected Gen 6 Bank record changed after review."}
@@ -13547,7 +13560,7 @@ class MainActivity : Activity() {
         }
         val recoveryNotice=if(retainedRecovery)
             "; exact temporary Bank recovery retained for review" else ""
-        Toast.makeText(this,"Withdrew exact Gen 6 PK6 to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show()
+        Toast.makeText(this,nativeGen6WithdrawalCapacityLabel(6,target)+recoveryNotice,Toast.LENGTH_LONG).show()
         showBank()
     }
 
