@@ -258,6 +258,16 @@ private fun gen7ToGen3CapacityLabel(kind:Int,index:Int):String=when(kind){
     else -> error("Unknown Gen 7 to Gen 3 capacity label")
 }
 
+private fun gen7ToGen4CapacityLabel(kind:Int,index:Int):String=when(kind){
+    0 -> "First structurally empty • Box ${index/GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_BOX_COUNT • Slot ${index%GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_SLOTS_PER_BOX"
+    1 -> "Box ${index+1} of $GEN4_PC_BOX_COUNT"
+    2 -> "Box ${index+1} of $GEN4_PC_BOX_COUNT • choose structurally empty slot"
+    3 -> "Slot ${index+1} of $GEN4_PC_SLOTS_PER_BOX"
+    4 -> "PSE converted Gen 7 PK7 → Gen 4 PK4 to Box ${index/GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_BOX_COUNT • Slot ${index%GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_SLOTS_PER_BOX and verified"
+    5 -> "All $GEN4_PC_CAPACITY native Generation 4 PC slots are unavailable. Existing or nonzero destination records and the PK7 Bank source were left unchanged."
+    else -> error("Unknown Gen 7 to Gen 4 capacity label")
+}
+
 private fun gen7ToGen5CapacityLabel(kind:Int,index:Int):String=when(kind){
     0 -> "First Structurally Empty • Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX"
     1 -> "Box ${index+1} of $GEN5_PC_BOX_COUNT"
@@ -36455,12 +36465,12 @@ class MainActivity : Activity() {
     private fun chooseGen7ToGen4Destination(p:Gen7Gen4Prepared){
         if(!gen7ToGen4StillBound(p))return showDialog("Gen 7 → Gen 4","The prepared snapshots changed. Reopen PSE Bank.")
         val profile=detectGen4Profile(p.destination)?:return
-        val empty=(0 until 540).filter{gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,it)}
-        if(empty.isEmpty())return showDialog("Gen 7 → Gen 4","No structurally empty native Gen 4 PC slot is available. Existing or nonzero slot data was left unchanged.")
+        val empty=(0 until GEN4_PC_CAPACITY).filter{gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,it)}
+        if(empty.isEmpty())return showDialog("Gen 7 → Gen 4",gen7ToGen4CapacityLabel(5,0))
         val first=empty.first()
         AlertDialog.Builder(this).setTitle("Choose native Gen 4 destination")
             .setMessage("The reviewed PSE conversion will write one native PK4 only into a structurally empty slot and update the Pokédex and active block CRCs. Every nonzero destination record remains unchanged; this does not claim official migration or verified provenance.")
-            .setItems(arrayOf("First structurally empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
+            .setItems(arrayOf(gen7ToGen4CapacityLabel(0,first),"Choose Box / Slot • $GEN4_PC_BOX_COUNT Boxes × $GEN4_PC_SLOTS_PER_BOX slots")){_,which->
                 if(!gen7ToGen4StillBound(p))showDialog("Gen 7 → Gen 4","The prepared snapshots changed. Reopen PSE Bank.")
                 else if(which==0)transferGen7BankToGen4(p,first)else showGen7ToGen4BoxPicker(p)
             }.setNegativeButton("Cancel",null).show()
@@ -36469,12 +36479,12 @@ class MainActivity : Activity() {
     private fun showGen7ToGen4BoxPicker(p:Gen7Gen4Prepared){
         if(!gen7ToGen4StillBound(p))return showDialog("Gen 7 → Gen 4","The prepared snapshots changed. Reopen PSE Bank.")
         val profile=detectGen4Profile(p.destination)?:return
-        val boxes=(0 until 18).filter{b->(0 until 30).any{s->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,b*30+s)}}
+        val boxes=(0 until GEN4_PC_BOX_COUNT).filter{b->(0 until GEN4_PC_SLOTS_PER_BOX).any{s->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,b*GEN4_PC_SLOTS_PER_BOX+s)}}
         AlertDialog.Builder(this).setTitle("Choose Gen 4 destination box")
-            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,w->
-                val b=boxes[w];val slots=(0 until 30).filter{s->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,b*30+s)}
-                AlertDialog.Builder(this).setTitle("Box ${b+1} • choose structurally empty slot")
-                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,sw->transferGen7BankToGen4(p,b*30+slots[sw])}
+            .setItems(boxes.map{gen7ToGen4CapacityLabel(1,it)}.toTypedArray()){_,w->
+                val b=boxes[w];val slots=(0 until GEN4_PC_SLOTS_PER_BOX).filter{s->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,b*GEN4_PC_SLOTS_PER_BOX+s)}
+                AlertDialog.Builder(this).setTitle(gen7ToGen4CapacityLabel(2,b))
+                    .setItems(slots.map{gen7ToGen4CapacityLabel(3,it)}.toTypedArray()){_,sw->transferGen7BankToGen4(p,b*GEN4_PC_SLOTS_PER_BOX+slots[sw])}
                     .setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
     }
@@ -36491,7 +36501,7 @@ class MainActivity : Activity() {
         var stagedDestination:ByteArray?=null
         var retainedRecovery=false
         try{
-            require(destinationBinding.matches(p.destination,bound())&&fresh.contentEquals(p.destination)&&target in 0 until 540){"The destination identity changed or the selected slot is invalid."}
+            require(destinationBinding.matches(p.destination,bound())&&fresh.contentEquals(p.destination)&&target in 0 until GEN4_PC_CAPACITY){"The destination identity changed or the selected slot is invalid."}
             val profile=detectGen4Profile(fresh)?:error("The destination is no longer a valid Gen 4 save.")
             val before=gen4Validation(fresh,profile)
             require(before.generalChecksum&&before.storageChecksum&&before.badPk4==0){"The fresh Gen 4 destination failed validation."}
@@ -36614,7 +36624,7 @@ class MainActivity : Activity() {
         }
         val recoveryNotice=if(retainedRecovery)
             "; exact temporary Bank recovery retained for review" else ""
-        Toast.makeText(this,"PSE converted Gen 7 → Gen 4 to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show()
+        Toast.makeText(this,gen7ToGen4CapacityLabel(4,target)+recoveryNotice,Toast.LENGTH_LONG).show()
         showBank()
     }
 
