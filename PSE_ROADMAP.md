@@ -1670,7 +1670,15 @@ Re-inventory found that the implemented PK6 -> PK3 conversion already binds the 
 
 The Gen 6 route now inserts one final cancellable review after either First Structurally Empty or manual Box / Slot selection. It shows the exact `Box N of 14`, `Slot N of 30` destination within the native 420-slot PC, repeats the unchanged origin or accepted explicit Legalise mapping, exact preserved Ball, reviewed PID decision, verified ability and marking mapping, and rechecks the same bound destination plus structural emptiness before entering the unchanged transaction. Existing and nonzero destination slots remain untouched; exact source and destination identity, retained destination and Bank recovery snapshots, scoped Pokédex and checksum updates, persisted reopen verification, cleanup-last source removal and independent two-sided rollback remain unchanged.
 
-This change is pending its own automatic Android compile before the Generation 6 -> Generation 3 exact destination and origin review is called validated.
+Commit `3c30d971e33e49064e6d6cdfb6e41bf0d9e4fb18` passed automatic Android build run `45866150342`, attempt 1, and was reported by exact Slack event `1795714120.904729`; the Generation 6 -> Generation 3 exact destination and origin review is validated.
+
+## Generation 5 -> Generation 3 exact destination and origin review
+
+Re-inventory found that the implemented PK5 -> PK3 conversion already binds the exact selected Black, White, Black 2 or White 2 Bank record and Ruby, Sapphire, Emerald, FireRed or LeafGreen destination, requires an explicit cancellable origin Legalise selection before conversion when the stored origin has no native PK3 mapping, blocks unsupported Gen 5 data through its reviewed PK4 bridge, and preserves represented fields plus PP Ups. It reviews PID and location effects, verifies historical ability data, enforces the native 14 x 30 PC capacity, writes only a structurally empty PK3 slot, updates scoped Pokédex mirrors and section checksums, and verifies the exact PK3 after persisted reopen. Both automatic and manual slot choices still proceeded directly into that transaction without repeating the exact selected slot and accepted origin decision.
+
+The Gen 5 route now inserts one final cancellable review after either First Structurally Empty or manual Box / Slot selection. It shows the exact `Box N of 14`, `Slot N of 30` destination within the native 420-slot PC, repeats the unchanged origin or accepted explicit Legalise mapping, exact preserved Ball, reviewed PID decision, verified ability and marking mapping, and rechecks the same bound destination plus structural emptiness before entering the unchanged transaction. Existing and nonzero destination slots remain untouched; exact source and destination identity, retained destination and Bank recovery snapshots, scoped Pokédex and checksum updates, persisted reopen verification, cleanup-last source removal and independent two-sided rollback remain unchanged.
+
+This change is pending its own automatic Android compile before the Generation 5 -> Generation 3 exact destination and origin review is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
