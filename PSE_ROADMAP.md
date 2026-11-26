@@ -1556,7 +1556,9 @@ Re-inventory found that the implemented PK3 -> PK4 conversion already binds the 
 
 The route now retains the original reviewed PK3 beside its Legalised conversion source and inserts one final cancellable review after either destination choice. It shows the exact `Box N of 18`, `Slot N of 30` destination within the native 540-slot PC, repeats any ball ID 0 mapping, the reviewed PID decision and canonical ability mapping, and rechecks the bound destination plus structural emptiness before entering the unchanged transaction. Existing and nonzero slots remain untouched; exact Bank and destination identity, represented-field verification, native Pokédex and checksum updates, retained recovery, persisted reopen, cleanup-last source removal and independent two-sided rollback remain unchanged.
 
-This implementation is pending its own automatic Android compile before the feature is called validated.
+Commit `24768cc2b420618ebbb77ce44841d4fad5e3546b` was rejected by automatic Android build run `45829855696`, attempt 1, and exact Slack event `1795700138.789539`: Kotlin code generation reported `MainActivity.class` above the JVM class-size limit. The single correction moves the newly expanded destination chooser, box/slot picker and final review handoff into the route's external review file. Exact native-capacity labels, source and destination binding, structural-empty-slot checks, accepted ball and PID disclosure, transaction entry and all recovery behavior remain unchanged.
+
+This correction is pending its own automatic Android compile before the feature is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

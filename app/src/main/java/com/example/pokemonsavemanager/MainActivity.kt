@@ -10460,7 +10460,7 @@ class MainActivity : Activity() {
         shell.addView(scroll,LinearLayout.LayoutParams(-1,0,1f));shell.addView(buildBottomNav("pokemon"),LinearLayout.LayoutParams(-1,-2));setContentView(shell)
     }
 
-    private data class Gen4Profile(
+    internal data class Gen4Profile(
         val family:String, val generalSize:Int, val storageSize:Int, val storageStart:Int,
         val partyOffset:Int, val hgss:Boolean
     )
@@ -10476,7 +10476,7 @@ class MainActivity : Activity() {
         return false
     }
 
-    private fun detectGen4Profile(data:ByteArray):Gen4Profile? = when {
+    internal fun detectGen4Profile(data:ByteArray):Gen4Profile? = when {
         gen4FooterLooksValid(data,0xC100) -> Gen4Profile("Diamond / Pearl",0xC100,0x121E0,0xC100,0x98,false)
         gen4FooterLooksValid(data,0xCF2C) -> Gen4Profile("Platinum",0xCF2C,0x121E4,0xCF2C,0xA0,false)
         gen4FooterLooksValid(data,0xF628) -> Gen4Profile("HeartGold / SoulSilver",0xF628,0x12310,0xF700,0x98,true)
@@ -10912,7 +10912,7 @@ class MainActivity : Activity() {
         return out
     }
 
-    private fun gen4DestinationSlotIsStructurallyEmpty(data:ByteArray,p:Gen4Profile,global:Int):Boolean{
+    internal fun gen4DestinationSlotIsStructurallyEmpty(data:ByteArray,p:Gen4Profile,global:Int):Boolean{
         if(global !in 0 until 540)return false
         val off=gen4BoxSlotOffset(data,p,global)
         if(off<0||off+136>data.size)return false
@@ -48589,16 +48589,16 @@ class MainActivity : Activity() {
         Toast.makeText(this,"PSE converted Gen 3 → Gen 2 in Box $targetBox and verified$recoveryNotice",Toast.LENGTH_LONG).show();showGen2PokemonViewer("boxes",targetBox)
     }
 
-    private data class Gen3ToGen4Meta(
+    internal data class Gen3ToGen4Meta(
         val speciesName:String,val baseFriendship:Int,val genderRate:Int,val abilityId:Int
     )
 
-    private data class Gen3ToGen4Plan(
+    internal data class Gen3ToGen4Plan(
         val meta:Gen3ToGen4Meta,val level:Int,val gender:Int,val customNickname:Boolean,
         val metYear:Int,val metMonth:Int,val metDay:Int,val pid:Long,val pidLegalised:Boolean
     )
 
-    private data class Gen3Gen4Prepared(
+    internal data class Gen3Gen4Prepared(
         val bankFile:File,val bankBytes:ByteArray,val originalSource:PokemonEntry,val source:PokemonEntry,val sourceBinding:PseBankSourceBinding,val destination:ByteArray,
         val plan:Gen3ToGen4Plan,val pk4:ByteArray,val converted:PokemonEntry,
         val destinationFile:File,val sourceUri:Uri?,val sourceLabel:String?
@@ -49149,56 +49149,13 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun preparedGen3ToGen4StillBound(p:Gen3Gen4Prepared):Boolean=
+    internal fun preparedGen3ToGen4StillBound(p:Gen3Gen4Prepared):Boolean=
         importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&
             currentSourceLabel==p.sourceLabel&&runCatching{
                 p.destinationFile.readBytes().contentEquals(p.destination)&&p.sourceBinding.matches(p.bankBytes,true)
             }.getOrDefault(false)
 
-    private fun chooseGen3ToGen4Destination(p:Gen3Gen4Prepared){
-        if(!preparedGen3ToGen4StillBound(p))return showDialog("Gen 3 → Gen 4","The destination identity or prepared snapshots changed. Reopen PSE Bank.")
-        val profile=detectGen4Profile(p.destination)?:return
-        val empty=(0 until 540).filter{gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,it)}
-        if(empty.isEmpty())return showDialog("Gen 3 → Gen 4","No structurally empty Gen 4 PC slot is available. Nonzero records were left unchanged.")
-        val first=empty.first()
-        AlertDialog.Builder(this).setTitle("Choose native Gen 4 destination")
-            .setMessage("PSE will write only to a completely zero-filled, unparsable PK4 slot. Nonzero destination records remain unchanged.")
-            .setItems(arrayOf("First structurally empty • Box ${first/30+1} • Slot ${first%30+1}","Choose a box / slot")){_,which->
-                if(which==0)showPseGen3ToGen4DestinationReview(
-                    p.originalSource,p.source,p.converted,first,
-                    {
-                        preparedGen3ToGen4StillBound(p)&&runCatching{val current=p.destinationFile.readBytes();val currentProfile=detectGen4Profile(current);currentProfile!=null&&gen4DestinationSlotIsStructurallyEmpty(current,currentProfile,first)}.getOrDefault(false)
-                    },{transferGen3BankToGen4(p,first)}
-                )else showGen3ToGen4BoxPicker(p)
-            }.setNegativeButton("Cancel",null).show()
-    }
-
-    private fun showGen3ToGen4BoxPicker(p:Gen3Gen4Prepared){
-        if(!preparedGen3ToGen4StillBound(p))return showDialog("Gen 3 → Gen 4","The destination identity or prepared snapshots changed. Reopen PSE Bank.")
-        val profile=detectGen4Profile(p.destination)?:return
-        val boxes=(0 until 18).filter{box->(0 until 30).any{slot->
-            gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,box*30+slot)
-        }}
-        AlertDialog.Builder(this).setTitle("Choose Gen 4 box")
-            .setMessage("Only structurally empty slots are listed. Nonzero destination records remain unchanged.")
-            .setItems(boxes.map{box->val count=(0 until 30).count{slot->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,box*30+slot)};"Box ${box+1} • $count structurally empty"}.toTypedArray()){_,which->
-                val box=boxes[which]
-                val slots=(0 until 30).filter{slot->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,box*30+slot)}
-                AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
-                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
-                        val target=box*GEN4_PC_SLOTS_PER_BOX+slots[slotIndex]
-                        showPseGen3ToGen4DestinationReview(
-                            p.originalSource,p.source,p.converted,target,
-                            {
-                                preparedGen3ToGen4StillBound(p)&&runCatching{val current=p.destinationFile.readBytes();val currentProfile=detectGen4Profile(current);currentProfile!=null&&gen4DestinationSlotIsStructurallyEmpty(current,currentProfile,target)}.getOrDefault(false)
-                            },{transferGen3BankToGen4(p,target)}
-                        )
-                    }
-                    .setNegativeButton("Back"){_,_->showGen3ToGen4BoxPicker(p)}.setNeutralButton("Cancel",null).show()
-            }.setNegativeButton("Back"){_,_->chooseGen3ToGen4Destination(p)}.setNeutralButton("Cancel",null).show()
-    }
-
-    private fun transferGen3BankToGen4(p:Gen3Gen4Prepared,target:Int){
+    internal fun transferGen3BankToGen4(p:Gen3Gen4Prepared,target:Int){
         fun bound()=importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel
         if(!preparedGen3ToGen4StillBound(p))return showDialog("Gen 3 → Gen 4","The destination identity or prepared snapshots changed. Reopen PSE Bank.")
         val file=p.destinationFile
