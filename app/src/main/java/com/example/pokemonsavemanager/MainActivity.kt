@@ -48270,6 +48270,12 @@ class MainActivity : Activity() {
         return Triple(mon,ot,nick)
     }
 
+    internal data class Gen3Gen2Prepared(
+        val bankFile:File,val source:PokemonEntry,val bankBytes:ByteArray,val sourceBinding:PseBankSourceBinding,
+        val mon:ByteArray,val ot:ByteArray,val nick:ByteArray,val destinationFile:File,
+        val destination:ByteArray,val sourceUri:Uri?,val sourceLabel:String?,val profileKey:String
+    )
+
     private fun prepareGen3ToGen2Transfer(bankFile:File,shown:PokemonEntry){
         val file=importedFile?:return showDialog("Gen 3 → Gen 2","Load a valid Gold, Silver or Crystal destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
@@ -48300,12 +48306,24 @@ class MainActivity : Activity() {
         val targets=availableGen2BoxTargets(destination)
         if(targets.isEmpty())return showDialog("Gen 3 → Gen 2","All 14 Gen 2 PC boxes are full or unavailable. Nothing was changed.")
         val labels=targets.map{gen2BoxDestinationLabel(it.first,it.second,file,profile,openedUri,destination)}.toTypedArray();var used=false
+        val prepared=Gen3Gen2Prepared(selected,source,bank,sourceBinding,mon,ot,nick,file,destination,openedUri,openedLabel,profile.key)
         AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 3 → Gen 2").setMessage(losses).setNegativeButton("Cancel",null).setPositiveButton("Choose Gen 2 Box"){_,_->
-            AlertDialog.Builder(this).setTitle("Choose Gen 2 PC Box").setItems(labels){_,which->if(used||which !in targets.indices){showDialog("Gen 3 → Gen 2","This destination choice was already handled. Reopen the Bank entry.");return@setItems};used=true;transferGen3BankToGen2(selected,source,bank,sourceBinding,mon,ot,nick,targets[which].first,file,destination,openedUri,openedLabel,profile.key)}.setNegativeButton("Cancel",null).show()
+            AlertDialog.Builder(this).setTitle("Choose Gen 2 PC Box").setItems(labels){_,which->if(used||which !in targets.indices){showDialog("Gen 3 → Gen 2","This destination choice was already handled. Reopen the Bank entry.");return@setItems};used=true;val target=targets[which];reviewGen3ToGen2Destination(prepared,target.first,GEN2_PC_SLOTS_PER_BOX-target.second)}.setNegativeButton("Cancel",null).show()
         }.show()
     }
 
-    private fun transferGen3BankToGen2(bankFile:File,source:PokemonEntry,bankBytes:ByteArray,sourceBinding:PseBankSourceBinding,mon:ByteArray,ot:ByteArray,nick:ByteArray,targetBox:Int,file:File,openedDestination:ByteArray,openedUri:Uri?,openedLabel:String?,profileKey:String){
+    internal fun gen3ToGen2StillBound(p:Gen3Gen2Prepared,targetBox:Int,targetSlot:Int):Boolean{
+        if(importedFile?.absolutePath!=p.destinationFile.absolutePath||currentSourceUri!=p.sourceUri||currentSourceLabel!=p.sourceLabel)return false
+        return runCatching{
+            val fresh=p.destinationFile.readBytes();val profile=detectGen2Profile(fresh);val base=gen2BoxOffset(targetBox)
+            fresh.contentEquals(p.destination)&&p.sourceBinding.matches(p.bankBytes,true)&&
+                verifyGen2SaveIntegrity(fresh).first&&profile?.key==p.profileKey&&
+                targetBox in 1..GEN2_PC_BOX_COUNT&&targetSlot in 0 until GEN2_PC_SLOTS_PER_BOX&&
+                base in fresh.indices&&(fresh[base].toInt()and 0xFF)==targetSlot
+        }.getOrDefault(false)
+    }
+
+    internal fun transferGen3BankToGen2(bankFile:File,source:PokemonEntry,bankBytes:ByteArray,sourceBinding:PseBankSourceBinding,mon:ByteArray,ot:ByteArray,nick:ByteArray,targetBox:Int,file:File,openedDestination:ByteArray,openedUri:Uri?,openedLabel:String?,profileKey:String){
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         if(!sourceBinding.matches(bankBytes,true)){showDialog("Gen 3 → Gen 2","The selected Bank identity changed. Reopen PSE Bank. Nothing was changed.");return}
         val destinationBinding=PseBankDestinationBinding.capture(file)
