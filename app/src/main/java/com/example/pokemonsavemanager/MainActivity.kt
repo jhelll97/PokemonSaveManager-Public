@@ -166,6 +166,14 @@ private fun gen7ToGen1CapacityLabel(kind:Int,box:Int,value:Int):String=when(kind
     else -> error("Unknown Gen 7 to Gen 1 capacity label")
 }
 
+private fun gen4ToGen2CapacityLabel(kind:Int,box:Int,value:Int,base:String=""):String=when(kind){
+    0 -> base.replaceFirst("Box $box","Box $box of $GEN2_PC_BOX_COUNT")+
+        " • writes Slot ${GEN2_PC_SLOTS_PER_BOX+1-value} of $GEN2_PC_SLOTS_PER_BOX"
+    1 -> "All $GEN2_PC_CAPACITY native Generation 2 PC slots are occupied or unavailable. Existing destination records and the PK4 Bank source were left unchanged."
+    2 -> "PSE converted Gen 4 PK4 → Gen 2 PK2 to Box $box of $GEN2_PC_BOX_COUNT • Slot ${value+1} of $GEN2_PC_SLOTS_PER_BOX and verified"
+    else -> error("Unknown Gen 4 to Gen 2 capacity label")
+}
+
 private fun gen7ToGen5CapacityLabel(kind:Int,index:Int):String=when(kind){
     0 -> "First Structurally Empty • Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX"
     1 -> "Box ${index+1} of $GEN5_PC_BOX_COUNT"
@@ -11332,7 +11340,7 @@ class MainActivity : Activity() {
         val statExp=IntArray(5){i->readU16BE(mon,11+i*2)}
         val finalShiny=gen2Shiny(finalDvs)
         val targets=availableGen2BoxTargets(destination)
-        if(targets.isEmpty())return showDialog("Gen 4 → Gen 2","All 14 Generation 2 PC boxes are full or unavailable. Nothing was changed.")
+        if(targets.isEmpty())return showDialog("Gen 4 → Gen 2",gen4ToGen2CapacityLabel(1,0,0))
         val review=buildString{
             append("PSE backward conversion; this is not an in-game trade, official migration or provenance claim. The source save stays unchanged, and the exact PK4 remains in Bank until the native Gen 2 write reopens successfully.\n\n")
             append("Preserved: species, nickname, OT name/TID, EXP, moves, current PP, PP Ups, friendship and Pokérus. Gen 4 IVs ")
@@ -11345,7 +11353,7 @@ class MainActivity : Activity() {
             append("Held items, Eggs, alternate forms, unsupported species/moves/text and invalid values are blocked instead of discarded.\n\n")
             append("Verified retained destination and PK4 Bank recovery snapshots are required. PSE writes one selected native Gen 2 box record, updates Owned/Seen and the primary checksum, reopens the exact record, then removes the Bank entry. Any failure restores or preserves both sides independently.")
         }
-        val labels=targets.map{gen2BoxDestinationLabel(it.first,it.second,file,profile,openedUri,destination)}.toTypedArray()
+        val labels=targets.map{gen4ToGen2CapacityLabel(0,it.first,it.second,gen2BoxDestinationLabel(it.first,it.second,file,profile,openedUri,destination))}.toTypedArray()
         var reviewConsumed=false;var transferConsumed=false
         AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 4 → Gen 2")
             .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("Choose Gen 2 Box"){_,_->
@@ -11375,21 +11383,22 @@ class MainActivity : Activity() {
         var bankRecoveryBinding:PseBankSourceBinding?=null
         var stagedDestination:ByteArray?=null
         var retainedRecovery=false
+        var placedSlot=-1
         try{
             val fresh=file.readBytes()
             require(destinationMatches(openedDestination)&&fresh.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(fresh).first){"The destination save or source identity changed. Reopen PSE Bank."}
             require(sourceBinding.matches(bankBytes,true)){"The selected Gen 4 Bank identity changed after review."}
             val profile=detectGen2Profile(fresh)?:error("The destination is no longer a valid Gen 2 save.")
-            require(profile.key==profileKey&&targetBox in 1..14){"The selected Gen 2 profile or PC Box changed."}
+            require(profile.key==profileKey&&targetBox in 1..GEN2_PC_BOX_COUNT){"The selected Gen 2 profile or PC Box changed."}
             val base=gen2BoxOffset(targetBox);val count=fresh[base].toInt()and 0xFF
-            require(count in 0..19){"The selected Gen 2 Box is full or structurally invalid."}
+            require(count in 0 until GEN2_PC_SLOTS_PER_BOX){"The selected Gen 2 Box is full or structurally invalid."}
             val before=gen2LocationPayloads(fresh,"Box $targetBox",profile)
             val currentBank=bankFile.readBytes();require(currentBank.contentEquals(bankBytes)){"The selected Gen 4 Bank record changed."}
             val current=parsePk4(currentBank,false)?:error("The Gen 4 Bank record is invalid.")
             require(current.checksumValid&&current.pid==source.pid&&current.species==source.species&&current.tid==source.tid&&current.sid==source.sid){"The selected Gen 4 Pokémon changed."}
             val refreshed=buildGen4ToGen2Record(currentBank,current)
             require(refreshed.first.contentEquals(mon)&&refreshed.second.contentEquals(ot)&&refreshed.third.contentEquals(nick)){"The prepared conversion changed."}
-            val work=fresh.copyOf();val slot=appendGen2BoxPokemon(work,targetBox,mon,ot,nick)
+            val work=fresh.copyOf();val slot=appendGen2BoxPokemon(work,targetBox,mon,ot,nick);placedSlot=slot
             markGen2PokedexOwnedSeen(work,profile,source.species);updateGen2PrimaryChecksum(work,profile)
             val stagedProfile=detectGen2Profile(work)?:error("The staged Gen 2 save failed structural validation.")
             require(stagedProfile.key==profile.key&&verifyGen2SaveIntegrity(work).first&&gen2BoxRawCore(work,targetBox,slot).contentEquals(mon)&&gen2PokedexOwnedSeen(work,stagedProfile,source.species)){"The staged Gen 2 record, Pokédex or checksum did not verify."}
@@ -11481,7 +11490,7 @@ class MainActivity : Activity() {
         }
         val recoveryNotice=if(retainedRecovery)
             "; exact temporary Bank recovery retained for review" else ""
-        Toast.makeText(this,"PSE converted Gen 4 → Gen 2 in Box $targetBox and verified$recoveryNotice",Toast.LENGTH_LONG).show()
+        Toast.makeText(this,gen4ToGen2CapacityLabel(2,targetBox,placedSlot)+recoveryNotice,Toast.LENGTH_LONG).show()
         showGen2PokemonViewer("boxes",targetBox)
     }
 
