@@ -8,6 +8,9 @@ data class LegendsArceusPseBankDestination(val pasture: Int, val position: Int)
 
 /** Restores one checksum-valid PA8 Bank record into a reviewed new Legends: Arceus save copy. */
 object LegendsArceusPseBankRestoreEditing {
+    const val PASTURE_COUNT = 32
+    const val SLOTS_PER_PASTURE = 30
+    const val STORAGE_CAPACITY = PASTURE_COUNT * SLOTS_PER_PASTURE
     private const val MAX_FILE_SIZE = 0x13AD06
     private const val FOOTER_SIZE = 32
 
@@ -75,7 +78,7 @@ object LegendsArceusPseBankRestoreEditing {
 
     fun emptyDestinations(source: ByteArray): List<LegendsArceusPseBankDestination> {
         val storage = LegendsArceusStorageReadOnly.read(source.copyOf())
-        return (0 until 32).flatMap { pasture ->
+        return (0 until PASTURE_COUNT).flatMap { pasture ->
             storage.pasture(pasture).filter { it.read is LegendsArceusSlotRead.Empty }
                 .map { LegendsArceusPseBankDestination(pasture + 1, it.position) }
         }
@@ -88,7 +91,9 @@ object LegendsArceusPseBankRestoreEditing {
         registerObtained: Boolean = false
     ): LegendsArceusPseBankRestoreCopyPlan {
         val destination = emptyDestinations(source).firstOrNull()
-            ?: throw IllegalArgumentException("All 960 native Legends: Arceus pasture slots are occupied.")
+            ?: throw IllegalArgumentException(
+                "All $STORAGE_CAPACITY native Legends: Arceus pasture slots are occupied."
+            )
         return stage(
             source, expectedSha256, bankRecord, destination.pasture, destination.position, registerObtained
         )
@@ -105,7 +110,7 @@ object LegendsArceusPseBankRestoreEditing {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
-        require(pasture in 1..32 && position in 1..30) {
+        require(pasture in 1..PASTURE_COUNT && position in 1..SLOTS_PER_PASTURE) {
             "The selected Legends: Arceus pasture destination is outside native storage."
         }
         val before = LegendsArceusStorageReadOnly.read(original)
@@ -171,7 +176,8 @@ object LegendsArceusPseBankRestoreEditing {
 
         val beforeBlocks = LegendsArceusSaveValidation.readPokemonBlocks(original)
         val afterBlocks = LegendsArceusSaveValidation.readPokemonBlocks(edited)
-        val relativeOffset = ((pasture - 1) * 30 + position - 1) * LegendsArceusPokemonReadOnly.STORED_SIZE
+        val relativeOffset = ((pasture - 1) * SLOTS_PER_PASTURE + position - 1) *
+            LegendsArceusPokemonReadOnly.STORED_SIZE
         require(afterBlocks.pastures.copyOfRange(relativeOffset, relativeOffset + storedRecord.size)
             .contentEquals(storedRecord)) { "The native PA8 stored core was not preserved exactly." }
         require(beforeBlocks.party.contentEquals(afterBlocks.party)) {

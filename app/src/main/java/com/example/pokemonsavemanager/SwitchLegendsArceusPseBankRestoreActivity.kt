@@ -112,7 +112,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 val pokemon = LegendsArceusPseBankRestoreEditing.inspectBankRecord(prepared.first)
                 val destinations = LegendsArceusPseBankRestoreEditing.emptyDestinations(source)
                 require(destinations.isNotEmpty()) {
-                    "All 960 native Legends: Arceus pasture slots are occupied."
+                    "All ${LegendsArceusPseBankRestoreEditing.STORAGE_CAPACITY} native Legends: Arceus pasture slots are occupied."
                 }
                 val native = bankEntry.name.startsWith("switch_pla_") &&
                     bankEntry.extension.equals("pa8", true)
@@ -146,13 +146,13 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                     val firstGrid = "row ${firstZeroBased / 6 + 1}, column ${firstZeroBased % 6 + 1}"
                     readyDestinations = prepared.destinations
                     review.text = "Choose destination (${prepared.destinations.size} empty) & review"
-                    firstEmpty.text = "Review first empty: Pasture ${firstDestination.pasture}, slot ${firstDestination.position} • $firstGrid"
+                    firstEmpty.text = "Review first empty: Pasture ${firstDestination.pasture} of ${LegendsArceusPseBankRestoreEditing.PASTURE_COUNT}, slot ${firstDestination.position} of ${LegendsArceusPseBankRestoreEditing.SLOTS_PER_PASTURE} • $firstGrid"
                     conversionEffects = prepared.effects
                     registerConvertedObtained = prepared.registerObtained
                     status.text = "Native source and Bank integrity verified\n" +
                         "${LegendsArceusSpeciesNames.name(prepared.pokemon.species)} (#${prepared.pokemon.species}) • EXP ${prepared.pokemon.experience}\n" +
                         "${prepared.destinations.size} empty native destination slots available\n" +
-                        "First empty shortcut target: Pasture ${firstDestination.pasture}, slot ${firstDestination.position} • $firstGrid\n" +
+                        "First empty shortcut target: Pasture ${firstDestination.pasture} of ${LegendsArceusPseBankRestoreEditing.PASTURE_COUNT}, slot ${firstDestination.position} of ${LegendsArceusPseBankRestoreEditing.SLOTS_PER_PASTURE} • $firstGrid\n" +
                         "Source SHA-256: ${expectedHash}\nBank source SHA-256: ${prepared.sourceBankHash}\n" +
                         "Prepared PA8 SHA-256: ${prepared.nativeRecordHash}" +
                         if (prepared.effects.isEmpty()) "" else "\n\nPSE conversion Legalise effects\n• " +
@@ -174,7 +174,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         if (busy || readyDestinations.isEmpty()) return
         val pastures = readyDestinations.groupBy { it.pasture }.toSortedMap()
         val labels = pastures.map { (pasture, slots) ->
-            "Pasture $pasture • ${slots.size} empty slot${if (slots.size == 1) "" else "s"}"
+            "Pasture $pasture of ${LegendsArceusPseBankRestoreEditing.PASTURE_COUNT} • ${slots.size} empty slot${if (slots.size == 1) "" else "s"}"
         }.toTypedArray()
         AlertDialog.Builder(this).setTitle("Choose Legends: Arceus Pasture")
             .setItems(labels) { _, index ->
@@ -191,9 +191,11 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         if (busy) return
         val labels = destinations.map {
             val zeroBased = it.position - 1
-            "Slot ${it.position} • row ${zeroBased / 6 + 1}, column ${zeroBased % 6 + 1}"
+            "Slot ${it.position} of ${LegendsArceusPseBankRestoreEditing.SLOTS_PER_PASTURE} • row ${zeroBased / 6 + 1}, column ${zeroBased % 6 + 1}"
         }.toTypedArray()
-        AlertDialog.Builder(this).setTitle("Pasture $pasture • choose empty slot")
+        AlertDialog.Builder(this).setTitle(
+            "Pasture $pasture of ${LegendsArceusPseBankRestoreEditing.PASTURE_COUNT} • choose empty slot"
+        )
             .setItems(labels) { _, index -> prepareDestinationReview(destinations[index]) }
             .setNegativeButton("Back") { _, _ -> showDestinationPasturePicker() }
             .show()
@@ -204,7 +206,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
         setBusy(true)
         val destinationZeroBased = destination.position - 1
         val destinationGrid = "row ${destinationZeroBased / 6 + 1}, column ${destinationZeroBased % 6 + 1}"
-        status.text = "Binding Pasture ${destination.pasture}, slot ${destination.position} • $destinationGrid to the restore review…"
+        status.text = "Binding Pasture ${destination.pasture} of ${LegendsArceusPseBankRestoreEditing.PASTURE_COUNT}, slot ${destination.position} of ${LegendsArceusPseBankRestoreEditing.SLOTS_PER_PASTURE} • $destinationGrid to the restore review…"
         worker.execute {
             val result = runCatching {
                 val source = readSource()
@@ -485,7 +487,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 "${LegendsArceusSpeciesNames.name(p.species)} (#${p.species}) • Form ${p.form} • EXP ${p.experience}\n" +
                     "Nickname: ${p.nickname.ifBlank { "None" }} • Shiny: ${if (p.shiny) "Yes" else "No"}\n" +
                     "OT ${p.originalTrainer} • TID ${p.tid} / SID ${p.sid}\nMoves: $moves\n\n" +
-                    "Destination: native Pasture ${plan.pasture}, slot ${plan.position} • $destinationGrid\n" +
+                    "Destination: native Pasture ${plan.pasture} of ${LegendsArceusPseBankRestoreEditing.PASTURE_COUNT}, slot ${plan.position} of ${LegendsArceusPseBankRestoreEditing.SLOTS_PER_PASTURE} • $destinationGrid\n" +
                     "$formatNote\n\n" +
                     "Allowed native byte scope: one previously empty 360-byte PA8 pasture slot at 0x${plan.absoluteOffset.toString(16).uppercase()}, " +
                     "the reviewed native Hisui obtained word when required, and the native SHA-256 footer. Every existing pasture slot, all party data, and all unrelated bytes remain exact." +
@@ -574,7 +576,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                 val destinationGrid = "row ${destinationZeroBased / 6 + 1}, column ${destinationZeroBased % 6 + 1}"
                 verifiedCopy = result.getOrNull()?.let { uri to plan.editedSha256 }
                 inspectCopy.text = if (verifiedCopy != null) {
-                    "Inspect verified copy: Pasture ${plan.pasture}, slot ${plan.position} • $destinationGrid"
+                    "Inspect verified copy: Pasture ${plan.pasture} of ${LegendsArceusPseBankRestoreEditing.PASTURE_COUNT}, slot ${plan.position} of ${LegendsArceusPseBankRestoreEditing.SLOTS_PER_PASTURE} • $destinationGrid"
                 } else {
                     "Inspect verified copy"
                 }
@@ -583,7 +585,7 @@ class SwitchLegendsArceusPseBankRestoreActivity : Activity() {
                     onSuccess = {
                         (if (conversionEffects.isEmpty()) "PSE Bank restore saved and reopened successfully.\n"
                         else "PSE conversion saved and reopened successfully.\n") +
-                            "Pasture ${plan.pasture}, slot ${plan.position} • $destinationGrid • SHA-256: ${plan.editedSha256}\n" +
+                            "Pasture ${plan.pasture} of ${LegendsArceusPseBankRestoreEditing.PASTURE_COUNT}, slot ${plan.position} of ${LegendsArceusPseBankRestoreEditing.SLOTS_PER_PASTURE} • $destinationGrid • SHA-256: ${plan.editedSha256}\n" +
                             "Recovery backup: $backupName\nOriginal source and Bank entry unchanged."
                     },
                     onFailure = {
