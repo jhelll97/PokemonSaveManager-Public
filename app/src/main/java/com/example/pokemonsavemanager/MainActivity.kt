@@ -27,6 +27,19 @@ import java.util.Locale
 import org.json.JSONObject
 import org.json.JSONArray
 
+private const val GEN5_PC_BOX_COUNT = 24
+private const val GEN5_PC_SLOTS_PER_BOX = 30
+private const val GEN5_PC_CAPACITY = GEN5_PC_BOX_COUNT * GEN5_PC_SLOTS_PER_BOX
+
+private fun gen5PcCapacityLabel(kind:Int,index:Int):String=when(kind){
+    0 -> "First Empty • Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX"
+    1 -> "Box ${index+1} of $GEN5_PC_BOX_COUNT"
+    2 -> "Box ${index+1} of $GEN5_PC_BOX_COUNT • choose slot"
+    3 -> "Slot ${index+1} of $GEN5_PC_SLOTS_PER_BOX"
+    4 -> "PSE converted Let's Go PB7 → Gen 5 PK5 to Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX; PB7 preserved"
+    else -> error("Unknown Generation 5 capacity label")
+}
+
 class MainActivity : Activity() {
     private val PICK_SWITCH_SOURCE = 1015
     private val PICK_SWITCH_SOURCE_TREE = 1016
@@ -15326,12 +15339,12 @@ class MainActivity : Activity() {
             parsePk5(p.destination.copyOfRange(offset,offset+136),false)==null
         }
         if(empty.isEmpty())return showDialog(title,
-            "All $GEN5_PC_CAPACITY native Generation 5 PC slots are occupied.")
+            "All 720 native Generation 5 PC slots are occupied.")
         val first=empty.first()
         AlertDialog.Builder(this).setTitle("Choose native Gen 5 destination")
             .setMessage("PSE will write the reviewed PK5 to one empty slot, update only required Pokédex and native integrity data, retain a recovery backup, and keep the PB7 Bank entry.")
             .setItems(arrayOf(
-                "First Empty • Box ${first/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${first%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX",
+                gen5PcCapacityLabel(0,first),
                 "Choose Box / Slot"
             )){_,which->
                 if(!letsGoGen5SnapshotsMatch(p))
@@ -15352,15 +15365,15 @@ class MainActivity : Activity() {
         }}
         if(boxes.isEmpty())return showDialog(title,"All native Generation 5 PC boxes are full.")
         AlertDialog.Builder(this).setTitle("Choose Gen 5 destination box")
-            .setItems(boxes.map{"Box ${it+1} of $GEN5_PC_BOX_COUNT"}.toTypedArray()){_,which->
+            .setItems(boxes.map{gen5PcCapacityLabel(1,it)}.toTypedArray()){_,which->
                 val box=boxes[which]
                 val slots=(0 until GEN5_PC_SLOTS_PER_BOX).filter{slot->
                     val offset=0x00400+box*0x1000+slot*136
                     parsePk5(p.destination.copyOfRange(offset,offset+136),false)==null
                 }
                 AlertDialog.Builder(this)
-                    .setTitle("Box ${box+1} of $GEN5_PC_BOX_COUNT • choose slot")
-                    .setItems(slots.map{"Slot ${it+1} of $GEN5_PC_SLOTS_PER_BOX"}.toTypedArray()){_,slotIndex->
+                    .setTitle(gen5PcCapacityLabel(2,box))
+                    .setItems(slots.map{gen5PcCapacityLabel(3,it)}.toTypedArray()){_,slotIndex->
                         transferLetsGoBankToGen5(
                             p,box*GEN5_PC_SLOTS_PER_BOX+slots[slotIndex]
                         )
@@ -15563,7 +15576,7 @@ class MainActivity : Activity() {
             return
         }
         Toast.makeText(this,
-            "PSE converted Let's Go PB7 → Gen 5 PK5 to Box ${target/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${target%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX; PB7 preserved",
+            gen5PcCapacityLabel(4,target),
             Toast.LENGTH_LONG).show()
         showBank()
     }
@@ -68325,9 +68338,6 @@ private data class Gen2ToGen5LegalisePlan(
         private const val GEN2_BANK_FILE_SIZE = GEN2_BANK_HEADER_SIZE + 32 + 11 + 11
         private const val SIZE_G4 = 0x80000
         private const val SIZE_G5 = 0x80000
-        private const val GEN5_PC_BOX_COUNT = 24
-        private const val GEN5_PC_SLOTS_PER_BOX = 30
-        private const val GEN5_PC_CAPACITY = GEN5_PC_BOX_COUNT * GEN5_PC_SLOTS_PER_BOX
         private const val SIZE_G6_XY = 0x65600
         private const val SIZE_G6_ORAS = 0x76000
         private const val SIZE_G7_SM = 0x6BE00
