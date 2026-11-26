@@ -92,6 +92,17 @@ private fun gen5PcCapacityLabel(kind:Int,index:Int):String=when(kind){
     else -> error("Unknown Generation 5 capacity label")
 }
 
+private fun nativeGen5WithdrawalCapacityLabel(kind:Int,index:Int):String=when(kind){
+    0 -> "First structurally empty • Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX"
+    1 -> "Box ${index+1} of $GEN5_PC_BOX_COUNT"
+    2 -> "Box ${index+1} of $GEN5_PC_BOX_COUNT • choose slot"
+    3 -> "Slot ${index+1} of $GEN5_PC_SLOTS_PER_BOX"
+    4 -> "Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX"
+    5 -> "All $GEN5_PC_CAPACITY native Generation 5 PC slots are unavailable. Existing or nonzero slot data was left unchanged."
+    6 -> "Withdrew exact Gen 5 PK5 to Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX and verified"
+    else -> error("Unknown native Gen 5 withdrawal capacity label")
+}
+
 private fun gen7ToGen5CapacityLabel(kind:Int,index:Int):String=when(kind){
     0 -> "First Structurally Empty • Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX"
     1 -> "Box ${index+1} of $GEN5_PC_BOX_COUNT"
@@ -12118,16 +12129,17 @@ class MainActivity : Activity() {
     private fun chooseGen5BankWithdrawalDestination(p:Gen5BankWithdrawalPrepared){
         if(!gen5BankWithdrawalStillBound(p))
             return showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
-        val empty=(0 until 720).filter{
-            val offset=0x00400+(it/30)*0x1000+(it%30)*136
+        val empty=(0 until GEN5_PC_CAPACITY).filter{
+            val offset=0x00400+(it/GEN5_PC_SLOTS_PER_BOX)*0x1000+
+                (it%GEN5_PC_SLOTS_PER_BOX)*136
             val raw=p.destination.copyOfRange(offset,offset+136)
             parsePk5(raw,false)==null&&raw.all{byte->byte==0.toByte()}
         }
-        if(empty.isEmpty())return showDialog("Gen 5 Bank withdrawal","No structurally empty native Generation 5 PC slot is available. Existing or nonzero slot data was left unchanged.")
+        if(empty.isEmpty())return showDialog("Gen 5 Bank withdrawal",nativeGen5WithdrawalCapacityLabel(5,0))
         val first=empty.first()
         AlertDialog.Builder(this).setTitle("Choose native Gen 5 destination")
             .setMessage("Choose one structurally empty native PK5 slot. PSE will show the exact no-conversion effect and selected Box / Slot before final confirmation.")
-            .setItems(arrayOf("First Empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
+            .setItems(arrayOf(nativeGen5WithdrawalCapacityLabel(0,first),"Choose Box / Slot")){_,which->
                 if(!gen5BankWithdrawalStillBound(p))showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
                 else if(which==0)reviewGen5BankWithdrawal(p,first)else showGen5BankWithdrawalBoxPicker(p)
             }.setNegativeButton("Cancel",null).show()
@@ -12136,23 +12148,23 @@ class MainActivity : Activity() {
     private fun showGen5BankWithdrawalBoxPicker(p:Gen5BankWithdrawalPrepared){
         if(!gen5BankWithdrawalStillBound(p))
             return showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
-        val boxes=(0 until 24).filter{box->(0 until 30).any{slot->
+        val boxes=(0 until GEN5_PC_BOX_COUNT).filter{box->(0 until GEN5_PC_SLOTS_PER_BOX).any{slot->
             val offset=0x00400+box*0x1000+slot*136
             val raw=p.destination.copyOfRange(offset,offset+136)
             parsePk5(raw,false)==null&&raw.all{byte->byte==0.toByte()}
         }}
-        if(boxes.isEmpty())return showDialog("Gen 5 Bank withdrawal","No native Generation 5 PC box contains a structurally empty slot. Existing or nonzero slot data was left unchanged.")
+        if(boxes.isEmpty())return showDialog("Gen 5 Bank withdrawal",nativeGen5WithdrawalCapacityLabel(5,0))
         AlertDialog.Builder(this).setTitle("Choose Gen 5 destination box")
-            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+            .setItems(boxes.map{nativeGen5WithdrawalCapacityLabel(1,it)}.toTypedArray()){_,which->
                 val box=boxes[which]
-                val slots=(0 until 30).filter{slot->
+                val slots=(0 until GEN5_PC_SLOTS_PER_BOX).filter{slot->
                     val offset=0x00400+box*0x1000+slot*136
                     val raw=p.destination.copyOfRange(offset,offset+136)
                     parsePk5(raw,false)==null&&raw.all{byte->byte==0.toByte()}
                 }
-                AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
-                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
-                        reviewGen5BankWithdrawal(p,box*30+slots[slotIndex])
+                AlertDialog.Builder(this).setTitle(nativeGen5WithdrawalCapacityLabel(2,box))
+                    .setItems(slots.map{nativeGen5WithdrawalCapacityLabel(3,it)}.toTypedArray()){_,slotIndex->
+                        reviewGen5BankWithdrawal(p,box*GEN5_PC_SLOTS_PER_BOX+slots[slotIndex])
                     }.setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
     }
@@ -12160,12 +12172,14 @@ class MainActivity : Activity() {
     private fun reviewGen5BankWithdrawal(p:Gen5BankWithdrawalPrepared,target:Int){
         if(!gen5BankWithdrawalStillBound(p))
             return showDialog("Gen 5 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
-        if(target !in 0 until 720)return showDialog("Gen 5 Bank withdrawal","The selected destination slot is invalid.")
-        val offset=0x00400+(target/30)*0x1000+(target%30)*136
+        if(target !in 0 until GEN5_PC_CAPACITY)return showDialog("Gen 5 Bank withdrawal","The selected destination slot is invalid.")
+        val offset=0x00400+(target/GEN5_PC_SLOTS_PER_BOX)*0x1000+
+            (target%GEN5_PC_SLOTS_PER_BOX)*136
         val reviewedSlot=p.destination.copyOfRange(offset,offset+136)
         if(parsePk5(reviewedSlot,false)!=null||reviewedSlot.any{it!=0.toByte()})
-            return showDialog("Gen 5 Bank withdrawal","Box ${target/30+1} • Slot ${target%30+1} is not structurally empty. Existing slot data was left unchanged.")
-        val review="Selected destination: Box ${target/30+1} • Slot ${target%30+1}.\n\n"+
+            return showDialog("Gen 5 Bank withdrawal",nativeGen5WithdrawalCapacityLabel(4,target)+
+                " is not structurally empty. Existing slot data was left unchanged.")
+        val review="Selected destination: ${nativeGen5WithdrawalCapacityLabel(4,target)}.\n\n"+
             "No Pokémon conversion or Legalise change is performed. The exact 136-byte PK5 Bank record is copied byte-for-byte, so species, PID, TID/SID, nickname, OT, experience, ability, nature, gender/form, shiny state, moves, PP, PP Ups, IVs, EVs, friendship, Pokérus, Ball, origin, locations, dates, ribbons and every stored PK5 byte remain unchanged. The source save is not edited.\n\n"+
             "Only the selected structurally empty PK5 slot, that box's native CRC, its checksum-table mirror and the checksum-table block CRC may change. Existing destination Pokémon, nonzero slot data and all other save bytes must remain identical. A verified retained recovery backup is required. The Bank record is removed only after the exact slot and native checksums persist and reopen successfully; any failure restores or preserves both destination and Bank record."
         AlertDialog.Builder(this).setTitle("${p.source.nickname.ifBlank{"Pokémon #${p.source.species}"}} • Gen 5 withdrawal")
@@ -12192,16 +12206,17 @@ class MainActivity : Activity() {
         var stagedDestination:ByteArray?=null
         var retainedRecovery=false
         try{
-            require(original.contentEquals(p.destination)&&target in 0 until 720){"The prepared destination changed or the selected slot is invalid."}
+            require(original.contentEquals(p.destination)&&target in 0 until GEN5_PC_CAPACITY){"The prepared destination changed or the selected slot is invalid."}
             val profile=detectGen5Profile(original)?:error("The destination is no longer a valid native Generation 5 save.")
-            require(gen5ChecksumTableValid(original,profile)&&(0 until 24).all{gen5BoxChecksumValid(original,it,profile)}){
+            require(gen5ChecksumTableValid(original,profile)&&(0 until GEN5_PC_BOX_COUNT).all{gen5BoxChecksumValid(original,it,profile)}){
                 "The destination box checksums or checksum table changed."
             }
             val bank=p.bankFile.readBytes();require(sourceBinding.matches(p.bankBytes,true)&&bank.contentEquals(p.bankBytes)){"The selected Gen 5 Bank record changed after review."}
             val source=parsePk5(bank,false)?:error("The selected Bank record is not a native PK5.")
             require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&
                 source.tid==p.source.tid&&source.sid==p.source.sid){"The selected PK5 no longer matches the reviewed Pokémon."}
-            val box=target/30;val slot=target%30;val offset=0x00400+box*0x1000+slot*136
+            val box=target/GEN5_PC_SLOTS_PER_BOX;val slot=target%GEN5_PC_SLOTS_PER_BOX
+            val offset=0x00400+box*0x1000+slot*136
             val emptySlot=original.copyOfRange(offset,offset+136)
             require(parsePk5(emptySlot,false)==null&&emptySlot.all{it==0.toByte()}){"The selected Generation 5 slot is no longer structurally empty. Existing slot data was not overwritten."}
             val save=original.copyOf();bank.copyInto(save,offset)
@@ -12283,7 +12298,8 @@ class MainActivity : Activity() {
                 }
                 val profile=detectGen5Profile(restored)
                     ?:error("The restored Generation 5 layout is invalid.")
-                restored.contentEquals(original)&&gen5ChecksumTableValid(restored,profile)&&(0 until 24).all{gen5BoxChecksumValid(restored,it,profile)}
+                restored.contentEquals(original)&&gen5ChecksumTableValid(restored,profile)&&
+                    (0 until GEN5_PC_BOX_COUNT).all{gen5BoxChecksumValid(restored,it,profile)}
             }.getOrDefault(false)
             val retainedBackup=backup?.let{saved->runCatching{
                 backupBinding?.matches(original,isBackupKept(saved))==true
@@ -12317,7 +12333,7 @@ class MainActivity : Activity() {
         }
         val recoveryNotice=if(retainedRecovery)
             "; exact temporary Bank recovery retained for review" else ""
-        Toast.makeText(this,"Withdrew exact Gen 5 PK5 to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show()
+        Toast.makeText(this,nativeGen5WithdrawalCapacityLabel(6,target)+recoveryNotice,Toast.LENGTH_LONG).show()
         showBank()
     }
 
