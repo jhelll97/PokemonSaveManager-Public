@@ -30,11 +30,11 @@ internal fun buildPseGen2ToGen3Review(
 }
 
 internal fun buildPseGen2ToGen4Review(
-    legaliseChanges:String,target:Int,source:MainActivity.Gen2Pokemon,converted:MainActivity.PokemonEntry,ppUps:IntArray
+    legaliseChanges:String,destinationLabel:String,source:MainActivity.Gen2Pokemon,converted:MainActivity.PokemonEntry,ppUps:IntArray
 ):String=buildString{
     append("PSE Bank conversion preview\n\n")
     append(legaliseChanges).append("\n\n")
-    append("Chosen destination: Box ${target/30+1}, Slot ${target%30+1}.\n")
+    append(destinationLabel).append("\n")
     append("The chosen slot is structurally empty; nonzero destination records remain unchanged.\n")
     appendPseGen2PreservedReview(this,converted,ppUps)
     appendPseGen2PidReview(this,converted)
