@@ -55221,6 +55221,11 @@ class MainActivity : Activity() {
         return Triple(mon,ot,nick)
     }
 
+    internal data class Gen1Gen2Prepared(
+        val bankFile:File,val source:Gen1Pokemon,val bankBytes:ByteArray,val destinationFile:File,
+        val destination:ByteArray,val catchRateByte:Int,val sourceUri:Uri?,val sourceLabel:String?,val profileKey:String
+    )
+
     private fun chooseGen1BankToGen2Destination(bankFile:File,p:Gen1Pokemon){
         val openedSource=currentSourceUri;val openedLabel=currentSourceLabel
         val file=importedFile?:return
@@ -55233,9 +55238,9 @@ class MainActivity : Activity() {
         if(source==null||!sameGen1TransferRecord(source,p)){
             showDialog("Gen 1 → Gen 2 PSE conversion blocked","The exact selected Gen 1 Bank record changed. Reopen PSE Bank; both sides remain unchanged.");return
         }
-        val prepared=runCatching{buildGen1BankToGen2Record(bankBytes,source)}
-        if(prepared.isFailure){
-            showDialog("Gen 1 → Gen 2 PSE conversion blocked",(prepared.exceptionOrNull()?.message?:"No documented native mapping is available.")+"\n\nThe Gen 1 Bank record and Gen 2 save remain unchanged.");return
+        val conversion=runCatching{buildGen1BankToGen2Record(bankBytes,source)}
+        if(conversion.isFailure){
+            showDialog("Gen 1 → Gen 2 PSE conversion blocked",(conversion.exceptionOrNull()?.message?:"No documented native mapping is available.")+"\n\nThe Gen 1 Bank record and Gen 2 save remain unchanged.");return
         }
         val targets=availableGen2BoxTargets(data)
         if(targets.isEmpty()){showDialog("Gen 1 → Gen 2 PSE conversion","All 14 Gen 2 PC boxes are full or unavailable.");return}
@@ -55260,6 +55265,7 @@ class MainActivity : Activity() {
             append("This is a PSE native-format conversion. It does not claim an official trade, verified Time Capsule history, encounter legality, or provenance.\n\n")
             append("Continue to choose the destination PC Box. Each choice names the exact next empty native slot.")
         }
+        val prepared=Gen1Gen2Prepared(bankFile,source,bankBytes,file,data,heldItem,openedSource,openedLabel,profile.key)
         var consumed=false
         AlertDialog.Builder(this)
             .setTitle("PSE Convert ${source.nickname.ifBlank{gen1SpeciesNameFromInternal(source.species)}} to ${profile.displayName}")
@@ -55270,7 +55276,8 @@ class MainActivity : Activity() {
                     .setItems(labels){_,which->
                         if(consumed||which !in targets.indices){showDialog("Gen 1 → Gen 2 PSE conversion","This destination choice was already handled or is invalid. Reopen the Bank entry. Nothing was changed.");return@setItems}
                         consumed=true
-                        transferGen1BankToGen2(bankFile,source,bankBytes,targets[which].first,file,data,openedSource,openedLabel,profile.key)
+                        val target=targets[which]
+                        reviewGen1ToGen2Destination(prepared,target.first,GEN2_PC_SLOTS_PER_BOX-target.second)
                     }
                     .setNegativeButton("Cancel",null)
                     .show()
@@ -55279,7 +55286,20 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun transferGen1BankToGen2(bankFile:File,p:Gen1Pokemon,openedBank:ByteArray,targetBox:Int,openedFile:File,openedDestination:ByteArray,openedSource:Uri?,openedLabel:String?,profileKey:String){
+    internal fun gen1ToGen2StillBound(p:Gen1Gen2Prepared,targetBox:Int,targetSlot:Int):Boolean{
+        if(targetBox !in 1..GEN2_PC_BOX_COUNT||targetSlot !in 0 until GEN2_PC_SLOTS_PER_BOX)return false
+        if(importedFile?.absolutePath!=p.destinationFile.absolutePath||currentSourceUri!=p.sourceUri||currentSourceLabel!=p.sourceLabel)return false
+        return runCatching{
+            val fresh=p.destinationFile.readBytes();val bank=p.bankFile.readBytes();val profile=detectGen2Profile(fresh);val base=gen2BoxOffset(targetBox)
+            fresh.contentEquals(p.destination)&&bank.contentEquals(p.bankBytes)&&
+                parseGen1BankPayload(bank)?.let{sameGen1TransferRecord(it,p.source)}==true&&
+                verifyGen2SaveIntegrity(fresh).first&&profile?.key==p.profileKey&&
+                base in fresh.indices&&(fresh[base].toInt()and 0xFF)==targetSlot&&
+                runCatching{buildGen1BankToGen2Record(bank,p.source)}.isSuccess
+        }.getOrDefault(false)
+    }
+
+    internal fun transferGen1BankToGen2(bankFile:File,p:Gen1Pokemon,openedBank:ByteArray,targetBox:Int,openedFile:File,openedDestination:ByteArray,openedSource:Uri?,openedLabel:String?,profileKey:String){
         val file=openedFile
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedSource&&currentSourceLabel==openedLabel
         val fresh=runCatching{file.readBytes()}.getOrElse{showDialog("Gen 1 → Gen 2 PSE conversion failed","The fresh destination save could not be read. Nothing was changed.");return}

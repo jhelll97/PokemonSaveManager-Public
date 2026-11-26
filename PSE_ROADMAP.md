@@ -1774,7 +1774,15 @@ Supported-title Bank review found that the implemented PSE2 -> PK1 conversion al
 
 The Gen 2 route now inserts one final cancellable review after Box selection. It shows the exact `Box N of 12`, `Slot N of 20` destination within the native 240-slot PC, repeats the accepted happiness, Pokérus and caught/met omission plan or confirms no omission is required, repeats every represented field and the held-item/catch-rate mapping, confirms unsupported records remain blocked rather than normalized, and rechecks the same destination bytes, exact Bank record, native save integrity, Legalise plan and exact next Box slot before entering the unchanged transaction. Existing destination records remain untouched; retained destination and Bank recovery snapshots, scoped Seen/Caught and checksum updates, persisted reopen verification, cleanup-last source removal and two-sided rollback remain unchanged.
 
-This change is pending its own automatic Android compile before the Generation 2 -> Generation 1 exact destination, Legalise and omission review is called validated.
+Commit `ec347a2a488e68253529e441d74a0d09fbf39cac` passed automatic Android build run `45893573430`, attempt 1, and was reported by exact Slack event `1795726679.994949`; the Generation 2 -> Generation 1 exact destination, Legalise and omission review is validated.
+
+## Generation 1 -> Generation 2 exact destination and mapping review
+
+Supported-title Bank review found that the implemented PSE1 -> PK2 conversion already binds the selected Red, Blue or Yellow Bank bytes and Gold, Silver or Crystal destination, preserves species, nickname, OT/TID, level, experience, Stat Exp, DVs, moves, current PP and PP Ups, carries the Gen 1 catch-rate byte into the native Gen 2 held-item byte through the disclosed Time Capsule-shaped mapping, and explicitly generates the Generation 2 friendship baseline while clearing Pokérus and caught/met fields that Generation 1 does not store. It enforces the native 14 x 20 PC capacity, appends only to a non-full native Box, updates Seen/Owned and the primary checksum, and verifies the exact converted record after persisted reopen. The selected Box still proceeded directly into that transaction without one final review of the exact next slot and accepted mapping disclosure.
+
+The Gen 1 route now inserts one final cancellable review after Box selection. It shows the exact `Box N of 14`, `Slot N of 20` destination within the native 280-slot PC, repeats every preserved field, the catch-rate-to-held-item mapping and generated friendship, Pokérus and caught/met values, confirms no move is removed or replaced, and rechecks the same destination bytes, exact Bank record, save profile and exact next Box slot before entering the unchanged transaction. Existing destination records remain untouched; retained destination and Bank recovery snapshots, scoped Seen/Owned and checksum updates, persisted reopen verification, cleanup-last source removal and two-sided rollback remain unchanged.
+
+This change is pending its own automatic Android compile before the Generation 1 -> Generation 2 exact destination and mapping review is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
