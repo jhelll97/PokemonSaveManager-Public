@@ -14479,6 +14479,12 @@ class MainActivity : Activity() {
         return Triple(mon,ot,nick)
     }
 
+    internal data class Gen6Gen2Prepared(
+        val bankFile:File,val source:PokemonEntry,val bankBytes:ByteArray,val sourceBinding:PseBankSourceBinding,
+        val mon:ByteArray,val ot:ByteArray,val nick:ByteArray,val omittedMetadata:String,
+        val destinationFile:File,val destination:ByteArray,val sourceUri:Uri?,val sourceLabel:String?,val profileKey:String
+    )
+
     private fun prepareGen6ToGen2Transfer(bankFile:File,shown:PokemonEntry){
         val file=importedFile?:return showDialog("Gen 6 → Gen 2","Load a valid Gold, Silver or Crystal destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
@@ -14531,6 +14537,7 @@ class MainActivity : Activity() {
             append("Verified retained destination and PK6 Bank recovery snapshots are required. PSE writes one selected native Gen 2 box record, updates Owned/Seen and the primary checksum, reopens the exact record, then removes the Bank entry. Any failure restores or preserves both sides independently.")
         }
         val labels=targets.map{gen6ToGen2CapacityLabel(0,it.first,it.second,gen2BoxDestinationLabel(it.first,it.second,file,profile,openedUri,destination))}.toTypedArray()
+        val prepared=Gen6Gen2Prepared(selected,source,bank,sourceBinding,mon,ot,nick,omitted,file,destination,openedUri,openedLabel,profile.key)
         var reviewConsumed=false;var transferConsumed=false
         AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 6 → Gen 2")
             .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("Choose Gen 2 Box"){_,_->
@@ -14540,13 +14547,25 @@ class MainActivity : Activity() {
                 }
                 AlertDialog.Builder(this).setTitle("Choose Gen 2 PC Box").setItems(labels){_,which->
                     if(transferConsumed||which !in targets.indices){showDialog("Gen 6 → Gen 2","This destination choice was already handled. Reopen PSE Bank.");return@setItems};transferConsumed=true
-                    transferGen6BankToGen2(selected,source,bank,sourceBinding,mon,ot,nick,targets[which].first,file,destination,openedUri,openedLabel,profile.key)
+                    val target=targets[which]
+                    reviewGen6ToGen2Destination(prepared,target.first,GEN2_PC_SLOTS_PER_BOX-target.second)
                 }.setNegativeButton("Cancel",null).show()
             }.show()
     }
 
+    internal fun gen6ToGen2StillBound(p:Gen6Gen2Prepared,targetBox:Int,targetSlot:Int):Boolean{
+        if(importedFile?.absolutePath!=p.destinationFile.absolutePath||currentSourceUri!=p.sourceUri||currentSourceLabel!=p.sourceLabel)return false
+        return runCatching{
+            val fresh=p.destinationFile.readBytes()
+            val profile=detectGen2Profile(fresh)
+            val base=gen2BoxOffset(targetBox)
+            fresh.contentEquals(p.destination)&&p.sourceBinding.matches(p.bankBytes,true)&&profile?.key==p.profileKey&&
+                targetBox in 1..GEN2_PC_BOX_COUNT&&targetSlot in 0 until GEN2_PC_SLOTS_PER_BOX&&
+                base in fresh.indices&&(fresh[base].toInt()and 0xFF)==targetSlot
+        }.getOrDefault(false)
+    }
 
-    private fun transferGen6BankToGen2(
+    internal fun transferGen6BankToGen2(
         bankFile:File,source:PokemonEntry,bankBytes:ByteArray,sourceBinding:PseBankSourceBinding,mon:ByteArray,ot:ByteArray,nick:ByteArray,
         targetBox:Int,file:File,openedDestination:ByteArray,openedUri:Uri?,openedLabel:String?,profileKey:String
     ){
