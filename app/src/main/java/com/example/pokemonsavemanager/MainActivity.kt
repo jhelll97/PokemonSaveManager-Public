@@ -123,6 +123,14 @@ private fun nativeGen3WithdrawalCapacityLabel(kind:Int,index:Int):String=when(ki
     else -> error("Unknown native Gen 3 withdrawal capacity label")
 }
 
+private fun nativeGen2WithdrawalCapacityLabel(kind:Int,box:Int,value:Int,base:String):String=when(kind){
+    0 -> base.replaceFirst("Box $box","Box $box of $GEN2_PC_BOX_COUNT")+
+        " • writes Slot ${GEN2_PC_SLOTS_PER_BOX+1-value} of $GEN2_PC_SLOTS_PER_BOX"
+    1 -> "All $GEN2_PC_CAPACITY native Generation 2 PC slots are occupied. Existing records were left unchanged."
+    2 -> "Withdrew exact Gen 2 PSE2 to Box $box of $GEN2_PC_BOX_COUNT • Slot ${value+1} of $GEN2_PC_SLOTS_PER_BOX and verified"
+    else -> error("Unknown native Gen 2 withdrawal capacity label")
+}
+
 private fun gen7ToGen5CapacityLabel(kind:Int,index:Int):String=when(kind){
     0 -> "First Structurally Empty • Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX"
     1 -> "Box ${index+1} of $GEN5_PC_BOX_COUNT"
@@ -57601,11 +57609,11 @@ class MainActivity : Activity() {
         Toast.makeText(this,"Gen 2 Pokémon recalculated and verified",Toast.LENGTH_LONG).show();if(onVerified!=null)onVerified(verified)else showGen2Details(verified,location)
     }
 
-    private fun availableGen2BoxTargets(data:ByteArray):List<Pair<Int,Int>> = (1..14).mapNotNull { box ->
+    private fun availableGen2BoxTargets(data:ByteArray):List<Pair<Int,Int>> = (1..GEN2_PC_BOX_COUNT).mapNotNull { box ->
         val base=gen2BoxOffset(box)
         if(base<0 || base>=data.size) null else {
             val count=data[base].toInt() and 0xFF
-            if(count in 0..19) box to (20-count) else null
+            if(count in 0 until GEN2_PC_SLOTS_PER_BOX)box to (GEN2_PC_SLOTS_PER_BOX-count) else null
         }
     }
 
@@ -61734,9 +61742,9 @@ private data class Gen2ToGen5LegalisePlan(
         val openedBank=runCatching{selected.readBytes()}.getOrNull()?:run{showDialog("Withdraw","The selected Gen 2 Bank record could not be read.");return};val opened=parseGen2BankPayload(openedBank)
         if(!sourceBinding.matches(openedBank,true)){showDialog("Withdraw","The reviewed Gen 2 Bank identity changed. Reopen PSE Bank. Nothing was changed.");return}
         if(opened==null||!sameGen2BankRecord(opened,mon)){showDialog("Withdraw","The selected Gen 2 Bank record changed. Reopen PSE Bank and try again.");return}
-        val targets=availableGen2BoxTargets(openedDestination);if(targets.isEmpty()){showDialog("Withdraw","No Gen 2 PC box has room.");return}
+        val targets=availableGen2BoxTargets(openedDestination);if(targets.isEmpty()){showDialog("Withdraw",nativeGen2WithdrawalCapacityLabel(1,0,0,""));return}
         var consumed=false
-        AlertDialog.Builder(this).setTitle("Withdraw to…").setItems(targets.map{(b,e)->gen2BoxDestinationLabel(b,e,file,openedProfile,currentSourceUri,openedDestination)}.toTypedArray()){_,which->
+        AlertDialog.Builder(this).setTitle("Withdraw to…").setItems(targets.map{(b,e)->nativeGen2WithdrawalCapacityLabel(0,b,e,gen2BoxDestinationLabel(b,e,file,openedProfile,currentSourceUri,openedDestination))}.toTypedArray()){_,which->
             if(consumed||which !in targets.indices){consumed=true;showDialog("Withdraw","This destination choice was already handled or is invalid. Reopen PSE Bank. Nothing was changed.");return@setItems}
             consumed=true
             if(!bound()){showDialog("Withdraw","The source identity changed after the box list opened. Reopen PSE Bank. Nothing was changed.");return@setItems}
@@ -61748,11 +61756,12 @@ private data class Gen2ToGen5LegalisePlan(
             var bankRecoveryBinding:PseBankSourceBinding?=null
             var stagedDestination:ByteArray?=null
             var retainedRecovery=false
+            var placedSlot=-1
             try{
                 require(destinationBinding.matches(openedDestination,bound())&&fresh.contentEquals(openedDestination)&&verifyGen2SaveIntegrity(fresh).first&&detectGen2Profile(fresh)?.key==openedProfile.key){"The captured Gen 2 destination identity, integrity or profile changed."}
                 require(fresh.contentEquals(openedDestination)){"The Gen 2 destination changed after the box list opened."};val profile=detectGen2Profile(fresh)?:error("The fresh Gen 2 destination is invalid.");require(gen2ChecksumValid(fresh,profile)){"The fresh Gen 2 checksum is invalid."}
                 val currentBank=selected.readBytes();require(sourceBinding.matches(openedBank,true)&&currentBank.contentEquals(openedBank)){"The selected Gen 2 Bank bytes changed before withdrawal."};val source=parseGen2BankPayload(currentBank)?:error("The selected Gen 2 Bank record is invalid.");require(sameGen2BankRecord(source,opened)){"The selected Gen 2 Pokémon changed before withdrawal."}
-                require(box in 1..14){"The selected Gen 2 destination box is invalid."};val location="Box $box";val before=gen2LocationPayloads(fresh,location,profile);require(before.size<20){"Box $box is now full."};val work=fresh.copyOf();val o=GEN2_BANK_HEADER_SIZE;val monRaw=currentBank.copyOfRange(o,o+32);val otRaw=currentBank.copyOfRange(o+32,o+43);val nickRaw=currentBank.copyOfRange(o+43,o+54);val slot=appendGen2BoxPokemon(work,box,monRaw,otRaw,nickRaw)
+                require(box in 1..GEN2_PC_BOX_COUNT){"The selected Gen 2 destination box is invalid."};val location="Box $box";val before=gen2LocationPayloads(fresh,location,profile);require(before.size<GEN2_PC_SLOTS_PER_BOX){"Box $box is now full."};val work=fresh.copyOf();val o=GEN2_BANK_HEADER_SIZE;val monRaw=currentBank.copyOfRange(o,o+32);val otRaw=currentBank.copyOfRange(o+32,o+43);val nickRaw=currentBank.copyOfRange(o+43,o+54);val slot=appendGen2BoxPokemon(work,box,monRaw,otRaw,nickRaw);placedSlot=slot
                 markGen2PokedexOwnedSeen(work,profile,source.species);updateGen2PrimaryChecksum(work,profile);val stagedProfile=detectGen2Profile(work)?:error("The staged Gen 2 save failed checksum verification.");require(gen2ChecksumValid(work,stagedProfile)){"The staged Gen 2 checksum is invalid."};val stagedPayloads=gen2LocationPayloads(work,location,stagedProfile);require(stagedPayloads.size==before.size+1&&sameGen2PayloadList(stagedPayloads.take(before.size),before)){"Existing Gen 2 box records changed during withdrawal staging."};val staged=parseGen2Box(work,box).firstOrNull{it.slot==slot};require(staged!=null&&sameGen2BankRecord(staged,source)){"The staged Gen 2 Bank record did not preserve every supported field."};require(gen2BoxRawCore(work,box,slot).contentEquals(monRaw)&&gen2PokedexOwnedSeen(work,stagedProfile,source.species)){"The exact record or Gen 2 Pokédex registration did not stage."}
                 require(verifyGen2SaveIntegrity(work).first&&stagedProfile.key==openedProfile.key){"The complete staged Gen 2 withdrawal failed integrity or profile validation."}
                 val backupRoot=backupsDir();require(backupRoot.absoluteFile==backupRoot.canonicalFile&&backupRoot.isDirectory){"The canonical destination backup folder is unavailable."}
@@ -61859,7 +61868,7 @@ private data class Gen2ToGen5LegalisePlan(
             }
             val recoveryNotice=if(retainedRecovery)
                 "; exact temporary Bank recovery retained for review" else ""
-            Toast.makeText(this,"Withdrawn to Box $box and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
+            Toast.makeText(this,nativeGen2WithdrawalCapacityLabel(2,box,placedSlot,"")+recoveryNotice,Toast.LENGTH_LONG).show();showBank()
         }.setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
     }
 
