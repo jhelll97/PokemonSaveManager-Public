@@ -36,6 +36,9 @@ private const val GEN4_PC_CAPACITY = GEN4_PC_BOX_COUNT * GEN4_PC_SLOTS_PER_BOX
 private const val GEN3_PC_BOX_COUNT = 14
 private const val GEN3_PC_SLOTS_PER_BOX = 30
 private const val GEN3_PC_CAPACITY = GEN3_PC_BOX_COUNT * GEN3_PC_SLOTS_PER_BOX
+private const val GEN2_PC_BOX_COUNT = 14
+private const val GEN2_PC_SLOTS_PER_BOX = 20
+private const val GEN2_PC_CAPACITY = GEN2_PC_BOX_COUNT * GEN2_PC_SLOTS_PER_BOX
 private const val SIZE_G1 = 0x8000
 private const val GEN1_MAIN_START = 0x2598
 private const val GEN1_PLAYER_NAME = 0x2598
@@ -98,6 +101,16 @@ private fun gen3PcCapacityLabel(kind:Int,index:Int):String=when(kind){
     4 -> "PSE converted Let's Go PB7 → Gen 3 PK3 to Box ${index/GEN3_PC_SLOTS_PER_BOX+1} of $GEN3_PC_BOX_COUNT • Slot ${index%GEN3_PC_SLOTS_PER_BOX+1} of $GEN3_PC_SLOTS_PER_BOX; PB7 preserved"
     5 -> "All $GEN3_PC_CAPACITY native Generation 3 PC slots are occupied."
     else -> error("Unknown Generation 3 capacity label")
+}
+
+private fun letsGoGen2CapacityLabel(
+    kind:Int,box:Int,value:Int,base:String
+):String=when(kind){
+    0 -> base.replaceFirst("Box $box","Box $box of $GEN2_PC_BOX_COUNT")+
+        " • writes Slot ${GEN2_PC_SLOTS_PER_BOX+1-value} of $GEN2_PC_SLOTS_PER_BOX"
+    1 -> "PSE converted Let's Go PB7 → Gen 2 PK2 to Box $box of $GEN2_PC_BOX_COUNT • Slot ${value+1} of $GEN2_PC_SLOTS_PER_BOX; PB7 preserved"
+    2 -> "All $GEN2_PC_CAPACITY native Generation 2 PC slots are occupied."
+    else -> error("Unknown Let's Go Generation 2 capacity label")
 }
 
 class MainActivity : Activity() {
@@ -16809,11 +16822,13 @@ class MainActivity : Activity() {
             return showDialog(title,"The Generation 2 destination family changed.")
         val targets=availableGen2BoxTargets(p.destination)
         if(targets.isEmpty())
-            return showDialog(title,"All 14 Generation 2 PC Boxes are full.")
+            return showDialog(title,letsGoGen2CapacityLabel(2,0,0,""))
         val labels=targets.map{
-            gen2BoxDestinationLabel(
-                it.first,it.second,p.destinationFile,profile,p.sourceUri,p.destination
-            )+" • writes Slot ${21-it.second}"
+            letsGoGen2CapacityLabel(0,it.first,it.second,
+                gen2BoxDestinationLabel(
+                    it.first,it.second,p.destinationFile,profile,p.sourceUri,p.destination
+                )
+            )
         }.toTypedArray()
         var consumed=false
         AlertDialog.Builder(this).setTitle("Choose exact native PK2 destination")
@@ -16852,12 +16867,12 @@ class MainActivity : Activity() {
             }
             val profile=detectGen2Profile(original)
                 ?:error("The destination is no longer a valid Generation 2 save.")
-            require(profile.key==p.profileKey&&targetBox in 1..14){
+            require(profile.key==p.profileKey&&targetBox in 1..GEN2_PC_BOX_COUNT){
                 "The selected Generation 2 profile or PC Box changed."
             }
             val base=gen2BoxOffset(targetBox)
             val count=original[base].toInt() and 0xFF
-            require(count in 0..19){
+            require(count in 0 until GEN2_PC_SLOTS_PER_BOX){
                 "The selected Generation 2 PC Box is full or structurally invalid."
             }
             val before=gen2LocationPayloads(original,"Box $targetBox",profile)
@@ -16934,7 +16949,9 @@ class MainActivity : Activity() {
             val allowed=HashSet<Int>()
             allowed.add(base)
             allowed.add(base+1+count);allowed.add(base+1+count+1)
-            val mons=base+22;val ots=mons+20*32;val nicks=ots+20*11
+            val mons=base+22
+            val ots=mons+GEN2_PC_SLOTS_PER_BOX*32
+            val nicks=ots+GEN2_PC_SLOTS_PER_BOX*11
             for(i in mons+count*32 until mons+(count+1)*32)allowed.add(i)
             for(i in ots+count*11 until ots+(count+1)*11)allowed.add(i)
             for(i in nicks+count*11 until nicks+(count+1)*11)allowed.add(i)
@@ -17039,7 +17056,7 @@ class MainActivity : Activity() {
             return
         }
         Toast.makeText(this,
-            "PSE converted Let's Go PB7 → Gen 2 PK2 to Box $targetBox • Slot ${destinationSlot+1}; PB7 preserved",
+            letsGoGen2CapacityLabel(1,targetBox,destinationSlot,""),
             Toast.LENGTH_LONG).show()
         showBank()
     }
