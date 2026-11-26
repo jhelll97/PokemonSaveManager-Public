@@ -39,6 +39,9 @@ private const val GEN3_PC_CAPACITY = GEN3_PC_BOX_COUNT * GEN3_PC_SLOTS_PER_BOX
 private const val GEN2_PC_BOX_COUNT = 14
 private const val GEN2_PC_SLOTS_PER_BOX = 20
 private const val GEN2_PC_CAPACITY = GEN2_PC_BOX_COUNT * GEN2_PC_SLOTS_PER_BOX
+private const val GEN1_PC_BOX_COUNT = 12
+private const val GEN1_PC_SLOTS_PER_BOX = 20
+private const val GEN1_PC_CAPACITY = GEN1_PC_BOX_COUNT * GEN1_PC_SLOTS_PER_BOX
 private const val SIZE_G1 = 0x8000
 private const val GEN1_MAIN_START = 0x2598
 private const val GEN1_PLAYER_NAME = 0x2598
@@ -111,6 +114,13 @@ private fun letsGoGen2CapacityLabel(
     1 -> "PSE converted Let's Go PB7 → Gen 2 PK2 to Box $box of $GEN2_PC_BOX_COUNT • Slot ${value+1} of $GEN2_PC_SLOTS_PER_BOX; PB7 preserved"
     2 -> "All $GEN2_PC_CAPACITY native Generation 2 PC slots are occupied."
     else -> error("Unknown Let's Go Generation 2 capacity label")
+}
+
+private fun letsGoGen1CapacityLabel(kind:Int,box:Int,value:Int):String=when(kind){
+    0 -> "Box $box of $GEN1_PC_BOX_COUNT • next empty Slot ${GEN1_PC_SLOTS_PER_BOX-value+1} of $GEN1_PC_SLOTS_PER_BOX • $value empty"
+    1 -> "PSE converted Let's Go PB7 → Gen 1 PK1 to Box $box of $GEN1_PC_BOX_COUNT • Slot ${value+1} of $GEN1_PC_SLOTS_PER_BOX; PB7 preserved"
+    2 -> "No writable native Generation 1 destination is available across $GEN1_PC_BOX_COUNT PC Boxes × $GEN1_PC_SLOTS_PER_BOX slots ($GEN1_PC_CAPACITY total slots). Nothing was changed."
+    else -> error("Unknown Let's Go Generation 1 capacity label")
 }
 
 class MainActivity : Activity() {
@@ -17154,8 +17164,7 @@ class MainActivity : Activity() {
         }
         val targets=availableGen1BoxTargets(destination)
         if(targets.isEmpty())
-            return showDialog(title,
-                "No writable Generation 1 PC Box has an empty native slot. Nothing was changed.")
+            return showDialog(title,letsGoGen1CapacityLabel(2,0,0))
         if(!bound()||!runCatching{
                 file.readBytes().contentEquals(destination)&&
                     selected.readBytes().contentEquals(bank)
@@ -17234,7 +17243,7 @@ class MainActivity : Activity() {
                 append("Choose Legalise only if every disclosed transformation and omission is acceptable. Cancel leaves both sides byte-for-byte unchanged.")
             }
             val labels=targets.map{
-                "Box ${it.first} • next empty Slot ${GEN1_BOX_CAPACITY-it.second+1} • ${it.second} empty"
+                letsGoGen1CapacityLabel(0,it.first,it.second)
             }.toTypedArray()
             AlertDialog.Builder(this)
                 .setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • PB7 → PK1")
@@ -17303,12 +17312,13 @@ class MainActivity : Activity() {
                 verifyGen1SaveIntegrity(original).first){
                 "The prepared Generation 1 destination changed."
             }
-            require(targetBox in 1..12&&gen1BoxIsWritable(original,targetBox)){
+            require(targetBox in 1..GEN1_PC_BOX_COUNT&&
+                gen1BoxIsWritable(original,targetBox)){
                 "The selected Generation 1 PC Box is no longer writable."
             }
             val base=gen1BoxDataOffset(original,targetBox)
             val count=original[base].toInt() and 0xFF
-            require(count in 0 until GEN1_BOX_CAPACITY){
+            require(count in 0 until GEN1_PC_SLOTS_PER_BOX){
                 "The selected Generation 1 PC Box is full or structurally invalid."
             }
             val before=parseGen1Box(original,targetBox).pokemon.sortedBy{it.slot}
@@ -17559,7 +17569,7 @@ class MainActivity : Activity() {
             return
         }
         Toast.makeText(this,
-            "PSE converted Let's Go PB7 → Gen 1 PK1 to Box $targetBox • Slot ${destinationSlot+1}; PB7 preserved",
+            letsGoGen1CapacityLabel(1,targetBox,destinationSlot),
             Toast.LENGTH_LONG).show()
         showBank()
     }
