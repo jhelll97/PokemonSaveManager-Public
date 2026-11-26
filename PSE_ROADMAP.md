@@ -1790,7 +1790,15 @@ Supported-title Bank review found that the implemented PSE1 -> PK3 conversion al
 
 The Gen 1 route now inserts one final cancellable review for both first-empty and manually selected destinations. It shows the exact `Box N of 14`, `Slot N of 30` location within the native 420-slot PC, repeats every preserved and deterministic PK3 field plus the catch-rate and unsupported-field omissions, confirms no move is removed or replaced, and rechecks the same destination bytes and identity, exact Bank record, deterministic PK3 bytes and structurally empty selected slot before entering the unchanged transaction. Existing and nonzero destination records remain untouched; retained destination and Bank recovery snapshots, scoped Pokédex and checksum updates, persisted reopen verification, cleanup-last source removal and two-sided rollback remain unchanged.
 
-This change is pending its own automatic Android compile before the Generation 1 -> Generation 3 exact destination and mapping review is called validated.
+Commit `a70b89a050c06b9d91dfb71afe2ea84197f7a08e` passed automatic Android build run `45897292639`, attempt 1, and was reported by exact Slack event `1795728445.947949`; the Generation 1 -> Generation 3 exact destination and mapping review is validated.
+
+## Generation 2 -> Generation 3 exact destination, Legalise and mapping review
+
+Supported-title Bank review found that the implemented PSE2 -> PK3 conversion already binds the exact selected Gold, Silver or Crystal Bank record and Ruby, Sapphire, Emerald, FireRed or LeafGreen destination, blocks Eggs, Mail and unsupported values, and requires an explicit cancellable Legalise choice for the deterministic PID, nature, gender, shiny, IV, EV, ability, origin, item and caught-data mapping before destination selection. It preserves moves, current PP, PP Ups, happiness and Pokérus, writes only one structurally empty native PK3 slot, protects unrelated PC data, updates every required Pokédex mirror and active-section checksum, retains exact destination and Bank recovery, verifies the persisted PK3 and removes the source last with independent two-sided rollback. Its first-empty and manual Box/Slot choices still entered that transaction immediately without one final accepted Legalise review tied to the exact selected native slot.
+
+The Gen 2 route now inserts one final cancellable review after either destination choice. It shows the exact `Box N of 14`, `Slot N of 30` location within the native 420-slot PC, repeats the accepted Legalise effects and every represented PK3 value, confirms that no move is removed or replaced, and rechecks the same destination bytes and identity, exact Bank record, Legalise plan, PP Ups, deterministic PK3 bytes and structurally empty selected slot before entering the unchanged transaction. Existing and nonzero destination records remain untouched; retained destination and Bank recovery snapshots, scoped PC, Pokédex and checksum updates, persisted reopen verification, cleanup-last source removal and independent two-sided rollback remain unchanged.
+
+This change is pending its own automatic Android compile before the Generation 2 -> Generation 3 exact destination, Legalise and mapping review is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

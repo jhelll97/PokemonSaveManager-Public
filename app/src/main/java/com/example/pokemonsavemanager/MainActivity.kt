@@ -59286,7 +59286,7 @@ class MainActivity : Activity() {
         selectedBankFiles.clear();bankMultiSelectMode=false;Toast.makeText(this,"Transferred ${prepared.size} Gen 2 Pokémon → Gen 1 Box $targetBox and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
     }
 
-    private data class Gen2ToGen3LegalisePlan(
+    internal data class Gen2ToGen3LegalisePlan(
         val species:Int,val heldItem:Int,val caughtData:Int,val nature:Int,val gender:Int,val shiny:Boolean,
         val dvs:List<Int>,val statExp:List<Int>,val happiness:Int,val pokerus:Int
     )
@@ -60075,6 +60075,12 @@ class MainActivity : Activity() {
         }
     }
 
+    internal data class Gen2Gen3Prepared(
+        val bankFile:File,val source:Gen2Pokemon,val bankBytes:ByteArray,val destination:ByteArray,
+        val meta:Gen1ToGen7TransferMeta,val plan:Gen2ToGen3LegalisePlan,val pk3:ByteArray,val converted:PokemonEntry,
+        val openedFile:File,val openedUri:Uri?,val openedLabel:String?,val ppUps:IntArray,val legaliseChanges:String
+    )
+
     private fun chooseGen2ToGen3Destination(bankFile:File,source:Gen2Pokemon,bankBytes:ByteArray,destination:ByteArray,meta:Gen1ToGen7TransferMeta,plan:Gen2ToGen3LegalisePlan,pk3:ByteArray,converted:PokemonEntry,openedFile:File,openedUri:Uri?,openedLabel:String?){
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         fun snapshotsMatch()=bound()&&runCatching{openedFile.readBytes().contentEquals(destination)&&bankFile.readBytes().contentEquals(bankBytes)}.getOrDefault(false)
@@ -60083,31 +60089,44 @@ class MainActivity : Activity() {
         if(importedFile?.absolutePath!=openedFile.absolutePath)return showDialog("Gen 2 → Gen 3","The active save changed before destination selection. Reopen PSE Bank. Nothing was changed.")
         val pc=gen3PcBuffer(destination)?:return showDialog("Gen 2 → Gen 3","PSE could not read Gen 3 PC storage.");val empties=(0 until GEN3_PC_CAPACITY).filter{gen3DestinationSlotIsStructurallyEmpty(pc,it)};if(empties.isEmpty())return showDialog("Gen 2 → Gen 3",gen2ToGen3CapacityLabel(5,0));val first=empties.first()
         val sourcePpUps=gen2BankToGen3PpUps(bankBytes)
+        val prepared=Gen2Gen3Prepared(bankFile,source,bankBytes,destination,meta,plan,pk3,converted,openedFile,openedUri,openedLabel,sourcePpUps,gen2ToGen3LegaliseChanges(plan))
         val preview=buildPseGen2ToGen3Review(gen2ToGen3LegaliseChanges(plan),gen2ToGen3CapacityLabel(0,first),source,converted,sourcePpUps,plan.gender)
-        AlertDialog.Builder(this).setTitle("PSE Convert "+(source.nickname.ifBlank{GEN2_NATIONAL_NAMES.getOrElse(source.species-1){"Pokémon"}})+" to Gen 3").setMessage(preview).setPositiveButton(gen2ToGen3CapacityLabel(0,first)){_,_->if(choiceConsumed){showDialog("Gen 2 → Gen 3","This destination choice was already submitted. Reopen PSE Bank.");return@setPositiveButton};choiceConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton};transferGen2BankToGen3(bankFile,source,bankBytes,destination,meta,plan,pk3,converted,first,openedFile,openedUri,openedLabel)}.setNeutralButton("Choose Box / Slot • $GEN3_PC_BOX_COUNT Boxes × $GEN3_PC_SLOTS_PER_BOX slots"){_,_->if(choiceConsumed){showDialog("Gen 2 → Gen 3","This destination choice was already submitted. Reopen PSE Bank.");return@setNeutralButton};choiceConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return@setNeutralButton};showGen2ToGen3BoxPicker(bankFile,source,bankBytes,destination,meta,plan,pk3,converted,pc,openedFile,openedUri,openedLabel)}.setNegativeButton("Cancel",null).show()
+        AlertDialog.Builder(this).setTitle("PSE Convert "+(source.nickname.ifBlank{GEN2_NATIONAL_NAMES.getOrElse(source.species-1){"Pokémon"}})+" to Gen 3").setMessage(preview).setPositiveButton(gen2ToGen3CapacityLabel(0,first)){_,_->if(choiceConsumed){showDialog("Gen 2 → Gen 3","This destination choice was already submitted. Reopen PSE Bank.");return@setPositiveButton};choiceConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton};reviewGen2ToGen3Destination(prepared,first)}.setNeutralButton("Choose Box / Slot • $GEN3_PC_BOX_COUNT Boxes × $GEN3_PC_SLOTS_PER_BOX slots"){_,_->if(choiceConsumed){showDialog("Gen 2 → Gen 3","This destination choice was already submitted. Reopen PSE Bank.");return@setNeutralButton};choiceConsumed=true;if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return@setNeutralButton};showGen2ToGen3BoxPicker(prepared,pc)}.setNegativeButton("Cancel",null).show()
     }
 
-    private fun showGen2ToGen3BoxPicker(bankFile:File,source:Gen2Pokemon,bankBytes:ByteArray,destination:ByteArray,meta:Gen1ToGen7TransferMeta,plan:Gen2ToGen3LegalisePlan,pk3:ByteArray,converted:PokemonEntry,pc:ByteArray,openedFile:File,openedUri:Uri?,openedLabel:String?){
-        fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
-        fun snapshotsMatch()=bound()&&runCatching{openedFile.readBytes().contentEquals(destination)&&bankFile.readBytes().contentEquals(bankBytes)}.getOrDefault(false)
+    private fun showGen2ToGen3BoxPicker(prepared:Gen2Gen3Prepared,pc:ByteArray){
+        fun bound()=importedFile?.absolutePath==prepared.openedFile.absolutePath&&currentSourceUri==prepared.openedUri&&currentSourceLabel==prepared.openedLabel
+        fun snapshotsMatch()=bound()&&runCatching{prepared.openedFile.readBytes().contentEquals(prepared.destination)&&prepared.bankFile.readBytes().contentEquals(prepared.bankBytes)}.getOrDefault(false)
         if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return}
         var boxConsumed=false;var transferConsumed=false
-        if(importedFile?.absolutePath!=openedFile.absolutePath)return showDialog("Gen 2 → Gen 3","The active save changed before box selection. Reopen PSE Bank. Nothing was changed.")
+        if(importedFile?.absolutePath!=prepared.openedFile.absolutePath)return showDialog("Gen 2 → Gen 3","The active save changed before box selection. Reopen PSE Bank. Nothing was changed.")
         val boxes=(0 until GEN3_PC_BOX_COUNT).filter{box->(0 until GEN3_PC_SLOTS_PER_BOX).any{slot->gen3DestinationSlotIsStructurallyEmpty(pc,box*GEN3_PC_SLOTS_PER_BOX+slot)}}
         if(boxes.isEmpty())return showDialog("Gen 2 → Gen 3",gen2ToGen3CapacityLabel(5,0))
         AlertDialog.Builder(this).setTitle("Choose Gen 3 destination box").setItems(boxes.map{gen2ToGen3CapacityLabel(1,it)}.toTypedArray()){_,which->
-            if(boxConsumed){showDialog("Gen 2 → Gen 3","This box choice was already submitted. Reopen PSE Bank.");return@setItems};boxConsumed=true
+            if(boxConsumed||which !in boxes.indices){showDialog("Gen 2 → Gen 3","This box choice was already submitted or is invalid. Reopen PSE Bank.");return@setItems};boxConsumed=true
             if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return@setItems}
             val box=boxes[which];val empties=(0 until GEN3_PC_SLOTS_PER_BOX).filter{slot->gen3DestinationSlotIsStructurallyEmpty(pc,box*GEN3_PC_SLOTS_PER_BOX+slot)}
             AlertDialog.Builder(this).setTitle(gen2ToGen3CapacityLabel(2,box)).setItems(empties.map{gen2ToGen3CapacityLabel(3,it)}.toTypedArray()){_,slotIndex->
-                if(transferConsumed){showDialog("Gen 2 → Gen 3","This transfer was already submitted. Reopen PSE Bank.");return@setItems};transferConsumed=true
+                if(transferConsumed||slotIndex !in empties.indices){showDialog("Gen 2 → Gen 3","This transfer was already submitted or the slot is invalid. Reopen PSE Bank.");return@setItems};transferConsumed=true
                 if(!snapshotsMatch()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return@setItems}
-                transferGen2BankToGen3(bankFile,source,bankBytes,destination,meta,plan,pk3,converted,box*GEN3_PC_SLOTS_PER_BOX+empties[slotIndex],openedFile,openedUri,openedLabel)
+                reviewGen2ToGen3Destination(prepared,box*GEN3_PC_SLOTS_PER_BOX+empties[slotIndex])
             }.setNegativeButton("Cancel",null).show()
         }.setNegativeButton("Cancel",null).show()
     }
 
-    private fun transferGen2BankToGen3(bankFile:File,expected:Gen2Pokemon,expectedBank:ByteArray,preparedDestination:ByteArray,meta:Gen1ToGen7TransferMeta,plan:Gen2ToGen3LegalisePlan,preparedPk3:ByteArray,prepared:PokemonEntry,target:Int,openedFile:File,openedUri:Uri?,openedLabel:String?){
+    internal fun gen2ToGen3StillBound(p:Gen2Gen3Prepared,target:Int):Boolean{
+        if(target !in 0 until GEN3_PC_CAPACITY)return false
+        if(importedFile?.absolutePath!=p.openedFile.absolutePath||currentSourceUri!=p.openedUri||currentSourceLabel!=p.openedLabel)return false
+        return runCatching{
+            val fresh=p.openedFile.readBytes();val bank=p.bankFile.readBytes();val source=parseGen2BankPayload(bank)?:error("The selected Gen 2 Bank record is invalid.");val pc=gen3PcBuffer(fresh)
+            fresh.contentEquals(p.destination)&&bank.contentEquals(p.bankBytes)&&generationForSize(fresh.size)==3&&gen3SaveValid(fresh)&&
+                sameGen2BankRecord(source,p.source)&&p.plan==gen2ToGen3LegalisePlan(source,p.meta)&&gen2ToGen3Rejection(source,p.plan,p.meta)==null&&
+                gen2BankToGen3PpUps(bank).contentEquals(p.ppUps)&&pc!=null&&gen3DestinationSlotIsStructurallyEmpty(pc,target)&&
+                buildGen2ToGen3Pk3(bank,source,fresh,p.meta,p.plan).contentEquals(p.pk3)
+        }.getOrDefault(false)
+    }
+
+    internal fun transferGen2BankToGen3(bankFile:File,expected:Gen2Pokemon,expectedBank:ByteArray,preparedDestination:ByteArray,meta:Gen1ToGen7TransferMeta,plan:Gen2ToGen3LegalisePlan,preparedPk3:ByteArray,prepared:PokemonEntry,target:Int,openedFile:File,openedUri:Uri?,openedLabel:String?){
         fun bound()=importedFile?.absolutePath==openedFile.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         if(!bound()){showDialog("Gen 2 → Gen 3","The destination identity or original snapshots changed. Reopen PSE Bank. Nothing was changed.");return}
         if(importedFile?.absolutePath!=openedFile.absolutePath){showDialog("Gen 2 → Gen 3","The active save changed after destination selection. Reopen PSE Bank. Nothing was changed.");return}
