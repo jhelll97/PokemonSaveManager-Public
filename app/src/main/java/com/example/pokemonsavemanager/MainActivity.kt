@@ -62060,7 +62060,24 @@ private data class Gen2ToGen5LegalisePlan(
             consumed=true
             if(!bound()){showDialog("Withdraw","The source identity changed after the box list opened. Reopen PSE Bank. Nothing was changed.");return@setItems}
             if(importedFile?.absolutePath!=file.absolutePath){showDialog("Withdraw","The active save changed after the box list opened. Reopen PSE Bank. Nothing was changed.");return@setItems}
-            val box=targets[which].first;var writeStarted=false;var bankDeleteAttempted=false;val fresh=runCatching{file.readBytes()}.getOrNull()?:return@setItems
+            val box=targets[which].first;val emptyCount=targets[which].second;val reviewedSlot=GEN2_PC_SLOTS_PER_BOX-emptyCount
+            val review="Final native Gen 2 Bank withdrawal review\n\n"+
+                "Chosen destination: Box $box of $GEN2_PC_BOX_COUNT, Slot ${reviewedSlot+1} of $GEN2_PC_SLOTS_PER_BOX, within the native $GEN2_PC_CAPACITY-slot PC. The record is appended only to this box's next structurally available slot; existing records remain unchanged.\n\n"+
+                "No Pokemon conversion or Legalise change is performed. The exact preserved PSE2 boxed record is restored with species #${opened.species}, TID ${opened.tid}, nickname, OT, experience, level, held item, moves, current PP, PP Ups, happiness, Pokerus, caught data, Stat Exp, DVs, shiny state and every represented native Generation 2 field unchanged. The original source save is not edited.\n\n"+
+                "Only the selected native box record, required Seen/Owned registration and primary checksum may change. PSE retains and verifies exact destination and Bank recovery data, reopens the destination and exact record, then removes the Bank record last. Cancel leaves the Bank record and destination byte-for-byte unchanged.\n\n"+
+                "This is a PSE Bank withdrawal, not an official trade, Time Capsule or Pokemon Bank transaction, legality certification or verified provenance."
+            var confirmationConsumed=false
+            AlertDialog.Builder(this).setTitle("${opened.nickname.ifBlank{"Pokemon #${opened.species}"}} • Gen 2 withdrawal")
+                .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("Withdraw • Box $box / Slot ${reviewedSlot+1}"){_,_->
+            if(confirmationConsumed){showDialog("Gen 2 Bank withdrawal","This exact destination confirmation was already submitted. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton};confirmationConsumed=true
+            val fresh=runCatching{file.readBytes()}.getOrNull()?:return@setPositiveButton
+            val refreshedTarget=availableGen2BoxTargets(fresh).firstOrNull{it.first==box}
+            val currentBank=runCatching{selected.readBytes()}.getOrNull()
+            if(!destinationBinding.matches(openedDestination,bound())||!fresh.contentEquals(openedDestination)||refreshedTarget!=(box to emptyCount)||
+                currentBank==null||!sourceBinding.matches(openedBank,true)||!currentBank.contentEquals(openedBank)||parseGen2BankPayload(currentBank)?.let{sameGen2BankRecord(it,opened)}!=true){
+                showDialog("Gen 2 Bank withdrawal","The destination identity, exact Bank record or selected native slot changed after review. Nothing was changed.");return@setPositiveButton
+            }
+            var writeStarted=false;var bankDeleteAttempted=false
             var safetyBackup:File?=null
             var bankRecovery:File?=null
             var backupBinding:PseBankDestinationBinding?=null
@@ -62175,11 +62192,12 @@ private data class Gen2ToGen5LegalisePlan(
                     (e.message?:"Unknown error")+"\n\n$recovery"+
                         (safetyBackup?.takeIf{retainedBackup}?.let{"\n\nVerified recovery backup: "+it.name}?:"")+
                         (bankRecovery?.takeIf{verifiedBankRecovery&&it.exists()}?.let{"\nVerified Bank recovery snapshot: "+it.name}?:"")
-                );return@setItems
+                );return@setPositiveButton
             }
             val recoveryNotice=if(retainedRecovery)
                 "; exact temporary Bank recovery retained for review" else ""
             Toast.makeText(this,nativeGen2WithdrawalCapacityLabel(2,box,placedSlot,"")+recoveryNotice,Toast.LENGTH_LONG).show();showBank()
+            }.show()
         }.setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
     }
 
