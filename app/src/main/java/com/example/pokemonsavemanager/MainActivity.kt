@@ -103,6 +103,16 @@ private fun nativeGen5WithdrawalCapacityLabel(kind:Int,index:Int):String=when(ki
     else -> error("Unknown native Gen 5 withdrawal capacity label")
 }
 
+private fun nativeGen4WithdrawalCapacityLabel(kind:Int,index:Int):String=when(kind){
+    0 -> "First structurally empty • Box ${index/GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_BOX_COUNT • Slot ${index%GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_SLOTS_PER_BOX"
+    1 -> "Box ${index+1} of $GEN4_PC_BOX_COUNT"
+    2 -> "Box ${index+1} of $GEN4_PC_BOX_COUNT • choose slot"
+    3 -> "Slot ${index+1} of $GEN4_PC_SLOTS_PER_BOX"
+    4 -> "All $GEN4_PC_CAPACITY native Generation 4 PC slots are unavailable. Existing or nonzero slot data was left unchanged."
+    5 -> "Withdrew exact Gen 4 PK4 to Box ${index/GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_BOX_COUNT • Slot ${index%GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_SLOTS_PER_BOX and verified"
+    else -> error("Unknown native Gen 4 withdrawal capacity label")
+}
+
 private fun gen7ToGen5CapacityLabel(kind:Int,index:Int):String=when(kind){
     0 -> "First Structurally Empty • Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX"
     1 -> "Box ${index+1} of $GEN5_PC_BOX_COUNT"
@@ -38359,13 +38369,13 @@ class MainActivity : Activity() {
         if(selected.parentFile!=root||!selected.isFile||!selected.extension.equals("pk4",true))return showDialog("Withdraw","The selected record is outside the Generation 4 PSE Bank.")
         val raw=runCatching{selected.readBytes()}.getOrDefault(ByteArray(0)); val source=if(raw.size==136)parsePk4(raw,false)else null
         if(!raw.contentEquals(openedBank)||source==null||!source.checksumValid||source.pid!=p.pid||source.species!=p.species||source.tid!=p.tid||source.sid!=p.sid)return showDialog("Withdraw","The selected Gen 4 Bank record changed. Reopen PSE Bank. Nothing was changed.")
-        val empties=(0 until 540).filter{global->val off=gen4BoxSlotOffset(data,profile,global);val slot=data.copyOfRange(off,off+136);parsePk4(slot,false)==null&&slot.all{it==0.toByte()}}
-        if(empties.isEmpty())return showDialog("Withdraw","No structurally empty Gen 4 PC slot is available. Existing or nonzero slot data was left unchanged.")
+        val empties=(0 until GEN4_PC_CAPACITY).filter{global->val off=gen4BoxSlotOffset(data,profile,global);val slot=data.copyOfRange(off,off+136);parsePk4(slot,false)==null&&slot.all{it==0.toByte()}}
+        if(empties.isEmpty())return showDialog("Withdraw",nativeGen4WithdrawalCapacityLabel(4,0))
         val first=empties.first()
         var consumed=false
         AlertDialog.Builder(this).setTitle("Withdraw ${p.nickname.ifBlank{"Pokémon"}} to…")
             .setMessage("This is a PSE Bank withdrawal, not an official trade, Pokémon Bank transaction or provenance claim. No conversion or Legalise change is performed. Choose one structurally empty native PK4 slot; the exact Bank record remains until the destination and retained recovery data verify.")
-            .setItems(arrayOf("First structurally empty slot • Box ${first/30+1} • Slot ${first%30+1}","Choose a box / slot")){_,which->
+            .setItems(arrayOf(nativeGen4WithdrawalCapacityLabel(0,first),"Choose a box / slot")){_,which->
             if(consumed){return@setItems};consumed=true
             if(which==0)withdrawGen4BankToSlot(selected,p,first,file,data,openedUri,openedLabel,openedBank)
             else showGen4BankBoxPicker(selected,p,file,data,profile,openedUri,openedLabel,openedBank)
@@ -38573,15 +38583,16 @@ class MainActivity : Activity() {
     }
 
     private fun showGen4BankBoxPicker(bankFile:File,p:PokemonEntry,file:File,data:ByteArray,profile:Gen4Profile,openedUri:Uri?,openedLabel:String?,openedBank:ByteArray){
-        val boxes=(0 until 18).filter{b->(0 until 30).any{s->val g=b*30+s;val o=gen4BoxSlotOffset(data,profile,g);val r=data.copyOfRange(o,o+136);parsePk4(r,false)==null&&r.all{it==0.toByte()}}}
+        val boxes=(0 until GEN4_PC_BOX_COUNT).filter{b->(0 until GEN4_PC_SLOTS_PER_BOX).any{s->val g=b*GEN4_PC_SLOTS_PER_BOX+s;val o=gen4BoxSlotOffset(data,profile,g);val r=data.copyOfRange(o,o+136);parsePk4(r,false)==null&&r.all{it==0.toByte()}}}
+        if(boxes.isEmpty())return showDialog("Withdraw",nativeGen4WithdrawalCapacityLabel(4,0))
         var boxConsumed=false
-        AlertDialog.Builder(this).setTitle("Choose Gen 4 destination box").setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,w->
+        AlertDialog.Builder(this).setTitle("Choose Gen 4 destination box").setItems(boxes.map{nativeGen4WithdrawalCapacityLabel(1,it)}.toTypedArray()){_,w->
             if(boxConsumed||w !in boxes.indices){boxConsumed=true;return@setItems};boxConsumed=true
-            val b=boxes[w];val empties=(0 until 30).filter{s->val g=b*30+s;val o=gen4BoxSlotOffset(data,profile,g);val r=data.copyOfRange(o,o+136);parsePk4(r,false)==null&&r.all{it==0.toByte()}}
+            val b=boxes[w];val empties=(0 until GEN4_PC_SLOTS_PER_BOX).filter{s->val g=b*GEN4_PC_SLOTS_PER_BOX+s;val o=gen4BoxSlotOffset(data,profile,g);val r=data.copyOfRange(o,o+136);parsePk4(r,false)==null&&r.all{it==0.toByte()}}
             var slotConsumed=false
-            AlertDialog.Builder(this).setTitle("Box ${b+1} • choose slot").setItems(empties.map{"Slot ${it+1}"}.toTypedArray()){_,sw->
+            AlertDialog.Builder(this).setTitle(nativeGen4WithdrawalCapacityLabel(2,b)).setItems(empties.map{nativeGen4WithdrawalCapacityLabel(3,it)}.toTypedArray()){_,sw->
                 if(slotConsumed||sw !in empties.indices){slotConsumed=true;return@setItems};slotConsumed=true
-                withdrawGen4BankToSlot(bankFile,p,b*30+empties[sw],file,data,openedUri,openedLabel,openedBank)
+                withdrawGen4BankToSlot(bankFile,p,b*GEN4_PC_SLOTS_PER_BOX+empties[sw],file,data,openedUri,openedLabel,openedBank)
             }.setNegativeButton("Cancel"){_,_->slotConsumed=true}.setOnCancelListener{slotConsumed=true}.show()
         }.setNegativeButton("Cancel"){_,_->boxConsumed=true}.setOnCancelListener{boxConsumed=true}.show()
     }
@@ -38599,7 +38610,7 @@ class MainActivity : Activity() {
         var retainedRecovery=false
         try{
             require(destinationBinding.matches(openedDestination,bound())&&original.contentEquals(openedDestination)){"The Gen 4 destination or source identity changed after slot selection."}
-            require(target in 0 until 540){"Invalid Gen 4 PC slot"}; val profile=detectGen4Profile(original) ?: throw IllegalStateException("A valid Gen 4 destination save is required")
+            require(target in 0 until GEN4_PC_CAPACITY){"Invalid Gen 4 PC slot"}; val profile=detectGen4Profile(original) ?: throw IllegalStateException("A valid Gen 4 destination save is required")
             val before=gen4Validation(original,profile); if(!before.generalChecksum || !before.storageChecksum || before.badPk4!=0)throw IllegalStateException("Gen 4 destination did not pass validation")
             val raw=bankFile.readBytes(); val source=if(raw.size==136)parsePk4(raw,false)else null; require(sourceBinding.matches(openedBank,true)&&raw.contentEquals(openedBank)&&source!=null&&source.checksumValid&&source.pid==p.pid&&source.species==p.species&&source.tid==p.tid&&source.sid==p.sid){"The Bank PK4 record changed or is invalid"}
             val save=original.copyOf(); val off=gen4BoxSlotOffset(save,profile,target); val old=save.copyOfRange(off,off+136)
@@ -38641,7 +38652,7 @@ class MainActivity : Activity() {
             )
             val recoveryNotice=if(retainedRecovery)
                 "; exact temporary Bank recovery retained for review" else ""
-            Toast.makeText(this,"Withdrawn to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
+            Toast.makeText(this,nativeGen4WithdrawalCapacityLabel(5,target)+recoveryNotice,Toast.LENGTH_LONG).show();showBank()
         }catch(e:Exception){
             val bankRestored=runCatching{
                 if(bankDeleteAttempted&&!bankFile.exists()){require(bankFile.createNewFile()){ "The Bank recovery path could not be reserved." };bankFile.writeBytes(openedBank)}
