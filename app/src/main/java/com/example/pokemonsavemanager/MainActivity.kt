@@ -36718,14 +36718,14 @@ class MainActivity : Activity() {
     }
 
 
-    private data class Gen6Gen4Prepared(
+    internal data class Gen6Gen4Prepared(
         val bankFile:File,val bankBytes:ByteArray,val sourceBinding:PseBankSourceBinding,val source:PokemonEntry,val destination:ByteArray,
         val plan5:Gen6Gen5Plan,val pk5:ByteArray,val converted5:PokemonEntry,val meta4:Gen3ToGen4Meta,
         val pk4:ByteArray,val converted4:PokemonEntry,val destinationFile:File,
         val sourceUri:Uri?,val sourceLabel:String?,val omitted:String
     )
 
-    private fun gen6ToGen4StillBound(p:Gen6Gen4Prepared):Boolean=
+    internal fun gen6ToGen4StillBound(p:Gen6Gen4Prepared):Boolean=
         importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
             runCatching{p.destinationFile.readBytes().contentEquals(p.destination)&&p.sourceBinding.matches(p.bankBytes,true)}.getOrDefault(false)
 
@@ -36816,34 +36816,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun chooseGen6ToGen4Destination(p:Gen6Gen4Prepared){
-        if(!gen6ToGen4StillBound(p))return showDialog("Gen 6 → Gen 4","The prepared snapshots changed. Reopen PSE Bank.")
-        val profile=detectGen4Profile(p.destination)?:return
-        val empty=(0 until GEN4_PC_CAPACITY).filter{gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,it)}
-        if(empty.isEmpty())return showDialog("Gen 6 → Gen 4",gen6ToGen4CapacityLabel(5,0))
-        val first=empty.first()
-        AlertDialog.Builder(this).setTitle("Choose native Gen 4 destination")
-            .setMessage("The reviewed PSE conversion will write one native PK4 only into a structurally empty slot and update the Pokédex and active block CRCs. Every nonzero destination record remains unchanged; this does not claim official migration or verified provenance.")
-            .setItems(arrayOf(gen6ToGen4CapacityLabel(0,first),"Choose Box / Slot • $GEN4_PC_BOX_COUNT Boxes × $GEN4_PC_SLOTS_PER_BOX slots")){_,which->
-                if(!gen6ToGen4StillBound(p))showDialog("Gen 6 → Gen 4","The prepared snapshots changed. Reopen PSE Bank.")
-                else if(which==0)transferGen6BankToGen4(p,first)else showGen6ToGen4BoxPicker(p)
-            }.setNegativeButton("Cancel",null).show()
-    }
-
-    private fun showGen6ToGen4BoxPicker(p:Gen6Gen4Prepared){
-        if(!gen6ToGen4StillBound(p))return showDialog("Gen 6 → Gen 4","The prepared snapshots changed. Reopen PSE Bank.")
-        val profile=detectGen4Profile(p.destination)?:return
-        val boxes=(0 until GEN4_PC_BOX_COUNT).filter{b->(0 until GEN4_PC_SLOTS_PER_BOX).any{s->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,b*GEN4_PC_SLOTS_PER_BOX+s)}}
-        AlertDialog.Builder(this).setTitle("Choose Gen 4 destination box")
-            .setItems(boxes.map{gen6ToGen4CapacityLabel(1,it)}.toTypedArray()){_,w->
-                val b=boxes[w];val slots=(0 until GEN4_PC_SLOTS_PER_BOX).filter{s->gen4DestinationSlotIsStructurallyEmpty(p.destination,profile,b*GEN4_PC_SLOTS_PER_BOX+s)}
-                AlertDialog.Builder(this).setTitle(gen6ToGen4CapacityLabel(2,b))
-                    .setItems(slots.map{gen6ToGen4CapacityLabel(3,it)}.toTypedArray()){_,sw->transferGen6BankToGen4(p,b*GEN4_PC_SLOTS_PER_BOX+slots[sw])}
-                    .setNegativeButton("Cancel",null).show()
-            }.setNegativeButton("Cancel",null).show()
-    }
-
-    private fun transferGen6BankToGen4(p:Gen6Gen4Prepared,target:Int){
+    internal fun transferGen6BankToGen4(p:Gen6Gen4Prepared,target:Int){
         if(!gen6ToGen4StillBound(p))return showDialog("Gen 6 → Gen 4","The prepared snapshots changed. Reopen PSE Bank.")
         val file=p.destinationFile
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel
