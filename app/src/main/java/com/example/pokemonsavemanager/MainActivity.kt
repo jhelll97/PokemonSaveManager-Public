@@ -225,6 +225,7 @@ private fun gen3To5ToGen6CapacityLabel(sourceGeneration:Int,kind:Int,index:Int):
     3 -> "Slot ${index+1} of $GEN6_PC_SLOTS_PER_BOX"
     4 -> "PSE converted Gen $sourceGeneration → Gen 6 to Box ${index/GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_BOX_COUNT • Slot ${index%GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_SLOTS_PER_BOX and verified"
     5 -> "All $GEN6_PC_CAPACITY native Generation 6 PC slots are unavailable. Nonzero destination records and the Gen $sourceGeneration Bank source were left unchanged."
+    6 -> "Chosen destination: Box ${index/GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_BOX_COUNT, Slot ${index%GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_SLOTS_PER_BOX, within the native $GEN6_PC_CAPACITY-slot PC."
     else -> error("Unknown Gen 3, Gen 4 or Gen 5 to Gen 6 capacity label")
 }
 
@@ -13371,7 +13372,7 @@ class MainActivity : Activity() {
         val destination:ByteArray,val trainer:TrainerData,val pk6:ByteArray,
         val converted:PokemonEntry,val destinationFile:File,
         val sourceUri:Uri?,val sourceLabel:String?,val gen4Meta:Gen3ToGen4Meta?=null,
-        val sourceBinding:PseBankSourceBinding?=null
+        val sourceBinding:PseBankSourceBinding?=null,val originalSource:PokemonEntry?=null
     )
 
     private fun genToGen6Title(p:Gen5Gen6Prepared)="Gen ${p.sourceGeneration} → Gen 6"
@@ -13522,7 +13523,17 @@ class MainActivity : Activity() {
             .setMessage("The reviewed PK6 will be written to one structurally empty slot. Nonzero destination records remain unchanged. PSE will update only that slot, the required Pokédex flags, and native block checksums.")
             .setItems(arrayOf(gen3To5ToGen6CapacityLabel(p.sourceGeneration,0,first),"Choose Box / Slot • $GEN6_PC_BOX_COUNT Boxes × $GEN6_PC_SLOTS_PER_BOX slots")){_,which->
                 if(!gen5ToGen6StillBound(p))showDialog(title,"The destination or Bank record changed. Reopen PSE Bank.")
-                else if(which==0)transferGen5BankToGen6(p,first)else showGen5ToGen6BoxPicker(p)
+                else if(which==0){
+                    if(p.sourceGeneration==3&&p.originalSource!=null)showPseGen3ToGen6DestinationReview(
+                        this,p.originalSource,p.source,p.converted,
+                        gen3To5ToGen6CapacityLabel(3,6,first),
+                        "Transfer • Box ${first/GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_BOX_COUNT / Slot ${first%GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_SLOTS_PER_BOX",
+                        {
+                            val current=runCatching{p.destinationFile.readBytes()}.getOrNull();val currentInfo=current?.let{boxStorageInfo(it)}
+                            gen5ToGen6StillBound(p)&&current!=null&&currentInfo!=null&&currentInfo.second==GEN6_PC_CAPACITY&&gen6DestinationSlotIsStructurallyEmpty(current,currentInfo.first,currentInfo.second,currentInfo.third,first)
+                        },{transferGen5BankToGen6(p,first)}
+                    )else transferGen5BankToGen6(p,first)
+                }else showGen5ToGen6BoxPicker(p)
             }.setNegativeButton("Cancel",null).show()
     }
 
@@ -13543,7 +13554,16 @@ class MainActivity : Activity() {
                 }
                 AlertDialog.Builder(this).setTitle(gen3To5ToGen6CapacityLabel(p.sourceGeneration,2,box))
                     .setItems(slots.map{gen3To5ToGen6CapacityLabel(p.sourceGeneration,3,it)}.toTypedArray()){_,slotIndex->
-                        transferGen5BankToGen6(p,box*GEN6_PC_SLOTS_PER_BOX+slots[slotIndex])
+                        val target=box*GEN6_PC_SLOTS_PER_BOX+slots[slotIndex]
+                        if(p.sourceGeneration==3&&p.originalSource!=null)showPseGen3ToGen6DestinationReview(
+                            this,p.originalSource,p.source,p.converted,
+                            gen3To5ToGen6CapacityLabel(3,6,target),
+                            "Transfer • Box ${target/GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_BOX_COUNT / Slot ${target%GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_SLOTS_PER_BOX",
+                            {
+                                val current=runCatching{p.destinationFile.readBytes()}.getOrNull();val currentInfo=current?.let{boxStorageInfo(it)}
+                                gen5ToGen6StillBound(p)&&current!=null&&currentInfo!=null&&currentInfo.second==GEN6_PC_CAPACITY&&gen6DestinationSlotIsStructurallyEmpty(current,currentInfo.first,currentInfo.second,currentInfo.third,target)
+                            },{transferGen5BankToGen6(p,target)}
+                        )else transferGen5BankToGen6(p,target)
                     }.setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
     }
@@ -49088,7 +49108,7 @@ class MainActivity : Activity() {
                     sourceGeneration=3,bankFile=selected,bankBytes=bank,source=conversionSource,
                     destination=destination,trainer=trainer,pk6=pk6,converted=converted,
                     destinationFile=file,sourceUri=openedUri,sourceLabel=openedLabel,
-                    sourceBinding=sourceBinding
+                    sourceBinding=sourceBinding,originalSource=source
                 )
                 val oldPid="%08X".format(source.pid);val newPid="%08X".format(converted.pid)
                 val pidNote=if(source.pid==converted.pid)"PID remains $oldPid." else

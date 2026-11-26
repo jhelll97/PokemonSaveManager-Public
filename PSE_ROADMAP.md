@@ -1530,7 +1530,15 @@ Route-scoped Generation 7 Box and Slot constants now govern capacity verificatio
 
 Commit `6441f5ed303c7ab69a2ab6a76b54076b6dba1667` was rejected by automatic Android build run `45820368538`, attempt 1, and exact Slack event `1795696561.559849`: Kotlin code generation reported that `MainActivity.class` exceeded the JVM class-size limit. The single correction moves the newly added destination-choice, exact-slot review and Box / Slot dialog rendering into a top-level helper while retaining the same source binding, native-capacity checks, explicit ball Legalise disclosure, selected-slot recheck, cancellable flow and transaction boundary.
 
-This correction is pending its own automatic Android compile before the feature is called validated.
+Commit `558243d1085d9b66b8678b20a57eea4cc9d0175e` passed automatic Android build run `45822173829`, attempt 1, and was reported by exact Slack event `1795697419.263479`; the Generation 3 -> Generation 7 native destination capacity and exact-slot review flow is validated.
+
+## Generation 3 -> Generation 6 exact destination and Legalise review
+
+Re-inventory found that the implemented PK3 -> PK6 conversion already binds the exact selected Gen 3 Bank record and X, Y, Omega Ruby or Alpha Sapphire destination, verifies canonical species and ability data through its native PK4 and PK5 bridges, blocks unsupported fields, requires explicit cancellable ball and PID Legalise review, enforces the native 31 × 30 PC capacity, and verifies the selected converted PK6, Pokédex state and checksums after persistence. Both destination choices still proceeded directly from selection to persistence without repeating the exact slot or reviewed ball, PID and ability mapping.
+
+The Gen 3 route now inserts one final cancellable review after either First Structurally Empty or manual Box / Slot selection. It shows the exact `Box N of 31`, `Slot N of 30` destination, repeats any ball ID 0 mapping, repeats the original-to-native PID decision and verified ability mapping, and rechecks the same bound destination plus structural emptiness before entering the unchanged transaction. Existing and nonzero slots remain untouched; source identity, retained destination and Bank recovery snapshots, scoped Pokédex and checksum updates, persisted reopen verification, source cleanup and independent two-sided rollback remain unchanged. The shared Gen 4 and Gen 5 chooser behavior is unchanged.
+
+This implementation is pending its own automatic Android compile before the feature is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
