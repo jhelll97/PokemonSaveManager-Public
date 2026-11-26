@@ -25,6 +25,9 @@ internal data class ScarletVioletPseDexRegistration(
 
 /** Restores one checksum-valid native PK9 Bank record into a reviewed new Scarlet/Violet save copy. */
 object ScarletVioletPseBankRestoreEditing {
+    const val BOX_COUNT = 32
+    const val SLOTS_PER_BOX = 30
+    const val STORAGE_CAPACITY = BOX_COUNT * SLOTS_PER_BOX
     private const val MAX_FILE_SIZE = 0x31CF81
     private const val FOOTER_SIZE = 32
 
@@ -87,7 +90,7 @@ object ScarletVioletPseBankRestoreEditing {
 
     fun emptyDestinations(source: ByteArray): List<ScarletVioletPseBankDestination> {
         val storage = ScarletVioletStorageReadOnly.read(source.copyOf())
-        return (0 until 32).flatMap { box ->
+        return (0 until BOX_COUNT).flatMap { box ->
             storage.box(box).filter { it.read is ScarletVioletSlotRead.Empty }.map {
                 ScarletVioletPseBankDestination(box + 1, it.position)
             }
@@ -102,7 +105,9 @@ object ScarletVioletPseBankRestoreEditing {
         caughtLanguageIndex: Int = 1
     ): ScarletVioletPseBankRestoreCopyPlan {
         val destination = emptyDestinations(source).firstOrNull()
-            ?: throw IllegalArgumentException("All 960 native Scarlet/Violet PC-box slots are occupied.")
+            ?: throw IllegalArgumentException(
+                "All $STORAGE_CAPACITY native Scarlet/Violet PC-box slots are occupied."
+            )
         return stage(
             source, expectedSha256, bankRecord, destination.box, destination.position,
             registerCaught, caughtLanguageIndex
@@ -121,7 +126,7 @@ object ScarletVioletPseBankRestoreEditing {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
-        require(box in 1..32 && position in 1..30) {
+        require(box in 1..BOX_COUNT && position in 1..SLOTS_PER_BOX) {
             "The selected Scarlet/Violet PC-box destination is outside native storage."
         }
         val before = ScarletVioletStorageReadOnly.read(original)
@@ -175,7 +180,8 @@ object ScarletVioletPseBankRestoreEditing {
 
         val beforeBlocks = ScarletVioletSaveValidation.readPokemonBlocks(original)
         val afterBlocks = ScarletVioletSaveValidation.readPokemonBlocks(edited)
-        val relativeOffset = ((box - 1) * 30 + position - 1) * ScarletVioletPokemonReadOnly.RECORD_SIZE
+        val relativeOffset = ((box - 1) * SLOTS_PER_BOX + position - 1) *
+            ScarletVioletPokemonReadOnly.RECORD_SIZE
         require(afterBlocks.boxes.copyOfRange(relativeOffset, relativeOffset + bankRecord.size)
             .contentEquals(bankRecord)) { "The native PSE Bank bytes were not preserved exactly." }
         require(beforeBlocks.party.contentEquals(afterBlocks.party)) {
