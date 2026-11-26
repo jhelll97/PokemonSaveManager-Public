@@ -144,6 +144,16 @@ private fun letsGoGen6CapacityLabel(kind:Int,index:Int):String=when(kind){
     else -> error("Unknown Let's Go to Gen 6 capacity label")
 }
 
+private fun letsGoGen7CapacityLabel(kind:Int,index:Int):String=when(kind){
+    0 -> "First Empty • Box ${index/GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_BOX_COUNT • Slot ${index%GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_SLOTS_PER_BOX"
+    1 -> "Box ${index+1} of $GEN7_PC_BOX_COUNT"
+    2 -> "Box ${index+1} of $GEN7_PC_BOX_COUNT • choose slot"
+    3 -> "Slot ${index+1} of $GEN7_PC_SLOTS_PER_BOX"
+    4 -> "All $GEN7_PC_CAPACITY native Generation 7 PC slots are unavailable. Existing records were left unchanged."
+    5 -> "PSE converted Let's Go PB7 → Gen 7 PK7 to Box ${index/GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_BOX_COUNT • Slot ${index%GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_SLOTS_PER_BOX; PB7 preserved"
+    else -> error("Unknown Let's Go to Gen 7 capacity label")
+}
+
 private fun gen4PcCapacityLabel(kind:Int,index:Int):String=when(kind){
     0 -> "First Empty • Box ${index/GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_BOX_COUNT • Slot ${index%GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_SLOTS_PER_BOX"
     1 -> "Box ${index+1} of $GEN4_PC_BOX_COUNT"
@@ -14812,14 +14822,16 @@ class MainActivity : Activity() {
         val title="Let's Go PB7 → Gen 7 PK7"
         if(!letsGoGen7SnapshotsMatch(p))return showDialog(title,"The destination or PB7 changed. Reopen PSE Bank.")
         val info=boxStorageInfo(p.destination)?:return showDialog(title,"Native Generation 7 PC storage could not be resolved.")
-        val empty=(0 until info.second).filter{
+        if(info.second!=GEN7_PC_CAPACITY)return showDialog(title,
+            "The native Generation 7 PC capacity could not be verified. Nothing was changed.")
+        val empty=(0 until GEN7_PC_CAPACITY).filter{
             parsePk6(p.destination,info.first+it*PK6_STORED_SIZE,PK6_STORED_SIZE,false,807)==null
         }
-        if(empty.isEmpty())return showDialog(title,"All native Generation 7 PC slots are occupied.")
+        if(empty.isEmpty())return showDialog(title,letsGoGen7CapacityLabel(4,0))
         val first=empty.first()
         AlertDialog.Builder(this).setTitle("Choose native Gen 7 destination")
             .setMessage("PSE will write the reviewed PK7 to one empty slot, update only required Pokédex and native integrity data, retain a recovery backup, and keep the PB7 Bank entry.")
-            .setItems(arrayOf("First Empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
+            .setItems(arrayOf(letsGoGen7CapacityLabel(0,first),"Choose Box / Slot")){_,which->
                 if(!letsGoGen7SnapshotsMatch(p))showDialog(title,"The destination or PB7 changed. Reopen PSE Bank.")
                 else if(which==0)transferLetsGoBankToGen7(p,first)else showLetsGoToGen7BoxPicker(p)
             }.setNegativeButton("Cancel",null).show()
@@ -14829,19 +14841,21 @@ class MainActivity : Activity() {
         val title="Let's Go PB7 → Gen 7 PK7"
         if(!letsGoGen7SnapshotsMatch(p))return showDialog(title,"The destination or PB7 changed. Reopen PSE Bank.")
         val info=boxStorageInfo(p.destination)?:return
-        val boxes=(0 until info.second/30).filter{box->(0 until 30).any{slot->
-            parsePk6(p.destination,info.first+(box*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,807)==null
+        if(info.second!=GEN7_PC_CAPACITY)return showDialog(title,
+            "The native Generation 7 PC capacity could not be verified. Nothing was changed.")
+        val boxes=(0 until GEN7_PC_BOX_COUNT).filter{box->(0 until GEN7_PC_SLOTS_PER_BOX).any{slot->
+            parsePk6(p.destination,info.first+(box*GEN7_PC_SLOTS_PER_BOX+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,807)==null
         }}
-        if(boxes.isEmpty())return showDialog(title,"All native Generation 7 PC boxes are full.")
+        if(boxes.isEmpty())return showDialog(title,letsGoGen7CapacityLabel(4,0))
         AlertDialog.Builder(this).setTitle("Choose Gen 7 destination box")
-            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+            .setItems(boxes.map{letsGoGen7CapacityLabel(1,it)}.toTypedArray()){_,which->
                 val box=boxes[which]
-                val slots=(0 until 30).filter{slot->
-                    parsePk6(p.destination,info.first+(box*30+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,807)==null
+                val slots=(0 until GEN7_PC_SLOTS_PER_BOX).filter{slot->
+                    parsePk6(p.destination,info.first+(box*GEN7_PC_SLOTS_PER_BOX+slot)*PK6_STORED_SIZE,PK6_STORED_SIZE,false,807)==null
                 }
-                AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
-                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
-                        transferLetsGoBankToGen7(p,box*30+slots[slotIndex])
+                AlertDialog.Builder(this).setTitle(letsGoGen7CapacityLabel(2,box))
+                    .setItems(slots.map{letsGoGen7CapacityLabel(3,it)}.toTypedArray()){_,slotIndex->
+                        transferLetsGoBankToGen7(p,box*GEN7_PC_SLOTS_PER_BOX+slots[slotIndex])
                     }.setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
     }
@@ -14863,7 +14877,9 @@ class MainActivity : Activity() {
             }
             val checks=validateGen7CoreChecksums(fresh);require(checks.first){checks.second}
             val info=boxStorageInfo(fresh)?:error("PSE could not resolve native Gen 7 PC storage.")
-            require(target in 0 until info.second){"The selected Gen 7 slot is invalid."}
+            require(info.second==GEN7_PC_CAPACITY&&target in 0 until GEN7_PC_CAPACITY){
+                "The selected Gen 7 slot or native PC capacity is invalid."
+            }
             val off=info.first+target*PK6_STORED_SIZE
             require(parsePk6(fresh,off,PK6_STORED_SIZE,false,807)==null){
                 "The selected Gen 7 slot is no longer empty."
@@ -14992,7 +15008,7 @@ class MainActivity : Activity() {
             return
         }
         Toast.makeText(this,
-            "PSE converted Let's Go PB7 → Gen 7 PK7 to Box ${target/30+1} • Slot ${target%30+1}; PB7 preserved",
+            letsGoGen7CapacityLabel(5,target),
             Toast.LENGTH_LONG).show()
         showBank()
     }
