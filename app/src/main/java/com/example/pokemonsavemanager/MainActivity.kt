@@ -113,6 +113,16 @@ private fun nativeGen4WithdrawalCapacityLabel(kind:Int,index:Int):String=when(ki
     else -> error("Unknown native Gen 4 withdrawal capacity label")
 }
 
+private fun nativeGen3WithdrawalCapacityLabel(kind:Int,index:Int):String=when(kind){
+    0 -> "First structurally empty • Box ${index/GEN3_PC_SLOTS_PER_BOX+1} of $GEN3_PC_BOX_COUNT • Slot ${index%GEN3_PC_SLOTS_PER_BOX+1} of $GEN3_PC_SLOTS_PER_BOX"
+    1 -> "Box ${index+1} of $GEN3_PC_BOX_COUNT"
+    2 -> "Box ${index+1} of $GEN3_PC_BOX_COUNT • choose slot"
+    3 -> "Slot ${index+1} of $GEN3_PC_SLOTS_PER_BOX"
+    4 -> "All $GEN3_PC_CAPACITY native Generation 3 PC slots are unavailable. Existing or nonzero slot data was left unchanged."
+    5 -> "Withdrew exact Gen 3 PK3 to Box ${index/GEN3_PC_SLOTS_PER_BOX+1} of $GEN3_PC_BOX_COUNT • Slot ${index%GEN3_PC_SLOTS_PER_BOX+1} of $GEN3_PC_SLOTS_PER_BOX and verified"
+    else -> error("Unknown native Gen 3 withdrawal capacity label")
+}
+
 private fun gen7ToGen5CapacityLabel(kind:Int,index:Int):String=when(kind){
     0 -> "First Structurally Empty • Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX"
     1 -> "Box ${index+1} of $GEN5_PC_BOX_COUNT"
@@ -49299,10 +49309,10 @@ class MainActivity : Activity() {
         val source=if(raw.size==80) parsePk3(raw,0,false) else null
         if(source==null || !source.checksumValid || source.pid!=p.pid || source.species!=p.species || source.tid!=p.tid || source.sid!=p.sid){showDialog("Withdraw","This Bank entry changed or is not a valid reviewed PK3 record.");return}
         val pc=gen3PcBuffer(data) ?: run {showDialog("Withdraw","Could not reconstruct Gen 3 PC storage.");return}
-        val empties=(0 until 420).filter{gen3BankDestinationSlotIsStructurallyEmpty(pc,it)}
-        if(empties.isEmpty()){showDialog("Withdraw","No structurally empty Gen 3 PC slot is available. Existing or nonzero slot data was left unchanged.");return}
+        val empties=(0 until GEN3_PC_CAPACITY).filter{gen3BankDestinationSlotIsStructurallyEmpty(pc,it)}
+        if(empties.isEmpty()){showDialog("Withdraw",nativeGen3WithdrawalCapacityLabel(4,0));return}
         val first=empties.first()
-        val labels=arrayOf("First structurally empty slot • Box ${first/30+1} • Slot ${first%30+1}","Choose a box / slot")
+        val labels=arrayOf(nativeGen3WithdrawalCapacityLabel(0,first),"Choose a box / slot")
         AlertDialog.Builder(this).setTitle("Withdraw ${p.nickname.ifBlank{"Pokémon"}} to…")
             .setMessage("This is a PSE Bank withdrawal, not an official trade, Pokémon Bank transaction or provenance claim. No conversion or Legalise change is performed. Choose one structurally empty native PK3 slot; the exact Bank record remains until the destination and retained recovery data verify.")
             .setItems(labels){_,which->if(which==0) withdrawGen3BankToSlot(selected,p,first,raw,file,openedUri,openedLabel,data) else showGen3BankBoxPicker(selected,p,pc,raw,file,openedUri,openedLabel,data)}
@@ -49310,12 +49320,13 @@ class MainActivity : Activity() {
     }
 
     private fun showGen3BankBoxPicker(bankFile:File,p:PokemonEntry,pc:ByteArray,openedBank:ByteArray,openedFile:File,openedUri:Uri?,openedLabel:String?,openedDestination:ByteArray){
-        val boxes=(0 until 14).filter{b->(0 until 30).any{s->gen3BankDestinationSlotIsStructurallyEmpty(pc,b*30+s)}}
+        val boxes=(0 until GEN3_PC_BOX_COUNT).filter{b->(0 until GEN3_PC_SLOTS_PER_BOX).any{s->gen3BankDestinationSlotIsStructurallyEmpty(pc,b*GEN3_PC_SLOTS_PER_BOX+s)}}
+        if(boxes.isEmpty())return showDialog("Withdraw",nativeGen3WithdrawalCapacityLabel(4,0))
         AlertDialog.Builder(this).setTitle("Choose Gen 3 destination box")
-            .setItems(boxes.map{b->"Box ${b+1}"}.toTypedArray()){_,w->
-                val b=boxes[w]; val empties=(0 until 30).filter{s->gen3BankDestinationSlotIsStructurallyEmpty(pc,b*30+s)}
-                AlertDialog.Builder(this).setTitle("Box ${b+1} • choose slot")
-                    .setItems(empties.map{s->"Slot ${s+1}"}.toTypedArray()){_,sw->withdrawGen3BankToSlot(bankFile,p,b*30+empties[sw],openedBank,openedFile,openedUri,openedLabel,openedDestination)}
+            .setItems(boxes.map{b->nativeGen3WithdrawalCapacityLabel(1,b)}.toTypedArray()){_,w->
+                val b=boxes[w]; val empties=(0 until GEN3_PC_SLOTS_PER_BOX).filter{s->gen3BankDestinationSlotIsStructurallyEmpty(pc,b*GEN3_PC_SLOTS_PER_BOX+s)}
+                AlertDialog.Builder(this).setTitle(nativeGen3WithdrawalCapacityLabel(2,b))
+                    .setItems(empties.map{s->nativeGen3WithdrawalCapacityLabel(3,s)}.toTypedArray()){_,sw->withdrawGen3BankToSlot(bankFile,p,b*GEN3_PC_SLOTS_PER_BOX+empties[sw],openedBank,openedFile,openedUri,openedLabel,openedDestination)}
                     .setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
     }
@@ -49345,7 +49356,7 @@ class MainActivity : Activity() {
         var stagedDestination:ByteArray?=null
         try{
             require(destinationBinding.matches(original,bound())&&generationForSize(original.size)==3&&gen3SaveValid(original)){"A valid bound Gen 3 destination save is required."}
-            require(target in 0 until 420){"Invalid Gen 3 PC slot."}
+            require(target in 0 until GEN3_PC_CAPACITY){"Invalid Gen 3 PC slot."}
             require(sourceBinding.matches(raw,true)&&selected.readBytes().contentEquals(raw)){"The selected Gen 3 Bank record changed after destination selection."}
             val save=original.copyOf();val pc=gen3PcBuffer(save)?:error("Could not reconstruct Gen 3 PC storage.");val beforePc=pc.copyOf()
             val off=4+target*80
@@ -49388,7 +49399,7 @@ class MainActivity : Activity() {
             )
             val recoveryNotice=if(retainedRecovery)
                 "; exact temporary Bank recovery retained for review" else ""
-            Toast.makeText(this,"Withdrawn to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show()
+            Toast.makeText(this,nativeGen3WithdrawalCapacityLabel(5,target)+recoveryNotice,Toast.LENGTH_LONG).show()
             showBank()
         }catch(e:Exception){
             val bankRestored=runCatching{

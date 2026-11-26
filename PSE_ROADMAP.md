@@ -1262,6 +1262,14 @@ Re-inventory found that exact native PK4 withdrawal into Diamond, Pearl, Platinu
 
 Shared Generation 4 Box and Slot constants now govern empty-slot enumeration, picker limits, transaction bounds, box-slot indexing and every visible destination label. Label construction remains outside `MainActivity` to preserve the validated class-size margin. The transaction still copies the exact native PK4 without conversion, preserves all occupied and nonzero slot data, changes only the selected slot and active storage checksum, retains exact destination and Bank recovery snapshots, removes the Bank source only after persisted reopen verification and keeps independent two-sided rollback.
 
+Commit `254fdf424c601eb2375dd66ba27fa34be1d19a14` passed automatic Android build run `45756090069`, attempt 1, and was reported by exact Slack event `1795668474.834569`; the native Generation 4 Bank withdrawal destination capacity labels are validated.
+
+## Native Generation 3 Bank withdrawal destination capacity labels
+
+Re-inventory found that exact native PK3 withdrawal into Ruby, Sapphire, Emerald, FireRed or LeafGreen already enumerates 14 native PC Boxes with 30 slots per Box, offers only structurally empty records, discloses the no-conversion effect before destination selection and verifies the exact 80-byte PK3 after persistence, but its first-empty shortcut, Box picker, Slot picker, full-capacity block and completion result showed bare ordinals. They now show `Box N of 14, Slot N of 30`, and the unavailable-destination disclosure states that all 420 native slots are unavailable while preserving the exact selected destination.
+
+Shared Generation 3 Box and Slot constants now govern empty-slot enumeration, picker limits, transaction bounds, box-slot indexing and every visible destination label. Label construction remains outside `MainActivity` to preserve the validated class-size margin. The transaction still copies the exact native PK3 without conversion, preserves all unrelated PC records, changes only the selected slot and affected native section checksums, retains exact destination and Bank recovery snapshots, removes the Bank source only after persisted reopen verification and keeps independent two-sided rollback.
+
 This implementation is pending its own automatic Android compile before the feature is called validated. Next bounded feature: continue the destination-chooser inventory with one implemented route that still omits concrete native Box or Slot capacity context.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
