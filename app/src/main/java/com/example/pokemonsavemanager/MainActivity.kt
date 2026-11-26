@@ -33,6 +33,9 @@ private const val GEN5_PC_CAPACITY = GEN5_PC_BOX_COUNT * GEN5_PC_SLOTS_PER_BOX
 private const val GEN4_PC_BOX_COUNT = 18
 private const val GEN4_PC_SLOTS_PER_BOX = 30
 private const val GEN4_PC_CAPACITY = GEN4_PC_BOX_COUNT * GEN4_PC_SLOTS_PER_BOX
+private const val GEN3_PC_BOX_COUNT = 14
+private const val GEN3_PC_SLOTS_PER_BOX = 30
+private const val GEN3_PC_CAPACITY = GEN3_PC_BOX_COUNT * GEN3_PC_SLOTS_PER_BOX
 private const val SIZE_G1 = 0x8000
 private const val GEN1_MAIN_START = 0x2598
 private const val GEN1_PLAYER_NAME = 0x2598
@@ -85,6 +88,16 @@ private fun gen4PcCapacityLabel(kind:Int,index:Int):String=when(kind){
     4 -> "PSE converted Let's Go PB7 → Gen 4 PK4 to Box ${index/GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_BOX_COUNT • Slot ${index%GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_SLOTS_PER_BOX; PB7 preserved"
     5 -> "All $GEN4_PC_CAPACITY native Generation 4 PC slots are occupied."
     else -> error("Unknown Generation 4 capacity label")
+}
+
+private fun gen3PcCapacityLabel(kind:Int,index:Int):String=when(kind){
+    0 -> "First Empty • Box ${index/GEN3_PC_SLOTS_PER_BOX+1} of $GEN3_PC_BOX_COUNT • Slot ${index%GEN3_PC_SLOTS_PER_BOX+1} of $GEN3_PC_SLOTS_PER_BOX"
+    1 -> "Box ${index+1} of $GEN3_PC_BOX_COUNT"
+    2 -> "Box ${index+1} of $GEN3_PC_BOX_COUNT • choose slot"
+    3 -> "Slot ${index+1} of $GEN3_PC_SLOTS_PER_BOX"
+    4 -> "PSE converted Let's Go PB7 → Gen 3 PK3 to Box ${index/GEN3_PC_SLOTS_PER_BOX+1} of $GEN3_PC_BOX_COUNT • Slot ${index%GEN3_PC_SLOTS_PER_BOX+1} of $GEN3_PC_SLOTS_PER_BOX; PB7 preserved"
+    5 -> "All $GEN3_PC_CAPACITY native Generation 3 PC slots are occupied."
+    else -> error("Unknown Generation 3 capacity label")
 }
 
 class MainActivity : Activity() {
@@ -16290,14 +16303,16 @@ class MainActivity : Activity() {
             return showDialog(title,"The destination or PB7 changed. Reopen PSE Bank.")
         val pc=gen3PcBuffer(p.destination)
             ?:return showDialog(title,"PSE could not reconstruct Generation 3 PC storage.")
-        val empty=(0 until 420).filter{parsePk3(pc,4+it*80,false)==null}
+        val empty=(0 until GEN3_PC_CAPACITY).filter{
+            parsePk3(pc,4+it*80,false)==null
+        }
         if(empty.isEmpty())return showDialog(title,
-            "No empty native Generation 3 PC slot is available.")
+            gen3PcCapacityLabel(5,0))
         val first=empty.first()
         AlertDialog.Builder(this).setTitle("Choose native Gen 3 destination")
             .setMessage("PSE will write the reviewed PK3 to one empty slot, update only required Pokédex mirrors and section checksums, retain a recovery backup, and keep the PB7 Bank entry.")
             .setNegativeButton("Cancel",null)
-            .setPositiveButton("First Empty • Box ${first/30+1} • Slot ${first%30+1}"){_,_->
+            .setPositiveButton(gen3PcCapacityLabel(0,first)){_,_->
                 transferLetsGoBankToGen3(p,first)
             }
             .setNeutralButton("Choose Box / Slot"){_,_->
@@ -16309,19 +16324,22 @@ class MainActivity : Activity() {
         val title="Let's Go PB7 → Gen 3 PK3"
         if(!letsGoGen3SnapshotsMatch(p))
             return showDialog(title,"The destination or PB7 changed. Reopen PSE Bank.")
-        val boxes=(0 until 14).filter{box->(0 until 30).any{slot->
-            parsePk3(pc,4+(box*30+slot)*80,false)==null
+        val boxes=(0 until GEN3_PC_BOX_COUNT).filter{box->
+            (0 until GEN3_PC_SLOTS_PER_BOX).any{slot->
+            parsePk3(pc,4+(box*GEN3_PC_SLOTS_PER_BOX+slot)*80,false)==null
         }}
         if(boxes.isEmpty())return showDialog(title,"All native Generation 3 PC boxes are full.")
         AlertDialog.Builder(this).setTitle("Choose Gen 3 destination box")
-            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+            .setItems(boxes.map{gen3PcCapacityLabel(1,it)}.toTypedArray()){_,which->
                 val box=boxes[which]
-                val slots=(0 until 30).filter{slot->
-                    parsePk3(pc,4+(box*30+slot)*80,false)==null
+                val slots=(0 until GEN3_PC_SLOTS_PER_BOX).filter{slot->
+                    parsePk3(pc,4+(box*GEN3_PC_SLOTS_PER_BOX+slot)*80,false)==null
                 }
-                AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
-                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
-                        transferLetsGoBankToGen3(p,box*30+slots[slotIndex])
+                AlertDialog.Builder(this).setTitle(gen3PcCapacityLabel(2,box))
+                    .setItems(slots.map{gen3PcCapacityLabel(3,it)}.toTypedArray()){_,slotIndex->
+                        transferLetsGoBankToGen3(
+                            p,box*GEN3_PC_SLOTS_PER_BOX+slots[slotIndex]
+                        )
                     }.setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
     }
@@ -16340,7 +16358,7 @@ class MainActivity : Activity() {
         var bankRecovery:File?=null
         try{
             require(original.contentEquals(p.destination)&&generationForSize(original.size)==3&&
-                gen3SaveValid(original)&&target in 0 until 420){
+                gen3SaveValid(original)&&target in 0 until GEN3_PC_CAPACITY){
                 "The prepared Generation 3 destination changed or selected slot is invalid."
             }
             val bank=p.bankFile.readBytes()
@@ -16527,7 +16545,7 @@ class MainActivity : Activity() {
             return
         }
         Toast.makeText(this,
-            "PSE converted Let's Go PB7 → Gen 3 PK3 to Box ${target/30+1} • Slot ${target%30+1}; PB7 preserved",
+            gen3PcCapacityLabel(4,target),
             Toast.LENGTH_LONG).show()
         showBank()
     }
