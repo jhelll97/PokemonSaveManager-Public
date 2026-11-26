@@ -152,6 +152,13 @@ private fun gen5ToGen1CapacityLabel(kind:Int,box:Int,value:Int):String=when(kind
     else -> error("Unknown Gen 5 to Gen 1 capacity label")
 }
 
+private fun gen6ToGen1CapacityLabel(kind:Int,box:Int,value:Int):String=when(kind){
+    0 -> "Box $box of $GEN1_PC_BOX_COUNT • next empty Slot ${GEN1_PC_SLOTS_PER_BOX-value+1} of $GEN1_PC_SLOTS_PER_BOX • $value empty"
+    1 -> "No writable native Generation 1 destination is available across $GEN1_PC_BOX_COUNT PC Boxes × $GEN1_PC_SLOTS_PER_BOX slots ($GEN1_PC_CAPACITY total slots). Existing destination records and the PK6 Bank source were left unchanged."
+    2 -> "PSE converted Gen 6 PK6 → Gen 1 PK1 to Box $box of $GEN1_PC_BOX_COUNT • Slot ${value+1} of $GEN1_PC_SLOTS_PER_BOX and verified"
+    else -> error("Unknown Gen 6 to Gen 1 capacity label")
+}
+
 private fun gen7ToGen5CapacityLabel(kind:Int,index:Int):String=when(kind){
     0 -> "First Structurally Empty • Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX"
     1 -> "Box ${index+1} of $GEN5_PC_BOX_COUNT"
@@ -13999,7 +14006,7 @@ class MainActivity : Activity() {
             return showDialog("Gen 6 → Gen 1 blocked","$it\n\nNo deterministic native Generation 1 mapping is available. Nothing was changed.")
         }
         val targets=availableGen1BoxTargets(destination)
-        if(targets.isEmpty())return showDialog("Gen 6 → Gen 1","No writable Generation 1 PC box has an empty slot. Nothing was changed.")
+        if(targets.isEmpty())return showDialog("Gen 6 → Gen 1",gen6ToGen1CapacityLabel(1,0,0))
         val sourceDvs=source.ivs.take(5).map{it/2}
         val hpDv=((sourceDvs[1]and 1)shl 3)or((sourceDvs[2]and 1)shl 2)or((sourceDvs[3]and 1)shl 1)or(sourceDvs[4]and 1)
         val finalDvs=intArrayOf(hpDv,sourceDvs[1],sourceDvs[2],sourceDvs[3],sourceDvs[4])
@@ -14028,7 +14035,7 @@ class MainActivity : Activity() {
                 append("Eggs, held items, alternate forms, non-English text, unsupported moves/species and invalid values are blocked instead of discarded.\n\n")
                 append("Verified retained destination and PK6 Bank recovery snapshots are required. PSE writes one chosen native Gen 1 record, updates Seen/Caught and the main checksum, reopens the exact box record, then removes the Bank entry. Any failure restores or preserves both sides independently.")
             }
-            val labels=targets.map{"Box ${it.first} • ${it.second} empty slot${if(it.second==1)"" else "s"}"}.toTypedArray()
+            val labels=targets.map{gen6ToGen1CapacityLabel(0,it.first,it.second)}.toTypedArray()
             AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 6 → Gen 1")
                 .setMessage(review).setNegativeButton("Cancel",null)
                 .setPositiveButton("Choose Gen 1 Box"){_,_->
@@ -14064,10 +14071,11 @@ class MainActivity : Activity() {
         var bankRecoveryBinding:PseBankSourceBinding?=null
         var stagedDestination:ByteArray?=null
         var retainedRecovery=false
+        var placedSlot=-1
         try{
             require(destinationMatches(preparedDestination)&&fresh.contentEquals(preparedDestination)){"The Gen 1 destination identity or data changed after review."}
             val integrity=verifyGen1SaveIntegrity(fresh);require(integrity.first){integrity.second}
-            require(targetBox in 1..12&&gen1BoxIsWritable(fresh,targetBox)){"The selected Gen 1 box is no longer writable."}
+            require(targetBox in 1..GEN1_PC_BOX_COUNT&&gen1BoxIsWritable(fresh,targetBox)){"The selected Gen 1 box is no longer writable."}
             val bank=bankFile.readBytes();require(sourceBinding.matches(expectedBank,true)&&bank.contentEquals(expectedBank)){"The selected Gen 6 Bank identity or record changed after review."}
             val source=parsePk6(bank,0,PK6_STORED_SIZE,false,721)?:error("The selected PK6 is invalid.")
             require(source.checksumValid&&source.pid==expected.pid&&source.species==expected.species&&source.tid==expected.tid&&source.sid==expected.sid){"The selected Gen 6 Pokémon changed."}
@@ -14076,10 +14084,10 @@ class MainActivity : Activity() {
             gen2ToGen1Rejection(rebuilt.second,legalise)?.let{error(it)}
             val converted=rebuilt.second;val bridge=rebuilt.first
             val base=gen1BoxDataOffset(fresh,targetBox);val count=fresh[base].toInt()and 0xFF
-            require(count in 0 until GEN1_BOX_CAPACITY){"Gen 1 Box $targetBox is full or structurally invalid."}
+            require(count in 0 until GEN1_PC_SLOTS_PER_BOX){"Gen 1 Box $targetBox is full or structurally invalid."}
             val before=parseGen1Box(fresh,targetBox).pokemon.sortedBy{it.slot};require(before.size==count){"Gen 1 Box $targetBox contains an invalid record."}
             val(mon,ot,nick)=buildGen2ToGen1Record(bridge,converted,meta,legalise)
-            val work=fresh.copyOf();val slot=appendGen1BoxPokemon(work,targetBox,mon,ot,nick);markGen1PokedexCaught(work,converted.species);updateGen1MainChecksum(work)
+            val work=fresh.copyOf();val slot=appendGen1BoxPokemon(work,targetBox,mon,ot,nick);placedSlot=slot;markGen1PokedexCaught(work,converted.species);updateGen1MainChecksum(work)
             val pre=verifyGen1WriteState(work,targetBox);require(pre.first){pre.second}
             val staged=parseGen1Box(work,targetBox).pokemon.sortedBy{it.slot};require(staged.size==before.size+1){"The staged Gen 1 box count did not increase by one."}
             require(staged.take(before.size).zip(before).all{(a,b)->sameGen1TransferRecord(a,b)}){"An existing Gen 1 Pokémon changed during staging."}
@@ -14182,7 +14190,7 @@ class MainActivity : Activity() {
         }
         val recoveryNotice=if(retainedRecovery)
             "; exact temporary Bank recovery retained for review" else ""
-        Toast.makeText(this,"PSE converted Gen 6 → Gen 1 to Box $targetBox and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
+        Toast.makeText(this,gen6ToGen1CapacityLabel(2,targetBox,placedSlot)+recoveryNotice,Toast.LENGTH_LONG).show();showBank()
     }
 
 
