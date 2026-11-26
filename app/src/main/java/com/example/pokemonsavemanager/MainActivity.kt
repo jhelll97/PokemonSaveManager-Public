@@ -36158,7 +36158,7 @@ class MainActivity : Activity() {
 
 
 
-    private data class Gen6Gen5Plan(val originGame:Int,val originLabel:String,val legalised:Boolean)
+    internal data class Gen6Gen5Plan(val originGame:Int,val originLabel:String,val legalised:Boolean)
 
 
     private data class Gen7Gen3Prepared(
@@ -36979,7 +36979,7 @@ class MainActivity : Activity() {
         showBank()
     }
 
-    private data class Gen6Gen5Prepared(
+    internal data class Gen6Gen5Prepared(
         val bankFile:File,val bankBytes:ByteArray,val sourceBinding:PseBankSourceBinding,val source:PokemonEntry,val destination:ByteArray,
         val plan:Gen6Gen5Plan,val pk5:ByteArray,val converted:PokemonEntry,val destinationFile:File,
         val sourceUri:Uri?,val sourceLabel:String?,val omittedMetadata:String
@@ -37128,28 +37128,15 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 6 → Gen 5").setMessage(preview).setNegativeButton("Cancel",null).setPositiveButton("Choose Gen 5 destination"){_,_->chooseGen6ToGen5Destination(prepared)}.show()
     }
 
-    private fun gen6ToGen5StillBound(p:Gen6Gen5Prepared):Boolean=
+    internal fun gen6ToGen5StillBound(p:Gen6Gen5Prepared):Boolean=
         importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&runCatching{p.destinationFile.readBytes().contentEquals(p.destination)&&p.sourceBinding.matches(p.bankBytes,true)}.getOrDefault(false)
-
-    private fun chooseGen6ToGen5Destination(p:Gen6Gen5Prepared){
-        if(!gen6ToGen5StillBound(p))return showDialog("Gen 6 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")
-        val empty=(0 until GEN5_PC_CAPACITY).filter{gen5DestinationSlotIsStructurallyEmpty(p.destination,it)}
-        if(empty.isEmpty())return showDialog("Gen 6 → Gen 5",gen6ToGen5CapacityLabel(5,0))
-        val first=empty.first();AlertDialog.Builder(this).setTitle("Choose native Gen 5 destination").setMessage("The reviewed PK5 will be written only to a structurally empty slot. PSE will update that slot, required Pokédex flags, the box CRC and native checksum table. Nonzero destination records remain unchanged.").setItems(arrayOf(gen6ToGen5CapacityLabel(0,first),"Choose Box / Slot • $GEN5_PC_BOX_COUNT Boxes × $GEN5_PC_SLOTS_PER_BOX slots")){_,which->if(!gen6ToGen5StillBound(p))showDialog("Gen 6 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")else if(which==0)transferGen6BankToGen5(p,first)else showGen6ToGen5BoxPicker(p)}.setNegativeButton("Cancel",null).show()
-    }
-
-    private fun showGen6ToGen5BoxPicker(p:Gen6Gen5Prepared){
-        if(!gen6ToGen5StillBound(p))return showDialog("Gen 6 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")
-        val boxes=(0 until GEN5_PC_BOX_COUNT).filter{box->(0 until GEN5_PC_SLOTS_PER_BOX).any{slot->gen5DestinationSlotIsStructurallyEmpty(p.destination,box*GEN5_PC_SLOTS_PER_BOX+slot)}}
-        AlertDialog.Builder(this).setTitle("Choose Gen 5 destination box").setMessage("Only boxes with structurally empty slots are listed. Nonzero destination records remain unchanged.").setItems(boxes.map{gen6ToGen5CapacityLabel(1,it)}.toTypedArray()){_,which->val box=boxes[which];val slots=(0 until GEN5_PC_SLOTS_PER_BOX).filter{slot->gen5DestinationSlotIsStructurallyEmpty(p.destination,box*GEN5_PC_SLOTS_PER_BOX+slot)};AlertDialog.Builder(this).setTitle(gen6ToGen5CapacityLabel(2,box)).setItems(slots.map{gen6ToGen5CapacityLabel(3,it)}.toTypedArray()){_,slotIndex->transferGen6BankToGen5(p,box*GEN5_PC_SLOTS_PER_BOX+slots[slotIndex])}.setNegativeButton("Cancel",null).show()}.setNegativeButton("Cancel",null).show()
-    }
 
     private fun retainGen6ToGen5SafetyBackup(file:File,expected:ByteArray){
         val profile=detectGen5Profile(expected)?:error("The Generation 5 destination recovery backup has no valid native layout.");require(file.isFile&&file.readBytes().contentEquals(expected)&&gen5ChecksumTableValid(expected,profile)&&(0 until 24).all{gen5BoxChecksumValid(expected,it,profile)}){"The Generation 5 destination recovery backup did not verify."}
         val names=keptBackupNames().apply{add(file.name)};val prefs=getSharedPreferences("pse_backup_state",MODE_PRIVATE);require(prefs.edit().putStringSet("kept",names).commit()){"The recovery backup Keep pin could not be saved. Nothing may be written."};require(isBackupKept(file)&&file.readBytes().contentEquals(expected)){"The retained recovery backup or Keep pin could not be rechecked."}
     }
 
-    private fun transferGen6BankToGen5(p:Gen6Gen5Prepared,target:Int){
+    internal fun transferGen6BankToGen5(p:Gen6Gen5Prepared,target:Int){
         if(!gen6ToGen5StillBound(p))return showDialog("Gen 6 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")
         val file=p.destinationFile;val destinationBinding=PseBankDestinationBinding.capture(file)
         if(destinationBinding==null||!destinationBinding.matches(p.destination,importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel))return showDialog("Gen 6 → Gen 5","The destination identity changed after review. Reopen PSE Bank. Nothing was changed.")
