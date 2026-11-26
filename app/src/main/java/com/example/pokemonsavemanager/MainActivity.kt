@@ -14226,6 +14226,13 @@ class MainActivity : Activity() {
         return bridge to converted
     }
 
+    internal data class Gen6Gen1Prepared(
+        val bankFile:File,val source:PokemonEntry,val bankBytes:ByteArray,val sourceBinding:PseBankSourceBinding,
+        val bridge:ByteArray,val converted:Gen2Pokemon,val destination:ByteArray,val meta:Gen1SpeciesMeta,
+        val legalise:Gen2ToGen1LegalisePlan?,val destinationFile:File,
+        val sourceUri:Uri?,val sourceLabel:String?,val omittedMetadata:String
+    )
+
     private fun prepareGen6ToGen1Transfer(bankFile:File,shown:PokemonEntry){
         val file=importedFile?:return showDialog("Gen 6 → Gen 1","Load a valid Red, Blue or Yellow destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
@@ -14291,6 +14298,10 @@ class MainActivity : Activity() {
                 append("Verified retained destination and PK6 Bank recovery snapshots are required. PSE writes one chosen native Gen 1 record, updates Seen/Caught and the main checksum, reopens the exact box record, then removes the Bank entry. Any failure restores or preserves both sides independently.")
             }
             val labels=targets.map{gen6ToGen1CapacityLabel(0,it.first,it.second)}.toTypedArray()
+            val prepared=Gen6Gen1Prepared(
+                selected,source,bank,sourceBinding,bridge,converted,destination,meta,
+                legalise,file,openedUri,openedLabel,omitted
+            )
             AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 6 → Gen 1")
                 .setMessage(review).setNegativeButton("Cancel",null)
                 .setPositiveButton("Choose Gen 1 Box"){_,_->
@@ -14301,14 +14312,26 @@ class MainActivity : Activity() {
                     AlertDialog.Builder(this).setTitle("Choose Gen 1 destination box").setItems(labels){_,which->
                         if(transferConsumed||which !in targets.indices){showDialog("Gen 6 → Gen 1","This destination choice was already handled. Reopen PSE Bank.");return@setItems};transferConsumed=true
                         if(!bound()){showDialog("Gen 6 → Gen 1","The destination identity changed. Nothing was changed.");return@setItems}
-                        transferGen6BankToGen1(selected,source,bank,sourceBinding,bridge,converted,destination,meta,targets[which].first,file,legalise,openedUri,openedLabel)
+                        val target=targets[which]
+                        reviewGen6ToGen1Destination(prepared,target.first,GEN1_PC_SLOTS_PER_BOX-target.second)
                     }.setNegativeButton("Cancel",null).show()
                 }.show()
         }
     }
 
+    internal fun gen6ToGen1StillBound(p:Gen6Gen1Prepared,targetBox:Int,targetSlot:Int):Boolean{
+        if(importedFile?.absolutePath!=p.destinationFile.absolutePath||currentSourceUri!=p.sourceUri||currentSourceLabel!=p.sourceLabel)return false
+        return runCatching{
+            val fresh=p.destinationFile.readBytes()
+            val base=gen1BoxDataOffset(fresh,targetBox)
+            fresh.contentEquals(p.destination)&&p.sourceBinding.matches(p.bankBytes,true)&&
+                verifyGen1SaveIntegrity(fresh).first&&targetBox in 1..GEN1_PC_BOX_COUNT&&
+                targetSlot in 0 until GEN1_PC_SLOTS_PER_BOX&&gen1BoxIsWritable(fresh,targetBox)&&
+                base in fresh.indices&&(fresh[base].toInt()and 0xFF)==targetSlot
+        }.getOrDefault(false)
+    }
 
-    private fun transferGen6BankToGen1(
+    internal fun transferGen6BankToGen1(
         bankFile:File,expected:PokemonEntry,expectedBank:ByteArray,sourceBinding:PseBankSourceBinding,expectedBridge:ByteArray,expectedConverted:Gen2Pokemon,
         preparedDestination:ByteArray,meta:Gen1SpeciesMeta,targetBox:Int,openedFile:File,
         legalise:Gen2ToGen1LegalisePlan?,openedUri:Uri?,openedLabel:String?
