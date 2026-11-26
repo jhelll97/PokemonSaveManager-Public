@@ -56,7 +56,6 @@ private fun MainActivity.showGen6ToGen7BoxPicker(p:MainActivity.Gen6Gen7Prepared
 }
 
 private fun MainActivity.reviewGenToGen7Destination(p:MainActivity.Gen6Gen7Prepared,target:Int){
-    if(p.sourceGeneration!=4)return transferGen6BankToGen7(p,target)
     val canTransfer={
         val current=runCatching{p.destinationFile.readBytes()}.getOrNull()
         val info=current?.let{boxStorageInfo(it)}
@@ -65,11 +64,13 @@ private fun MainActivity.reviewGenToGen7Destination(p:MainActivity.Gen6Gen7Prepa
     }
     val box=target/PSE_GEN7_SLOTS_PER_BOX+1
     val slot=target%PSE_GEN7_SLOTS_PER_BOX+1
-    showPseGen4ToGen7DestinationReview(
-        p,genToGen7CapacityLabel(4,6,target),
-        "Transfer • Box $box of $PSE_GEN7_BOX_COUNT / Slot $slot of $PSE_GEN7_SLOTS_PER_BOX",
-        canTransfer,{transferGen6BankToGen7(p,target)}
-    )
+    val destinationLabel=genToGen7CapacityLabel(p.sourceGeneration,6,target)
+    val transferLabel="Transfer • Box $box of $PSE_GEN7_BOX_COUNT / Slot $slot of $PSE_GEN7_SLOTS_PER_BOX"
+    when(p.sourceGeneration){
+        4->showPseGen4ToGen7DestinationReview(p,destinationLabel,transferLabel,canTransfer){transferGen6BankToGen7(p,target)}
+        5->showPseGen5ToGen7DestinationReview(p,destinationLabel,transferLabel,canTransfer){transferGen6BankToGen7(p,target)}
+        else->transferGen6BankToGen7(p,target)
+    }
 }
 
 private fun MainActivity.showPseGen4ToGen7DestinationReview(
@@ -100,6 +101,41 @@ private fun MainActivity.showPseGen4ToGen7DestinationReview(
         .setMessage(preview).setPositiveButton(transferLabel){_,_->
             if(consumed||!canTransfer()){
                 showDialog("Gen 4 → Gen 7","The destination identity, Bank record or selected slot changed, or this transfer was already submitted. Nothing was changed.")
+                return@setPositiveButton
+            }
+            consumed=true
+            onTransfer()
+        }.setNegativeButton("Cancel",null).show()
+}
+
+private fun MainActivity.showPseGen5ToGen7DestinationReview(
+    p:MainActivity.Gen6Gen7Prepared,
+    destinationLabel:String,
+    transferLabel:String,
+    canTransfer:()->Boolean,
+    onTransfer:()->Unit
+){
+    val source=p.source
+    val converted=p.converted
+    val oldPid="%08X".format(source.pid)
+    val newPid="%08X".format(converted.pid)
+    val pidLine=if(source.pid==converted.pid)"PID remains $oldPid." else
+        "PID changes $oldPid → $newPid only to preserve the reviewed shiny state under the wider Generation 6 and 7 threshold."
+    val preview=buildString{
+        append("Final PSE Gen 5 → Gen 7 destination review\n\n")
+        append(destinationLabel).append(" The slot is structurally empty; existing and nonzero destination records remain unchanged.\n\n")
+        append("Ball: exact Generation 5 ball ID ${source.ball} is preserved in the native PK7.\n")
+        append(pidLine).append('\n')
+        append("Ability: source slot ${source.abilityNumber}, ability #${source.ability} → verified Gen 7 ability #${converted.ability}.\n")
+        append("Markings: ${p.markingNote}.\n")
+        append("The previously reviewed transfer marker, Egg-location conversion, current handler, empty relearn and geographic fields, Resort and Hyper Training defaults, represented fields, Pokédex update, block CRCs and save signature are unchanged. Cancel leaves the exact Bank record and destination byte-for-byte unchanged.\n\n")
+        append("This is a PSE conversion, not an official Pokémon Bank transaction, in-game trade or provenance claim. The exact Gen 5 Bank record remains until the chosen PK7, retained recovery data, Pokédex state, checksums, save signature and reopened destination all verify.")
+    }
+    var consumed=false
+    AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 5 → Gen 7")
+        .setMessage(preview).setPositiveButton(transferLabel){_,_->
+            if(consumed||!canTransfer()){
+                showDialog("Gen 5 → Gen 7","The destination identity, Bank record or selected slot changed, or this transfer was already submitted. Nothing was changed.")
                 return@setPositiveButton
             }
             consumed=true
