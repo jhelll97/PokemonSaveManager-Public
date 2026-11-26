@@ -1510,6 +1510,8 @@ Re-inventory found that the implemented PSE1 -> PK7 conversion already binds the
 
 Route-scoped Generation 7 Box and Slot constants now govern capacity verification, chooser bounds, slot-grid placement, selected-slot validation, transaction entry and every visible destination capacity label for this single-transfer route. The transaction still leaves existing and nonzero PC data unchanged, retains exact destination and Bank recovery snapshots, reopens the persisted PK7, PP Ups, Pokédex state and checksums, removes the Bank source only after verification, and preserves independent two-sided rollback. Cancel at the destination chooser or final review leaves both sides byte-exact.
 
+Commit `d391f84bc68d04362ce47132023a58710b3ed4d9` was rejected by automatic Android build run `45814210450`, attempt 1, and exact Slack event `1795694072.739289`: Kotlin code generation reported that `MainActivity.class` exceeded the JVM class-size limit. The single correction moves the unchanged Gen 1 -> Gen 7 review disclosure and legalisation summary into a top-level review builder so the destination and transaction behavior remain unchanged while the activity bytecode is reduced.
+
 This implementation is pending its own automatic Android compile before the feature is called validated. Next bounded feature: continue the destination-chooser inventory with one implemented route that still omits concrete native Box or Slot capacity context.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
