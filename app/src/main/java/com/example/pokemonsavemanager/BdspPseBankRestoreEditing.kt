@@ -15,6 +15,9 @@ data class BdspPseBankDexRegistration(
 
 /** Restores one checksum-valid native PB8 Bank record into a reviewed new BDSP save copy. */
 object BdspPseBankRestoreEditing {
+    const val BOX_COUNT = 40
+    const val SLOTS_PER_BOX = 30
+    const val STORAGE_CAPACITY = BOX_COUNT * SLOTS_PER_BOX
     private const val BOX_OFFSET = 0x14EF4
     private const val HASH_OFFSET = 0xE9818
     private const val HASH_LENGTH = 16
@@ -69,7 +72,7 @@ object BdspPseBankRestoreEditing {
 
     fun emptyDestinations(source: ByteArray): List<BdspPseBankDestination> {
         val storage = BdspStorageReadOnly.read(source.copyOf())
-        return (0 until 40).flatMap { box ->
+        return (0 until BOX_COUNT).flatMap { box ->
             storage.box(box).filter { it.read is BdspSlotRead.Empty }
                 .map { BdspPseBankDestination(box + 1, it.position) }
         }
@@ -77,7 +80,9 @@ object BdspPseBankRestoreEditing {
 
     fun stage(source: ByteArray, expectedSha256: String, bankRecord: ByteArray): BdspPseBankRestoreCopyPlan {
         val destination = emptyDestinations(source).firstOrNull()
-            ?: throw IllegalArgumentException("All 1,200 native BDSP PC-box slots are occupied.")
+            ?: throw IllegalArgumentException(
+                "All $STORAGE_CAPACITY native BDSP PC-box slots are occupied."
+            )
         return stage(source, expectedSha256, bankRecord, destination.box, destination.position)
     }
 
@@ -93,7 +98,7 @@ object BdspPseBankRestoreEditing {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
-        require(box in 1..40 && position in 1..30) {
+        require(box in 1..BOX_COUNT && position in 1..SLOTS_PER_BOX) {
             "The selected BDSP PC-box destination is outside native storage."
         }
         val before = BdspStorageReadOnly.read(original)
@@ -102,7 +107,7 @@ object BdspPseBankRestoreEditing {
         }
         val pokemon = inspectBankRecord(supplied)
         val recordOffset = BOX_OFFSET +
-            ((box - 1) * 30 + position - 1) * BdspPokemonReadOnly.RECORD_SIZE
+            ((box - 1) * SLOTS_PER_BOX + position - 1) * BdspPokemonReadOnly.RECORD_SIZE
         val edited = original.copyOf()
         supplied.copyInto(edited, recordOffset)
         val dexRegistration = if (registerCaughtEnglish) {
