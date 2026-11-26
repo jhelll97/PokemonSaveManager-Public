@@ -1114,7 +1114,23 @@ class MainActivity : Activity() {
             .setItems(targets.map{(box,empty)->gen2BoxDestinationLabel(box,empty,file,openedProfile,currentSourceUri,openedDestination)}.toTypedArray()){_,which->
                 if(consumed||which !in targets.indices){consumed=true;showDialog("Move selected","This destination choice was already handled or is invalid. Reopen the Bank selection. Nothing was changed.");return@setItems}
                 consumed=true
-                moveSelectedGen2BankPokemon(selected,openedDestination,targets[which].first,file,openedSource,openedLabel)
+                val(box,emptyCount)=targets[which];val firstSlot=GEN2_PC_SLOTS_PER_BOX-emptyCount
+                val placements=selected.indices.joinToString("\n"){index->
+                    "${index+1}. ${selected[index].source.nickname.ifBlank{"Pokemon #${selected[index].source.species}"}} -> Box $box of $GEN2_PC_BOX_COUNT, Slot ${firstSlot+index+1} of $GEN2_PC_SLOTS_PER_BOX"
+                }
+                val review="Final native Gen 2 batch withdrawal review\n\n$placements\n\n"+
+                    "No Pokemon conversion or Legalise change is performed. Every exact preserved PSE2 record is restored in selection order with all represented native Generation 2 fields unchanged; existing destination records remain unchanged. Only the listed box records, required Seen/Owned registration and primary checksum may change.\n\n"+
+                    "PSE retains exact destination and per-record Bank recovery data, reopens every persisted record, then removes each Bank record last. Cancel leaves the destination and all selected Bank records byte-for-byte unchanged. This is a PSE Bank withdrawal, not an official trade, Time Capsule or Pokemon Bank transaction, legality certification or verified provenance."
+                var submitted=false
+                AlertDialog.Builder(this).setTitle("Review ${selected.size} exact Gen 2 withdrawals")
+                    .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("Withdraw exact PSE2 selection"){_,_->
+                        if(submitted){showDialog("Gen 2 Bank multi-withdrawal","This exact destination review was already submitted. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton};submitted=true
+                        val current=runCatching{file.readBytes()}.getOrNull();val refreshed=current?.let{availableGen2BoxTargets(it).firstOrNull{target->target.first==box}}
+                        val unchanged=current!=null&&current.contentEquals(openedDestination)&&refreshed==(box to emptyCount)&&importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedSource&&currentSourceLabel==openedLabel&&
+                            selected.all{item->runCatching{item.sourceBinding.matches(item.bankBytes,true)&&item.bankFile.readBytes().contentEquals(item.bankBytes)}.getOrDefault(false)}
+                        if(!unchanged){showDialog("Gen 2 Bank multi-withdrawal","The destination identity, selected Bank records or reviewed native slots changed. Nothing was changed.");return@setPositiveButton}
+                        moveSelectedGen2BankPokemon(selected,openedDestination,box,file,openedSource,openedLabel)
+                    }.show()
             }
             .setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
     }
