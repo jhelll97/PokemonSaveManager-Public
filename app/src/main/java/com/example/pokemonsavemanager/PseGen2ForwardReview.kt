@@ -14,12 +14,12 @@ private fun appendPseGen2Omissions(out:StringBuilder,source:MainActivity.Gen2Pok
 }
 
 internal fun buildPseGen2ToGen3Review(
-    legaliseChanges:String,first:Int,source:MainActivity.Gen2Pokemon,converted:MainActivity.PokemonEntry,
+    legaliseChanges:String,firstDestination:String,source:MainActivity.Gen2Pokemon,converted:MainActivity.PokemonEntry,
     ppUps:IntArray,gender:Int
 ):String=buildString{
     append("PSE Bank conversion preview\n\n")
     append(legaliseChanges).append("\n\n")
-    append("First structurally empty destination: Box ${first/30+1}, Slot ${first%30+1}; Choose Box / Slot can select another structurally empty slot. Every nonzero destination record remains unchanged.\n")
+    append("$firstDestination; Choose Box / Slot can select another structurally empty slot. Every nonzero destination record remains unchanged.\n")
     appendPseGen2PreservedReview(this,converted,ppUps)
     append("PID: ${"%08X".format(converted.pid)}; SID becomes 0; nature #${converted.nature} is EXP mod 25; gender becomes #$gender; ability slot becomes ${converted.abilityNumber}.\n")
     append("IVs: deterministic Gen 3 mapping ${converted.ivs.joinToString("/")}. EVs: Gen 2 Stat Exp ÷ 257, with the single Special budget split across SpA/SpD and total capped at 510; final ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")

@@ -1446,6 +1446,14 @@ Re-inventory found that the implemented PSE1 -> PK3 conversion already reopens t
 
 Route-scoped Generation 3 Box and Slot constants now govern chooser bounds, selected-slot validation, completion navigation and every visible destination capacity label for this route. Label construction remains outside `MainActivity` to preserve the validated class-size margin. The transaction still leaves existing and nonzero PC data unchanged, retains exact destination and Bank recovery snapshots, reopens the persisted PK3 and Pokédex mirrors, removes the Bank source only after verification, and preserves two-sided rollback.
 
+Commit `661423a52e76f42b4134d15730a9522ee1a4343e` passed automatic Android build run `45794461654`, attempt 1, and was reported by exact Slack event `1795687064.033239`; the Generation 1 -> Generation 3 native destination capacity labels are validated.
+
+## Generation 2 -> Generation 3 native destination capacity labels
+
+Re-inventory found that the implemented PSE2 -> PK3 conversion already binds the exact selected Gen 2 Bank record and destination, blocks unsupported data, requires explicit cancellable Legalise review before destination selection, writes only one structurally empty native PK3 slot, preserves current PP and PP Ups, updates every required Pokédex mirror and active section checksum, and verifies the exact converted PK3 after persistence. Its review, destination buttons, nested Box/Slot picker, full-capacity block and completion result omitted native capacity totals. They now show `Box N of 14`, `Slot N of 30`, the complete 420-slot capacity and the exact placed location.
+
+Route-scoped Generation 3 Box and Slot constants now govern chooser bounds, selected-slot validation and every visible destination capacity label for this route. The external review builder receives the already constructed route label so it exposes the same capacity context without duplicating storage constants. The transaction still leaves existing and nonzero PC data unchanged, retains exact destination and Bank recovery snapshots, reopens the persisted PK3, PP Ups and Pokédex mirrors, removes the Bank source only after verification, and preserves independent two-sided rollback.
+
 This implementation is pending its own automatic Android compile before the feature is called validated. Next bounded feature: continue the destination-chooser inventory with one implemented route that still omits concrete native Box or Slot capacity context.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
