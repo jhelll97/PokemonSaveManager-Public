@@ -1326,6 +1326,14 @@ Re-inventory found that the implemented PK4 -> PK2 backward PSE conversion alrea
 
 Route-scoped Generation 2 Box and Slot constants now govern selected-Box bounds, full-Box validation and every visible destination capacity label for this route. Label construction remains outside `MainActivity` to preserve the validated class-size margin. The transaction still preserves supported moves, current PP and PP Ups, represented fields, native Box ordering, existing records, Owned and Seen flags, the primary checksum, exact destination and PK4 Bank recovery snapshots, persisted reopen verification, source cleanup only after verification and two-sided rollback.
 
+Commit `570a43c5da399773ffede87cf7acbf89781ffd43` passed automatic Android build run `45768249086`, attempt 1, and was reported by exact Slack event `1795675003.141899`; the Generation 4 -> Generation 2 native destination capacity labels are validated.
+
+## Generation 5 -> Generation 2 native destination capacity labels
+
+Re-inventory found that the implemented PK5 -> PK2 backward PSE conversion already binds the exact selected PK5 and Generation 2 destination, blocks unsupported species, forms and fields, requires a separate explicit cancellable Legalise review before removing and compacting moves unavailable in Generation 2, offers only native PC Boxes with room, appends to the next empty slot and verifies the exact converted record after persistence, but its Box picker and completion result omitted total Box capacity and the concrete destination Slot. They now show `Box N of 14`, the next `Slot N of 20`, and distinguish a valid no-destination block across 280 native PC slots while leaving every destination record and the PK5 Bank source unchanged.
+
+Route-scoped Generation 2 Box and Slot constants now govern selected-Box bounds, full-Box validation and every visible destination capacity label for this route. Label construction remains outside `MainActivity` to preserve the validated class-size margin. The transaction still preserves supported moves, current PP and PP Ups, applies only explicitly accepted move removals and compaction, preserves native Box ordering, existing records, Owned and Seen flags, the primary checksum, exact destination and PK5 Bank recovery snapshots, persisted reopen verification, source cleanup only after verification and two-sided rollback.
+
 This implementation is pending its own automatic Android compile before the feature is called validated. Next bounded feature: continue the destination-chooser inventory with one implemented route that still omits concrete native Box or Slot capacity context.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
