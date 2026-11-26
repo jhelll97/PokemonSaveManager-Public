@@ -2123,7 +2123,7 @@ class MainActivity : Activity() {
     }
 
     private data class Gen1Gen3BatchPrepared(val bankFile:File,val bankBytes:ByteArray,val source:Gen1Pokemon,val sourceBinding:PseBankSourceBinding,val pk3:ByteArray,val converted:PokemonEntry)
-    private fun gen3DestinationSlotIsStructurallyEmpty(pc:ByteArray,global:Int):Boolean{
+    internal fun gen3DestinationSlotIsStructurallyEmpty(pc:ByteArray,global:Int):Boolean{
         if(global !in 0 until 420)return false
         val off=4+global*80
         if(off+80>pc.size)return false
@@ -4580,7 +4580,7 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun gen3PcBuffer(data: ByteArray): ByteArray? {
+    internal fun gen3PcBuffer(data: ByteArray): ByteArray? {
         if (!gen3SaveValid(data)) return null
         val out = ByteArray(33744)
         var dst = 0
@@ -11504,7 +11504,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private data class Gen4ToGen3Plan(val meta:Gen3ToGen4Meta,val originGame:Int,val originLegalised:Boolean=false,val metLocation:Int=0)
+    internal data class Gen4ToGen3Plan(val meta:Gen3ToGen4Meta,val originGame:Int,val originLegalised:Boolean=false,val metLocation:Int=0)
 
     private fun gen4ToGen2Blocker(p:PokemonEntry):String?=when{
         !p.checksumValid->"The source PK4 checksum is invalid."
@@ -36161,16 +36161,16 @@ class MainActivity : Activity() {
     internal data class Gen6Gen5Plan(val originGame:Int,val originLabel:String,val legalised:Boolean)
 
 
-    private data class Gen7Gen3Prepared(
+    internal data class Gen7Gen3Prepared(
         val bankFile:File,val bankBytes:ByteArray,val sourceBinding:PseBankSourceBinding,val source:PokemonEntry,val destination:ByteArray,
         val pk6:ByteArray,val converted6:PokemonEntry,
         val plan5:Gen6Gen5Plan,val pk5:ByteArray,val converted5:PokemonEntry,
         val meta4:Gen3ToGen4Meta,val meta3:Gen3ToGen4Meta,val originGame:Int,val originLegalised:Boolean,
         val pk4:ByteArray,val converted4:PokemonEntry,val plan3:Gen4ToGen3Plan,val pk3:ByteArray,val converted3:PokemonEntry,
-        val destinationFile:File,val sourceUri:Uri?,val sourceLabel:String?,val omitted:String
+        val destinationFile:File,val sourceUri:Uri?,val sourceLabel:String?,val omitted:String,val markingNote:String
     )
 
-    private fun gen7ToGen3StillBound(p:Gen7Gen3Prepared):Boolean=runCatching{
+    internal fun gen7ToGen3StillBound(p:Gen7Gen3Prepared):Boolean=runCatching{
         importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
             p.destinationFile.readBytes().contentEquals(p.destination)&&p.sourceBinding.matches(p.bankBytes,true)
     }.getOrDefault(false)
@@ -36264,7 +36264,7 @@ class MainActivity : Activity() {
                 val converted3=parsePk3(pk3,0,false)
                     ?:return@inner showDialog("Gen 7 → Gen 3","The prepared PK3 could not be reopened.")
                 val omitted=gen6ToGen5OmittedMetadata(pk6,converted6)
-                val prepared=Gen7Gen3Prepared(selected,bank,sourceBinding,source,destination,pk6,converted6,plan5,pk5,converted5,meta4,meta3,originGame,originLegalised,pk4,converted4,plan3,pk3,converted3,file,openedUri,openedLabel,omitted)
+                val prepared=Gen7Gen3Prepared(selected,bank,sourceBinding,source,destination,pk6,converted6,plan5,pk5,converted5,meta4,meta3,originGame,originLegalised,pk4,converted4,plan3,pk3,converted3,file,openedUri,openedLabel,omitted,markingNote)
                 val originNotice=if(originLegalised)"Origin Legalise: ${originGameName(source.originGame)} (ID ${source.originGame}) → $originTitle (ID $originGame). This is a user-selected provenance edit and does not verify history." else "Origin preserved: $originTitle (ID $originGame)."
                 val pidNotice=if(converted3.pid==source.pid)"PID remains ${"%08X".format(source.pid)}." else
                     "PID changes ${"%08X".format(source.pid)} → ${"%08X".format(converted3.pid)} only to satisfy Generation 4/3 PID-derived nature, ability slot, gender and shiny constraints."
@@ -36279,32 +36279,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun chooseGen7ToGen3Destination(p:Gen7Gen3Prepared){
-        if(!gen7ToGen3StillBound(p))return showDialog("Gen 7 → Gen 3","The prepared snapshots changed. Reopen PSE Bank.")
-        val pc=gen3PcBuffer(p.destination)?:return showDialog("Gen 7 → Gen 3","PSE could not reconstruct Gen 3 PC storage.")
-        val empty=(0 until GEN3_PC_CAPACITY).filter{gen3DestinationSlotIsStructurallyEmpty(pc,it)}
-        if(empty.isEmpty())return showDialog("Gen 7 → Gen 3",gen7ToGen3CapacityLabel(5,0))
-        val first=empty.first()
-        AlertDialog.Builder(this).setTitle("Choose native Gen 3 destination")
-            .setMessage("The reviewed PSE conversion will be written to one structurally empty native PK3 slot. Every nonzero destination record remains unchanged; this does not claim official migration or verified provenance.")
-            .setNegativeButton("Cancel",null)
-            .setPositiveButton(gen7ToGen3CapacityLabel(0,first)){_,_->transferGen7BankToGen3(p,first)}
-            .setNeutralButton("Choose Box / Slot • $GEN3_PC_BOX_COUNT Boxes × $GEN3_PC_SLOTS_PER_BOX slots"){_,_->showGen7ToGen3BoxPicker(p,pc)}.show()
-    }
-
-    private fun showGen7ToGen3BoxPicker(p:Gen7Gen3Prepared,pc:ByteArray){
-        if(!gen7ToGen3StillBound(p))return showDialog("Gen 7 → Gen 3","The prepared snapshots changed. Reopen PSE Bank.")
-        val boxes=(0 until GEN3_PC_BOX_COUNT).filter{b->(0 until GEN3_PC_SLOTS_PER_BOX).any{s->gen3DestinationSlotIsStructurallyEmpty(pc,b*GEN3_PC_SLOTS_PER_BOX+s)}}
-        AlertDialog.Builder(this).setTitle("Choose Gen 3 destination box")
-            .setItems(boxes.map{gen7ToGen3CapacityLabel(1,it)}.toTypedArray()){_,w->
-                val b=boxes[w];val empties=(0 until GEN3_PC_SLOTS_PER_BOX).filter{s->gen3DestinationSlotIsStructurallyEmpty(pc,b*GEN3_PC_SLOTS_PER_BOX+s)}
-                AlertDialog.Builder(this).setTitle(gen7ToGen3CapacityLabel(2,b))
-                    .setItems(empties.map{gen7ToGen3CapacityLabel(3,it)}.toTypedArray()){_,sw->transferGen7BankToGen3(p,b*GEN3_PC_SLOTS_PER_BOX+empties[sw])}
-                    .setNegativeButton("Cancel",null).show()
-            }.setNegativeButton("Cancel",null).show()
-    }
-
-    private fun transferGen7BankToGen3(p:Gen7Gen3Prepared,target:Int){
+    internal fun transferGen7BankToGen3(p:Gen7Gen3Prepared,target:Int){
         fun bound()=importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel
         if(!gen7ToGen3StillBound(p))return showDialog("Gen 7 → Gen 3","The prepared snapshots changed. Reopen PSE Bank.")
         val file=p.destinationFile
