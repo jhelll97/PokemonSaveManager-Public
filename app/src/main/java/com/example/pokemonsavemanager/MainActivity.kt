@@ -54893,8 +54893,16 @@ class MainActivity : Activity() {
         val q=parsePk3(out,0,false)?:error("Converted PK3 parse failed");require(q.checksumValid&&q.species==dex&&q.tid==p.tid&&q.shiny==sourceShiny&&q.originGame==originGame&&q.ball==4);return out
     }
     private fun registerGen1ToGen3Pokedex(save:ByteArray,dex:Int){val s0=gen3ActiveSection(save,0)?:error("Missing section 0");val s1=gen3ActiveSection(save,1)?:error("Missing section 1");val bit=dex-1;val mask=1 shl(bit and 7);val byte=bit/8;val game=detectGen3GameFromData(save,currentSourceLabel?:importedFile?.name.orEmpty());val seen2=if(game.contains("FireRed")||game.contains("LeafGreen"))s1+0x938 else s1+0x988;for(o in intArrayOf(s0+0x28+byte,s0+0x5C+byte,seen2+byte))save[o]=(save[o].toInt() or mask).toByte();updateGen3SectionChecksum(save,0);updateGen3SectionChecksum(save,1)}
+
+    internal data class Gen1Gen3Prepared(
+        val bankFile:File,val source:Gen1Pokemon,val bankBytes:ByteArray,val pk3:ByteArray,
+        val converted:PokemonEntry,val destinationFile:File,val destination:ByteArray,
+        val sourceUri:Uri?,val sourceLabel:String?
+    )
+
     private fun chooseGen1BankToGen3Destination(bankFile:File,p:Gen1Pokemon){
         val file=importedFile?:return
+        val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         val data=runCatching{file.readBytes()}.getOrNull()
             ?:return showDialog("Gen 1 → Gen 3","The destination save could not be read.")
         if(generationForSize(data.size)!=3||!gen3SaveValid(data))
@@ -54916,6 +54924,7 @@ class MainActivity : Activity() {
         if(empties.isEmpty())return showDialog("Gen 1 → Gen 3",gen1ToGen3CapacityLabel(5,0))
         val first=empties.first()
         val sourceShiny=source.dvs[2]==10&&source.dvs[3]==10&&source.dvs[4]==10&&source.dvs[1] in setOf(2,3,6,7,10,11,14,15)
+        val prepared=Gen1Gen3Prepared(bankFile,source,raw,pk3,converted,file,data,openedUri,openedLabel)
         val preview=buildString{
             append("PSE Bank conversion preview\n\n")
             append("Preserved: species, nickname, OT, TID, EXP, level, moves, current PP and shiny state (${sourceShiny}).\n")
@@ -54925,30 +54934,50 @@ class MainActivity : Activity() {
             append("Required native defaults: friendship 70, English language, no held item, Poké Ball, met location 0, met level ${source.level}, and destination-compatible Gen 3 origin #${converted.originGame}. The Gen 1 catch-rate byte and fields without a native PK3 representation are omitted.\n\n")
             append("There was no official Gen 1/2 → Gen 3 transfer route. This is a PSE conversion into a native PK3, not an official migration or provenance claim. The source save stays unchanged. The exact Gen 1 Bank record remains until a retained recovery backup, the selected PK3, Pokédex mirrors, checksums and reopened destination all verify.")
         }
+        var choiceConsumed=false
         AlertDialog.Builder(this)
             .setTitle("PSE Convert ${source.nickname.ifBlank{gen1SpeciesNameFromInternal(source.species)}} to Gen 3")
             .setMessage(preview)
             .setPositiveButton(gen1ToGen3CapacityLabel(0,first)){_,_->
-                transferGen1BankToGen3(bankFile,source,pk3,converted,first)
+                if(choiceConsumed){showDialog("Gen 1 → Gen 3","This destination choice was already submitted. Reopen PSE Bank.");return@setPositiveButton};choiceConsumed=true
+                reviewGen1ToGen3Destination(prepared,first)
             }
             .setNeutralButton("Choose Box / Slot • $GEN3_PC_BOX_COUNT Boxes × $GEN3_PC_SLOTS_PER_BOX slots"){_,_->
-                showGen1ToGen3BoxPicker(bankFile,source,pk3,converted,pc)
+                if(choiceConsumed){showDialog("Gen 1 → Gen 3","This destination choice was already submitted. Reopen PSE Bank.");return@setNeutralButton};choiceConsumed=true
+                showGen1ToGen3BoxPicker(prepared,pc)
             }
             .setNegativeButton("Cancel",null)
             .show()
     }
-    private fun showGen1ToGen3BoxPicker(bankFile:File,p:Gen1Pokemon,pk3:ByteArray,converted:PokemonEntry,pc:ByteArray){
+    private fun showGen1ToGen3BoxPicker(prepared:Gen1Gen3Prepared,pc:ByteArray){
         val boxes=(0 until GEN3_PC_BOX_COUNT).filter{box->(0 until GEN3_PC_SLOTS_PER_BOX).any{slot->gen3DestinationSlotIsStructurallyEmpty(pc,box*GEN3_PC_SLOTS_PER_BOX+slot)}}
         if(boxes.isEmpty())return showDialog("Gen 1 → Gen 3",gen1ToGen3CapacityLabel(5,0))
+        var boxConsumed=false
         AlertDialog.Builder(this).setTitle("Choose Gen 3 destination box")
             .setItems(boxes.map{gen1ToGen3CapacityLabel(1,it)}.toTypedArray()){_,which->
+                if(boxConsumed||which !in boxes.indices){showDialog("Gen 1 → Gen 3","This Box choice was already handled or is invalid. Reopen PSE Bank.");return@setItems};boxConsumed=true
                 val box=boxes[which]
                 val empties=(0 until GEN3_PC_SLOTS_PER_BOX).filter{slot->gen3DestinationSlotIsStructurallyEmpty(pc,box*GEN3_PC_SLOTS_PER_BOX+slot)}
+                var transferConsumed=false
                 AlertDialog.Builder(this).setTitle(gen1ToGen3CapacityLabel(2,box))
                     .setItems(empties.map{gen1ToGen3CapacityLabel(3,it)}.toTypedArray()){_,slotIndex->
-                        transferGen1BankToGen3(bankFile,p,pk3,converted,box*GEN3_PC_SLOTS_PER_BOX+empties[slotIndex])
+                        if(transferConsumed||slotIndex !in empties.indices){showDialog("Gen 1 → Gen 3","This slot choice was already handled or is invalid. Reopen PSE Bank.");return@setItems};transferConsumed=true
+                        reviewGen1ToGen3Destination(prepared,box*GEN3_PC_SLOTS_PER_BOX+empties[slotIndex])
                     }.setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
+    }
+
+    internal fun gen1ToGen3StillBound(p:Gen1Gen3Prepared,target:Int):Boolean{
+        if(target !in 0 until GEN3_PC_CAPACITY)return false
+        if(importedFile?.absolutePath!=p.destinationFile.absolutePath||currentSourceUri!=p.sourceUri||currentSourceLabel!=p.sourceLabel)return false
+        return runCatching{
+            val fresh=p.destinationFile.readBytes();val bank=p.bankFile.readBytes();val pc=gen3PcBuffer(fresh)
+            fresh.contentEquals(p.destination)&&bank.contentEquals(p.bankBytes)&&
+                generationForSize(fresh.size)==3&&gen3SaveValid(fresh)&&
+                parseGen1BankPayload(bank)?.let{sameGen1TransferRecord(it,p.source)}==true&&
+                pc!=null&&gen3DestinationSlotIsStructurallyEmpty(pc,target)&&
+                buildGen1ToGen3Pk3(bank,p.source,fresh).contentEquals(p.pk3)
+        }.getOrDefault(false)
     }
     private fun writeGen1ToGen3PcAndDexFrozen(save:ByteArray,pc:ByteArray,dex:Int){
         // Freeze one coherent Gen 3 save-slot map for the whole transaction. Re-selecting
@@ -54990,7 +55019,7 @@ class MainActivity : Activity() {
         if(sSeen3!=s1)updateGen3SectionChecksumAt(save,sSeen3,seen3SectionId)
     }
 
-    private fun transferGen1BankToGen3(bankFile:File,p:Gen1Pokemon,pk3:ByteArray,converted:PokemonEntry,target:Int){
+    internal fun transferGen1BankToGen3(bankFile:File,p:Gen1Pokemon,pk3:ByteArray,converted:PokemonEntry,target:Int){
         val openedFile=importedFile?:return
         val openedUri=currentSourceUri
         val openedLabel=currentSourceLabel

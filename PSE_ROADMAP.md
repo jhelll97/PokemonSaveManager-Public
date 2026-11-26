@@ -1782,7 +1782,15 @@ Supported-title Bank review found that the implemented PSE1 -> PK2 conversion al
 
 The Gen 1 route now inserts one final cancellable review after Box selection. It shows the exact `Box N of 14`, `Slot N of 20` destination within the native 280-slot PC, repeats every preserved field, the catch-rate-to-held-item mapping and generated friendship, Pokérus and caught/met values, confirms no move is removed or replaced, and rechecks the same destination bytes, exact Bank record, save profile and exact next Box slot before entering the unchanged transaction. Existing destination records remain untouched; retained destination and Bank recovery snapshots, scoped Seen/Owned and checksum updates, persisted reopen verification, cleanup-last source removal and two-sided rollback remain unchanged.
 
-This change is pending its own automatic Android compile before the Generation 1 -> Generation 2 exact destination and mapping review is called validated.
+Commit `ab1cd4e84e34052c6e9e3e5741732365f0bb4c20` passed automatic Android build run `45895108589`, attempt 1, and was reported by exact Slack event `1795727701.433039`; the Generation 1 -> Generation 2 exact destination and mapping review is validated.
+
+## Generation 1 -> Generation 3 exact destination and mapping review
+
+Supported-title Bank review found that the implemented PSE1 -> PK3 conversion already reopens the selected Red, Blue or Yellow Bank bytes, validates the loaded Ruby, Sapphire, Emerald, FireRed or LeafGreen destination, discloses the deterministic PID, SID, nature, IV, EV, origin and required native defaults, writes only one structurally empty native PK3 slot, updates every required Pokédex mirror and active-section checksum, and verifies the exact converted PK3 after persisted reopen. Its first-empty button and nested Box/Slot picker identified the exact native location but entered the transaction immediately after selection without one final accepted mapping review tied to that slot.
+
+The Gen 1 route now inserts one final cancellable review for both first-empty and manually selected destinations. It shows the exact `Box N of 14`, `Slot N of 30` location within the native 420-slot PC, repeats every preserved and deterministic PK3 field plus the catch-rate and unsupported-field omissions, confirms no move is removed or replaced, and rechecks the same destination bytes and identity, exact Bank record, deterministic PK3 bytes and structurally empty selected slot before entering the unchanged transaction. Existing and nonzero destination records remain untouched; retained destination and Bank recovery snapshots, scoped Pokédex and checksum updates, persisted reopen verification, cleanup-last source removal and two-sided rollback remain unchanged.
+
+This change is pending its own automatic Android compile before the Generation 1 -> Generation 3 exact destination and mapping review is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
