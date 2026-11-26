@@ -17,6 +17,9 @@ data class SwordShieldPseBankDexRegistration(
 
 /** Restores one checksum-valid native PK8 Bank record into a reviewed new Sword/Shield save copy. */
 object SwordShieldPseBankRestoreEditing {
+    const val BOX_COUNT = 32
+    const val SLOTS_PER_BOX = 30
+    const val STORAGE_CAPACITY = BOX_COUNT * SLOTS_PER_BOX
     private const val MAX_FILE_SIZE = 0x1876B1
 
     fun readDocumentBytes(input: InputStream): ByteArray = input.use {
@@ -66,7 +69,7 @@ object SwordShieldPseBankRestoreEditing {
 
     fun emptyDestinations(source: ByteArray): List<SwordShieldPseBankDestination> {
         val storage = SwordShieldStorageReadOnly.read(source.copyOf())
-        return (0 until 32).flatMap { box ->
+        return (0 until BOX_COUNT).flatMap { box ->
             storage.box(box).filter { it.read is SwordShieldSlotRead.Empty }
                 .map { SwordShieldPseBankDestination(box + 1, it.position) }
         }
@@ -78,7 +81,9 @@ object SwordShieldPseBankRestoreEditing {
         bankRecord: ByteArray
     ): SwordShieldPseBankRestoreCopyPlan {
         val destination = emptyDestinations(source).firstOrNull()
-            ?: throw IllegalArgumentException("All 960 native Sword/Shield PC-box slots are occupied.")
+            ?: throw IllegalArgumentException(
+                "All $STORAGE_CAPACITY native Sword/Shield PC-box slots are occupied."
+            )
         return stage(source, expectedSha256, bankRecord, destination.box, destination.position)
     }
 
@@ -95,7 +100,7 @@ object SwordShieldPseBankRestoreEditing {
         val original = source.copyOf()
         val supplied = bankRecord.copyOf()
         require(sha256(original) == expectedSha256) { "The source changed. Reopen it from PSE." }
-        require(box in 1..32 && position in 1..30) {
+        require(box in 1..BOX_COUNT && position in 1..SLOTS_PER_BOX) {
             "The selected Sword/Shield PC-box destination is outside native storage."
         }
         val before = SwordShieldStorageReadOnly.read(original)
@@ -146,7 +151,8 @@ object SwordShieldPseBankRestoreEditing {
 
         val beforeBlocks = SwordShieldSaveValidation.readPokemonBlocks(original)
         val afterBlocks = SwordShieldSaveValidation.readPokemonBlocks(edited)
-        val relativeOffset = ((box - 1) * 30 + position - 1) * SwordShieldPokemonReadOnly.RECORD_SIZE
+        val relativeOffset = ((box - 1) * SLOTS_PER_BOX + position - 1) *
+            SwordShieldPokemonReadOnly.RECORD_SIZE
         require(afterBlocks.boxes.copyOfRange(relativeOffset, relativeOffset + bankRecord.size)
             .contentEquals(bankRecord)) { "The native PSE Bank bytes were not preserved exactly." }
         require(beforeBlocks.party.contentEquals(afterBlocks.party)) {
