@@ -1278,6 +1278,14 @@ Re-inventory found that exact native PSE2 withdrawal into Gold, Silver or Crysta
 
 Route-scoped Generation 2 Box and Slot constants now govern Box enumeration, free-slot calculation, selected-Box bounds, full-Box validation and every visible destination capacity label. Label construction remains outside `MainActivity` to preserve the validated class-size margin. The transaction still preserves the exact selected PSE2 Bank payload and append-only Box ordering, existing Box records, Owned and Seen flags, primary checksum, exact destination and Bank recovery snapshots, persisted reopen verification, source cleanup after verification and two-sided rollback.
 
+Commit `08e33971a9b686f58682ec831cf8b773bcf149c6` passed automatic Android build run `45759159970`, attempt 1, and was reported by exact Slack event `1795670095.143999`; the native Generation 2 Bank withdrawal destination capacity labels are validated.
+
+## Native Generation 1 Bank withdrawal destination capacity labels
+
+Re-inventory found that exact native PSE1 withdrawal into Red, Blue or Yellow already enumerates up to 12 initialized writable PC Boxes with 20 slots per Box, offers only Boxes with room, appends to the next empty slot and verifies the exact withdrawn record after persistence, but its Box picker and completion result omitted total Box capacity and the concrete destination Slot. They now show `Box N of 12`, the next `Slot N of 20`, and distinguish a valid no-writable-destination block across 240 total native slots without claiming that uninitialized Boxes are occupied.
+
+Route-scoped Generation 1 Box and Slot constants now govern Box enumeration, free-slot calculation and every visible destination capacity label. Label construction remains outside `MainActivity` to preserve the validated class-size margin. The transaction still preserves the exact selected PSE1 Bank payload and append-only Box ordering, existing Box records and mirrors, Seen and Caught flags, native box-bank and main checksums, exact destination and Bank recovery snapshots, persisted reopen verification, source cleanup after verification and two-sided rollback.
+
 This implementation is pending its own automatic Android compile before the feature is called validated. Next bounded feature: continue the destination-chooser inventory with one implemented route that still omits concrete native Box or Slot capacity context.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair

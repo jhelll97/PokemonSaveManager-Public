@@ -131,6 +131,13 @@ private fun nativeGen2WithdrawalCapacityLabel(kind:Int,box:Int,value:Int,base:St
     else -> error("Unknown native Gen 2 withdrawal capacity label")
 }
 
+private fun nativeGen1WithdrawalCapacityLabel(kind:Int,box:Int,value:Int):String=when(kind){
+    0 -> "Box $box of $GEN1_PC_BOX_COUNT • next empty Slot ${GEN1_PC_SLOTS_PER_BOX-value+1} of $GEN1_PC_SLOTS_PER_BOX • $value empty"
+    1 -> "No writable native Generation 1 destination is available across $GEN1_PC_BOX_COUNT PC Boxes × $GEN1_PC_SLOTS_PER_BOX slots ($GEN1_PC_CAPACITY total slots). Existing records were left unchanged."
+    2 -> "Withdrew exact Gen 1 PSE1 to Box $box of $GEN1_PC_BOX_COUNT • Slot ${value+1} of $GEN1_PC_SLOTS_PER_BOX and verified"
+    else -> error("Unknown native Gen 1 withdrawal capacity label")
+}
+
 private fun gen7ToGen5CapacityLabel(kind:Int,index:Int):String=when(kind){
     0 -> "First Structurally Empty • Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX"
     1 -> "Box ${index+1} of $GEN5_PC_BOX_COUNT"
@@ -62712,7 +62719,7 @@ private data class Gen2ToGen5LegalisePlan(
         require(gen1BoxIsWritable(data,box)); val base=gen1BoxDataOffset(data,box); val count=(data[base].toInt() and 0xFF).coerceIn(0,GEN1_BOX_CAPACITY); require(count<GEN1_BOX_CAPACITY) { "Box $box is full." }
         data[base]=(count+1).toByte(); data[base+GEN1_BOX_SPECIES_LIST+count]=monRaw[0]; data[base+GEN1_BOX_SPECIES_LIST+count+1]=0xFF.toByte(); monRaw.copyInto(data,base+GEN1_BOX_MONS+count*GEN1_BOX_MON_SIZE); otRaw.copyInto(data,base+GEN1_BOX_OT_NAMES+count*11); nickRaw.copyInto(data,base+GEN1_BOX_NICKS+count*11); updateGen1ChecksumsAfterBoxChange(data,box); return count
     }
-    private fun availableGen1BoxTargets(data:ByteArray):List<Pair<Int,Int>> { val out=ArrayList<Pair<Int,Int>>(); for(b in 1..12) if(gen1BoxIsWritable(data,b)) { val base=gen1BoxDataOffset(data,b); val c=(data[base].toInt() and 0xFF).coerceIn(0,GEN1_BOX_CAPACITY); if(c<GEN1_BOX_CAPACITY) out.add(b to GEN1_BOX_CAPACITY-c) }; return out }
+    private fun availableGen1BoxTargets(data:ByteArray):List<Pair<Int,Int>> { val out=ArrayList<Pair<Int,Int>>(); for(b in 1..GEN1_PC_BOX_COUNT) if(gen1BoxIsWritable(data,b)) { val base=gen1BoxDataOffset(data,b); val c=(data[base].toInt() and 0xFF).coerceIn(0,GEN1_PC_SLOTS_PER_BOX); if(c<GEN1_PC_SLOTS_PER_BOX) out.add(b to GEN1_PC_SLOTS_PER_BOX-c) }; return out }
     private fun confirmGen1Duplicate(p:Gen1Pokemon,location:String,party:Boolean) {
         val live=loadFreshGen1Selection(p,location,party,"Duplicate Pokémon")?:return
         val targets=availableGen1BoxTargets(live.first)
@@ -63012,9 +63019,9 @@ private data class Gen2ToGen5LegalisePlan(
         val currentBank=runCatching{selected.readBytes()}.getOrNull()
         if(currentBank==null||!sourceBinding.matches(openedRaw,true)||!exactBank(currentBank)){showDialog("Withdraw","The selected Gen 1 Bank record changed. Reopen PSE Bank. Nothing was changed.");return}
         val targets=availableGen1BoxTargets(openedDestination)
-        if(targets.isEmpty()){showDialog("Withdraw","No writable Gen 1 box has room.");return}
+        if(targets.isEmpty()){showDialog("Withdraw",nativeGen1WithdrawalCapacityLabel(1,0,0));return}
         var consumed=false
-        AlertDialog.Builder(this).setTitle("Withdraw to…").setItems(targets.map{(b,e)->"Box $b • $e empty"}.toTypedArray()){_,which->
+        AlertDialog.Builder(this).setTitle("Withdraw to…").setItems(targets.map{(b,e)->nativeGen1WithdrawalCapacityLabel(0,b,e)}.toTypedArray()){_,which->
             if(consumed||which !in targets.indices){consumed=true;showDialog("Withdraw","This destination choice was already handled or is invalid. Reopen PSE Bank. Nothing was changed.");return@setItems}
             consumed=true
             if(!bound()){showDialog("Withdraw failed","The loaded Gen 1 save identity changed after the box list opened. Reopen PSE Bank. Nothing was changed.");return@setItems}
@@ -63024,6 +63031,7 @@ private data class Gen2ToGen5LegalisePlan(
             var backupBinding:PseBankDestinationBinding?=null
             var bankRecoveryBinding:PseBankSourceBinding?=null
             var stagedDestination:ByteArray?=null
+            var placedSlot=-1
             try {
                 require(destinationBinding.matches(openedDestination,bound())&&fresh.contentEquals(openedDestination)){"The Gen 1 destination or its source identity changed after the box list opened."}
                 val freshIntegrity=verifyGen1SaveIntegrity(fresh);require(freshIntegrity.first){freshIntegrity.second}
@@ -63033,7 +63041,7 @@ private data class Gen2ToGen5LegalisePlan(
                 val parsed=parseGen1BankPayload(raw)?:error("The selected Gen 1 Bank record is invalid.")
                 val before=parseGen1Box(fresh,box).pokemon.sortedBy{it.slot}
                 val d=fresh.copyOf();val o=GEN1_BANK_HEADER_SIZE
-                val slot=appendGen1BoxPokemon(d,box,raw.copyOfRange(o,o+GEN1_BOX_MON_SIZE),raw.copyOfRange(o+GEN1_BOX_MON_SIZE,o+GEN1_BOX_MON_SIZE+11),raw.copyOfRange(o+GEN1_BOX_MON_SIZE+11,GEN1_BANK_FILE_SIZE))
+                val slot=appendGen1BoxPokemon(d,box,raw.copyOfRange(o,o+GEN1_BOX_MON_SIZE),raw.copyOfRange(o+GEN1_BOX_MON_SIZE,o+GEN1_BOX_MON_SIZE+11),raw.copyOfRange(o+GEN1_BOX_MON_SIZE+11,GEN1_BANK_FILE_SIZE));placedSlot=slot
                 val dex=gen1DexFromInternalIndex(parsed.species)?:error("Withdrawn Pokémon species could not be mapped to the Gen 1 Pokédex.")
                 markGen1PokedexCaught(d,dex);updateGen1MainChecksum(d)
                 val bit=dex-1;val mask=1 shl(bit%8);require((d[0x25A3+bit/8].toInt() and mask)!=0&&(d[0x25B6+bit/8].toInt() and mask)!=0){"Withdrawn Pokémon Pokédex registration was not staged."}
@@ -63087,7 +63095,7 @@ private data class Gen2ToGen5LegalisePlan(
                 )
                 val recoveryNotice=if(bankRecoveryClean) "" else
                     "; exact temporary Bank recovery retained for review"
-                Toast.makeText(this,"Withdrawn to Box $box and verified$recoveryNotice",Toast.LENGTH_LONG).show();showGen1PokemonViewer("boxes",box)
+                Toast.makeText(this,nativeGen1WithdrawalCapacityLabel(2,box,placedSlot)+recoveryNotice,Toast.LENGTH_LONG).show();showGen1PokemonViewer("boxes",box)
             } catch(e:Exception) {
                 val bankRestored=runCatching{
                     if(bankDeleteAttempted&&!selected.exists()){require(selected.createNewFile()){"The Bank recovery path could not be reserved."};selected.writeBytes(openedRaw)}
