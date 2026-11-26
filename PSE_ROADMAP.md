@@ -1422,6 +1422,14 @@ Re-inventory found that the implemented PK3 -> PK5 and PK4 -> PK5 conversions sh
 
 Route-scoped Generation 5 Box and Slot constants now govern chooser bounds, selected-slot validation, checksum verification and every visible destination capacity label in this shared path. Label construction remains outside `MainActivity` to preserve the validated class-size margin. The transactions still leave nonzero destination records unchanged, preserve exact source and destination binding, retain verified destination and Bank recovery snapshots, reopen the persisted PK5, remove the Bank source only after verification, and preserve independent two-sided rollback.
 
+Commit `56037c368429329cecbffc43552c39c59ce0648d` passed automatic Android build run `45788511872`, attempt 1, and was reported by exact Slack event `1795684658.288989`; the shared Generation 3 and Generation 4 -> Generation 5 native destination capacity labels are validated.
+
+## Generation 3, Generation 4 and Generation 5 -> Generation 6 native destination capacity labels
+
+Re-inventory found that the implemented PK3 -> PK6, PK4 -> PK6 and PK5 -> PK6 conversions share one native Generation 6 destination chooser and transaction. Each route already binds the exact selected Bank source and destination, blocks unsupported source data, requires explicit cancellable review of every conversion or Legalise change before destination selection, offers only structurally empty native PK6 slots, updates only the reviewed PK6, required Pokédex fields and native block checksums, and verifies the exact converted PK6 after persistence. Their shared chooser, nested Box/Slot picker, full-capacity block and completion result omitted native capacity totals. They now require and show `Box N of 31`, `Slot N of 30`, the complete 930-slot capacity and the exact placed location while retaining the source generation in every route-specific result.
+
+Route-scoped Generation 6 Box and Slot constants now govern capacity verification, chooser bounds, selected-slot validation and every visible destination capacity label in this shared path. Label construction remains outside `MainActivity` to preserve the validated class-size margin. The transactions still leave nonzero destination records unchanged, preserve exact source and destination binding, retain verified destination and Bank recovery snapshots, reopen the persisted PK6, remove the Bank source only after verification, and preserve independent two-sided rollback.
+
 This implementation is pending its own automatic Android compile before the feature is called validated. Next bounded feature: continue the destination-chooser inventory with one implemented route that still omits concrete native Box or Slot capacity context.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
