@@ -300,6 +300,17 @@ private fun gen2ToGen5CapacityLabel(kind:Int,index:Int):String=when(kind){
     else -> error("Unknown Gen 2 to Gen 5 capacity label")
 }
 
+private fun gen1ToGen6CapacityLabel(kind:Int,index:Int):String=when(kind){
+    0 -> "First structurally empty • Box ${index/GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_BOX_COUNT • Slot ${index%GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_SLOTS_PER_BOX"
+    1 -> "Box ${index+1} of $GEN6_PC_BOX_COUNT"
+    2 -> "Box ${index+1} of $GEN6_PC_BOX_COUNT • choose structurally empty slot"
+    3 -> "Slot ${index+1} of $GEN6_PC_SLOTS_PER_BOX"
+    4 -> "PSE converted Gen 1 → Gen 6 to Box ${index/GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_BOX_COUNT • Slot ${index%GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_SLOTS_PER_BOX and verified"
+    5 -> "All $GEN6_PC_CAPACITY native Generation 6 PC slots are unavailable. Existing or nonzero destination records and the Gen 1 Bank source were left unchanged."
+    6 -> "Chosen destination: Box ${index/GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_BOX_COUNT, Slot ${index%GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_SLOTS_PER_BOX, within the native $GEN6_PC_CAPACITY-slot PC."
+    else -> error("Unknown Gen 1 to Gen 6 capacity label")
+}
+
 private fun gen5ToGen4CapacityLabel(kind:Int,index:Int):String=when(kind){
     0 -> "First structurally empty • Box ${index/GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_BOX_COUNT • Slot ${index%GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_SLOTS_PER_BOX"
     1 -> "Box ${index+1} of $GEN4_PC_BOX_COUNT"
@@ -54757,28 +54768,54 @@ class MainActivity : Activity() {
                 ?:return@loadGen1ToGen5MetaAsync showDialog("Gen 1 → Gen 6","The prepared native PK6 could not be reopened.")
             val info=boxStorageInfo(data)
                 ?:return@loadGen1ToGen5MetaAsync showDialog("Gen 1 → Gen 6","PSE could not resolve Gen 6 PC storage.")
-            val first=(0 until info.second).firstOrNull{gen6DestinationSlotIsStructurallyEmpty(data,info.first,info.second,info.third,it)}
-                ?:return@loadGen1ToGen5MetaAsync showDialog("Gen 1 → Gen 6","No structurally empty Gen 6 PC slot is available. Nonzero destination records were left unchanged.")
+            if(info.second!=GEN6_PC_CAPACITY)return@loadGen1ToGen5MetaAsync showDialog("Gen 1 → Gen 6","The native Generation 6 PC capacity could not be verified. Nothing was changed.")
+            val targets=(0 until GEN6_PC_CAPACITY).filter{gen6DestinationSlotIsStructurallyEmpty(data,info.first,info.second,info.third,it)}
+            if(targets.isEmpty())return@loadGen1ToGen5MetaAsync showDialog("Gen 1 → Gen 6",gen1ToGen6CapacityLabel(5,0))
+            val first=targets.first()
             val decrypted=decryptPk6IfNeeded(pk6)
             val ec=readU32LE(decrypted,0)
             val handler=gen6Pk6HandlerName(pk6)
-            val preview=buildString{
-                append("PSE Bank conversion preview\n\n")
-                append("Preserved: species, nickname, original OT, TID, EXP, level, moves, current PP, PP Ups and shiny state (${converted.shiny}).\n")
-                append("Encryption constant: ${"%08X".format(ec)}. PID: ${"%08X".format(converted.pid)} for the verified shiny state; ability slot ${converted.abilityNumber}, nature #${converted.nature} (EXP mod 25), gender #${converted.gender} from the Gen 1 record and species ratio, and SID becomes 0.\n")
-                append("IVs: each Gen 1 DV is doubled; Special is copied to both Special Attack and Special Defense. Final HP/Atk/Def/Spe/SpA/SpD: ${converted.ivs.joinToString("/")}.\n")
-                append("EVs: each Stat Exp value is divided by 257; Special is copied to both special stats, each value is capped at 252, then the highest values are trimmed only if needed to fit the total cap of 510. Final HP/Atk/Def/Spe/SpA/SpD: ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")
-                append("Ability: destination-valid ability #${converted.ability}. Required native values: base friendship ${converted.friendship}, language #${converted.language}, no held item, Poké Ball, met level ${converted.metLevel}, met location #${converted.metLocation}, origin game #${converted.originGame}, and conversion date ${converted.metYear + 2000}-${converted.metMonth}-${converted.metDay}.\n")
-                append("Destination trainer “${handler}” becomes current handler; original OT/TID stay preserved. OT gender defaults to male because Gen 1 does not encode it. Egg data, geographic data, relearn moves, ribbons, markings, Pokérus and fields without a native PK6 representation remain empty or are omitted.\n\n")
-                append("The destination slot is structurally empty; nonzero destination records remain unchanged.\n\n")
-                append("Nintendo provided no direct Gen 1 → Gen 6 route. This is a PSE native PK6 conversion, not an official migration or provenance claim. The source save stays unchanged. The exact Gen 1 Bank record remains until a retained recovery backup, the selected PK6, Pokédex, PC checksum, Pokédex checksum and reopened destination all verify.")
+            fun review(target:Int){
+                if(!snapshotsMatch()||target !in 0 until GEN6_PC_CAPACITY||!gen6DestinationSlotIsStructurallyEmpty(data,info.first,info.second,info.third,target))return showDialog("Gen 1 → Gen 6","The destination, Bank record or selected slot changed. Reopen PSE Bank. Nothing was changed.")
+                val preview=buildString{
+                    append("PSE Bank conversion preview\n\n")
+                    append(gen1ToGen6CapacityLabel(6,target)).append(" The slot is structurally empty; nonzero destination records remain unchanged.\n")
+                    append("Preserved: species, nickname, original OT, TID, EXP, level, moves, current PP, PP Ups and shiny state (${converted.shiny}).\n")
+                    append("Encryption constant: ${"%08X".format(ec)}. PID: ${"%08X".format(converted.pid)} for the verified shiny state; ability slot ${converted.abilityNumber}, nature #${converted.nature} (EXP mod 25), gender #${converted.gender} from the Gen 1 record and species ratio, and SID becomes 0.\n")
+                    append("IVs: each Gen 1 DV is doubled; Special is copied to both Special Attack and Special Defense. Final HP/Atk/Def/Spe/SpA/SpD: ${converted.ivs.joinToString("/")}.\n")
+                    append("EVs: each Stat Exp value is divided by 257; Special is copied to both special stats, each value is capped at 252, then the highest values are trimmed only if needed to fit the total cap of 510. Final HP/Atk/Def/Spe/SpA/SpD: ${converted.evs.joinToString("/")} (total ${converted.evs.sum()}).\n")
+                    append("Ability: destination-valid ability #${converted.ability}. Required native values: base friendship ${converted.friendship}, language #${converted.language}, no held item, Poké Ball, met level ${converted.metLevel}, met location #${converted.metLocation}, origin game #${converted.originGame}, and conversion date ${converted.metYear + 2000}-${converted.metMonth}-${converted.metDay}.\n")
+                    append("Destination trainer “${handler}” becomes current handler; original OT/TID stay preserved. OT gender defaults to male because Gen 1 does not encode it. Egg data, geographic data, relearn moves, ribbons, markings, Pokérus and fields without a native PK6 representation remain empty or are omitted.\n\n")
+                    append("Nintendo provided no direct Gen 1 → Gen 6 route. This is a PSE native PK6 conversion, not an official migration or provenance claim. The source save stays unchanged. The exact Gen 1 Bank record remains until a retained recovery backup, the selected PK6, Pokédex, PC checksum, Pokédex checksum and reopened destination all verify.")
+                }
+                AlertDialog.Builder(this)
+                    .setTitle("PSE Convert ${source.nickname.ifBlank{gen1SpeciesNameFromInternal(source.species)}} to Gen 6")
+                    .setMessage(preview)
+                    .setPositiveButton("Transfer • Box ${target/GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_BOX_COUNT / Slot ${target%GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_SLOTS_PER_BOX"){_,_->
+                        if(!snapshotsMatch()||target !in 0 until GEN6_PC_CAPACITY||!gen6DestinationSlotIsStructurallyEmpty(data,info.first,info.second,info.third,target))showDialog("Gen 1 → Gen 6","The destination, Bank record or selected slot changed after review. Nothing was changed.")
+                        else transferGen1BankToGen6(bankFile,source,opened,data,pk6,converted,target,file,openedUri,openedLabel)
+                    }
+                    .setNegativeButton("Cancel",null)
+                    .show()
             }
-            AlertDialog.Builder(this)
-                .setTitle("PSE Convert ${source.nickname.ifBlank{gen1SpeciesNameFromInternal(source.species)}} to Gen 6")
-                .setMessage(preview)
-                .setPositiveButton("First Empty (Box ${first/30+1} / Slot ${first%30+1})"){_,_->
-                    if(!snapshotsMatch())showDialog("Gen 1 → Gen 6","The destination or Bank record changed after review. Nothing was changed.")
-                    else transferGen1BankToGen6(bankFile,source,opened,data,pk6,converted,first,file,openedUri,openedLabel)
+            fun chooseBox(){
+                if(!snapshotsMatch())return showDialog("Gen 1 → Gen 6","The destination or Bank record changed. Reopen PSE Bank. Nothing was changed.")
+                val boxes=(0 until GEN6_PC_BOX_COUNT).filter{box->(0 until GEN6_PC_SLOTS_PER_BOX).any{slot->gen6DestinationSlotIsStructurallyEmpty(data,info.first,info.second,info.third,box*GEN6_PC_SLOTS_PER_BOX+slot)}}
+                AlertDialog.Builder(this).setTitle("Choose Gen 6 destination box")
+                    .setMessage("Only boxes containing structurally empty slots are listed across $GEN6_PC_BOX_COUNT Boxes × $GEN6_PC_SLOTS_PER_BOX slots ($GEN6_PC_CAPACITY total). Nonzero destination records remain unchanged.")
+                    .setItems(boxes.map{box->val count=(0 until GEN6_PC_SLOTS_PER_BOX).count{slot->gen6DestinationSlotIsStructurallyEmpty(data,info.first,info.second,info.third,box*GEN6_PC_SLOTS_PER_BOX+slot)};gen1ToGen6CapacityLabel(1,box)+" • $count structurally empty"}.toTypedArray()){_,which->
+                        if(!snapshotsMatch())return@setItems showDialog("Gen 1 → Gen 6","The destination or Bank record changed. Reopen PSE Bank. Nothing was changed.")
+                        val box=boxes[which];val slots=(0 until GEN6_PC_SLOTS_PER_BOX).filter{slot->gen6DestinationSlotIsStructurallyEmpty(data,info.first,info.second,info.third,box*GEN6_PC_SLOTS_PER_BOX+slot)}
+                        AlertDialog.Builder(this).setTitle(gen1ToGen6CapacityLabel(2,box))
+                            .setItems(slots.map{gen1ToGen6CapacityLabel(3,it)}.toTypedArray()){_,slotIndex->review(box*GEN6_PC_SLOTS_PER_BOX+slots[slotIndex])}
+                            .setNegativeButton("Cancel",null).show()
+                    }.setNegativeButton("Cancel",null).show()
+            }
+            AlertDialog.Builder(this).setTitle("Choose native Gen 6 destination")
+                .setMessage("Choose the exact structurally empty PK6 slot across $GEN6_PC_BOX_COUNT Boxes × $GEN6_PC_SLOTS_PER_BOX slots ($GEN6_PC_CAPACITY total). Cancel leaves the destination and Bank record byte-exact.")
+                .setItems(arrayOf(gen1ToGen6CapacityLabel(0,first),"Choose Box / Slot • $GEN6_PC_BOX_COUNT Boxes × $GEN6_PC_SLOTS_PER_BOX slots ($GEN6_PC_CAPACITY total)")){_,which->
+                    if(!snapshotsMatch())showDialog("Gen 1 → Gen 6","The destination or Bank record changed. Reopen PSE Bank. Nothing was changed.")
+                    else if(which==0)review(first)else chooseBox()
                 }
                 .setNegativeButton("Cancel",null)
                 .show()
@@ -54802,7 +54839,7 @@ class MainActivity : Activity() {
             require(generationForSize(original.size)==6){"The destination is no longer a Gen 6 save."}
             require(gen6BoxChecksumValid(original)&&gen6BlockChecksumValid(original,20)){"The fresh Gen 6 destination failed storage or Pokédex validation."}
             val info=boxStorageInfo(original)?:error("PSE could not resolve Gen 6 PC storage.")
-            require(target in 0 until info.second){"Invalid Gen 6 PC slot."}
+            require(info.second==GEN6_PC_CAPACITY&&target in 0 until GEN6_PC_CAPACITY){"Invalid Gen 6 PC slot or native capacity."}
             val off=info.first+target*PK6_STORED_SIZE
             require(gen6DestinationSlotIsStructurallyEmpty(original,info.first,info.second,info.third,target)){"The destination slot is no longer structurally empty. Nonzero records were left unchanged."}
             val bank=bankFile.readBytes()
@@ -54889,7 +54926,7 @@ class MainActivity : Activity() {
             return
         }
         val recoveryNotice=BankTransferRecovery.successNotice(retainedRecovery)
-        Toast.makeText(this,"PSE converted Gen 1 → Gen 6 to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show()
+        Toast.makeText(this,gen1ToGen6CapacityLabel(4,target)+recoveryNotice,Toast.LENGTH_LONG).show()
         showBank()
     }
 
