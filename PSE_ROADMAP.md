@@ -1310,6 +1310,14 @@ Re-inventory found that the implemented PK6 -> PK1 backward PSE conversion alrea
 
 Route-scoped Generation 1 Box and Slot constants now govern selected-Box bounds, full-Box validation and every visible destination capacity label for this route. Label construction remains outside `MainActivity` to preserve the validated class-size margin. The transaction still preserves supported moves, PP and PP Ups, represented fields and the exact bound PK6 until verified cleanup, preserves append-only native Box ordering, existing records and mirrors, Seen and Caught flags, native box-bank and main checksums, exact destination and PK6 Bank recovery snapshots, persisted reopen verification and two-sided rollback.
 
+Commit `bab76feeba5ca79ac60659a17018980ddb18eed2` passed automatic Android build run `45764842585`, attempt 1, and was reported by exact Slack event `1795673417.821679`; the Generation 6 -> Generation 1 native destination capacity labels are validated.
+
+## Generation 7 -> Generation 1 native destination capacity labels
+
+Re-inventory found that the implemented PK7 -> PK1 backward PSE conversion already binds the exact selected PK7 and Generation 1 destination, blocks unsupported source data, requires a separate explicit cancellable Legalise review before any supported alternate form is normalized to base form, offers only initialized writable PC Boxes with room, appends to the next empty slot and verifies the exact converted record after persistence, but its Box picker and completion result omitted total Box capacity and the concrete destination Slot. They now show `Box N of 12`, the next `Slot N of 20`, and distinguish a valid no-writable-destination block across 240 potential native slots without claiming that uninitialized Boxes are occupied.
+
+Route-scoped Generation 1 Box and Slot constants now govern selected-Box bounds, full-Box validation and every visible destination capacity label for this route. Label construction remains outside `MainActivity` to preserve the validated class-size margin. The transaction still preserves supported moves, PP and PP Ups, applies only an explicitly accepted base-form normalization, keeps unreviewed forms blocked, preserves the exact bound PK7 until verified cleanup, append-only native Box ordering, existing records and mirrors, Seen and Caught flags, native checksums, exact destination and PK7 recovery snapshots, persisted reopen verification and two-sided rollback.
+
 This implementation is pending its own automatic Android compile before the feature is called validated. Next bounded feature: continue the destination-chooser inventory with one implemented route that still omits concrete native Box or Slot capacity context.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
