@@ -37475,7 +37475,7 @@ class MainActivity : Activity() {
         Toast.makeText(this,gen4To6ToGen7CapacityLabel(p.sourceGeneration,4,target)+recoveryNotice,Toast.LENGTH_LONG).show();showBank()
     }
 
-    private data class Gen7Gen5Prepared(
+    internal data class Gen7Gen5Prepared(
         val bankFile:File,val bankBytes:ByteArray,val sourceBinding:PseBankSourceBinding,val source:PokemonEntry,val destination:ByteArray,
         val originGame:Int,val originLegalised:Boolean,val pk6:ByteArray,val converted6:PokemonEntry,
         val plan5:Gen6Gen5Plan,val pk5:ByteArray,val converted5:PokemonEntry,
@@ -37483,7 +37483,7 @@ class MainActivity : Activity() {
         val markingNote:String,val omitted:String
     )
 
-    private fun gen7ToGen5StillBound(p:Gen7Gen5Prepared):Boolean=
+    internal fun gen7ToGen5StillBound(p:Gen7Gen5Prepared):Boolean=
         importedFile?.absolutePath==p.destinationFile.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel&&
             runCatching{p.destinationFile.readBytes().contentEquals(p.destination)&&p.sourceBinding.matches(p.bankBytes,true)}.getOrDefault(false)
 
@@ -37565,33 +37565,7 @@ class MainActivity : Activity() {
             }.show()
     }
 
-    private fun chooseGen7ToGen5Destination(p:Gen7Gen5Prepared){
-        if(!gen7ToGen5StillBound(p))return showDialog("Gen 7 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")
-        val empty=(0 until GEN5_PC_CAPACITY).filter{gen5DestinationSlotIsStructurallyEmpty(p.destination,it)}
-        if(empty.isEmpty())return showDialog("Gen 7 → Gen 5",gen7ToGen5CapacityLabel(5,0))
-        val first=empty.first()
-        AlertDialog.Builder(this).setTitle("Choose native Gen 5 destination")
-            .setMessage("The reviewed PK5 will be written only to a structurally empty slot with scoped Pokédex and checksum updates. Nonzero destination records remain unchanged.")
-            .setItems(arrayOf(gen7ToGen5CapacityLabel(0,first),"Choose Box / Slot")){_,which->
-                if(!gen7ToGen5StillBound(p))showDialog("Gen 7 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")
-                else if(which==0)transferGen7BankToGen5(p,first)else showGen7ToGen5BoxPicker(p)
-            }.setNegativeButton("Cancel",null).show()
-    }
-
-    private fun showGen7ToGen5BoxPicker(p:Gen7Gen5Prepared){
-        if(!gen7ToGen5StillBound(p))return showDialog("Gen 7 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")
-        val boxes=(0 until GEN5_PC_BOX_COUNT).filter{box->(0 until GEN5_PC_SLOTS_PER_BOX).any{slot->gen5DestinationSlotIsStructurallyEmpty(p.destination,box*GEN5_PC_SLOTS_PER_BOX+slot)}}
-        AlertDialog.Builder(this).setTitle("Choose Gen 5 destination box")
-            .setMessage("Only boxes with structurally empty slots are listed. Nonzero destination records remain unchanged.")
-            .setItems(boxes.map{gen7ToGen5CapacityLabel(1,it)}.toTypedArray()){_,which->
-                val box=boxes[which];val slots=(0 until GEN5_PC_SLOTS_PER_BOX).filter{slot->gen5DestinationSlotIsStructurallyEmpty(p.destination,box*GEN5_PC_SLOTS_PER_BOX+slot)}
-                AlertDialog.Builder(this).setTitle(gen7ToGen5CapacityLabel(2,box))
-                    .setItems(slots.map{gen7ToGen5CapacityLabel(3,it)}.toTypedArray()){_,slotIndex->transferGen7BankToGen5(p,box*GEN5_PC_SLOTS_PER_BOX+slots[slotIndex])}
-                    .setNegativeButton("Cancel",null).show()
-            }.setNegativeButton("Cancel",null).show()
-    }
-
-    private fun transferGen7BankToGen5(p:Gen7Gen5Prepared,target:Int){
+    internal fun transferGen7BankToGen5(p:Gen7Gen5Prepared,target:Int){
         if(!gen7ToGen5StillBound(p))return showDialog("Gen 7 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")
         val file=p.destinationFile
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel
