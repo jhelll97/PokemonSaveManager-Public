@@ -27,6 +27,9 @@ import java.util.Locale
 import org.json.JSONObject
 import org.json.JSONArray
 
+private const val GEN7_PC_BOX_COUNT = 32
+private const val GEN7_PC_SLOTS_PER_BOX = 30
+private const val GEN7_PC_CAPACITY = GEN7_PC_BOX_COUNT * GEN7_PC_SLOTS_PER_BOX
 private const val GEN6_PC_BOX_COUNT = 31
 private const val GEN6_PC_SLOTS_PER_BOX = 30
 private const val GEN6_PC_CAPACITY = GEN6_PC_BOX_COUNT * GEN6_PC_SLOTS_PER_BOX
@@ -118,6 +121,17 @@ private fun nativeGen6WithdrawalCapacityLabel(kind:Int,index:Int):String=when(ki
     5 -> "All $GEN6_PC_CAPACITY native Generation 6 PC slots are unavailable. Existing or nonzero slot data was left unchanged."
     6 -> "Withdrew exact Gen 6 PK6 to Box ${index/GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_BOX_COUNT • Slot ${index%GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_SLOTS_PER_BOX and verified"
     else -> error("Unknown native Gen 6 withdrawal capacity label")
+}
+
+private fun nativeGen7WithdrawalCapacityLabel(kind:Int,index:Int):String=when(kind){
+    0 -> "First structurally empty • Box ${index/GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_BOX_COUNT • Slot ${index%GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_SLOTS_PER_BOX"
+    1 -> "Box ${index+1} of $GEN7_PC_BOX_COUNT"
+    2 -> "Box ${index+1} of $GEN7_PC_BOX_COUNT • choose slot"
+    3 -> "Slot ${index+1} of $GEN7_PC_SLOTS_PER_BOX"
+    4 -> "Box ${index/GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_BOX_COUNT • Slot ${index%GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_SLOTS_PER_BOX"
+    5 -> "All $GEN7_PC_CAPACITY native Generation 7 PC slots are unavailable. Existing or nonzero slot data was left unchanged."
+    6 -> "Withdrew exact Gen 7 PK7 to Box ${index/GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_BOX_COUNT • Slot ${index%GEN7_PC_SLOTS_PER_BOX+1} of $GEN7_PC_SLOTS_PER_BOX and verified"
+    else -> error("Unknown native Gen 7 withdrawal capacity label")
 }
 
 private fun gen4PcCapacityLabel(kind:Int,index:Int):String=when(kind){
@@ -35340,14 +35354,15 @@ class MainActivity : Activity() {
         if(!gen7BankWithdrawalStillBound(p))
             return showDialog("Gen 7 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
         val info=boxStorageInfo(p.destination)?:return
-        val empty=(0 until info.second).filter{
+        if(info.second!=GEN7_PC_CAPACITY)return showDialog("Gen 7 Bank withdrawal","The native Generation 7 PC capacity could not be verified. Nothing was changed.")
+        val empty=(0 until GEN7_PC_CAPACITY).filter{
             gen7BankDestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,it)
         }
-        if(empty.isEmpty())return showDialog("Gen 7 Bank withdrawal","No structurally empty native Generation 7 PC slot is available. Existing or nonzero slot data was left unchanged.")
+        if(empty.isEmpty())return showDialog("Gen 7 Bank withdrawal",nativeGen7WithdrawalCapacityLabel(5,0))
         val first=empty.first()
         AlertDialog.Builder(this).setTitle("Choose native Gen 7 destination")
             .setMessage("Choose one structurally empty native PK7 slot. PSE will show the exact no-conversion effect and selected Box / Slot before final confirmation; nonzero slot data is preserved.")
-            .setItems(arrayOf("First structurally empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
+            .setItems(arrayOf(nativeGen7WithdrawalCapacityLabel(0,first),"Choose Box / Slot")){_,which->
                 if(!gen7BankWithdrawalStillBound(p))showDialog("Gen 7 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
                 else if(which==0)reviewGen7BankWithdrawal(p,first)else showGen7BankWithdrawalBoxPicker(p)
             }.setNegativeButton("Cancel",null).show()
@@ -35357,19 +35372,20 @@ class MainActivity : Activity() {
         if(!gen7BankWithdrawalStillBound(p))
             return showDialog("Gen 7 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
         val info=boxStorageInfo(p.destination)?:return
-        val boxes=(0 until info.second/30).filter{box->(0 until 30).any{slot->
-            gen7BankDestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*30+slot)
+        if(info.second!=GEN7_PC_CAPACITY)return showDialog("Gen 7 Bank withdrawal","The native Generation 7 PC capacity could not be verified. Nothing was changed.")
+        val boxes=(0 until GEN7_PC_BOX_COUNT).filter{box->(0 until GEN7_PC_SLOTS_PER_BOX).any{slot->
+            gen7BankDestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*GEN7_PC_SLOTS_PER_BOX+slot)
         }}
-        if(boxes.isEmpty())return showDialog("Gen 7 Bank withdrawal","No native Generation 7 PC box contains a structurally empty slot. Existing or nonzero slot data was left unchanged.")
+        if(boxes.isEmpty())return showDialog("Gen 7 Bank withdrawal",nativeGen7WithdrawalCapacityLabel(5,0))
         AlertDialog.Builder(this).setTitle("Choose Gen 7 destination box")
-            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+            .setItems(boxes.map{nativeGen7WithdrawalCapacityLabel(1,it)}.toTypedArray()){_,which->
                 val box=boxes[which]
-                val slots=(0 until 30).filter{slot->
-                    gen7BankDestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*30+slot)
+                val slots=(0 until GEN7_PC_SLOTS_PER_BOX).filter{slot->
+                    gen7BankDestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*GEN7_PC_SLOTS_PER_BOX+slot)
                 }
-                AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
-                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
-                        reviewGen7BankWithdrawal(p,box*30+slots[slotIndex])
+                AlertDialog.Builder(this).setTitle(nativeGen7WithdrawalCapacityLabel(2,box))
+                    .setItems(slots.map{nativeGen7WithdrawalCapacityLabel(3,it)}.toTypedArray()){_,slotIndex->
+                        reviewGen7BankWithdrawal(p,box*GEN7_PC_SLOTS_PER_BOX+slots[slotIndex])
                     }.setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
     }
@@ -35378,10 +35394,10 @@ class MainActivity : Activity() {
         if(!gen7BankWithdrawalStillBound(p))
             return showDialog("Gen 7 Bank withdrawal","The destination identity or Bank record changed. Reopen PSE Bank.")
         val info=boxStorageInfo(p.destination)?:return
-        if(target !in 0 until info.second)return showDialog("Gen 7 Bank withdrawal","The selected destination slot is invalid.")
+        if(info.second!=GEN7_PC_CAPACITY||target !in 0 until GEN7_PC_CAPACITY)return showDialog("Gen 7 Bank withdrawal","The selected destination slot or native PC capacity is invalid.")
         if(!gen7BankDestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,target))
-            return showDialog("Gen 7 Bank withdrawal","Box ${target/30+1} • Slot ${target%30+1} is no longer structurally empty. Existing slot data was left unchanged.")
-        val review="Selected destination: Box ${target/30+1} • Slot ${target%30+1}.\n\n"+
+            return showDialog("Gen 7 Bank withdrawal",nativeGen7WithdrawalCapacityLabel(4,target)+" is no longer structurally empty. Existing slot data was left unchanged.")
+        val review="Selected destination: ${nativeGen7WithdrawalCapacityLabel(4,target)}.\n\n"+
             "This is a PSE Bank withdrawal, not an official trade, Pokémon Bank transaction or provenance claim. No conversion or Legalise change is performed. The exact 232-byte PK7 Bank record is copied byte-for-byte, so species, encryption constant, PID, TID/SID, nickname, OT and handler data, experience, ability, nature, gender/form, shiny state, moves, PP, PP Ups, relearn moves, IVs, EVs, friendship, affection, Pokérus, Ball, origin, locations, dates, ribbons, Hyper Training and every stored PK7 byte remain unchanged. The source save is not edited.\n\n"+
             "Only the selected structurally empty PK7 slot, native PC storage checksum and required save signature may change. Existing destination Pokémon, nonzero slot data and all other save bytes must remain identical. A verified retained recovery backup is required. The Bank record is removed only after the exact slot and native checksums persist and reopen successfully; any failure restores or preserves both destination and Bank record."
         AlertDialog.Builder(this).setTitle("${p.source.nickname.ifBlank{"Pokémon #${p.source.species}"}} • Gen 7 withdrawal")
@@ -35411,7 +35427,7 @@ class MainActivity : Activity() {
             require(original.contentEquals(p.destination)&&generationForSize(original.size)==7){"The prepared Generation 7 destination changed."}
             require(validateGen7CoreChecksums(original).first){"The destination core checksums changed."}
             val info=boxStorageInfo(original)?:error("PSE could not resolve native Generation 7 PC storage.")
-            require(target in 0 until info.second){"The selected Generation 7 slot is invalid."}
+            require(info.second==GEN7_PC_CAPACITY&&target in 0 until GEN7_PC_CAPACITY){"The selected Generation 7 slot or native PC capacity is invalid."}
             val offset=info.first+target*PK6_STORED_SIZE
             require(gen7BankDestinationSlotIsStructurallyEmpty(original,info.first,info.second,info.third,target)){"The selected Generation 7 slot is no longer structurally empty. Existing slot data was not overwritten."}
             val bank=p.bankFile.readBytes();require(sourceBinding.matches(p.bankBytes,true)&&bank.contentEquals(p.bankBytes)){"The selected Gen 7 Bank record changed after review."}
@@ -35522,7 +35538,7 @@ class MainActivity : Activity() {
         }
         val recoveryNotice=if(retainedRecovery)
             "; exact temporary Bank recovery retained for review" else ""
-        Toast.makeText(this,"Withdrew exact Gen 7 PK7 to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show()
+        Toast.makeText(this,nativeGen7WithdrawalCapacityLabel(6,target)+recoveryNotice,Toast.LENGTH_LONG).show()
         showBank()
     }
 
