@@ -30,6 +30,9 @@ import org.json.JSONArray
 private const val GEN5_PC_BOX_COUNT = 24
 private const val GEN5_PC_SLOTS_PER_BOX = 30
 private const val GEN5_PC_CAPACITY = GEN5_PC_BOX_COUNT * GEN5_PC_SLOTS_PER_BOX
+private const val GEN4_PC_BOX_COUNT = 18
+private const val GEN4_PC_SLOTS_PER_BOX = 30
+private const val GEN4_PC_CAPACITY = GEN4_PC_BOX_COUNT * GEN4_PC_SLOTS_PER_BOX
 private const val SIZE_G1 = 0x8000
 private const val GEN1_MAIN_START = 0x2598
 private const val GEN1_PLAYER_NAME = 0x2598
@@ -72,6 +75,16 @@ private fun gen5PcCapacityLabel(kind:Int,index:Int):String=when(kind){
     3 -> "Slot ${index+1} of $GEN5_PC_SLOTS_PER_BOX"
     4 -> "PSE converted Let's Go PB7 → Gen 5 PK5 to Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX; PB7 preserved"
     else -> error("Unknown Generation 5 capacity label")
+}
+
+private fun gen4PcCapacityLabel(kind:Int,index:Int):String=when(kind){
+    0 -> "First Empty • Box ${index/GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_BOX_COUNT • Slot ${index%GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_SLOTS_PER_BOX"
+    1 -> "Box ${index+1} of $GEN4_PC_BOX_COUNT"
+    2 -> "Box ${index+1} of $GEN4_PC_BOX_COUNT • choose slot"
+    3 -> "Slot ${index+1} of $GEN4_PC_SLOTS_PER_BOX"
+    4 -> "PSE converted Let's Go PB7 → Gen 4 PK4 to Box ${index/GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_BOX_COUNT • Slot ${index%GEN4_PC_SLOTS_PER_BOX+1} of $GEN4_PC_SLOTS_PER_BOX; PB7 preserved"
+    5 -> "All $GEN4_PC_CAPACITY native Generation 4 PC slots are occupied."
+    else -> error("Unknown Generation 4 capacity label")
 }
 
 class MainActivity : Activity() {
@@ -15801,12 +15814,12 @@ class MainActivity : Activity() {
             ?:return showDialog(title,"The Generation 4 destination layout is no longer valid.")
         val empty=gen4EmptyBoxSlots(p.destination,profile)
         if(empty.isEmpty())return showDialog(title,
-            "No empty native Generation 4 PC slot is available.")
+            gen4PcCapacityLabel(5,0))
         val first=empty.first()
         AlertDialog.Builder(this).setTitle("Choose native Gen 4 destination")
             .setMessage("PSE will write the reviewed PK4 to one empty slot, update only required Pokédex and active block integrity data, retain a recovery backup, and keep the PB7 Bank entry.")
             .setItems(arrayOf(
-                "First Empty • Box ${first/30+1} • Slot ${first%30+1}",
+                gen4PcCapacityLabel(0,first),
                 "Choose Box / Slot"
             )){_,which->
                 if(!letsGoGen4SnapshotsMatch(p))
@@ -15822,21 +15835,28 @@ class MainActivity : Activity() {
             return showDialog(title,"The destination or PB7 changed. Reopen PSE Bank.")
         val profile=detectGen4Profile(p.destination)
             ?:return showDialog(title,"The Generation 4 destination layout is no longer valid.")
-        val boxes=(0 until 18).filter{box->(0 until 30).any{slot->
-            val off=gen4BoxSlotOffset(p.destination,profile,box*30+slot)
+        val boxes=(0 until GEN4_PC_BOX_COUNT).filter{box->
+            (0 until GEN4_PC_SLOTS_PER_BOX).any{slot->
+            val off=gen4BoxSlotOffset(
+                p.destination,profile,box*GEN4_PC_SLOTS_PER_BOX+slot
+            )
             parsePk4(p.destination.copyOfRange(off,off+136),false)==null
         }}
         if(boxes.isEmpty())return showDialog(title,"All native Generation 4 PC boxes are full.")
         AlertDialog.Builder(this).setTitle("Choose Gen 4 destination box")
-            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+            .setItems(boxes.map{gen4PcCapacityLabel(1,it)}.toTypedArray()){_,which->
                 val box=boxes[which]
-                val slots=(0 until 30).filter{slot->
-                    val off=gen4BoxSlotOffset(p.destination,profile,box*30+slot)
+                val slots=(0 until GEN4_PC_SLOTS_PER_BOX).filter{slot->
+                    val off=gen4BoxSlotOffset(
+                        p.destination,profile,box*GEN4_PC_SLOTS_PER_BOX+slot
+                    )
                     parsePk4(p.destination.copyOfRange(off,off+136),false)==null
                 }
-                AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
-                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
-                        transferLetsGoBankToGen4(p,box*30+slots[slotIndex])
+                AlertDialog.Builder(this).setTitle(gen4PcCapacityLabel(2,box))
+                    .setItems(slots.map{gen4PcCapacityLabel(3,it)}.toTypedArray()){_,slotIndex->
+                        transferLetsGoBankToGen4(
+                            p,box*GEN4_PC_SLOTS_PER_BOX+slots[slotIndex]
+                        )
                     }.setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
     }
@@ -15854,7 +15874,7 @@ class MainActivity : Activity() {
         var backup:File?=null
         var bankRecovery:File?=null
         try{
-            require(original.contentEquals(p.destination)&&target in 0 until 540){
+            require(original.contentEquals(p.destination)&&target in 0 until GEN4_PC_CAPACITY){
                 "The prepared Generation 4 destination changed or selected slot is invalid."
             }
             val profile=detectGen4Profile(original)
@@ -16044,7 +16064,7 @@ class MainActivity : Activity() {
             return
         }
         Toast.makeText(this,
-            "PSE converted Let's Go PB7 → Gen 4 PK4 to Box ${target/30+1} • Slot ${target%30+1}; PB7 preserved",
+            gen4PcCapacityLabel(4,target),
             Toast.LENGTH_LONG).show()
         showBank()
     }
