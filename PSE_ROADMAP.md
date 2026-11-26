@@ -1806,7 +1806,15 @@ Supported-title Bank review found that same-generation PK3 withdrawal already re
 
 The native Gen 3 route now inserts one final cancellable review after either destination choice. It shows the exact `Box N of 14`, `Slot N of 30` location within the native 420-slot PC, states that the complete 80-byte PK3 remains unchanged, identifies the exact native fields preserved, names the limited PC-storage checksum scope and rechecks the same loaded destination identity and bytes, canonical Bank record, native PK3 identity and structurally empty selected slot before entering the unchanged transaction. Existing and nonzero records remain untouched; retained recovery, persisted reopen verification, cleanup-last Bank removal and two-sided failure handling remain unchanged.
 
-This change is pending its own automatic Android compile before the native Generation 3 Bank withdrawal exact destination review is called validated.
+Commit `97d28e01c803a2015fc555f7df53c9841a14a9a3` passed automatic Android build run `45900701423`, attempt 1, and was reported by exact Slack event `1795730376.450689`; the native Generation 3 Bank withdrawal exact destination review is validated.
+
+## Native Generation 4 Bank withdrawal exact destination review
+
+Supported-title Bank review found that same-generation PK4 withdrawal already requires one canonical checksum-valid 136-byte Bank record and a valid Diamond, Pearl, Platinum, HeartGold or SoulSilver destination, lists only structurally empty native PC slots, copies the exact PK4 byte-for-byte, preserves unrelated PC data, refreshes the required active native storage checksum, retains exact destination and Bank recovery snapshots, reopens the complete destination and selected record, and removes the Bank source only after successful verification with two-sided recovery on failure. Its first-empty and manual Box/Slot choices still entered that transaction immediately without one final review tying the exact no-conversion effect to the selected native slot.
+
+The native Gen 4 route now inserts one final cancellable review after either destination choice. It shows the exact `Box N of 18`, `Slot N of 30` location within the native 540-slot PC, states that the complete 136-byte PK4 remains unchanged, identifies the exact native fields preserved, names the limited active PC-storage checksum scope and rechecks the same loaded destination identity and bytes, canonical Bank record, native PK4 identity and structurally empty selected slot before entering the unchanged transaction. Existing and nonzero records remain untouched; retained recovery, persisted reopen verification, cleanup-last Bank removal and two-sided failure handling remain unchanged.
+
+This change is pending its own automatic Android compile before the native Generation 4 Bank withdrawal exact destination review is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

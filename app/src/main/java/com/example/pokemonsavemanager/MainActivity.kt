@@ -38530,7 +38530,7 @@ class MainActivity : Activity() {
             .setMessage("This is a PSE Bank withdrawal, not an official trade, Pokémon Bank transaction or provenance claim. No conversion or Legalise change is performed. Choose one structurally empty native PK4 slot; the exact Bank record remains until the destination and retained recovery data verify.")
             .setItems(arrayOf(nativeGen4WithdrawalCapacityLabel(0,first),"Choose a box / slot")){_,which->
             if(consumed){return@setItems};consumed=true
-            if(which==0)withdrawGen4BankToSlot(selected,p,first,file,data,openedUri,openedLabel,openedBank)
+            if(which==0)reviewGen4BankWithdrawal(selected,p,first,openedBank,file,openedUri,openedLabel,data)
             else showGen4BankBoxPicker(selected,p,file,data,profile,openedUri,openedLabel,openedBank)
         }.setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
     }
@@ -38745,12 +38745,25 @@ class MainActivity : Activity() {
             var slotConsumed=false
             AlertDialog.Builder(this).setTitle(nativeGen4WithdrawalCapacityLabel(2,b)).setItems(empties.map{nativeGen4WithdrawalCapacityLabel(3,it)}.toTypedArray()){_,sw->
                 if(slotConsumed||sw !in empties.indices){slotConsumed=true;return@setItems};slotConsumed=true
-                withdrawGen4BankToSlot(bankFile,p,b*GEN4_PC_SLOTS_PER_BOX+empties[sw],file,data,openedUri,openedLabel,openedBank)
+                reviewGen4BankWithdrawal(bankFile,p,b*GEN4_PC_SLOTS_PER_BOX+empties[sw],openedBank,file,openedUri,openedLabel,data)
             }.setNegativeButton("Cancel"){_,_->slotConsumed=true}.setOnCancelListener{slotConsumed=true}.show()
         }.setNegativeButton("Cancel"){_,_->boxConsumed=true}.setOnCancelListener{boxConsumed=true}.show()
     }
 
-    private fun withdrawGen4BankToSlot(bankFile:File,p:PokemonEntry,target:Int,file:File,openedDestination:ByteArray,openedUri:Uri?,openedLabel:String?,openedBank:ByteArray){
+    internal fun gen4BankWithdrawalStillBound(bankFile:File,p:PokemonEntry,target:Int,openedBank:ByteArray,openedFile:File,openedUri:Uri?,openedLabel:String?,openedDestination:ByteArray):Boolean{
+        if(target !in 0 until GEN4_PC_CAPACITY||importedFile?.absolutePath!=openedFile.absolutePath||currentSourceUri!=openedUri||currentSourceLabel!=openedLabel)return false
+        return runCatching{
+            val root=bankDir().canonicalFile;val selected=bankFile.canonicalFile;val destination=openedFile.readBytes();val bank=selected.readBytes();val profile=detectGen4Profile(destination);val source=if(bank.size==136)parsePk4(bank,false)else null
+            val validation=profile?.let{gen4Validation(destination,it)};val offset=profile?.let{gen4BoxSlotOffset(destination,it,target)}?:-1
+            val slot=if(offset>=0&&offset+136<=destination.size)destination.copyOfRange(offset,offset+136)else ByteArray(0)
+            bankFile.absoluteFile==selected&&bankDir().absoluteFile==root&&selected.parentFile==root&&selected.isFile&&selected.extension.equals("pk4",true)&&
+                destination.contentEquals(openedDestination)&&profile!=null&&validation!=null&&validation.generalChecksum&&validation.storageChecksum&&validation.badPk4==0&&
+                bank.contentEquals(openedBank)&&source!=null&&source.checksumValid&&source.pid==p.pid&&source.species==p.species&&source.tid==p.tid&&source.sid==p.sid&&
+                slot.size==136&&parsePk4(slot,false)==null&&slot.all{it==0.toByte()}
+        }.getOrDefault(false)
+    }
+
+    internal fun withdrawGen4BankToSlot(bankFile:File,p:PokemonEntry,target:Int,file:File,openedDestination:ByteArray,openedUri:Uri?,openedLabel:String?,openedBank:ByteArray){
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val destinationBinding=PseBankDestinationBinding.capture(file)
         val sourceBinding=PseBankSourceBinding.capture(bankFile)
