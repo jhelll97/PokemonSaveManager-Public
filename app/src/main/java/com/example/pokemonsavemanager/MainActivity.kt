@@ -198,6 +198,16 @@ private fun gen7ToGen2CapacityLabel(kind:Int,box:Int,value:Int,base:String=""):S
     else -> error("Unknown Gen 7 to Gen 2 capacity label")
 }
 
+private fun gen6ToGen5CapacityLabel(kind:Int,index:Int):String=when(kind){
+    0 -> "First Structurally Empty • Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX"
+    1 -> "Box ${index+1} of $GEN5_PC_BOX_COUNT"
+    2 -> "Box ${index+1} of $GEN5_PC_BOX_COUNT • choose slot"
+    3 -> "Slot ${index+1} of $GEN5_PC_SLOTS_PER_BOX"
+    4 -> "PSE converted Gen 6 PK6 → Gen 5 PK5 to Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX and verified"
+    5 -> "All $GEN5_PC_CAPACITY native Generation 5 PC slots are unavailable. Nonzero destination records and the PK6 Bank source were left unchanged."
+    else -> error("Unknown Gen 6 to Gen 5 capacity label")
+}
+
 private fun gen7ToGen5CapacityLabel(kind:Int,index:Int):String=when(kind){
     0 -> "First Structurally Empty • Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX"
     1 -> "Box ${index+1} of $GEN5_PC_BOX_COUNT"
@@ -36974,15 +36984,15 @@ class MainActivity : Activity() {
 
     private fun chooseGen6ToGen5Destination(p:Gen6Gen5Prepared){
         if(!gen6ToGen5StillBound(p))return showDialog("Gen 6 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")
-        val empty=(0 until 720).filter{gen5DestinationSlotIsStructurallyEmpty(p.destination,it)}
-        if(empty.isEmpty())return showDialog("Gen 6 → Gen 5","No structurally empty native Generation 5 PC slot is available. Nonzero records were left unchanged.")
-        val first=empty.first();AlertDialog.Builder(this).setTitle("Choose native Gen 5 destination").setMessage("The reviewed PK5 will be written only to a structurally empty slot. PSE will update that slot, required Pokédex flags, the box CRC and native checksum table. Nonzero destination records remain unchanged.").setItems(arrayOf("First Structurally Empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->if(!gen6ToGen5StillBound(p))showDialog("Gen 6 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")else if(which==0)transferGen6BankToGen5(p,first)else showGen6ToGen5BoxPicker(p)}.setNegativeButton("Cancel",null).show()
+        val empty=(0 until GEN5_PC_CAPACITY).filter{gen5DestinationSlotIsStructurallyEmpty(p.destination,it)}
+        if(empty.isEmpty())return showDialog("Gen 6 → Gen 5",gen6ToGen5CapacityLabel(5,0))
+        val first=empty.first();AlertDialog.Builder(this).setTitle("Choose native Gen 5 destination").setMessage("The reviewed PK5 will be written only to a structurally empty slot. PSE will update that slot, required Pokédex flags, the box CRC and native checksum table. Nonzero destination records remain unchanged.").setItems(arrayOf(gen6ToGen5CapacityLabel(0,first),"Choose Box / Slot • $GEN5_PC_BOX_COUNT Boxes × $GEN5_PC_SLOTS_PER_BOX slots")){_,which->if(!gen6ToGen5StillBound(p))showDialog("Gen 6 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")else if(which==0)transferGen6BankToGen5(p,first)else showGen6ToGen5BoxPicker(p)}.setNegativeButton("Cancel",null).show()
     }
 
     private fun showGen6ToGen5BoxPicker(p:Gen6Gen5Prepared){
         if(!gen6ToGen5StillBound(p))return showDialog("Gen 6 → Gen 5","The destination or Bank record changed. Reopen PSE Bank.")
-        val boxes=(0 until 24).filter{box->(0 until 30).any{slot->gen5DestinationSlotIsStructurallyEmpty(p.destination,box*30+slot)}}
-        AlertDialog.Builder(this).setTitle("Choose Gen 5 destination box").setMessage("Only boxes with structurally empty slots are listed. Nonzero destination records remain unchanged.").setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->val box=boxes[which];val slots=(0 until 30).filter{slot->gen5DestinationSlotIsStructurallyEmpty(p.destination,box*30+slot)};AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot").setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->transferGen6BankToGen5(p,box*30+slots[slotIndex])}.setNegativeButton("Cancel",null).show()}.setNegativeButton("Cancel",null).show()
+        val boxes=(0 until GEN5_PC_BOX_COUNT).filter{box->(0 until GEN5_PC_SLOTS_PER_BOX).any{slot->gen5DestinationSlotIsStructurallyEmpty(p.destination,box*GEN5_PC_SLOTS_PER_BOX+slot)}}
+        AlertDialog.Builder(this).setTitle("Choose Gen 5 destination box").setMessage("Only boxes with structurally empty slots are listed. Nonzero destination records remain unchanged.").setItems(boxes.map{gen6ToGen5CapacityLabel(1,it)}.toTypedArray()){_,which->val box=boxes[which];val slots=(0 until GEN5_PC_SLOTS_PER_BOX).filter{slot->gen5DestinationSlotIsStructurallyEmpty(p.destination,box*GEN5_PC_SLOTS_PER_BOX+slot)};AlertDialog.Builder(this).setTitle(gen6ToGen5CapacityLabel(2,box)).setItems(slots.map{gen6ToGen5CapacityLabel(3,it)}.toTypedArray()){_,slotIndex->transferGen6BankToGen5(p,box*GEN5_PC_SLOTS_PER_BOX+slots[slotIndex])}.setNegativeButton("Cancel",null).show()}.setNegativeButton("Cancel",null).show()
     }
 
     private fun retainGen6ToGen5SafetyBackup(file:File,expected:ByteArray){
@@ -36999,9 +37009,9 @@ class MainActivity : Activity() {
         var stagedDestination:ByteArray?=null
         var retainedRecovery=false
         try{
-            require(destinationBinding.matches(p.destination,importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel)&&original.contentEquals(p.destination)&&target in 0 until 720){"The destination identity changed or the selected slot is invalid."};val profile=detectGen5Profile(original)?:error("The destination is no longer a valid Generation 5 save.");require(gen5ChecksumTableValid(original,profile)&&(0 until 24).all{gen5BoxChecksumValid(original,it,profile)}){"The destination box checksums or checksum table changed."}
+            require(destinationBinding.matches(p.destination,importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel)&&original.contentEquals(p.destination)&&target in 0 until GEN5_PC_CAPACITY){"The destination identity changed or the selected slot is invalid."};val profile=detectGen5Profile(original)?:error("The destination is no longer a valid Generation 5 save.");require(gen5ChecksumTableValid(original,profile)&&(0 until GEN5_PC_BOX_COUNT).all{gen5BoxChecksumValid(original,it,profile)}){"The destination box checksums or checksum table changed."}
             val bank=p.bankFile.readBytes();require(p.sourceBinding.matches(p.bankBytes,true)&&bank.contentEquals(p.bankBytes)){"The Gen 6 Bank record changed."};val source=parsePk6(bank,0,PK6_STORED_SIZE,false,721)?:error("The PK6 Bank record is invalid.");require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&source.tid==p.source.tid&&source.sid==p.source.sid){"The selected source no longer matches the reviewed Pokémon."}
-            val pk5=buildGen6ToGen5Pk5(bank,source,original,p.plan);require(pk5.contentEquals(p.pk5)){"The reviewed PK5 conversion changed before writing."};val box=target/30;val slot=target%30;val offset=0x00400+box*0x1000+slot*136;require(gen5DestinationSlotIsStructurallyEmpty(original,target)){"The selected Generation 5 slot is no longer structurally empty. Nonzero records were left unchanged."}
+            val pk5=buildGen6ToGen5Pk5(bank,source,original,p.plan);require(pk5.contentEquals(p.pk5)){"The reviewed PK5 conversion changed before writing."};val box=target/GEN5_PC_SLOTS_PER_BOX;val slot=target%GEN5_PC_SLOTS_PER_BOX;val offset=0x00400+box*0x1000+slot*136;require(gen5DestinationSlotIsStructurallyEmpty(original,target)){"The selected Generation 5 slot is no longer structurally empty. Nonzero records were left unchanged."}
             val save=original.copyOf();pk5.copyInto(save,offset);val staged=parsePk5(save.copyOfRange(offset,offset+136),false)?:error("The staged PK5 could not be parsed.");require(sameGen6ToGen5Pk5(staged,p.converted)&&gen5Pk5PpUps(pk5).contentEquals(gen6Pk6PpUps(bank))){"The staged PK5 differs from the reviewed conversion."}
             val allowed=HashSet<Int>();for(i in offset until offset+136)allowed.add(i);val bit=staged.species-1;val maskByte=bit/8;val dex=profile.pokedexOffset;allowed.add(dex+0x08+maskByte);for(region in 0..3){allowed.add(dex+0x5C+region*0x54+maskByte);allowed.add(dex+0x1AC+region*0x54+maskByte)};if(staged.species<=493){val langBit=bit*7+1;allowed.add(dex+(if(profile.sequel)0x328 else 0x320)+langBit/8)};val (_,dexLocal,dexMirror)=gen5PokedexBlock(profile);for(i in 0..1){allowed.add(dexLocal+i);allowed.add(dexMirror+i);allowed.add(0x00400+box*0x1000+0x0FF2+i);allowed.add(profile.checksumTable+2+box*2+i);allowed.add(profile.checksumBlockChecksumOffset+i)}
             registerGen1ToGen5Pokedex(save,profile,staged);updateGen5BoxChecksum(save,box,profile);require(save.indices.all{it in allowed||save[it]==original[it]}){"The conversion changed data outside the selected PK5, required Pokédex flags, box CRC and checksum table."};require(gen5BoxChecksumValid(save,box,profile)&&gen5ChecksumTableValid(save,profile)&&gen1ToGen5DexRegistered(save,profile,staged)){"The staged Generation 5 save failed storage, Pokédex or checksum verification."}
@@ -37082,7 +37092,7 @@ class MainActivity : Activity() {
         }
         val recoveryNotice=if(retainedRecovery)
             "; exact temporary Bank recovery retained for review" else ""
-        Toast.makeText(this,"PSE converted Gen 6 → Gen 5 to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
+        Toast.makeText(this,gen6ToGen5CapacityLabel(4,target)+recoveryNotice,Toast.LENGTH_LONG).show();showBank()
     }
 
     private data class Gen6Gen7Prepared(
