@@ -61,11 +61,12 @@ internal fun buildPseGen2ToGen5Review(
 }
 
 internal fun buildPseGen2ToGen6Review(
-    legaliseChanges:String,source:MainActivity.Gen2Pokemon,converted:MainActivity.PokemonEntry,ppUps:IntArray,
+    legaliseChanges:String,destinationLabel:String,source:MainActivity.Gen2Pokemon,converted:MainActivity.PokemonEntry,ppUps:IntArray,
     encryptionConstant:String,handlerName:String
 ):String=buildString{
     append("PSE Bank conversion preview\n\n")
     append(legaliseChanges).append("\n\n")
+    append(destinationLabel).append(" The slot is structurally empty; nonzero destination records remain unchanged.\n")
     appendPseGen2PreservedReview(this,converted,ppUps)
     append("Encryption constant: $encryptionConstant. ")
     appendPseGen2PidReview(this,converted)
