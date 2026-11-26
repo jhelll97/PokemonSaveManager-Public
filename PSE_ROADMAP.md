@@ -1358,6 +1358,14 @@ Re-inventory found that the implemented PK6 -> PK5 backward PSE conversion alrea
 
 Route-scoped Generation 5 Box and Slot constants now govern chooser bounds, selected-slot validation and every visible destination capacity label for this route. Label construction remains outside `MainActivity` to preserve the validated class-size margin. The transaction still preserves every reviewed representable PK5 field and PP Up, keeps the explicit origin Legalise choice cancellable, leaves nonzero slots unchanged, updates only the selected PK5, required Pokédex flags, box CRC and checksum table, and preserves exact source and destination binding, retained recovery, persisted reopen verification, cleanup ordering and two-sided rollback.
 
+Commit `6a9c20aea6f2ad5c2fce3a060b0f8710f005ba41` passed automatic Android build run `45774281291`, attempt 1, and was reported by exact Slack event `1795678250.615309`; the Generation 6 -> Generation 5 native destination capacity labels are validated.
+
+## Generation 5 -> Generation 4 native destination capacity labels
+
+Re-inventory found that the implemented PK5 -> PK4 backward PSE conversion already binds the exact selected PK5 and Generation 4 destination, blocks unsupported data, requires an explicit cancellable Legalise choice when the origin must be mapped to an exact Gen 4-compatible title, offers only structurally empty native PC slots and verifies the exact converted PK4 after persistence, but its destination chooser, nested Box/Slot picker, full-capacity block and completion result omitted native capacity totals. They now show `Box N of 18`, `Slot N of 30`, the complete 540-slot capacity and the exact placed location.
+
+Route-scoped Generation 4 Box and Slot constants now govern chooser bounds, selected-slot validation and every visible destination capacity label for this route. Label construction remains outside `MainActivity` to preserve the validated class-size margin. The transaction still preserves every reviewed representable PK4 field and PP Up, keeps explicit origin Legalise cancellable, leaves nonzero slots unchanged, updates only the selected PK4, required Pokédex mirrors and active block CRCs, and preserves exact source and destination binding, retained recovery, persisted reopen verification, cleanup ordering and two-sided rollback.
+
 This implementation is pending its own automatic Android compile before the feature is called validated. Next bounded feature: continue the destination-chooser inventory with one implemented route that still omits concrete native Box or Slot capacity context.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
