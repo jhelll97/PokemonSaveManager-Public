@@ -69,7 +69,9 @@ private fun MainActivity.reviewGenToGen6Destination(p:MainActivity.Gen5Gen6Prepa
         p.originalSource,p.source,p.converted,destinationLabel,transferLabel,canTransfer,transfer
     )else if(p.sourceGeneration==4)showPseGen4ToGen6DestinationReview(
         p.source,p.converted,destinationLabel,transferLabel,canTransfer,transfer
-    )else transfer()
+    )else showPseGen5ToGen6DestinationReview(
+        p,destinationLabel,transferLabel,canTransfer,transfer
+    )
 }
 
 private fun MainActivity.showPseGen4ToGen6DestinationReview(
@@ -98,6 +100,41 @@ private fun MainActivity.showPseGen4ToGen6DestinationReview(
         .setMessage(preview).setPositiveButton(transferLabel){_,_->
             if(consumed||!canTransfer()){
                 showDialog("Gen 4 → Gen 6","The destination identity, Bank record or selected slot changed, or this transfer was already submitted. Nothing was changed.")
+                return@setPositiveButton
+            }
+            consumed=true
+            onTransfer()
+        }.setNegativeButton("Cancel",null).show()
+}
+
+private fun MainActivity.showPseGen5ToGen6DestinationReview(
+    p:MainActivity.Gen5Gen6Prepared,
+    destinationLabel:String,
+    transferLabel:String,
+    canTransfer:()->Boolean,
+    onTransfer:()->Unit
+){
+    val source=p.source
+    val converted=p.converted
+    val oldPid="%08X".format(source.pid)
+    val newPid="%08X".format(converted.pid)
+    val pidLine=if(source.pid==converted.pid)"PID remains $oldPid." else
+        "PID changes $oldPid → $newPid only to preserve the reviewed shiny state under Generation 6's wider threshold."
+    val preview=buildString{
+        append("Final PSE Gen 5 → Gen 6 destination review\n\n")
+        append(destinationLabel).append(" The slot is structurally empty; existing and nonzero destination records remain unchanged.\n\n")
+        append("Ball: exact Generation 5 ball ID ${source.ball} is preserved in the native PK6.\n")
+        append(pidLine).append('\n')
+        append("Ability: source slot ${source.abilityNumber}, ability #${source.ability} remains verified ability #${converted.ability}.\n")
+        append("Markings: native Gen 5 marking value 0x${"%02X".format(source.markingValue)} remains the same six native one-bit PK6 markings.\n")
+        append("The previously reviewed transfer marker, Egg-location conversion, current handler, empty relearn and geographic fields, represented fields, Pokédex update and checksum scope are unchanged. Cancel leaves the exact Bank record and destination byte-for-byte unchanged.\n\n")
+        append("This is a PSE conversion, not an official Pokémon Bank transaction, in-game trade or provenance claim. The exact Gen 5 Bank record remains until the chosen PK6, retained recovery data, Pokédex state, checksums and reopened destination all verify.")
+    }
+    var consumed=false
+    AlertDialog.Builder(this).setTitle("${source.nickname.ifBlank{"Pokémon #${source.species}"}} • Gen 5 → Gen 6")
+        .setMessage(preview).setPositiveButton(transferLabel){_,_->
+            if(consumed||!canTransfer()){
+                showDialog("Gen 5 → Gen 6","The destination identity, Bank record or selected slot changed, or this transfer was already submitted. Nothing was changed.")
                 return@setPositiveButton
             }
             consumed=true
