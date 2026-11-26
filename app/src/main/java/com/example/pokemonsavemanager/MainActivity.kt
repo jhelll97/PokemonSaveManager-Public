@@ -27,6 +27,9 @@ import java.util.Locale
 import org.json.JSONObject
 import org.json.JSONArray
 
+private const val GEN6_PC_BOX_COUNT = 31
+private const val GEN6_PC_SLOTS_PER_BOX = 30
+private const val GEN6_PC_CAPACITY = GEN6_PC_BOX_COUNT * GEN6_PC_SLOTS_PER_BOX
 private const val GEN5_PC_BOX_COUNT = 24
 private const val GEN5_PC_SLOTS_PER_BOX = 30
 private const val GEN5_PC_CAPACITY = GEN5_PC_BOX_COUNT * GEN5_PC_SLOTS_PER_BOX
@@ -94,6 +97,16 @@ private fun gen7ToGen5CapacityLabel(kind:Int,index:Int):String=when(kind){
     4 -> "PSE converted Gen 7 → Gen 5 to Box ${index/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${index%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX and verified"
     5 -> "All $GEN5_PC_CAPACITY native Generation 5 PC slots are unavailable. Nonzero records were left unchanged."
     else -> error("Unknown Gen 7 to Gen 5 capacity label")
+}
+
+private fun gen7ToGen6CapacityLabel(kind:Int,index:Int):String=when(kind){
+    0 -> "First Structurally Empty • Box ${index/GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_BOX_COUNT • Slot ${index%GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_SLOTS_PER_BOX"
+    1 -> "Box ${index+1} of $GEN6_PC_BOX_COUNT"
+    2 -> "Box ${index+1} of $GEN6_PC_BOX_COUNT • choose slot"
+    3 -> "Slot ${index+1} of $GEN6_PC_SLOTS_PER_BOX"
+    4 -> "PSE converted Gen 7 → Gen 6 to Box ${index/GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_BOX_COUNT • Slot ${index%GEN6_PC_SLOTS_PER_BOX+1} of $GEN6_PC_SLOTS_PER_BOX and verified"
+    5 -> "All $GEN6_PC_CAPACITY native Generation 6 PC slots are unavailable. Existing or nonzero slot data was left unchanged."
+    else -> error("Unknown Gen 7 to Gen 6 capacity label")
 }
 
 private fun gen4PcCapacityLabel(kind:Int,index:Int):String=when(kind){
@@ -37534,14 +37547,15 @@ class MainActivity : Activity() {
     private fun chooseGen7ToGen6Destination(p:Gen7Gen6Prepared){
         if(!gen7ToGen6SnapshotsMatch(p))return showDialog("Gen 7 → Gen 6","The destination or Bank record changed. Reopen PSE Bank.")
         val info=boxStorageInfo(p.destination)?:return
-        val empty=(0 until info.second).filter{
+        if(info.second!=GEN6_PC_CAPACITY)return showDialog("Gen 7 → Gen 6","The native Generation 6 PC capacity could not be verified. Nothing was changed.")
+        val empty=(0 until GEN6_PC_CAPACITY).filter{
             gen6DestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,it)
         }
-        if(empty.isEmpty())return showDialog("Gen 7 → Gen 6","No structurally empty native Generation 6 PC slot is available. Existing or nonzero slot data was left unchanged.")
+        if(empty.isEmpty())return showDialog("Gen 7 → Gen 6",gen7ToGen6CapacityLabel(5,0))
         val first=empty.first()
         AlertDialog.Builder(this).setTitle("Choose native Gen 6 destination")
             .setMessage("The reviewed PK6 will be written to one structurally empty slot. PSE will update only that slot, required Pokédex flags and native block checksums. Nonzero destination records remain unchanged.")
-            .setItems(arrayOf("First Structurally Empty • Box ${first/30+1} • Slot ${first%30+1}","Choose Box / Slot")){_,which->
+            .setItems(arrayOf(gen7ToGen6CapacityLabel(0,first),"Choose Box / Slot")){_,which->
                 if(!gen7ToGen6SnapshotsMatch(p))showDialog("Gen 7 → Gen 6","The destination or Bank record changed. Reopen PSE Bank.")
                 else if(which==0)transferGen7BankToGen6(p,first)
                 else showGen7ToGen6BoxPicker(p)
@@ -37551,19 +37565,20 @@ class MainActivity : Activity() {
     private fun showGen7ToGen6BoxPicker(p:Gen7Gen6Prepared){
         if(!gen7ToGen6SnapshotsMatch(p))return showDialog("Gen 7 → Gen 6","The destination or Bank record changed. Reopen PSE Bank.")
         val info=boxStorageInfo(p.destination)?:return
-        val boxes=(0 until info.second/30).filter{box->(0 until 30).any{slot->
-            gen6DestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*30+slot)
+        if(info.second!=GEN6_PC_CAPACITY)return showDialog("Gen 7 → Gen 6","The native Generation 6 PC capacity could not be verified. Nothing was changed.")
+        val boxes=(0 until GEN6_PC_BOX_COUNT).filter{box->(0 until GEN6_PC_SLOTS_PER_BOX).any{slot->
+            gen6DestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*GEN6_PC_SLOTS_PER_BOX+slot)
         }}
-        if(boxes.isEmpty())return showDialog("Gen 7 → Gen 6","No Generation 6 PC box has a structurally empty slot. Existing or nonzero slot data was left unchanged.")
+        if(boxes.isEmpty())return showDialog("Gen 7 → Gen 6",gen7ToGen6CapacityLabel(5,0))
         AlertDialog.Builder(this).setTitle("Choose Gen 6 destination box")
-            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+            .setItems(boxes.map{gen7ToGen6CapacityLabel(1,it)}.toTypedArray()){_,which->
                 val box=boxes[which]
-                val slots=(0 until 30).filter{slot->
-                    gen6DestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*30+slot)
+                val slots=(0 until GEN6_PC_SLOTS_PER_BOX).filter{slot->
+                    gen6DestinationSlotIsStructurallyEmpty(p.destination,info.first,info.second,info.third,box*GEN6_PC_SLOTS_PER_BOX+slot)
                 }
-                AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
-                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
-                        transferGen7BankToGen6(p,box*30+slots[slotIndex])
+                AlertDialog.Builder(this).setTitle(gen7ToGen6CapacityLabel(2,box))
+                    .setItems(slots.map{gen7ToGen6CapacityLabel(3,it)}.toTypedArray()){_,slotIndex->
+                        transferGen7BankToGen6(p,box*GEN6_PC_SLOTS_PER_BOX+slots[slotIndex])
                     }.setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
     }
@@ -37577,7 +37592,7 @@ class MainActivity : Activity() {
         var bankRecoveryBinding:PseBankSourceBinding?=null
         var retainedRecovery=false
         try{
-            require(destinationBinding.matches(p.destination,importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel)&&fresh.contentEquals(p.destination)&&generationForSize(fresh.size)==6){"The prepared Gen 6 destination changed."};require(gen6BoxChecksumValid(fresh)&&gen6BlockChecksumValid(fresh,20)){"The destination storage or Pokédex checksum changed."};val info=boxStorageInfo(fresh)?:error("PSE could not resolve native Gen 6 PC storage.");require(target in 0 until info.second){"The selected Gen 6 slot is invalid."};val off=info.first+target*PK6_STORED_SIZE;require(gen6DestinationSlotIsStructurallyEmpty(fresh,info.first,info.second,info.third,target)){"The selected Gen 6 slot is no longer structurally empty. Nonzero destination records were left unchanged."}
+            require(destinationBinding.matches(p.destination,importedFile?.absolutePath==file.absolutePath&&currentSourceUri==p.sourceUri&&currentSourceLabel==p.sourceLabel)&&fresh.contentEquals(p.destination)&&generationForSize(fresh.size)==6){"The prepared Gen 6 destination changed."};require(gen6BoxChecksumValid(fresh)&&gen6BlockChecksumValid(fresh,20)){"The destination storage or Pokédex checksum changed."};val info=boxStorageInfo(fresh)?:error("PSE could not resolve native Gen 6 PC storage.");require(info.second==GEN6_PC_CAPACITY&&target in 0 until GEN6_PC_CAPACITY){"The selected Gen 6 slot or native PC capacity is invalid."};val off=info.first+target*PK6_STORED_SIZE;require(gen6DestinationSlotIsStructurallyEmpty(fresh,info.first,info.second,info.third,target)){"The selected Gen 6 slot is no longer structurally empty. Nonzero destination records were left unchanged."}
             val bank=p.bankFile.readBytes();require(p.sourceBinding.matches(p.bankBytes,true)&&bank.contentEquals(p.bankBytes)){"The Gen 7 Bank record changed."};val source=parsePk6(bank,0,PK6_STORED_SIZE,false,807)?:error("The PK7 Bank record is invalid.");require(source.checksumValid&&source.pid==p.source.pid&&source.species==p.source.species&&source.tid==p.source.tid&&source.sid==p.source.sid){"The selected source no longer matches the reviewed Pokémon."};val pk6=buildGen7ToGen6Pk6(bank,source,p.originGame);require(pk6.contentEquals(p.pk6)){"The reviewed PK6 conversion changed before writing."}
             val work=fresh.copyOf();pk6.copyInto(work,off);val staged=parsePk6(work,off,PK6_STORED_SIZE,false,721)?:error("The staged PK6 could not be parsed.");require(sameGen6ToGen7Pk7(staged,p.converted)&&staged.markingValue==p.converted.markingValue&&gen6Pk6PpUps(pk6).contentEquals(gen6Pk6PpUps(bank))){"The staged PK6 differs from the reviewed conversion."}
             val allowed=HashSet<Int>();for(i in off until off+PK6_STORED_SIZE)allowed.add(i);val bit=staged.species-1;val bd=bit ushr 3;val shift=staged.gender.coerceIn(0,1) or ((if(staged.shiny)1 else 0) shl 1);allowed.add(0x15000+0x08+bd);allowed.add(0x15000+0x08+0x60*(1+shift)+bd);for(i in 5..8)allowed.add(0x15000+0x08+0x60*i+bd);val boxBlock=if(work.size==SIZE_G6_XY)53 else 56;for(id in intArrayOf(20,boxBlock)){val c=gen6ChecksumOffset(work,id);allowed.add(c);allowed.add(c+1)}
@@ -37656,7 +37671,7 @@ class MainActivity : Activity() {
         }
         val recoveryNotice=if(retainedRecovery)
             "; exact temporary Bank recovery retained for review" else ""
-        Toast.makeText(this,"PSE converted Gen 7 → Gen 6 to Box ${target/30+1} • Slot ${target%30+1} and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
+        Toast.makeText(this,gen7ToGen6CapacityLabel(4,target)+recoveryNotice,Toast.LENGTH_LONG).show();showBank()
     }
 
 
