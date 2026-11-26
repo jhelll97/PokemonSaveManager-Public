@@ -38587,7 +38587,23 @@ class MainActivity : Activity() {
             .setItems(targets.map{(box,slots)->"Box ${box+1} • Slots ${slots.joinToString(", "){(it+1).toString()}}"}.toTypedArray()){_,which->
                 if(consumed||which !in targets.indices){consumed=true;return@setItems};consumed=true
                 val(box,slots)=targets[which]
-                withdrawSelectedGen4BankPokemon(selected,destination,profile,box,slots,file,openedUri,openedLabel)
+                val placements=selected.indices.joinToString("\n"){index->
+                    "${index+1}. ${selected[index].source.nickname.ifBlank{"Pokemon #${selected[index].source.species}"}} -> Box ${box+1} of 18, Slot ${slots[index]+1} of 30"
+                }
+                val review="Final native Gen 4 batch withdrawal review\n\n$placements\n\n"+
+                    "No Pokemon conversion or Legalise change is performed. Every exact checksum-valid 136-byte PK4 is copied byte-for-byte in selection order; existing and nonzero destination records remain unchanged. Only the listed native slots and active storage checksum may change.\n\n"+
+                    "PSE retains exact destination and per-record Bank recovery data, reopens every persisted PK4, then removes each Bank record last. Cancel leaves the destination and all selected Bank records byte-for-byte unchanged. This is a PSE Bank withdrawal, not an official trade, Pokemon Bank or HOME transaction, legality certification or verified provenance."
+                var submitted=false
+                AlertDialog.Builder(this).setTitle("Review ${selected.size} exact Gen 4 withdrawals")
+                    .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("Withdraw exact PK4 selection"){_,_->
+                        if(submitted){showDialog("Gen 4 Bank multi-withdrawal","This exact destination review was already submitted. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton};submitted=true
+                        val current=runCatching{file.readBytes()}.getOrNull()
+                        val unchanged=current!=null&&current.contentEquals(destination)&&importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel&&
+                            selected.all{item->runCatching{item.sourceBinding.matches(item.bankBytes,true)&&item.bankFile.readBytes().contentEquals(item.bankBytes)}.getOrDefault(false)}&&
+                            slots.all{slot->val off=gen4BoxSlotOffset(current,profile,box*30+slot);val raw=current.copyOfRange(off,off+136);parsePk4(raw,false)==null&&raw.all{it==0.toByte()}}
+                        if(!unchanged){showDialog("Gen 4 Bank multi-withdrawal","The destination identity, selected Bank records or reviewed native slots changed. Nothing was changed.");return@setPositiveButton}
+                        withdrawSelectedGen4BankPokemon(selected,destination,profile,box,slots,file,openedUri,openedLabel)
+                    }.show()
             }.setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
     }
 
