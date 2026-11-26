@@ -1686,7 +1686,15 @@ Re-inventory found that the implemented PK4 -> PK3 conversion already binds the 
 
 The Gen 4 route now inserts one final cancellable review after either First Structurally Empty or manual Box / Slot selection. It shows the exact `Box N of 14`, `Slot N of 30` destination within the native 420-slot PC, repeats the unchanged origin or accepted explicit Legalise mapping, exact preserved Ball and PID, verified ability and marking mapping, and rechecks the same bound destination plus structural emptiness before entering the unchanged transaction. Existing and nonzero destination slots remain untouched; exact source and destination identity, retained destination and Bank recovery snapshots, scoped Pokédex and checksum updates, persisted reopen verification, cleanup-last source removal and independent two-sided rollback remain unchanged.
 
-This change is pending its own automatic Android compile before the Generation 4 -> Generation 3 exact destination and origin review is called validated.
+Commit `7923cac60833fa2f6e44991d9a622cf1ce54b3bb` passed automatic Android build run `45870697823`, attempt 1, and was reported by exact Slack event `1795716080.495259`; the Generation 4 -> Generation 3 exact destination and origin review is validated.
+
+## Generation 4 -> Generation 2 exact destination and omission review
+
+Re-inventory found that the implemented PK4 -> PK2 conversion already binds the exact selected Diamond, Pearl, Platinum, HeartGold or SoulSilver Bank record and Gold, Silver or Crystal destination, blocks unsupported species, moves, forms, held items, Eggs, text and invalid values, and explicitly discloses the native Generation 2 fields that cannot represent PK4 PID, SID, origin, locations, dates, Ball, ability, nature, markings, ribbons or fateful provenance. It preserves represented fields plus PP Ups, reviews IV-to-DV, EV-to-Stat-Exp, level and shiny-result mappings, enforces the native 14 x 20 PC capacity, appends only to a non-full native Box, updates Owned/Seen and the primary checksum, and verifies the exact converted record after persisted reopen. The selected Box still proceeded directly into that transaction without one final review of the exact next slot and accepted omission disclosure.
+
+The Gen 4 route now inserts one final cancellable review after Box selection. It shows the exact `Box N of 14`, `Slot N of 20` destination within the native 280-slot PC, repeats that unavailable origin and provenance fields remain omitted rather than guessed, repeats the represented and blocked field scope, and rechecks the same bound destination, Bank identity, save profile and exact next Box slot before entering the unchanged transaction. Existing destination records remain untouched; exact source and destination identity, retained destination and Bank recovery snapshots, scoped Pokédex and checksum updates, persisted reopen verification, cleanup-last source removal and independent two-sided rollback remain unchanged.
+
+This change is pending its own automatic Android compile before the Generation 4 -> Generation 2 exact destination and omission review is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
