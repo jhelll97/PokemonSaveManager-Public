@@ -1369,8 +1369,16 @@ class MainActivity : Activity() {
             if(consumed||which !in targets.indices){consumed=true;showDialog("Move selected","This destination choice was already handled or is invalid. Reopen the Bank selection. Nothing was changed.");return@setItems}
             consumed=true
             if(!destinationBinding.matches(initial,bound())){showDialog("Move selected","The loaded Gen 1 save identity changed after the box list opened. Reopen the Bank selection. Nothing was changed.");return@setItems}
-            val box=targets[which].first
+            val(box,emptyCount)=targets[which]
             val fresh=runCatching{file.readBytes()}.getOrNull()?:return@setItems
+            val firstSlot=GEN1_PC_SLOTS_PER_BOX-emptyCount
+            val placements=selected.indices.joinToString("\n"){index->
+                "${index+1}. ${selected[index].source.nickname.ifBlank{gen1SpeciesNameFromInternal(selected[index].source.species)}} -> Box $box of $GEN1_PC_BOX_COUNT, Slot ${firstSlot+index+1} of $GEN1_PC_SLOTS_PER_BOX"
+            }
+            val review="Final native Gen 1 batch withdrawal review\n\n$placements\n\n"+
+                "No Pokemon conversion or Legalise change is performed. Every exact PSE1 record is restored in selection order with all represented native Generation 1 fields unchanged; existing destination records remain unchanged. Only the listed box records, required Seen/Caught registration and main checksum may change.\n\n"+
+                "PSE retains exact destination and per-record Bank recovery data, reopens every persisted record, then removes each Bank record last. Cancel leaves the destination and all selected Bank records byte-for-byte unchanged. This is a PSE Bank withdrawal, not an official trade, Pokemon Bank transaction, legality certification or verified provenance."
+            fun executeReviewedWithdrawal(){
             var writeStarted=false;var activeWriteAttempted=false;var safetyBackup:File?=null
             var backupBinding:PseBankDestinationBinding?=null
             var stagedDestination:ByteArray?=null
@@ -1568,6 +1576,19 @@ class MainActivity : Activity() {
                     (safetyBackup?.takeIf{retainedBackup}?.let{"\n\nVerified recovery backup: ${it.name}"}?:"")+
                     (verifiedBankRecovery.filter{it.exists()}.takeIf{it.isNotEmpty()}?.joinToString(prefix="\nVerified Bank recovery snapshots: "){it.name}?:""))
             }
+            }
+            var submitted=false
+            AlertDialog.Builder(this).setTitle("Review ${selected.size} exact Gen 1 withdrawals")
+                .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("Withdraw exact PSE1 selection"){_,_->
+                    if(submitted){showDialog("Gen 1 Bank multi-withdrawal","This exact destination review was already submitted. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton};submitted=true
+                    val current=runCatching{file.readBytes()}.getOrNull()
+                    val refreshed=current?.let{availableGen1BoxTargets(it).firstOrNull{target->target.first==box}}
+                    val unchanged=current!=null&&current.contentEquals(initial)&&current.contentEquals(fresh)&&refreshed==(box to emptyCount)&&
+                        destinationBinding.matches(initial,bound())&&activeMatches(initial)&&
+                        selected.all{item->runCatching{item.sourceBinding.matches(item.bankBytes,true)&&item.bankFile.readBytes().contentEquals(item.bankBytes)&&parseGen1BankPayload(item.bankBytes)?.let{parsed->sameGen1TransferRecord(parsed,item.source)}==true}.getOrDefault(false)}
+                    if(!unchanged){showDialog("Gen 1 Bank multi-withdrawal","The destination identity, selected Bank records or reviewed native slots changed. Nothing was changed.");return@setPositiveButton}
+                    executeReviewedWithdrawal()
+                }.show()
         }.setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
     }
 

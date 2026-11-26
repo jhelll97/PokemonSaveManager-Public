@@ -1862,7 +1862,15 @@ Supported-title Bank review found that same-generation PSE2 multi-withdrawal alr
 
 The native Gen 2 batch route now inserts one final cancellable review after box selection. It lists every selected Bank record in order with its exact `Box N of 14`, `Slot N of 20` destination derived from the unchanged native box count, states that all represented Generation 2 fields remain unchanged, names the limited box, Seen/Owned and checksum scope, and rechecks the same destination identity and bytes, every canonical exact Bank record and the reviewed next-slot sequence before entering the unchanged batch transaction. Existing records remain untouched; retained recovery, persisted reopen verification, cleanup-last Bank removal and independent failure handling remain unchanged.
 
-This change is pending its own automatic Android compile before the native Generation 2 Bank batch exact destination review is called validated.
+Commit `896359b7ff0fe106185485fccab2044537d01fe5` passed automatic Android build run `45910772724`, attempt 1, and was reported by exact Slack event `1795736296.097759`; the native Generation 2 Bank batch exact destination review is validated.
+
+## Native Generation 1 Bank batch exact destination review
+
+Supported-title Bank review found that same-generation PSE1 multi-withdrawal already binds every canonical exact preserved Bank record and a checksum-clean Red, Blue or Yellow destination, offers only native boxes with enough capacity for the complete ordered selection, restores every represented Generation 1 record without conversion, preserves existing box records, updates Seen/Caught registration and the required main checksum, retains exact destination and per-record Bank recovery, reopens every persisted record and removes Bank sources last with independent recovery on failure. Selecting a listed box still entered the batch transaction immediately without one final accepted review naming each selected Pokemon's exact native slot.
+
+The native Gen 1 batch route now inserts one final cancellable review after box selection. It lists every selected Bank record in order with its exact `Box N of 12`, `Slot N of 20` destination derived from the unchanged native box count, states that all represented Generation 1 fields remain unchanged, names the limited box, Seen/Caught and checksum scope, and rechecks the same destination identity and bytes, every canonical exact Bank record and the reviewed next-slot sequence before entering the unchanged batch transaction. Existing records remain untouched; retained recovery, persisted reopen verification, cleanup-last Bank removal and independent failure handling remain unchanged.
+
+This change is pending its own automatic Android compile before the native Generation 1 Bank batch exact destination review is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
