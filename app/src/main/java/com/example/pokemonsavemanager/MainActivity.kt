@@ -15320,17 +15320,18 @@ class MainActivity : Activity() {
         val title="Let's Go PB7 → Gen 5 PK5"
         if(!letsGoGen5SnapshotsMatch(p))
             return showDialog(title,"The destination or PB7 changed. Reopen PSE Bank.")
-        val empty=(0 until 720).filter{
-            val offset=0x00400+(it/30)*0x1000+(it%30)*136
+        val empty=(0 until GEN5_PC_CAPACITY).filter{
+            val offset=0x00400+(it/GEN5_PC_SLOTS_PER_BOX)*0x1000+
+                (it%GEN5_PC_SLOTS_PER_BOX)*136
             parsePk5(p.destination.copyOfRange(offset,offset+136),false)==null
         }
         if(empty.isEmpty())return showDialog(title,
-            "All 720 native Generation 5 PC slots are occupied.")
+            "All $GEN5_PC_CAPACITY native Generation 5 PC slots are occupied.")
         val first=empty.first()
         AlertDialog.Builder(this).setTitle("Choose native Gen 5 destination")
             .setMessage("PSE will write the reviewed PK5 to one empty slot, update only required Pokédex and native integrity data, retain a recovery backup, and keep the PB7 Bank entry.")
             .setItems(arrayOf(
-                "First Empty • Box ${first/30+1} • Slot ${first%30+1}",
+                "First Empty • Box ${first/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${first%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX",
                 "Choose Box / Slot"
             )){_,which->
                 if(!letsGoGen5SnapshotsMatch(p))
@@ -15344,21 +15345,25 @@ class MainActivity : Activity() {
         val title="Let's Go PB7 → Gen 5 PK5"
         if(!letsGoGen5SnapshotsMatch(p))
             return showDialog(title,"The destination or PB7 changed. Reopen PSE Bank.")
-        val boxes=(0 until 24).filter{box->(0 until 30).any{slot->
+        val boxes=(0 until GEN5_PC_BOX_COUNT).filter{box->
+            (0 until GEN5_PC_SLOTS_PER_BOX).any{slot->
             val offset=0x00400+box*0x1000+slot*136
             parsePk5(p.destination.copyOfRange(offset,offset+136),false)==null
         }}
         if(boxes.isEmpty())return showDialog(title,"All native Generation 5 PC boxes are full.")
         AlertDialog.Builder(this).setTitle("Choose Gen 5 destination box")
-            .setItems(boxes.map{"Box ${it+1}"}.toTypedArray()){_,which->
+            .setItems(boxes.map{"Box ${it+1} of $GEN5_PC_BOX_COUNT"}.toTypedArray()){_,which->
                 val box=boxes[which]
-                val slots=(0 until 30).filter{slot->
+                val slots=(0 until GEN5_PC_SLOTS_PER_BOX).filter{slot->
                     val offset=0x00400+box*0x1000+slot*136
                     parsePk5(p.destination.copyOfRange(offset,offset+136),false)==null
                 }
-                AlertDialog.Builder(this).setTitle("Box ${box+1} • choose slot")
-                    .setItems(slots.map{"Slot ${it+1}"}.toTypedArray()){_,slotIndex->
-                        transferLetsGoBankToGen5(p,box*30+slots[slotIndex])
+                AlertDialog.Builder(this)
+                    .setTitle("Box ${box+1} of $GEN5_PC_BOX_COUNT • choose slot")
+                    .setItems(slots.map{"Slot ${it+1} of $GEN5_PC_SLOTS_PER_BOX"}.toTypedArray()){_,slotIndex->
+                        transferLetsGoBankToGen5(
+                            p,box*GEN5_PC_SLOTS_PER_BOX+slots[slotIndex]
+                        )
                     }.setNegativeButton("Cancel",null).show()
             }.setNegativeButton("Cancel",null).show()
     }
@@ -15376,7 +15381,7 @@ class MainActivity : Activity() {
         var backup:File?=null
         var bankRecovery:File?=null
         try{
-            require(original.contentEquals(p.destination)&&target in 0 until 720){
+            require(original.contentEquals(p.destination)&&target in 0 until GEN5_PC_CAPACITY){
                 "The prepared Generation 5 destination changed or selected slot is invalid."
             }
             val profile=detectGen5Profile(original)
@@ -15423,7 +15428,8 @@ class MainActivity : Activity() {
                 "The reviewed PK5 conversion changed before writing."
             }
 
-            val box=target/30;val slot=target%30
+            val box=target/GEN5_PC_SLOTS_PER_BOX
+            val slot=target%GEN5_PC_SLOTS_PER_BOX
             val offset=0x00400+box*0x1000+slot*136
             require(parsePk5(original.copyOfRange(offset,offset+136),false)==null){
                 "The selected Generation 5 slot is no longer empty."
@@ -15534,7 +15540,9 @@ class MainActivity : Activity() {
                 val profile=detectGen5Profile(restored)
                     ?:error("The restored Generation 5 layout is invalid.")
                 restored.contentEquals(original)&&gen5ChecksumTableValid(restored,profile)&&
-                    (0 until 24).all{gen5BoxChecksumValid(restored,it,profile)}
+                    (0 until GEN5_PC_BOX_COUNT).all{
+                        gen5BoxChecksumValid(restored,it,profile)
+                    }
             }.getOrDefault(false)
             if(bankRestored&&saveRestored)runCatching{bankRecovery?.delete()}
             val recovery=when{
@@ -15555,7 +15563,7 @@ class MainActivity : Activity() {
             return
         }
         Toast.makeText(this,
-            "PSE converted Let's Go PB7 → Gen 5 PK5 to Box ${target/30+1} • Slot ${target%30+1}; PB7 preserved",
+            "PSE converted Let's Go PB7 → Gen 5 PK5 to Box ${target/GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_BOX_COUNT • Slot ${target%GEN5_PC_SLOTS_PER_BOX+1} of $GEN5_PC_SLOTS_PER_BOX; PB7 preserved",
             Toast.LENGTH_LONG).show()
         showBank()
     }
@@ -68317,6 +68325,9 @@ private data class Gen2ToGen5LegalisePlan(
         private const val GEN2_BANK_FILE_SIZE = GEN2_BANK_HEADER_SIZE + 32 + 11 + 11
         private const val SIZE_G4 = 0x80000
         private const val SIZE_G5 = 0x80000
+        private const val GEN5_PC_BOX_COUNT = 24
+        private const val GEN5_PC_SLOTS_PER_BOX = 30
+        private const val GEN5_PC_CAPACITY = GEN5_PC_BOX_COUNT * GEN5_PC_SLOTS_PER_BOX
         private const val SIZE_G6_XY = 0x65600
         private const val SIZE_G6_ORAS = 0x76000
         private const val SIZE_G7_SM = 0x6BE00
