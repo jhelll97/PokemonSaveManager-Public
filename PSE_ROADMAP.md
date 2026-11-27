@@ -2126,7 +2126,17 @@ The native PA9 batch chooser now provides a non-dismissing `Select all` action. 
 
 The change does not alter source or Bank identity checks, converted-entry Legalise routes, deterministic empty-slot mapping, 64-byte slot-footer protection, Party or Pokédex protection, title/revision checks, checksum handling, recovery backup, persisted reopen verification or failed-copy cleanup.
 
-This feature is pending its own automatic Android compile before the Legends: Z-A native PA9 batch selection shortcut is called validated.
+Commit `584065701ef5a9ba309a70ba40c325be6eec73d5` passed automatic Android build run `45963035710`, attempt 1, and was reported by exact Slack event `1795767403.324649`. The Legends: Z-A native PA9 batch selection shortcut is compile-validated.
+
+## Let's Go native PB7 batch selection shortcut
+
+After the Legends: Z-A selection shortcut compiled successfully, Let's Go remained the final supported native batch restore where choosing every PB7 Bank entry required checking each item individually.
+
+The native PB7 batch chooser now provides a non-dismissing `Select all` action. It marks every canonical `switch_lgpe_<sha256>.pb7` candidate in the existing reviewed list while retaining the same explicit final append-destination review. The existing guard still rejects fewer than two entries and rejects a selected count larger than the current number of unused native storage records, so the shortcut cannot replace existing Pokémon or silently omit entries.
+
+The change does not alter source or Bank identity checks, converted-entry Legalise routes, append-only destination mapping, Party or partner pointers, Pokédex protection, storage-count or CRC handling, recovery backup, persisted reopen verification or failed-copy cleanup.
+
+This feature is pending its own automatic Android compile before the Let's Go native PB7 batch selection shortcut is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
