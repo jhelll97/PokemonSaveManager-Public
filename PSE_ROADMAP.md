@@ -2000,7 +2000,15 @@ Scarlet/Violet users could copy one checksum-valid Party PK9 at a time or review
 
 The Scarlet/Violet Party view now offers `Copy selected Party Pokémon to PSE Bank`. A separate activity reopens the exact validated Scarlet/Violet source, excludes empty and unreadable Party slots, lets the user select several readable native 344-byte PK9 records, and presents a cancellable final review naming every exact Party slot and SHA-256-derived Bank filename. Confirmation reopens the source again, requires every selected record to remain byte-for-byte identical and checksum-valid, reuses the verified content-addressed PK9 batch writer, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PK9 bytes explicitly share one Bank entry. Eggs and cached Party fields may be preserved in Bank as exact native records, while existing restore guards remain unchanged. The source save, Party count and order, PC Boxes, ride Pokémon, native records and container integrity are never written or normalized.
 
-This feature is pending its own automatic Android compile before the Scarlet/Violet native Party batch deposit is called validated.
+Commit `a28ef4e134909cb6782ba503ca1aeee39b64005b` passed automatic Android build run `45941125593`, attempt 1, and was reported by exact Slack event `1795754947.218599`. The Scarlet/Violet native Party batch deposit is compile-validated.
+
+## Legends: Z-A native Party batch deposit to PSE Bank
+
+Legends: Z-A users could copy one checksum-valid Party PA9 at a time or review a batch from one PC Box, but could not preserve several current Party records in one bounded Bank operation.
+
+The Legends: Z-A Party view now offers `Copy selected Party Pokémon to PSE Bank`. A separate activity reopens the exact validated Legends: Z-A source, excludes empty and unreadable Party slots, extracts only each readable native 344-byte PA9 from its documented 480-byte Party stride, and presents a cancellable final review naming every exact Party slot and SHA-256-derived Bank filename. Confirmation reopens the source again, requires every selected PA9 to remain byte-for-byte identical and checksum-valid, reuses the verified content-addressed PA9 batch writer, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PA9 bytes explicitly share one Bank entry. Eggs, Alpha flags and cached Party fields may be preserved in Bank as exact native PA9 records, while stride-only Party metadata and existing restore guards remain unchanged. The source save, Party order and native presence prefix, all 480-byte Party strides, all 408-byte PC strides, revision identity and container integrity are never written or normalized.
+
+This feature is pending its own automatic Android compile before the Legends: Z-A native Party batch deposit is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
