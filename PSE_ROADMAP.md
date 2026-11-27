@@ -1968,7 +1968,15 @@ Supported-title Bank inventory found the same native batch-deposit gap in Pokém
 
 Each Legends: Z-A Box now offers `Copy selected Pokémon to PSE Bank`. A separate activity reopens the exact validated Legends: Z-A source, excludes empty and unreadable slots, lets the user select several readable native 344-byte PA9 records from that Box, and presents a cancellable final review naming every exact Box slot and SHA-256-derived Bank filename. The activity extracts each PA9 only from the documented 408-byte native box stride. Confirmation reopens the source again, requires every selected record to remain byte-for-byte identical and checksum-valid, writes only missing content-addressed entries, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PA9 bytes explicitly share one Bank entry. Eggs, Alpha flags and other native PA9 data may be preserved in Bank as exact records, while existing restore guards remain unchanged. The source save, title and revision identity, native box strides, party data, records and container integrity are never written or normalized.
 
-This feature is pending its own automatic Android compile before the Legends: Z-A native Box batch deposit is called validated.
+Commit `18e152dcae87bbc6527d02bf9b549342de246632` passed automatic Android build run `45935076352`, attempt 1, and was reported by exact Slack event `1795751360.825189`; the Legends: Z-A native Box batch deposit is validated.
+
+## Sword/Shield native Party batch deposit to PSE Bank
+
+With every supported Switch title's primary storage batch path compile-validated, the next Bank matrix gap was native Party selection. Sword/Shield users could copy one checksum-valid Party PK8 at a time, but could not review and preserve several current Party records in one bounded Bank operation.
+
+The Sword/Shield Party view now offers `Copy selected Party Pokémon to PSE Bank`. A separate activity reopens the exact validated Sword/Shield source, excludes empty and unreadable Party slots, lets the user select several readable native 344-byte PK8 records, and presents a cancellable final review naming every exact Party slot and SHA-256-derived Bank filename. Confirmation reopens the source again, requires every selected record to remain byte-for-byte identical and checksum-valid, reuses the verified content-addressed PK8 batch writer, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PK8 bytes explicitly share one Bank entry. Eggs and cached Party fields may be preserved in Bank as exact native records, while existing restore guards remain unchanged. The source save, Party count and order, PC boxes, native records and container integrity are never written or normalized.
+
+This feature is pending its own automatic Android compile before the Sword/Shield native Party batch deposit is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
