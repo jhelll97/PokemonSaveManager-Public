@@ -82,16 +82,23 @@ class SwitchScarletVioletPseBankPartyBatchDepositActivity : Activity() {
     private fun showSelection() {
         if (busy || candidates.isEmpty()) return
         val selected = BooleanArray(candidates.size)
+        var reviewButton: Button? = null
+        fun refreshReviewAction() {
+            reviewButton?.text = "Review (${selected.count { it }})"
+        }
         val dialog = AlertDialog.Builder(this)
             .setTitle("Choose native Party PK9 records")
             .setMultiChoiceItems(candidates.map { it.label }.toTypedArray(), selected) { _, index, checked ->
                 selected[index] = checked
+                refreshReviewAction()
             }
             .setNegativeButton("Cancel", null)
-            .setPositiveButton("Review", null)
+            .setPositiveButton("Review (0)", null)
             .create()
         dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            reviewButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            refreshReviewAction()
+            reviewButton?.setOnClickListener {
                 val chosen = candidates.filterIndexed { index, _ -> selected[index] }
                 if (chosen.isEmpty()) {
                     status.text = "Choose at least one Pokémon. Nothing was copied."
