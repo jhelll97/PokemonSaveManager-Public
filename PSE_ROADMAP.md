@@ -1896,7 +1896,15 @@ Supported-title Bank inventory found the same native PC-copy gap in Generation 6
 
 Generation 6 multi-select now offers `Copy selected to Gen 6 Box`. It reuses the exact reviewed structurally empty destination slots, byte-for-byte PK6 staging, native box and block checksum refresh, retained destination backup and persisted reopen verification while skipping every Bank removal. The cancellable review states that every selected PK6 Bank original remains byte-for-byte unchanged. The transaction rechecks all canonical source files after persistence and after temporary recovery cleanup; destination rollback remains independent on failure.
 
-This feature is pending its own automatic Android compile before the native Generation 6 Bank batch copy is called validated.
+Commit `ca5467ea62d72e3204f84b8c411627da2561e086` passed automatic Android build run `45918853341`, attempt 1, and was reported by exact Slack event `1795741339.105739`; the native Generation 6 Bank batch copy is validated.
+
+## Native Generation 7 Bank batch copy to PC Box
+
+Supported-title Bank inventory found the same native PC-copy gap in Generation 7: multi-selection could withdraw exact PK7 records into a chosen PC Box, but could not retain the selected Bank originals after placing the verified batch. Users who wanted an in-save copy therefore had only the destructive withdrawal action.
+
+Generation 7 multi-select now offers `Copy selected to Gen 7 Box`. It uses the compile-validated shared exact-copy transaction added with the Generation 6 feature: reviewed structurally empty destination slots, byte-for-byte PK7 staging, native checksum refresh, retained destination backup, persisted reopen verification and no Bank removal. The cancellable review states that every selected PK7 Bank original remains byte-for-byte unchanged. The transaction rechecks all canonical source files after persistence and temporary recovery cleanup; destination rollback remains independent on failure.
+
+This feature is pending its own automatic Android compile before the native Generation 7 Bank batch copy is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

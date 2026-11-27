@@ -67889,6 +67889,17 @@ private data class Gen2ToGen5LegalisePlan(
                 }
             }
         }
+        if(bankMultiSelectMode&&bankViewGeneration==7&&currentGen==7&&batchDestination!=null){
+            addButton(root,"📦  Copy selected to Gen 7 Box"){
+                if(importedFile?.absolutePath!=batchDestination.absolutePath||currentSourceUri!=batchDestinationUri||currentSourceLabel!=batchDestinationLabel){
+                    showDialog("Copy selected to Gen 7 Box","The loaded destination changed. Reopen PSE Bank. Nothing was changed.")
+                }else{
+                    val chosen=selectedBankFiles.map{File(it)}
+                    if(chosen.isEmpty())showDialog("Copy selected to Gen 7 Box","Select one or more Gen 7 Bank Pokémon first.")
+                    else chooseSelectedStandardBankDestination(chosen,7,true)
+                }
+            }
+        }
         val nav = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL }
         fun bankNavButton(label:String, enabled:Boolean, click:()->Unit): TextView = TextView(this).apply {
             text=label; gravity=Gravity.CENTER; textSize=28f; typeface=Typeface.DEFAULT_BOLD
