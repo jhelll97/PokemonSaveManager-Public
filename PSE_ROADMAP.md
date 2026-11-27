@@ -2086,7 +2086,17 @@ The native PK8 batch chooser now provides a non-dismissing `Select all` action. 
 
 The change does not alter source or Bank identity checks, converted-entry Legalise routes, deterministic empty-slot mapping, checksum handling, recovery backup, persisted reopen verification or failed-copy cleanup.
 
-This feature is pending its own automatic Android compile before the Sword/Shield native PK8 batch selection shortcut is called validated.
+Commit `96c06a293a56b41254c3df5e23c0ff780616a14d` passed automatic Android build run `45956554499`, attempt 1, and was reported by exact Slack event `1795764068.144639`. The Sword/Shield native PK8 batch selection shortcut is compile-validated.
+
+## BDSP native PB8 batch selection shortcut
+
+After the Sword/Shield selection shortcut compiled successfully, BDSP remained the next supported native batch restore where choosing every PB8 Bank entry required checking each item individually.
+
+The native PB8 batch chooser now provides a non-dismissing `Select all` action. It marks every canonical `switch_bdsp_<sha256>.pb8` candidate in the existing reviewed list while retaining the same explicit final destination review. The existing guard still rejects fewer than two entries and rejects a selected count larger than the current number of empty native Box slots, so the shortcut cannot overwrite occupied slots or silently omit entries.
+
+The change does not alter source or Bank identity checks, converted-entry Legalise routes, deterministic empty-slot mapping, MD5 handling, recovery backup, persisted reopen verification or failed-copy cleanup.
+
+This feature is pending its own automatic Android compile before the BDSP native PB8 batch selection shortcut is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
