@@ -2136,7 +2136,17 @@ The native PB7 batch chooser now provides a non-dismissing `Select all` action. 
 
 The change does not alter source or Bank identity checks, converted-entry Legalise routes, append-only destination mapping, Party or partner pointers, Pokédex protection, storage-count or CRC handling, recovery backup, persisted reopen verification or failed-copy cleanup.
 
-This feature is pending its own automatic Android compile before the Let's Go native PB7 batch selection shortcut is called validated.
+Commit `9e96aa7721fd45634506fce3a7e5ef48de8f3b08` passed automatic Android build run `45964596469`, attempt 1, and was reported by exact Slack event `1795768325.308299`. The Let's Go native PB7 batch selection shortcut is compile-validated.
+
+## Sword/Shield native Box deposit selection shortcut
+
+After native batch restore selection shortcuts compiled across every supported Switch title, Sword/Shield remained the first native Box batch deposit where copying every readable PK8 required checking each item individually.
+
+The native PK8 Box deposit chooser now provides a non-dismissing `Select all` action. It marks every readable checksum-valid Pokémon candidate in the selected Box while keeping the existing explicit final review of slot, Pokémon label and canonical `switch_swsh_<sha256>.pk8` destination. Empty and unreadable slots remain excluded, identical bytes still share one content-addressed Bank entry, and choosing nothing remains blocked.
+
+The change does not alter source reopen or identity checks, exact PK8 extraction, source-slot preservation, atomic Bank writes, duplicate handling, rollback of newly created entries or final persisted-byte verification.
+
+This feature is pending its own automatic Android compile before the Sword/Shield native Box deposit selection shortcut is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
