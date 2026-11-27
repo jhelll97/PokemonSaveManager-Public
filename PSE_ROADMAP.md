@@ -2246,7 +2246,17 @@ The native PK9 batch restore chooser now changes its bulk action between `Select
 
 The change does not alter exact Bank-entry identity checks, distinct structurally empty destination binding, capacity blocking, explicit final destination review, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback.
 
-This feature is pending its own automatic Android compile before the Scarlet/Violet native batch restore selection toggle is called validated.
+Commit `1a5c9dde0fa9f75f6b9678c50b0c1e5eeb6fd776` passed automatic Android build run `45986452805`, attempt 1, and was reported by exact Slack event `1795777722.932159`. The Scarlet/Violet native batch restore selection toggle is compile-validated.
+
+## Legends: Z-A native batch restore selection toggle
+
+After the Scarlet/Violet restore toggle compiled successfully, Legends: Z-A remained the final native batch restore chooser where `Select all` could not reverse its own bulk selection without unchecking every PA9 individually.
+
+The native PA9 batch restore chooser now changes its bulk action between `Select all` and `Clear all`. It follows manual checkbox changes, updates every visible selection without dismissing the chooser, and still requires at least two selected PA9 entries before destination review.
+
+The change does not alter exact Bank-entry identity checks, distinct structurally empty destination binding, capacity blocking, explicit final destination review, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback.
+
+This feature is pending its own automatic Android compile before the Legends: Z-A native batch restore selection toggle is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
