@@ -2602,7 +2602,15 @@ The Scarlet/Violet PK9 batch restore chooser now shows `Review destinations (sel
 
 The existing minimum-two requirement and over-capacity rejection remain unchanged. This does not change Bank identity, destination selection, recovery, checksums, reopen verification, cleanup, or rollback behavior.
 
-This feature is pending its own automatic Android compile before the Scarlet/Violet native batch restore capacity progress is called validated.
+The Scarlet/Violet native batch restore capacity progress was compile-validated on commit `4a18b5eba62f6d96f735f76444ca9b004af43432` by exact PSE_BUILD_SUCCESS at Slack TS `1795812444.589469`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46064824669`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Legends Z-A native batch restore capacity progress
+
+The Legends Z-A PA9 batch restore chooser now shows `Review destinations (selected/capacity)`, refreshing after both manual selection changes and the bulk selection control. This keeps the currently empty destination limit visible while selecting Bank entries.
+
+The existing minimum-two requirement and over-capacity rejection remain unchanged. This does not change Bank identity, destination selection, recovery, checksums, reopen verification, cleanup, or rollback behavior.
+
+This feature is pending its own automatic Android compile before the Legends Z-A native batch restore capacity progress is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
