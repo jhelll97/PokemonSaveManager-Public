@@ -2506,7 +2506,15 @@ The native Party PK9 batch deposit chooser now provides a `Select all` action th
 
 The existing requirement to select at least one readable native Party PK9 remains authoritative. This change does not alter source-save identity checks, exact native Party-record rereads, content-addressed Bank names, duplicate-content handling, explicit final review or the rule that the source save and every Party slot remain unchanged.
 
-This feature is pending its own automatic Android compile before the Scarlet/Violet native Party batch deposit selection shortcut is called validated.
+The Scarlet/Violet native Party batch deposit selection shortcut was compile-validated on commit `8ef80472f67fef693fa7cf32a9225056c8426bf8` by the exact `PSE_BUILD_SUCCESS` event at Slack timestamp `1795802628.862919`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, Actions run `46045259206`, attempt `1`, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, signed-APK packaging remained skipped, the reporter job succeeded, and the event SHA was current HEAD before this next bounded change.
+
+## Legends: Z-A native Party batch deposit selection shortcut
+
+The native Party PA9 batch deposit chooser now provides a `Select all` action that changes to `Clear all` when every readable Party record is selected. Bulk changes update every visible checkbox and the existing live `Review (N)` count immediately.
+
+The existing requirement to select at least one readable native Party PA9 remains authoritative. This change does not alter source-save identity checks, exact native Party-record rereads, content-addressed Bank names, duplicate-content handling, explicit final review or the rule that the source save and every Party slot remain unchanged.
+
+This feature is pending its own automatic Android compile before the Legends: Z-A native Party batch deposit selection shortcut is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
