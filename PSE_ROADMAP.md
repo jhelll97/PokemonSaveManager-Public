@@ -2570,7 +2570,15 @@ The native PK8 batch restore chooser now shows the selected count against the ex
 
 The existing minimum of two selected records and explicit over-capacity rejection remain authoritative. This display change does not alter exact Bank-entry identity checks, destination selection, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback.
 
-This feature is pending its own automatic Android compile before the Sword/Shield native batch restore capacity progress is called validated.
+The Sword/Shield native batch restore capacity progress was compile-validated on commit `3a2dac9a96dcc19702ee5b43c5b1be104a6132b4` by exact PSE_BUILD_SUCCESS at Slack TS `1795809337.081199`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46059166713`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## BDSP native batch restore capacity progress
+
+The BDSP PB8 batch restore chooser now shows `Review destinations (selected/capacity)`, refreshing after both manual selection changes and the bulk selection control. This keeps the currently empty destination limit visible while selecting Bank entries.
+
+The existing minimum-two requirement and over-capacity rejection remain unchanged. This does not change Bank identity, destination selection, recovery, checksums, reopen verification, cleanup, or rollback behavior.
+
+This feature is pending its own automatic Android compile before the BDSP native batch restore capacity progress is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
