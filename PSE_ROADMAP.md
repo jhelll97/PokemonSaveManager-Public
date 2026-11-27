@@ -2306,7 +2306,17 @@ The native PK9 Box deposit chooser now changes its bulk action between `Select a
 
 The change does not alter source reopen or identity checks, exact PK9 extraction, source Box slots, party data, explicit final review, content-addressed Bank writes, duplicate handling, rollback of newly created entries or persisted-byte verification.
 
-This feature is pending its own automatic Android compile before the Scarlet/Violet native Box deposit selection toggle is called validated.
+Commit `da0486699a29b025e59c5f6d3eac19ed9c944b14` passed automatic Android build run `45998250894`, attempt 1, and was reported by exact Slack event `1795782896.410489`. The Scarlet/Violet native Box deposit selection toggle is compile-validated.
+
+## Legends: Z-A native Box deposit selection toggle
+
+After the Scarlet/Violet deposit toggle compiled successfully, Legends: Z-A remained the final native Box deposit chooser where `Select all` could not reverse its own bulk selection without unchecking every PA9 individually.
+
+The native PA9 Box deposit chooser now changes its bulk action between `Select all` and `Clear all`. It follows manual checkbox changes, updates every visible selection without dismissing the chooser, and still blocks review when no PA9 is selected.
+
+The change does not alter source reopen or identity checks, exact PA9 extraction, source Box slots, party data, explicit final review, content-addressed Bank writes, duplicate handling, rollback of newly created entries or persisted-byte verification.
+
+This feature is pending its own automatic Android compile before the Legends: Z-A native Box deposit selection toggle is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
