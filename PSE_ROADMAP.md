@@ -2106,7 +2106,17 @@ The native PA8 batch chooser now provides a non-dismissing `Select all` action. 
 
 The change does not alter source or Bank identity checks, converted-entry Legalise routes, deterministic empty-slot mapping, PA8 representation handling, checksum handling, recovery backup, persisted reopen verification or failed-copy cleanup.
 
-This feature is pending its own automatic Android compile before the Legends: Arceus native PA8 batch selection shortcut is called validated.
+Commit `f83e365f0f6e630d7a6c39a40af2726f51da1ee1` passed automatic Android build run `45959749428`, attempt 1, and was reported by exact Slack event `1795765697.727959`. The Legends: Arceus native PA8 batch selection shortcut is compile-validated.
+
+## Scarlet/Violet native PK9 batch selection shortcut
+
+After the Legends: Arceus selection shortcut compiled successfully, Scarlet/Violet remained the next supported native batch restore where choosing every PK9 Bank entry required checking each item individually.
+
+The native PK9 batch chooser now provides a non-dismissing `Select all` action. It marks every canonical `switch_sv_<sha256>.pk9` candidate in the existing reviewed list while retaining the same explicit final destination review. The existing guard still rejects fewer than two entries and rejects a selected count larger than the current number of empty native Box slots, so the shortcut cannot overwrite occupied slots or silently omit entries.
+
+The change does not alter source or Bank identity checks, converted-entry Legalise routes, deterministic empty-slot mapping, ride Pokémon protection, Pokédex protection, checksum handling, recovery backup, persisted reopen verification or failed-copy cleanup.
+
+This feature is pending its own automatic Android compile before the Scarlet/Violet native PK9 batch selection shortcut is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
