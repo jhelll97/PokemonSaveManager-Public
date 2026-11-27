@@ -2378,7 +2378,15 @@ The native PK8 batch deposit chooser now shows the current selection directly on
 
 The existing requirement to select at least one readable native PK8 remains authoritative. This change does not alter source-save identity checks, exact native record rereads, content-addressed Bank names, duplicate-content handling, explicit final review or the rule that the source save and every source slot remain unchanged.
 
-This feature is pending its own automatic Android compile before the Sword/Shield native batch deposit live selection count is called validated.
+The Sword/Shield native batch deposit live selection count was compile-validated on commit `1278f4a42df77a3ae4dfb5e5d1d1c1052456be04` by the exact `PSE_BUILD_SUCCESS` event at Slack timestamp `1795790111.172969`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, Actions run `46015217443`, attempt `1`, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, signed-APK packaging remained skipped, the reporter job succeeded, and the event SHA was current HEAD before this next bounded change.
+
+## BDSP native batch deposit live selection count
+
+The native PB8 batch deposit chooser now shows the current selection directly on its review action as `Review (N)`. The count refreshes after each manual checkbox change and after `Select all` or `Clear all`, so the number of exact source records entering final review is visible before leaving the chooser.
+
+The existing requirement to select at least one readable native PB8 remains authoritative. This change does not alter source-save identity checks, exact native record rereads, content-addressed Bank names, duplicate-content handling, explicit final review or the rule that the source save and every source slot remain unchanged.
+
+This feature is pending its own automatic Android compile before the BDSP native batch deposit live selection count is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
