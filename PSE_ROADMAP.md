@@ -2066,7 +2066,17 @@ The Legends: Z-A Bank now offers `Restore native PA9 batch` when at least two ca
 
 Confirmation reopens the source and every selected Bank entry, stages each exact 344-byte PA9 body in its reviewed empty 408-byte PC slot, and refreshes the native SHA-256 footer through the existing container writer. Verification reopens every PA9 byte-for-byte and rejects destination reuse, occupied-slot replacement, Party or Pokédex changes, changes to any 64-byte slot footer, changes outside the reviewed PA9 bodies and save footer, title, revision or size changes, source drift, Bank drift and persisted-copy mismatch. The transaction retains and rereads a verified recovery backup, requires a new empty document, reopens the saved copy, and removes a failed copy when possible. The original source and all Bank entries remain unchanged.
 
-This feature is pending its own automatic Android compile before the Legends: Z-A native PA9 batch restore is called validated.
+Commit `bf5ba9d4d0e3dd69a2d910f6de37097d4fdcd7f2` passed automatic Android build run `45953063012`, attempt 1, and was reported by exact Slack event `1795762315.806939`. The Legends: Z-A native PA9 batch restore is compile-validated.
+
+## Let's Go native PB7 batch restore from PSE Bank
+
+After the Legends: Z-A batch restore compiled successfully, Let's Go remained a supported title where several exact native PB7 Bank entries required repeated one-record save transactions.
+
+The Let's Go Bank now offers `Restore native PB7 batch` when at least two canonical native entries exist. A separate activity reopens the exact validated source, accepts only `switch_lgpe_<sha256>.pb7` files whose filenames, bytes and PB7 checksums agree, requires at least two unused native storage records, and lets the user choose a batch. PSE binds the selected exact Bank identities in review order to consecutive append-only storage slots and presents a cancellable final review naming every filename, SHA-256, species, level, slot and native byte offset. Converted entries remain on their existing one-record explicit Legalise routes.
+
+Confirmation reopens the source and every selected Bank entry, writes each exact 260-byte PB7 into its reviewed unused native storage record, increments the native storage count once, and refreshes only the block 8 and block 9 CRCs. Verification reopens every PB7 byte-for-byte as an unassigned storage Pokémon and rejects protected destination bytes, storage-capacity overflow, changes to existing Pokémon, Party or partner pointers, Pokédex data, title identity, unrelated bytes, source identity, Bank identity or persisted-copy content. The transaction retains and rereads a verified recovery backup, requires a new empty document, reopens the saved copy, and removes a failed copy when possible. The original source and all Bank entries remain unchanged.
+
+This feature is pending its own automatic Android compile before the Let's Go native PB7 batch restore is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
