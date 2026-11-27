@@ -1920,7 +1920,15 @@ Supported-title Bank inventory found the remaining native PC-copy gap in Generat
 
 Generation 1 multi-select now offers `Copy selected to Gen 1 Box`. It reuses the exact reviewed destination box and ordered native slots, preserved PSE1 staging, Seen/Caught registration, main-checksum update, retained destination backup and persisted working-save and active-save reopen verification while skipping every Bank removal. The final cancellable review names each exact Box and Slot and states that every selected Bank original remains byte-for-byte unchanged. Temporary recovery snapshots are cleaned only after the working destination, active destination, retained backup and every canonical source verify; independent destination rollback remains unchanged. This is a PSE Bank copy and makes no official trade, Pokemon Bank, legality or provenance claim.
 
-This feature is pending its own automatic Android compile before the native Generation 1 Bank batch copy is called validated.
+Commit `e313822e686fb206664ec72bb87c4abca913090e` passed automatic Android build run `45925092104`, attempt 1, and was reported by exact Slack event `1795745147.670589`; the native Generation 1 Bank batch copy is validated.
+
+## Sword/Shield native Box batch deposit to PSE Bank
+
+Supported-title Bank inventory found that Sword/Shield could copy one checksum-valid native PK8 at a time from party or PC storage, but a user reviewing a populated native Box could not select and preserve several records in one bounded Bank operation. Repeating the single-record flow also provided no complete pre-write review tying the selected Box slots to their content-addressed PSE Bank identities.
+
+Each Sword/Shield Box now offers `Copy selected Pokémon to PSE Bank`. A separate activity reopens the exact validated Sword/Shield source, excludes empty and unreadable slots, lets the user select several readable native PK8 records, and presents a cancellable final review naming every exact Box slot and SHA-256-derived Bank filename. Confirmation reopens the source again, requires every selected 344-byte record to remain byte-for-byte identical and checksum-valid, writes only missing content-addressed entries, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PK8 bytes explicitly share one Bank entry. The source save, title identity, native slots and checksums are never written or normalized.
+
+This feature is pending its own automatic Android compile before the Sword/Shield native Box batch deposit is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

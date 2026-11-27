@@ -3,6 +3,11 @@ package com.example.pokemonsavemanager
 import java.io.File
 import java.security.MessageDigest
 
+data class SwitchPseBankBatchDepositResult(
+    val entries: List<File>,
+    val createdEntries: List<File>
+)
+
 /** Byte-preserving local PSE Bank storage for validated native Switch Pokémon records. */
 object SwitchPseBankStore {
     fun depositLetsGo(context: android.content.Context, record: ByteArray): File {
@@ -54,6 +59,78 @@ object SwitchPseBankStore {
         return deposit(context, "switch_swsh_", "pk8", record)
     }
 
+    fun depositSwordShieldBatch(
+        context: android.content.Context,
+        records: List<ByteArray>
+    ): SwitchPseBankBatchDepositResult {
+        require(records.isNotEmpty()) { "Choose at least one native Sword/Shield Pokémon." }
+        val preserved = records.map { record ->
+            require(record.size == SwordShieldPokemonReadOnly.RECORD_SIZE) {
+                "Every selected record must be a complete native PK8."
+            }
+            require(SwordShieldPokemonReadOnly.read(record) is SwordShieldSlotRead.Pokemon) {
+                "Every selected Sword/Shield Pokémon must remain readable and checksum-valid."
+            }
+            record.copyOf()
+        }
+        val directory = File(context.filesDir, "pse_bank").apply { mkdirs() }.canonicalFile
+        val targets = preserved.map { record ->
+            val digest = sha256(record)
+            File(directory, "switch_swsh_$digest.pk8") to record
+        }
+        val uniqueTargets = LinkedHashMap<String, Pair<File, ByteArray>>()
+        targets.forEach { (target, record) -> uniqueTargets.putIfAbsent(target.name, target to record) }
+        val created = mutableListOf<Pair<File, ByteArray>>()
+        try {
+            uniqueTargets.values.forEach { (target, record) ->
+                require(target.canonicalFile.parentFile == directory) { "The PSE Bank destination is unavailable." }
+                if (target.exists()) {
+                    require(target.isFile && target.readBytes().contentEquals(record)) {
+                        "A Sword/Shield Bank entry no longer matches its content hash. Nothing was changed."
+                    }
+                } else {
+                    val temporary = File(directory, ".${target.name}.${System.nanoTime()}.tmp")
+                    try {
+                        temporary.writeBytes(record)
+                        require(temporary.readBytes().contentEquals(record)) {
+                            "A staged Sword/Shield Bank entry failed verification."
+                        }
+                        require(temporary.renameTo(target)) {
+                            "A native Sword/Shield Bank entry could not be committed."
+                        }
+                        created += target to record
+                        require(target.readBytes().contentEquals(record)) {
+                            "A committed Sword/Shield Bank entry failed verification."
+                        }
+                    } finally {
+                        if (temporary.exists()) temporary.delete()
+                    }
+                }
+            }
+            uniqueTargets.values.forEach { (target, record) ->
+                require(target.isFile && target.readBytes().contentEquals(record)) {
+                    "The complete Sword/Shield Bank batch did not verify."
+                }
+            }
+            return SwitchPseBankBatchDepositResult(
+                targets.map { it.first }, created.map { it.first }
+            )
+        } catch (failure: Exception) {
+            val retained = created.mapNotNull { (target, record) ->
+                if (!target.exists()) null
+                else if (runCatching { target.readBytes().contentEquals(record) && target.delete() }
+                        .getOrDefault(false)) null
+                else target.name
+            }
+            throw IllegalStateException(
+                (failure.message ?: "The Sword/Shield Bank batch could not be copied.") +
+                    if (retained.isEmpty()) " No new Bank entries were retained."
+                    else " These verified new entries could not be rolled back: ${retained.joinToString()}",
+                failure
+            )
+        }
+    }
+
     private fun deposit(
         context: android.content.Context,
         prefix: String,
@@ -61,8 +138,7 @@ object SwitchPseBankStore {
         record: ByteArray
     ): File {
         val directory = File(context.filesDir, "pse_bank").apply { mkdirs() }
-        val digest = MessageDigest.getInstance("SHA-256").digest(record)
-            .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+        val digest = sha256(record)
         val target = File(directory, prefix + digest + "." + extension)
         if (target.exists()) {
             require(target.readBytes().contentEquals(record)) { "Bank entry hash collision; no data was changed." }
@@ -82,4 +158,8 @@ object SwitchPseBankStore {
             if (temporary.exists()) temporary.delete()
         }
     }
+
+    private fun sha256(record: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(record)
+            .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
 }
