@@ -10227,6 +10227,22 @@ class SwitchReadOnlyActivity : Activity() {
                 }
             }
         }
+        if (entries.count {
+            it.name.startsWith("switch_swsh_") && it.extension.equals("pk8", true)
+        } >= 2) {
+            builder.setNeutralButton("Restore native PK8 batch") { _, _ ->
+                val source = selectedSourceUri
+                if (session === bound && source != null) startActivity(
+                    Intent(
+                        this@SwitchReadOnlyActivity,
+                        SwitchSwordShieldPseBankBatchRestoreActivity::class.java
+                    )
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
+        }
         builder.show()
     }
 

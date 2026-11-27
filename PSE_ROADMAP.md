@@ -2016,7 +2016,17 @@ Let's Go users could copy one checksum-valid Party PB7 at a time or review a bat
 
 The Let's Go Party view now offers `Copy selected Party Pokémon to PSE Bank`. A separate activity reopens the exact validated Let's Go source, excludes empty and unreadable Party pointers, follows each selected native Party pointer to its exact 260-byte PB7 in the shared stored list, and presents a cancellable final review naming every Party slot, stored-record index and SHA-256-derived Bank filename. Confirmation reopens the source again, requires every selected Party slot to retain the same stored-record pointer and byte-for-byte identical checksum-valid PB7, reuses the verified content-addressed PB7 batch writer, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PB7 bytes explicitly share one Bank entry. Eggs, partner assignments and cached fields may be preserved in Bank as exact native records, while existing restore guards remain unchanged. The source save, Party order and pointers, partner pointer, shared stored-list order, every native PB7 and container integrity are never written or normalized.
 
-This feature is pending its own automatic Android compile before the Let's Go native Party batch deposit is called validated.
+Commit `14b5d355b7ccdafe522de26cd214b74a17284b18` passed automatic Android build run `45943965272`, attempt 1, and was reported by exact Slack event `1795756898.434219`. The Let's Go native Party batch deposit is compile-validated.
+
+## Sword/Shield native PK8 batch restore from PSE Bank
+
+With native Box and Party batch deposits compile-validated across every supported Switch title, the next shared Bank gap is the reverse operation. Sword/Shield users can restore one exact native PK8 at a time, but cannot review several native Bank entries and place them into one new save copy without repeating the full save transaction for each entry.
+
+The Sword/Shield Bank now offers `Restore native PK8 batch` when at least two content-addressed native entries exist. A separate activity reopens the exact validated source, accepts only canonical `switch_swsh_<sha256>.pk8` files whose filenames, bytes and native PK8 checksums agree, requires at least two empty PC-box slots, and lets the user choose a batch. PSE deterministically binds each selected exact Bank identity to a distinct currently empty destination and presents a cancellable final review naming every filename, SHA-256, species, level, Box, slot and encrypted byte offset. Converted entries remain on their existing one-record explicit Legalise routes.
+
+Confirmation reopens the source and every selected Bank entry, stages all writes into one new save copy, refreshes the native footer through the existing container writer, and verifies that every PK8 reopens byte-for-byte in its reviewed destination. Verification rejects destination reuse, occupied-slot replacement, Party changes, changes outside the reviewed 344-byte destinations and native footer, title or size changes, source drift, Bank drift and persisted-copy mismatch. The transaction retains and rereads a verified recovery backup, requires a new empty document, reopens the saved copy, and removes a failed copy when possible. The original source and all Bank entries remain unchanged.
+
+This feature is pending its own automatic Android compile before the Sword/Shield native PK8 batch restore is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
