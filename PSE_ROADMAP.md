@@ -2166,7 +2166,17 @@ The native PB7 storage-page deposit chooser now provides a non-dismissing `Selec
 
 The change does not alter source reopen or identity checks, exact PB7 extraction, source stored-list order, party or partner pointers, atomic Bank writes, duplicate handling, rollback of newly created entries or final persisted-byte verification.
 
-This feature is pending its own automatic Android compile before the Let's Go native storage-page deposit selection shortcut is called validated.
+Commit `52a879329915ae2285b7eaa890142f13b3400dc8` passed automatic Android build run `45970715062`, attempt 1, and was reported by exact Slack event `1795770938.584539`. The Let's Go native storage-page deposit selection shortcut is compile-validated.
+
+## Legends: Arceus native Pasture deposit selection shortcut
+
+After the Let's Go deposit shortcut compiled successfully, Legends: Arceus remained the next native Pasture batch deposit where copying every readable PA8 required checking each item individually.
+
+The native PA8 Pasture deposit chooser now provides a non-dismissing `Select all` action. It marks every readable checksum-valid Pokémon candidate in the selected Pasture while keeping the existing explicit final review of slot, Pokémon label and canonical `switch_pla_<sha256>.pa8` destination. Empty and unreadable slots remain excluded, identical bytes still share one content-addressed Bank entry, and choosing nothing remains blocked.
+
+The change does not alter source reopen or identity checks, exact PA8 extraction, source Pasture slots, party data, atomic Bank writes, duplicate handling, rollback of newly created entries or final persisted-byte verification.
+
+This feature is pending its own automatic Android compile before the Legends: Arceus native Pasture deposit selection shortcut is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
