@@ -2196,7 +2196,17 @@ The native PA9 Box deposit chooser now provides a non-dismissing `Select all` ac
 
 The change does not alter source reopen or identity checks, exact PA9 extraction, source Box slots, party data, atomic Bank writes, duplicate handling, rollback of newly created entries or final persisted-byte verification.
 
-This feature is pending its own automatic Android compile before the Legends: Z-A native Box deposit selection shortcut is called validated.
+Commit `b1413c8ae02eae1a8db23aa174d717aacb1881c8` passed automatic Android build run `45976191016`, attempt 1, and was reported by exact Slack event `1795773506.780979`. The Legends: Z-A native Box deposit selection shortcut is compile-validated.
+
+## Sword/Shield native batch restore selection toggle
+
+After native deposit selection shortcuts compiled across every supported Switch title, Sword/Shield remained the first native batch restore chooser where `Select all` could not reverse its own bulk selection without unchecking every PK8 individually.
+
+The native PK8 batch restore chooser now changes its bulk action between `Select all` and `Clear all`. It follows manual checkbox changes, updates every visible selection without dismissing the chooser, and still requires at least two selected PK8 entries before destination review.
+
+The change does not alter exact Bank-entry identity checks, distinct structurally empty destination binding, capacity blocking, explicit final destination review, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback.
+
+This feature is pending its own automatic Android compile before the Sword/Shield native batch restore selection toggle is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
