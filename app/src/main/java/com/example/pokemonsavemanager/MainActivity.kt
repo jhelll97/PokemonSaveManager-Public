@@ -1091,46 +1091,17 @@ class MainActivity : Activity() {
     }
 
     private fun chooseSelectedGen2BankDestination(chosen:List<File>,copyOnly:Boolean=false) {
-        val action=if(copyOnly) "Copy" else "Move"
-        val operation=if(copyOnly) "copy" else "withdrawal"
         val openedSource=currentSourceUri;val openedLabel=currentSourceLabel
         val file=importedFile?:return
-        if(chosen.isEmpty()){showDialog("$action selected","Select one or more Gen 2 Bank Pokémon first.");return}
-        if(chosen.map{it.absolutePath}.distinct().size!=chosen.size){showDialog("$action selected","The selection contains the same Gen 2 Bank entry more than once. Nothing was changed.");return}
-        val openedDestination=runCatching{file.readBytes()}.getOrNull()?:return showDialog("$action selected","The Gen 2 destination could not be read.")
-        val openedProfile=detectGen2Profile(openedDestination)?:return showDialog("$action selected","The Gen 2 destination failed checksum validation. Nothing was changed.")
-        if(!gen2ChecksumValid(openedDestination,openedProfile)){showDialog("$action selected","The Gen 2 destination checksum is invalid. Nothing was changed.");return}
-        val selected=try{
-            loadBoundGen2BankBatch(chosen,bankDir()){parseGen2BankPayload(it)}
-        }catch(e:Exception){showDialog("$action selected",(e.message?:"A selected Gen 2 Bank record could not be read.")+" Nothing was changed.");return}
-        val targets=availableGen2BoxTargets(openedDestination).filter{it.second>=selected.size}
-        if(targets.isEmpty()){showDialog("$action selected","No Gen 2 PC box has enough reported free slots for the complete selection. Nothing was changed.");return}
-        var consumed=false
-        AlertDialog.Builder(this).setTitle("$action ${selected.size} Pokémon to which box?")
-            .setMessage("PSE will revalidate every selected Bank record and the complete destination, place the batch in order, register Seen and Owned status, and verify exact persistence"+if(copyOnly)" while keeping every Bank original unchanged." else ", then remove Bank records last.")
-            .setItems(targets.map{(box,empty)->gen2BoxDestinationLabel(box,empty,file,openedProfile,currentSourceUri,openedDestination)}.toTypedArray()){_,which->
-                if(consumed||which !in targets.indices){consumed=true;showDialog("$action selected","This destination choice was already handled or is invalid. Reopen the Bank selection. Nothing was changed.");return@setItems}
-                consumed=true
-                val(box,emptyCount)=targets[which];val firstSlot=GEN2_PC_SLOTS_PER_BOX-emptyCount
-                val placements=selected.indices.joinToString("\n"){index->
-                    "${index+1}. ${selected[index].source.nickname.ifBlank{"Pokemon #${selected[index].source.species}"}} -> Box $box of $GEN2_PC_BOX_COUNT, Slot ${firstSlot+index+1} of $GEN2_PC_SLOTS_PER_BOX"
-                }
-                val review="Final native Gen 2 batch $operation review\n\n$placements\n\n"+
-                    "No Pokemon conversion or Legalise change is performed. Every exact preserved PSE2 record is restored in selection order with all represented native Generation 2 fields unchanged; existing destination records remain unchanged. Only the listed box records, required Seen/Owned registration and primary checksum may change.\n\n"+
-                    if(copyOnly) "PSE retains exact destination recovery data, reopens every persisted record and keeps every selected Bank record byte-for-byte unchanged. Cancel leaves both sides unchanged. This is a PSE Bank copy, not an official trade, Time Capsule or Pokemon Bank transaction, legality certification or verified provenance."
-                    else "PSE retains exact destination and per-record Bank recovery data, reopens every persisted record, then removes each Bank record last. Cancel leaves the destination and all selected Bank records byte-for-byte unchanged. This is a PSE Bank withdrawal, not an official trade, Time Capsule or Pokemon Bank transaction, legality certification or verified provenance."
-                var submitted=false
-                AlertDialog.Builder(this).setTitle("Review ${selected.size} exact Gen 2 ${if(copyOnly)"copies" else "withdrawals"}")
-                    .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("$action exact PSE2 selection"){_,_->
-                        if(submitted){showDialog("Gen 2 Bank batch $operation","This exact destination review was already submitted. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton};submitted=true
-                        val current=runCatching{file.readBytes()}.getOrNull();val refreshed=current?.let{availableGen2BoxTargets(it).firstOrNull{target->target.first==box}}
-                        val unchanged=current!=null&&current.contentEquals(openedDestination)&&refreshed==(box to emptyCount)&&importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedSource&&currentSourceLabel==openedLabel&&
-                            selected.all{item->runCatching{item.sourceBinding.matches(item.bankBytes,true)&&item.bankFile.readBytes().contentEquals(item.bankBytes)}.getOrDefault(false)}
-                        if(!unchanged){showDialog("Gen 2 Bank batch $operation","The destination identity, selected Bank records or reviewed native slots changed. Nothing was changed.");return@setPositiveButton}
-                        moveSelectedGen2BankPokemon(selected,openedDestination,box,file,openedSource,openedLabel,copyOnly)
-                    }.show()
-            }
-            .setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
+        fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedSource&&currentSourceLabel==openedLabel
+        runSelectedGen2BankBatchReview(
+            this,chosen,copyOnly,file,{bound()},{bankDir()},{parseGen2BankPayload(it)},
+            {data->detectGen2Profile(data)?.let{gen2ChecksumValid(data,it)}==true},
+            {data->availableGen2BoxTargets(data)},
+            {box,empty,data->gen2BoxDestinationLabel(box,empty,file,requireNotNull(detectGen2Profile(data)),openedSource,data)},
+            {title,message->showDialog(title,message)},
+            {selected,destination,box->moveSelectedGen2BankPokemon(selected,destination,box,file,openedSource,openedLabel,copyOnly)}
+        )
     }
 
     private fun moveSelectedGen2BankPokemon(selected:List<Gen2BankBatchItem>,openedDestination:ByteArray,targetBox:Int,openedFile:File,openedSource:Uri?,openedLabel:String?,copyOnly:Boolean=false) {

@@ -68,6 +68,80 @@ internal fun loadBoundGen2BankBatch(
     }
 }
 
+internal fun runSelectedGen2BankBatchReview(
+    activity: Activity,
+    chosen: List<File>,
+    copyOnly: Boolean,
+    file: File,
+    bound: () -> Boolean,
+    bankDirectory: () -> File,
+    parse: (ByteArray) -> MainActivity.Gen2Pokemon?,
+    destinationValid: (ByteArray) -> Boolean,
+    availableTargets: (ByteArray) -> List<Pair<Int,Int>>,
+    targetLabel: (Int,Int,ByteArray) -> String,
+    showFailure: (String,String) -> Unit,
+    onSubmit: (List<Gen2BankBatchItem>,ByteArray,Int) -> Unit
+) {
+    val action=if(copyOnly) "Copy" else "Move"
+    val operation=if(copyOnly) "copy" else "withdrawal"
+    if(chosen.isEmpty())return showFailure("$action selected","Select one or more Gen 2 Bank Pokémon first.")
+    if(chosen.map{it.absolutePath}.distinct().size!=chosen.size)return showFailure(
+        "$action selected","The selection contains the same Gen 2 Bank entry more than once. Nothing was changed."
+    )
+    val reviewed=runCatching{file.readBytes()}.getOrNull()
+        ?:return showFailure("$action selected","The Gen 2 destination could not be read.")
+    if(!bound()||!destinationValid(reviewed))return showFailure(
+        "$action selected","The Gen 2 destination identity or checksum is invalid. Nothing was changed."
+    )
+    val selected=try{loadBoundGen2BankBatch(chosen,bankDirectory(),parse)}catch(error:Exception){
+        return showFailure("$action selected",(error.message?:"A selected Gen 2 Bank record could not be read.")+" Nothing was changed.")
+    }
+    val targets=availableTargets(reviewed).filter{it.second>=selected.size}
+    if(targets.isEmpty())return showFailure(
+        "$action selected","No Gen 2 PC box has enough reported free slots for the complete selection. Nothing was changed."
+    )
+    var consumed=false
+    AlertDialog.Builder(activity).setTitle("$action ${selected.size} Pokémon to which box?")
+        .setMessage("PSE will revalidate every selected Bank record and the complete destination, place the batch in order, register Seen and Owned status, and verify exact persistence"+
+            if(copyOnly)" while keeping every Bank original unchanged." else ", then remove Bank records last.")
+        .setItems(targets.map{targetLabel(it.first,it.second,reviewed)}.toTypedArray()){_,which->
+            if(consumed||which !in targets.indices){
+                consumed=true
+                showFailure("$action selected","This destination choice was already handled or is invalid. Reopen the Bank selection. Nothing was changed.")
+                return@setItems
+            }
+            consumed=true
+            val(box,emptyCount)=targets[which]
+            val firstSlot=20-emptyCount
+            val placements=selected.indices.joinToString("\n"){index->
+                "${index+1}. ${selected[index].source.nickname.ifBlank{"Pokemon #${selected[index].source.species}"}} -> Box $box of 14, Slot ${firstSlot+index+1} of 20"
+            }
+            val review="Final native Gen 2 batch $operation review\n\n$placements\n\n"+
+                "No Pokemon conversion or Legalise change is performed. Every exact preserved PSE2 record is restored in selection order with all represented native Generation 2 fields unchanged; existing destination records remain unchanged. Only the listed box records, required Seen/Owned registration and primary checksum may change.\n\n"+
+                if(copyOnly) "PSE retains exact destination recovery data, reopens every persisted record and keeps every selected Bank record byte-for-byte unchanged. Cancel leaves both sides unchanged. This is a PSE Bank copy, not an official trade, Time Capsule or Pokemon Bank transaction, legality certification or verified provenance."
+                else "PSE retains exact destination and per-record Bank recovery data, reopens every persisted record, then removes each Bank record last. Cancel leaves the destination and all selected Bank records byte-for-byte unchanged. This is a PSE Bank withdrawal, not an official trade, Time Capsule or Pokemon Bank transaction, legality certification or verified provenance."
+            var submitted=false
+            AlertDialog.Builder(activity).setTitle("Review ${selected.size} exact Gen 2 ${if(copyOnly)"copies" else "withdrawals"}")
+                .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("$action exact PSE2 selection"){_,_->
+                    if(submitted){
+                        showFailure("Gen 2 Bank batch $operation","This exact destination review was already submitted. Reopen PSE Bank. Nothing was changed.")
+                        return@setPositiveButton
+                    }
+                    submitted=true
+                    val current=runCatching{file.readBytes()}.getOrNull()
+                    val refreshed=current?.let{availableTargets(it).firstOrNull{target->target.first==box}}
+                    val unchanged=current!=null&&current.contentEquals(reviewed)&&destinationValid(current)&&bound()&&
+                        refreshed==(box to emptyCount)&&selected.all{item->runCatching{
+                            item.sourceBinding.matches(item.bankBytes,true)&&item.bankFile.readBytes().contentEquals(item.bankBytes)
+                        }.getOrDefault(false)}
+                    if(!unchanged)return@setPositiveButton showFailure(
+                        "Gen 2 Bank batch $operation","The destination identity, selected Bank records or reviewed native slots changed. Nothing was changed."
+                    )
+                    onSubmit(selected,reviewed,box)
+                }.show()
+        }.setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
+}
+
 internal fun sameGen1ToGen5BatchPk5(
     a: MainActivity.PokemonEntry,
     b: MainActivity.PokemonEntry
