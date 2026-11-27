@@ -88,9 +88,10 @@ class SwitchLetsGoPseBankPartyBatchDepositActivity : Activity() {
         fun refreshSelectionActions() {
             bulkButton?.text = if (selected.all { it }) "Clear all" else "Select all"
             reviewButton?.text = "Review (${selected.count { it }})"
+            reviewButton?.isEnabled = selected.any { it }
         }
         val dialog = AlertDialog.Builder(this)
-            .setTitle("Choose native Party PB7 records")
+            .setTitle("Choose 1-${candidates.size} native Party PB7 records")
             .setMultiChoiceItems(candidates.map { it.label }.toTypedArray(), selected) { _, index, checked ->
                 selected[index] = checked
                 refreshSelectionActions()
