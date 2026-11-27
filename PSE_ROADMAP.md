@@ -2626,7 +2626,15 @@ The native PB8 batch restore chooser now states the valid selection range as `Ch
 
 The existing minimum-two and over-capacity checks remain in the click handler as a safety backstop. This guidance does not alter exact Bank-entry identity, destination selection, recovery, checksums, persisted reopen verification, cleanup, or rollback behavior.
 
-This feature is pending its own automatic Android compile before the BDSP native batch restore selection guidance is called validated.
+The BDSP native batch restore selection guidance was compile-validated on commit `0cf77d7d8258bb6bb387b0c68745297c9d9d4330` by exact PSE_BUILD_SUCCESS at Slack TS `1795814643.837049`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46068794396`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Let's Go native batch restore selection guidance
+
+The native PB7 batch restore chooser now states the valid selection range as `Choose 2-capacity native PB7 entries`. Its `Review destinations (selected/capacity)` action is enabled only while the selected count is within that reviewed range, so an incomplete or over-capacity selection cannot advance to destination mapping.
+
+The existing minimum-two and over-capacity checks remain in the click handler as a safety backstop. This guidance does not alter exact Bank-entry identity, destination selection, recovery, checksums, persisted reopen verification, cleanup, or rollback behavior.
+
+This feature is pending its own automatic Android compile before the Let's Go native batch restore selection guidance is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
