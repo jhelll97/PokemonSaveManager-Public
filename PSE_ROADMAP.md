@@ -1976,7 +1976,15 @@ With every supported Switch title's primary storage batch path compile-validated
 
 The Sword/Shield Party view now offers `Copy selected Party Pokémon to PSE Bank`. A separate activity reopens the exact validated Sword/Shield source, excludes empty and unreadable Party slots, lets the user select several readable native 344-byte PK8 records, and presents a cancellable final review naming every exact Party slot and SHA-256-derived Bank filename. Confirmation reopens the source again, requires every selected record to remain byte-for-byte identical and checksum-valid, reuses the verified content-addressed PK8 batch writer, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PK8 bytes explicitly share one Bank entry. Eggs and cached Party fields may be preserved in Bank as exact native records, while existing restore guards remain unchanged. The source save, Party count and order, PC boxes, native records and container integrity are never written or normalized.
 
-This feature is pending its own automatic Android compile before the Sword/Shield native Party batch deposit is called validated.
+Commit `da70b927dafca52a0de03aa7d74ed1d9010c0fa7` passed automatic Android build run `45936701588`, attempt 1, and was reported by exact Slack event `1795752444.445619`. The Sword/Shield native Party batch deposit is compile-validated.
+
+## BDSP native Party batch deposit to PSE Bank
+
+BDSP users could copy one checksum-valid Party PB8 at a time or review a batch from one PC box, but could not preserve several current Party records in one bounded Bank operation.
+
+The BDSP Party view now offers `Copy selected Party Pokémon to PSE Bank`. A separate activity reopens the exact validated BDSP source, excludes empty and unreadable Party slots, lets the user select several readable native 344-byte PB8 records, and presents a cancellable final review naming every exact Party slot and SHA-256-derived Bank filename. Confirmation reopens the source again, requires every selected record to remain byte-for-byte identical and checksum-valid, reuses the verified content-addressed PB8 batch writer, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PB8 bytes explicitly share one Bank entry. Eggs and cached Party fields may be preserved in Bank as exact native records, while existing restore guards remain unchanged. The source save, Party count and order, PC boxes, native records and container integrity are never written or normalized.
+
+This feature is pending its own automatic Android compile before the BDSP native Party batch deposit is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

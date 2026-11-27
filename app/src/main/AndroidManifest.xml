@@ -73,6 +73,7 @@
         <activity android:name=".SwitchSwordShieldPseBankBatchDepositActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPseBankPartyBatchDepositActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPseBankBatchDepositActivity" android:exported="false"/>
+        <activity android:name=".SwitchBdspPseBankPartyBatchDepositActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokemonDuplicateActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokemonSwapActivity" android:exported="false"/>
         <activity android:name=".SwitchSwordShieldPokemonPartyMoveActivity" android:exported="false"/>
