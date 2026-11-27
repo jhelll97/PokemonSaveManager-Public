@@ -2276,7 +2276,17 @@ The native PB8 Box deposit chooser now changes its bulk action between `Select a
 
 The change does not alter source reopen or identity checks, exact PB8 extraction, source-slot preservation, explicit final review, content-addressed Bank writes, duplicate handling, rollback of newly created entries or persisted-byte verification.
 
-This feature is pending its own automatic Android compile before the BDSP native Box deposit selection toggle is called validated.
+Commit `909c3f49dd77d54655dcebb42b6e7b2bf31158e5` passed automatic Android build run `45992424978`, attempt 1, and was reported by exact Slack event `1795780485.168039`. The BDSP native Box deposit selection toggle is compile-validated.
+
+## Let's Go native storage-page deposit selection toggle
+
+After the BDSP deposit toggle compiled successfully, Let's Go remained the next native storage-page deposit chooser where `Select all` could not reverse its own bulk selection without unchecking every PB7 individually.
+
+The native PB7 storage-page deposit chooser now changes its bulk action between `Select all` and `Clear all`. It follows manual checkbox changes, updates every visible selection without dismissing the chooser, and still blocks review when no PB7 is selected.
+
+The change does not alter source reopen or identity checks, exact PB7 extraction, source stored-list order, party or partner pointers, explicit final review, content-addressed Bank writes, duplicate handling, rollback of newly created entries or persisted-byte verification.
+
+This feature is pending its own automatic Android compile before the Let's Go native storage-page deposit selection toggle is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
