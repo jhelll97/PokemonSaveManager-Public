@@ -2498,7 +2498,15 @@ The native Party PA8 batch deposit chooser now provides a `Select all` action th
 
 The existing requirement to select at least one readable native Party PA8 remains authoritative. This change does not alter source-save identity checks, exact native Party-record rereads, content-addressed Bank names, duplicate-content handling, explicit final review or the rule that the source save and every Party slot remain unchanged.
 
-This feature is pending its own automatic Android compile before the Legends: Arceus native Party batch deposit selection shortcut is called validated.
+The Legends: Arceus native Party batch deposit selection shortcut was compile-validated on commit `0133ea8936a02759a470a91ba293855c9e6e36e7` by the exact `PSE_BUILD_SUCCESS` event at Slack timestamp `1795801837.773589`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, Actions run `46043557819`, attempt `1`, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, signed-APK packaging remained skipped, the reporter job succeeded, and the event SHA was current HEAD before this next bounded change.
+
+## Scarlet/Violet native Party batch deposit selection shortcut
+
+The native Party PK9 batch deposit chooser now provides a `Select all` action that changes to `Clear all` when every readable Party record is selected. Bulk changes update every visible checkbox and the existing live `Review (N)` count immediately.
+
+The existing requirement to select at least one readable native Party PK9 remains authoritative. This change does not alter source-save identity checks, exact native Party-record rereads, content-addressed Bank names, duplicate-content handling, explicit final review or the rule that the source save and every Party slot remain unchanged.
+
+This feature is pending its own automatic Android compile before the Scarlet/Violet native Party batch deposit selection shortcut is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
