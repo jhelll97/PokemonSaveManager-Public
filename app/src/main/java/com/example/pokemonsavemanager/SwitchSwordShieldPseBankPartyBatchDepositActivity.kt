@@ -82,22 +82,34 @@ class SwitchSwordShieldPseBankPartyBatchDepositActivity : Activity() {
     private fun showSelection() {
         if (busy || candidates.isEmpty()) return
         val selected = BooleanArray(candidates.size)
+        var bulkButton: Button? = null
         var reviewButton: Button? = null
-        fun refreshReviewAction() {
+        fun refreshSelectionActions() {
+            bulkButton?.text = if (selected.all { it }) "Clear all" else "Select all"
             reviewButton?.text = "Review (${selected.count { it }})"
         }
         val dialog = AlertDialog.Builder(this)
             .setTitle("Choose native Party PK8 records")
             .setMultiChoiceItems(candidates.map { it.label }.toTypedArray(), selected) { _, index, checked ->
                 selected[index] = checked
-                refreshReviewAction()
+                refreshSelectionActions()
             }
             .setNegativeButton("Cancel", null)
+            .setNeutralButton("Select all", null)
             .setPositiveButton("Review (0)", null)
             .create()
         dialog.setOnShowListener {
+            bulkButton = dialog.getButton(AlertDialog.BUTTON_NEUTRAL)
             reviewButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
-            refreshReviewAction()
+            refreshSelectionActions()
+            bulkButton?.setOnClickListener {
+                val check = selected.any { !it }
+                selected.indices.forEach { index ->
+                    selected[index] = check
+                    dialog.listView.setItemChecked(index, check)
+                }
+                refreshSelectionActions()
+            }
             reviewButton?.setOnClickListener {
                 val chosen = candidates.filterIndexed { index, _ -> selected[index] }
                 if (chosen.isEmpty()) {
