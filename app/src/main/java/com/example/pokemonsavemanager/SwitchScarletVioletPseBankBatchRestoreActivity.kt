@@ -115,11 +115,13 @@ class SwitchScarletVioletPseBankBatchRestoreActivity : Activity() {
             "$name • Lv ${candidate.pokemon.cachedLevel}" +
                 (if (candidate.pokemon.shiny) " • Shiny" else "") + "\n${candidate.name}"
         }.toTypedArray()
+        val selectionLimit = minOf(selected.size, emptyDestinations.size)
         var bulkButton: Button? = null
         var reviewButton: Button? = null
         fun refreshSelectionActions() {
-            bulkButton?.text = if (selected.all { it }) "Clear all" else "Select all"
-            reviewButton?.text = "Review destinations (${selected.count { it }})"
+            val selectedCount = selected.count { it }
+            bulkButton?.text = if (selectedCount >= selectionLimit) "Clear all" else "Select available ($selectionLimit)"
+            reviewButton?.text = "Review destinations ($selectedCount)"
         }
         val dialog = AlertDialog.Builder(this)
             .setTitle("Choose native PK9 entries")
@@ -128,7 +130,7 @@ class SwitchScarletVioletPseBankBatchRestoreActivity : Activity() {
                 refreshSelectionActions()
             }
             .setNegativeButton("Cancel", null)
-            .setNeutralButton("Select all", null)
+            .setNeutralButton("Select available", null)
             .setPositiveButton("Review destinations (0)", null)
             .create()
         dialog.setOnShowListener {
@@ -136,10 +138,20 @@ class SwitchScarletVioletPseBankBatchRestoreActivity : Activity() {
             reviewButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
             refreshSelectionActions()
             bulkButton?.setOnClickListener {
-                val check = selected.any { !it }
-                selected.indices.forEach { index ->
-                    selected[index] = check
-                    dialog.listView.setItemChecked(index, check)
+                if (selected.count { it } >= selectionLimit) {
+                    selected.indices.forEach { index ->
+                        selected[index] = false
+                        dialog.listView.setItemChecked(index, false)
+                    }
+                } else {
+                    var remaining = selectionLimit - selected.count { it }
+                    selected.indices.forEach { index ->
+                        if (!selected[index] && remaining > 0) {
+                            selected[index] = true
+                            dialog.listView.setItemChecked(index, true)
+                            remaining -= 1
+                        }
+                    }
                 }
                 refreshSelectionActions()
             }

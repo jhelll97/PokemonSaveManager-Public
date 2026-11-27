@@ -2546,7 +2546,15 @@ The native PA8 batch restore chooser now offers `Select available (N)`, where N 
 
 This change does not alter exact Bank-entry identity checks, distinct structurally empty native destination binding, the minimum of two selected records, explicit final destination review, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback. It does not silently drop any Bank entry or choose a destination outside the later reviewed mapping.
 
-This feature is pending its own automatic Android compile before the Legends: Arceus native batch restore capacity-aware selection shortcut is called validated.
+The Legends: Arceus native batch restore capacity-aware selection shortcut was compile-validated on commit `30d29ab480f17107064e7f73350a81a4ae20e3b2` by the exact `PSE_BUILD_SUCCESS` event at Slack timestamp `1795806839.007039`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, Actions run `46053847331`, attempt `1`, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, signed-APK packaging remained skipped, the reporter job succeeded, and the event SHA was current HEAD before this next bounded change.
+
+## Scarlet/Violet native batch restore capacity-aware selection shortcut
+
+The native PK9 batch restore chooser now offers `Select available (N)`, where N is the smaller of the readable Bank-entry count and the exact number of currently empty native box destinations. The shortcut keeps any manual selections, adds visible entries only until that reviewed capacity is reached, updates every changed checkbox and the live `Review destinations (N)` count, and changes to `Clear all` at the capacity limit. Manual over-selection remains visible and continues to be rejected by the existing explicit capacity check.
+
+This change does not alter exact Bank-entry identity checks, distinct structurally empty native destination binding, the minimum of two selected records, explicit final destination review, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback. It does not silently drop any Bank entry or choose a destination outside the later reviewed mapping.
+
+This feature is pending its own automatic Android compile before the Scarlet/Violet native batch restore capacity-aware selection shortcut is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
