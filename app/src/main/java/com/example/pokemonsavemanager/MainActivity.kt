@@ -67856,47 +67856,20 @@ private data class Gen2ToGen5LegalisePlan(
                 }
             }
         }
-        if(bankMultiSelectMode&&bankViewGeneration==4&&currentGen==4&&batchDestination!=null){
-            addButton(root,"📦  Copy selected to Gen 4 Box"){
+        if(bankMultiSelectMode&&bankViewGeneration in 4..7&&currentGen==bankViewGeneration&&batchDestination!=null){
+            val generation=bankViewGeneration
+            val title="Copy selected to Gen $generation Box"
+            addButton(root,"📦  $title"){
                 if(importedFile?.absolutePath!=batchDestination.absolutePath||currentSourceUri!=batchDestinationUri||currentSourceLabel!=batchDestinationLabel){
-                    showDialog("Copy selected to Gen 4 Box","The loaded destination changed. Reopen PSE Bank. Nothing was changed.")
+                    showDialog(title,"The loaded destination changed. Reopen PSE Bank. Nothing was changed.")
                 }else{
                     val chosen=selectedBankFiles.map{File(it)}
-                    if(chosen.isEmpty())showDialog("Copy selected to Gen 4 Box","Select one or more Gen 4 Bank Pokémon first.")
-                    else chooseSelectedGen4BankDestination(chosen,true)
-                }
-            }
-        }
-        if(bankMultiSelectMode&&bankViewGeneration==5&&currentGen==5&&batchDestination!=null){
-            addButton(root,"📦  Copy selected to Gen 5 Box"){
-                if(importedFile?.absolutePath!=batchDestination.absolutePath||currentSourceUri!=batchDestinationUri||currentSourceLabel!=batchDestinationLabel){
-                    showDialog("Copy selected to Gen 5 Box","The loaded destination changed. Reopen PSE Bank. Nothing was changed.")
-                }else{
-                    val chosen=selectedBankFiles.map{File(it)}
-                    if(chosen.isEmpty())showDialog("Copy selected to Gen 5 Box","Select one or more Gen 5 Bank Pokémon first.")
-                    else chooseSelectedGen5BankDestination(chosen,true)
-                }
-            }
-        }
-        if(bankMultiSelectMode&&bankViewGeneration==6&&currentGen==6&&batchDestination!=null){
-            addButton(root,"📦  Copy selected to Gen 6 Box"){
-                if(importedFile?.absolutePath!=batchDestination.absolutePath||currentSourceUri!=batchDestinationUri||currentSourceLabel!=batchDestinationLabel){
-                    showDialog("Copy selected to Gen 6 Box","The loaded destination changed. Reopen PSE Bank. Nothing was changed.")
-                }else{
-                    val chosen=selectedBankFiles.map{File(it)}
-                    if(chosen.isEmpty())showDialog("Copy selected to Gen 6 Box","Select one or more Gen 6 Bank Pokémon first.")
-                    else chooseSelectedStandardBankDestination(chosen,6,true)
-                }
-            }
-        }
-        if(bankMultiSelectMode&&bankViewGeneration==7&&currentGen==7&&batchDestination!=null){
-            addButton(root,"📦  Copy selected to Gen 7 Box"){
-                if(importedFile?.absolutePath!=batchDestination.absolutePath||currentSourceUri!=batchDestinationUri||currentSourceLabel!=batchDestinationLabel){
-                    showDialog("Copy selected to Gen 7 Box","The loaded destination changed. Reopen PSE Bank. Nothing was changed.")
-                }else{
-                    val chosen=selectedBankFiles.map{File(it)}
-                    if(chosen.isEmpty())showDialog("Copy selected to Gen 7 Box","Select one or more Gen 7 Bank Pokémon first.")
-                    else chooseSelectedStandardBankDestination(chosen,7,true)
+                    if(chosen.isEmpty())showDialog(title,"Select one or more Gen $generation Bank Pokémon first.")
+                    else when(generation){
+                        4->chooseSelectedGen4BankDestination(chosen,true)
+                        5->chooseSelectedGen5BankDestination(chosen,true)
+                        else->chooseSelectedStandardBankDestination(chosen,generation,true)
+                    }
                 }
             }
         }
