@@ -1904,7 +1904,15 @@ Supported-title Bank inventory found the same native PC-copy gap in Generation 7
 
 Generation 7 multi-select now offers `Copy selected to Gen 7 Box`. It uses the compile-validated shared exact-copy transaction added with the Generation 6 feature: reviewed structurally empty destination slots, byte-for-byte PK7 staging, native checksum refresh, retained destination backup, persisted reopen verification and no Bank removal. The cancellable review states that every selected PK7 Bank original remains byte-for-byte unchanged. The transaction rechecks all canonical source files after persistence and temporary recovery cleanup; destination rollback remains independent on failure.
 
-This feature is pending its own automatic Android compile before the native Generation 7 Bank batch copy is called validated.
+Commit `50bbeb9ecd6d3a1b66161939b34249b7ba1609aa`, the compiler-size correction to feature commit `9b75941924050514127b722e14ff10c3313e09b2`, passed automatic Android build run `45921253523`, attempt 1, and was reported by exact Slack event `1795742763.303139`; the native Generation 7 Bank batch copy is validated.
+
+## Native Generation 2 Bank batch copy to PC Box
+
+Supported-title Bank inventory found the same native PC-copy gap in Generation 2: multi-selection could withdraw exact preserved PSE2 records into a chosen Gold, Silver or Crystal PC Box, but could not retain the selected Bank originals after placing the verified batch. Users who wanted an in-save copy therefore had only the destructive withdrawal action.
+
+Generation 2 multi-select now offers `Copy selected to Gen 2 Box`. It reuses the exact reviewed destination box and ordered native slots, preserved PSE2 staging, Seen/Owned registration, primary-checksum update, retained destination backup and persisted reopen verification while skipping every Bank removal. The final cancellable review names each exact Box and Slot and states that every selected Bank original remains byte-for-byte unchanged. Temporary recovery snapshots are cleaned only after the destination, retained backup and every canonical source verify; destination rollback remains independent on failure. This is a PSE Bank copy and makes no official trade, Time Capsule, Pokemon Bank, legality or provenance claim.
+
+This feature is pending its own automatic Android compile before the native Generation 2 Bank batch copy is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

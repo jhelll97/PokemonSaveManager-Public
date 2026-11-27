@@ -1067,11 +1067,12 @@ internal fun finishSelectedGen2BankWithdrawalCompletion(
     recoveryFiles: List<File>,
     expected: List<ByteArray>,
     moved: Int,
-    targetBox: Int
+    targetBox: Int,
+    copyOnly: Boolean = false
 ): SelectedGen2BankWithdrawalCompletion {
     val recoveryClean=cleanupExactBankRecoverySnapshots(recoveryFiles, expected)
     return SelectedGen2BankWithdrawalCompletion(
-        "$moved Gen 2 Pokémon moved to Box $targetBox and verified" +
+        "$moved Gen 2 Pokémon ${if(copyOnly) "copied" else "moved"} to Box $targetBox and verified" +
             if(recoveryClean) "" else
                 "; a Bank recovery snapshot was retained for review",
         recoveryClean
@@ -1098,17 +1099,18 @@ internal fun finishSelectedGen2BankWithdrawal(
     backup: File,
     expectedBackup: ByteArray,
     kept: Boolean,
-    removed: List<Pair<File, ByteArray>>
+    removed: List<Pair<File, ByteArray>>,
+    copyOnly: Boolean = false
 ): String {
     val completion=finishSelectedGen2BankWithdrawalCompletion(
-        recoveryFiles, expected, moved, targetBox
+        recoveryFiles, expected, moved, targetBox, copyOnly
     )
     require(destinationBound &&
         destination.isFile && destination.readBytes().contentEquals(expectedDestination) &&
         retainedBankBackupMatches(backup, expectedBackup, kept) &&
-        removed.size == moved && exactBankPathsAbsent(removed.map { it.first }) &&
+        (copyOnly && removed.isEmpty() || !copyOnly && removed.size == moved && exactBankPathsAbsent(removed.map { it.first })) &&
         (!completion.recoveryClean || exactBankPathsAbsent(recoveryFiles))) {
-        "The verified Gen 2 destination, removed Bank batch or retained destination backup changed during recovery cleanup."
+        "The verified Gen 2 destination, Bank originals or retained destination backup changed during recovery cleanup."
     }
     return completion.message
 }
