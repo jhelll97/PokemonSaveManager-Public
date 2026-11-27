@@ -12028,6 +12028,20 @@ class SwitchReadOnlyActivity : Activity() {
                 "Box names, wallpapers and unlock state are not read in this view."
             setPadding(16, 16, 16, 16)
         })
+        list.addView(Button(this).apply {
+            text = "Copy selected Pokémon to PSE Bank"
+            isAllCaps = false
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && source != null) startActivity(
+                    Intent(this@SwitchReadOnlyActivity, SwitchBdspPseBankBatchDepositActivity::class.java)
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .putExtra("pse.switch.box", box + 1)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
+        })
         for (slot in storage.box(box)) list.addView(Button(this).apply {
             text = "Slot ${slot.position}: ${bdspLabel(slot.read)}"
             isAllCaps = false; isEnabled = slot.read !is BdspSlotRead.Empty

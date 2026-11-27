@@ -1928,7 +1928,15 @@ Supported-title Bank inventory found that Sword/Shield could copy one checksum-v
 
 Each Sword/Shield Box now offers `Copy selected Pokémon to PSE Bank`. A separate activity reopens the exact validated Sword/Shield source, excludes empty and unreadable slots, lets the user select several readable native PK8 records, and presents a cancellable final review naming every exact Box slot and SHA-256-derived Bank filename. Confirmation reopens the source again, requires every selected 344-byte record to remain byte-for-byte identical and checksum-valid, writes only missing content-addressed entries, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PK8 bytes explicitly share one Bank entry. The source save, title identity, native slots and checksums are never written or normalized.
 
-This feature is pending its own automatic Android compile before the Sword/Shield native Box batch deposit is called validated.
+Commit `5adc9dbec9e5ce3396d6bf0ad4e67a024666563f` passed automatic Android build run `45927090691`, attempt 1, and was reported by exact Slack event `1795746266.724809`; the Sword/Shield native Box batch deposit is validated.
+
+## BDSP native Box batch deposit to PSE Bank
+
+Supported-title Bank inventory found the same native batch-deposit gap in Brilliant Diamond and Shining Pearl: users could copy one checksum-valid PB8 at a time from party or PC storage, but could not select and preserve several native records from one Box in a complete reviewed Bank operation.
+
+Each BDSP Box now offers `Copy selected Pokémon to PSE Bank`. A separate activity reopens the exact validated BDSP source, excludes empty and unreadable slots, lets the user select several readable native PB8 records, and presents a cancellable final review naming every exact Box slot and SHA-256-derived Bank filename. Confirmation reopens the source again, requires every selected 344-byte record to remain byte-for-byte identical and checksum-valid, writes only missing content-addressed entries, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PB8 bytes explicitly share one Bank entry. The source save, title identity, native slots and checksums are never written or normalized.
+
+This feature is pending its own automatic Android compile before the BDSP native Box batch deposit is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
