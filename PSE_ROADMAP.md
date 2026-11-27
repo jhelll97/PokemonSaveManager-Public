@@ -2458,7 +2458,15 @@ The native Party PK9 batch deposit chooser now shows the current selection direc
 
 The existing requirement to select at least one readable native Party PK9 remains authoritative. This change does not alter source-save identity checks, exact native Party-record rereads, content-addressed Bank names, duplicate-content handling, explicit final review or the rule that the source save and every Party slot remain unchanged.
 
-This feature is pending its own automatic Android compile before the Scarlet/Violet native Party batch deposit live selection count is called validated.
+The Scarlet/Violet native Party batch deposit live selection count was compile-validated on commit `101eeec29c26322e1bda0936d4ea0156974c31f7` by the exact `PSE_BUILD_SUCCESS` event at Slack timestamp `1795797661.210079`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, Actions run `46034091008`, attempt `1`, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, signed-APK packaging remained skipped, the reporter job succeeded, and the event SHA was current HEAD before this next bounded change.
+
+## Legends: Z-A native Party batch deposit live selection count
+
+The native Party PA9 batch deposit chooser now shows the current selection directly on its review action as `Review (N)`. The count refreshes after each Party checkbox change, so the number of exact source records entering final review is visible before leaving the chooser.
+
+The existing requirement to select at least one readable native Party PA9 remains authoritative. This change does not alter source-save identity checks, exact native Party-record rereads, content-addressed Bank names, duplicate-content handling, explicit final review or the rule that the source save and every Party slot remain unchanged.
+
+This feature is pending its own automatic Android compile before the Legends: Z-A native Party batch deposit live selection count is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
