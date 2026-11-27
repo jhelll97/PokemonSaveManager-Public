@@ -2610,7 +2610,15 @@ The Legends Z-A PA9 batch restore chooser now shows `Review destinations (select
 
 The existing minimum-two requirement and over-capacity rejection remain unchanged. This does not change Bank identity, destination selection, recovery, checksums, reopen verification, cleanup, or rollback behavior.
 
-This feature is pending its own automatic Android compile before the Legends Z-A native batch restore capacity progress is called validated.
+The Legends Z-A native batch restore capacity progress was compile-validated on commit `5f8c6dba11b7ce44b1ee754c1f6604e75f754f3a` by exact PSE_BUILD_SUCCESS at Slack TS `1795813054.644559`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46066214683`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Sword/Shield native batch restore selection guidance
+
+The native PK8 batch restore chooser now states the valid selection range as `Choose 2-capacity native PK8 entries`. Its `Review destinations (selected/capacity)` action is enabled only while the selected count is within that reviewed range, so an incomplete or over-capacity selection cannot advance to destination mapping.
+
+The existing minimum-two and over-capacity checks remain in the click handler as a safety backstop. This guidance does not alter exact Bank-entry identity, destination selection, recovery, checksums, persisted reopen verification, cleanup, or rollback behavior.
+
+This feature is pending its own automatic Android compile before the Sword/Shield native batch restore selection guidance is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
