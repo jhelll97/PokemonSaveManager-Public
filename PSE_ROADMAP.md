@@ -2514,7 +2514,15 @@ The native Party PA9 batch deposit chooser now provides a `Select all` action th
 
 The existing requirement to select at least one readable native Party PA9 remains authoritative. This change does not alter source-save identity checks, exact native Party-record rereads, content-addressed Bank names, duplicate-content handling, explicit final review or the rule that the source save and every Party slot remain unchanged.
 
-This feature is pending its own automatic Android compile before the Legends: Z-A native Party batch deposit selection shortcut is called validated.
+The Legends: Z-A native Party batch deposit selection shortcut was compile-validated on commit `602948e18a4a2c2b506259306c9299f95ddcc5bc` by the exact `PSE_BUILD_SUCCESS` event at Slack timestamp `1795803385.076849`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, Actions run `46046836470`, attempt `1`, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, signed-APK packaging remained skipped, the reporter job succeeded, and the event SHA was current HEAD before this next bounded change. This completes the native Party batch deposit selection-shortcut pass across all six supported Switch titles.
+
+## Sword/Shield native batch restore capacity-aware selection shortcut
+
+The native PK8 batch restore chooser now offers `Select available (N)`, where N is the smaller of the readable Bank-entry count and the exact number of currently empty native destination slots. The shortcut keeps any manual selections, adds visible entries only until that reviewed capacity is reached, updates every changed checkbox and the live `Review destinations (N)` count, and changes to `Clear all` at the capacity limit. Manual over-selection remains visible and continues to be rejected by the existing explicit capacity check.
+
+This change does not alter exact Bank-entry identity checks, distinct structurally empty destination binding, the minimum of two selected records, explicit final destination review, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback. It does not silently drop any Bank entry or choose a destination outside the later reviewed mapping.
+
+This feature is pending its own automatic Android compile before the Sword/Shield native batch restore capacity-aware selection shortcut is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
