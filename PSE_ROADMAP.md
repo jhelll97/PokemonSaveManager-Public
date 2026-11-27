@@ -2578,7 +2578,15 @@ The BDSP PB8 batch restore chooser now shows `Review destinations (selected/capa
 
 The existing minimum-two requirement and over-capacity rejection remain unchanged. This does not change Bank identity, destination selection, recovery, checksums, reopen verification, cleanup, or rollback behavior.
 
-This feature is pending its own automatic Android compile before the BDSP native batch restore capacity progress is called validated.
+The BDSP native batch restore capacity progress was compile-validated on commit `edfaf96ebdaaf1689ebaed06fb4735a6fba82d99` by exact PSE_BUILD_SUCCESS at Slack TS `1795809951.429409`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46060330573`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Let's Go native batch restore capacity progress
+
+The Let's Go PB7 batch restore chooser now shows `Review destinations (selected/capacity)`, refreshing after both manual selection changes and the bulk selection control. This keeps the currently empty destination limit visible while selecting Bank entries.
+
+The existing minimum-two requirement and over-capacity rejection remain unchanged. This does not change Bank identity, destination selection, recovery, checksums, reopen verification, cleanup, or rollback behavior.
+
+This feature is pending its own automatic Android compile before the Let's Go native batch restore capacity progress is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
