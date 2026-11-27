@@ -2026,7 +2026,17 @@ The Sword/Shield Bank now offers `Restore native PK8 batch` when at least two co
 
 Confirmation reopens the source and every selected Bank entry, stages all writes into one new save copy, refreshes the native footer through the existing container writer, and verifies that every PK8 reopens byte-for-byte in its reviewed destination. Verification rejects destination reuse, occupied-slot replacement, Party changes, changes outside the reviewed 344-byte destinations and native footer, title or size changes, source drift, Bank drift and persisted-copy mismatch. The transaction retains and rereads a verified recovery backup, requires a new empty document, reopens the saved copy, and removes a failed copy when possible. The original source and all Bank entries remain unchanged.
 
-This feature is pending its own automatic Android compile before the Sword/Shield native PK8 batch restore is called validated.
+Commit `b12253a6a77b987e240ffe3e7553bd837a29e18e` passed automatic Android build run `45946007368`, attempt 1, and was reported by exact Slack event `1795758162.191539`. The Sword/Shield native PK8 batch restore is compile-validated.
+
+## BDSP native PB8 batch restore from PSE Bank
+
+After Sword/Shield's native batch restore compiled successfully, BDSP remained the next supported title where several exact native Bank entries required repeated one-record save transactions.
+
+The BDSP Bank now offers `Restore native PB8 batch` when at least two canonical native entries exist. A separate activity reopens the exact validated source, accepts only `switch_bdsp_<sha256>.pb8` files whose filenames, bytes and PB8 checksums agree, requires at least two empty PC-box slots, and lets the user choose a batch. PSE deterministically binds each selected exact Bank identity to a distinct currently empty destination and presents a cancellable final review naming every filename, SHA-256, species, level, Box, slot and native byte offset. Converted entries remain on their existing one-record explicit Legalise routes.
+
+Confirmation reopens the source and every selected Bank entry, stages all writes into one new save copy, refreshes BDSP's native whole-file MD5 once, and verifies that every PB8 reopens byte-for-byte in its reviewed destination. Verification rejects destination reuse, occupied-slot replacement, changes outside the reviewed 344-byte destinations and MD5, title, revision or size changes, source drift, Bank drift and persisted-copy mismatch. The transaction retains and rereads a verified recovery backup, requires a new empty document, reopens the saved copy, and removes a failed copy when possible. The original source and all Bank entries remain unchanged.
+
+This feature is pending its own automatic Android compile before the BDSP native PB8 batch restore is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

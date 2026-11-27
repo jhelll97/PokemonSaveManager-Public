@@ -134,6 +134,7 @@
         <activity android:name=".SwitchBdspPokemonSpeedStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokemonSpecialStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPseBankRestoreActivity" android:exported="false"/>
+        <activity android:name=".SwitchBdspPseBankBatchRestoreActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokemonDuplicateActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokemonSwapActivity" android:exported="false"/>
         <activity android:name=".SwitchBdspPokemonPartyMoveActivity" android:exported="false"/>
