@@ -2156,7 +2156,17 @@ The native PB8 Box deposit chooser now provides a non-dismissing `Select all` ac
 
 The change does not alter source reopen or identity checks, exact PB8 extraction, source-slot preservation, atomic Bank writes, duplicate handling, rollback of newly created entries or final persisted-byte verification.
 
-This feature is pending its own automatic Android compile before the BDSP native Box deposit selection shortcut is called validated.
+Commit `772b06a5cc559b31937918c6e9a8d297cd221570` passed automatic Android build run `45968564542`, attempt 1, and was reported by exact Slack event `1795770142.507449`. The BDSP native Box deposit selection shortcut is compile-validated.
+
+## Let's Go native storage-page deposit selection shortcut
+
+After the BDSP deposit shortcut compiled successfully, Let's Go remained the next native storage-page batch deposit where copying every readable PB7 required checking each item individually.
+
+The native PB7 storage-page deposit chooser now provides a non-dismissing `Select all` action. It marks every readable checksum-valid Pokémon candidate in the selected storage page while keeping the existing explicit final review of stored-record slot, Pokémon label and canonical `switch_lgpe_<sha256>.pb7` destination. Empty and unreadable records remain excluded, identical bytes still share one content-addressed Bank entry, and choosing nothing remains blocked.
+
+The change does not alter source reopen or identity checks, exact PB7 extraction, source stored-list order, party or partner pointers, atomic Bank writes, duplicate handling, rollback of newly created entries or final persisted-byte verification.
+
+This feature is pending its own automatic Android compile before the Let's Go native storage-page deposit selection shortcut is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
