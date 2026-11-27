@@ -117,27 +117,34 @@ class SwitchLetsGoPseBankBatchRestoreActivity : Activity() {
                 (if (candidate.pokemon.shiny) " • Shiny" else "") + "\n${candidate.name}"
         }.toTypedArray()
         var bulkButton: Button? = null
+        var reviewButton: Button? = null
+        fun refreshSelectionActions() {
+            bulkButton?.text = if (selected.all { it }) "Clear all" else "Select all"
+            reviewButton?.text = "Review destinations (${selected.count { it }})"
+        }
         val dialog = AlertDialog.Builder(this)
             .setTitle("Choose native PB7 entries")
             .setMultiChoiceItems(labels, selected) { _, index, checked ->
                 selected[index] = checked
-                bulkButton?.text = if (selected.all { it }) "Clear all" else "Select all"
+                refreshSelectionActions()
             }
             .setNegativeButton("Cancel", null)
             .setNeutralButton("Select all", null)
-            .setPositiveButton("Review destinations", null)
+            .setPositiveButton("Review destinations (0)", null)
             .create()
         dialog.setOnShowListener {
             bulkButton = dialog.getButton(AlertDialog.BUTTON_NEUTRAL)
+            reviewButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            refreshSelectionActions()
             bulkButton?.setOnClickListener {
                 val check = selected.any { !it }
                 selected.indices.forEach { index ->
                     selected[index] = check
                     dialog.listView.setItemChecked(index, check)
                 }
-                bulkButton?.text = if (check) "Clear all" else "Select all"
+                refreshSelectionActions()
             }
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            reviewButton?.setOnClickListener {
                 val chosen = candidates.filterIndexed { index, _ -> selected[index] }
                 when {
                     chosen.size < 2 -> status.text = "Choose at least two native PB7 entries. Nothing was written."
