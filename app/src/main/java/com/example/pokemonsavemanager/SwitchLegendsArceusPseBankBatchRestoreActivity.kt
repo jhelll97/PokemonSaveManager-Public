@@ -121,7 +121,7 @@ class SwitchLegendsArceusPseBankBatchRestoreActivity : Activity() {
         fun refreshSelectionActions() {
             val selectedCount = selected.count { it }
             bulkButton?.text = if (selectedCount >= selectionLimit) "Clear all" else "Select available ($selectionLimit)"
-            reviewButton?.text = "Review destinations ($selectedCount)"
+            reviewButton?.text = "Review destinations ($selectedCount/$selectionLimit)"
         }
         val dialog = AlertDialog.Builder(this)
             .setTitle("Choose native PA8 entries")
@@ -131,7 +131,7 @@ class SwitchLegendsArceusPseBankBatchRestoreActivity : Activity() {
             }
             .setNegativeButton("Cancel", null)
             .setNeutralButton("Select available", null)
-            .setPositiveButton("Review destinations (0)", null)
+            .setPositiveButton("Review destinations (0/$selectionLimit)", null)
             .create()
         dialog.setOnShowListener {
             bulkButton = dialog.getButton(AlertDialog.BUTTON_NEUTRAL)

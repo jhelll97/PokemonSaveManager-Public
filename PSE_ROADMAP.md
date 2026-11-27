@@ -2586,7 +2586,15 @@ The Let's Go PB7 batch restore chooser now shows `Review destinations (selected/
 
 The existing minimum-two requirement and over-capacity rejection remain unchanged. This does not change Bank identity, destination selection, recovery, checksums, reopen verification, cleanup, or rollback behavior.
 
-This feature is pending its own automatic Android compile before the Let's Go native batch restore capacity progress is called validated.
+The Let's Go native batch restore capacity progress was compile-validated on commit `17de901bc50ecbbff8a374db55477fab3f60036a` by exact PSE_BUILD_SUCCESS at Slack TS `1795810973.058799`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46061482460`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Legends: Arceus native batch restore capacity progress
+
+The Legends: Arceus PA8 batch restore chooser now shows `Review destinations (selected/capacity)`, refreshing after both manual selection changes and the bulk selection control. This keeps the currently empty destination limit visible while selecting Bank entries.
+
+The existing minimum-two requirement and over-capacity rejection remain unchanged. This does not change Bank identity, destination selection, recovery, checksums, reopen verification, cleanup, or rollback behavior.
+
+This feature is pending its own automatic Android compile before the Legends: Arceus native batch restore capacity progress is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
