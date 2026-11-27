@@ -2096,7 +2096,17 @@ The native PB8 batch chooser now provides a non-dismissing `Select all` action. 
 
 The change does not alter source or Bank identity checks, converted-entry Legalise routes, deterministic empty-slot mapping, MD5 handling, recovery backup, persisted reopen verification or failed-copy cleanup.
 
-This feature is pending its own automatic Android compile before the BDSP native PB8 batch selection shortcut is called validated.
+Commit `18d08340616e440ac898dc12c3152e60b7ec59e9` passed automatic Android build run `45958009639`, attempt 1, and was reported by exact Slack event `1795764977.796029`. The BDSP native PB8 batch selection shortcut is compile-validated.
+
+## Legends: Arceus native PA8 batch selection shortcut
+
+After the BDSP selection shortcut compiled successfully, Legends: Arceus remained the next supported native batch restore where choosing every PA8 Bank entry required checking each item individually.
+
+The native PA8 batch chooser now provides a non-dismissing `Select all` action. It marks every canonical `switch_pla_<sha256>.pa8` candidate in the existing reviewed list while retaining the same explicit final destination review, including stored-core and Party-tail disclosure. The existing guard still rejects fewer than two entries and rejects a selected count larger than the current number of empty native Pasture slots, so the shortcut cannot overwrite occupied slots or silently omit entries.
+
+The change does not alter source or Bank identity checks, converted-entry Legalise routes, deterministic empty-slot mapping, PA8 representation handling, checksum handling, recovery backup, persisted reopen verification or failed-copy cleanup.
+
+This feature is pending its own automatic Android compile before the Legends: Arceus native PA8 batch selection shortcut is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
