@@ -2326,7 +2326,17 @@ The native PK8 batch restore chooser now updates its positive action as `Review 
 
 The change does not alter exact Bank-entry identity checks, distinct structurally empty destination binding, explicit final destination review, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback.
 
-This feature is pending its own automatic Android compile before the Sword/Shield native batch restore live selection count is called validated.
+Commit `a53a3b24c2470839f6a6ad6815139d4e628f1f98` passed automatic Android build run `46002252786`, attempt 1, and was reported by exact Slack event `1795784787.284899`. The Sword/Shield native batch restore live selection count is compile-validated.
+
+## BDSP native batch restore live selection count
+
+After the Sword/Shield count compiled successfully, BDSP remained the next native batch restore chooser whose review action did not show how many PB8 entries were currently selected.
+
+The native PB8 batch restore chooser now updates its positive action as `Review destinations (N)` after every manual checkbox change and every `Select all` or `Clear all` action. The chooser remains open, and its existing requirement for at least two entries and its destination-capacity limit remain authoritative.
+
+The change does not alter exact Bank-entry identity checks, distinct structurally empty destination binding, explicit final destination review, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback.
+
+This feature is pending its own automatic Android compile before the BDSP native batch restore live selection count is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
