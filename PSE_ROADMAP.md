@@ -2402,7 +2402,15 @@ The native PA8 batch deposit chooser now shows the current selection directly on
 
 The existing requirement to select at least one readable native PA8 remains authoritative. This change does not alter source-save identity checks, exact native record rereads, content-addressed Bank names, duplicate-content handling, explicit final review or the rule that the source save and every source slot remain unchanged.
 
-This feature is pending its own automatic Android compile before the Legends: Arceus native batch deposit live selection count is called validated.
+The Legends: Arceus native batch deposit live selection count was compile-validated on commit `fd619bd4536ce7e876b8a44a0ac06bb2091ede3b` by the exact `PSE_BUILD_SUCCESS` event at Slack timestamp `1795792385.555399`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, Actions run `46021637115`, attempt `1`, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, signed-APK packaging remained skipped, the reporter job succeeded, and the event SHA was current HEAD before this next bounded change.
+
+## Scarlet/Violet native batch deposit live selection count
+
+The native PK9 batch deposit chooser now shows the current selection directly on its review action as `Review (N)`. The count refreshes after each manual checkbox change and after `Select all` or `Clear all`, so the number of exact source records entering final review is visible before leaving the chooser.
+
+The existing requirement to select at least one readable native PK9 remains authoritative. This change does not alter source-save identity checks, exact native record rereads, content-addressed Bank names, duplicate-content handling, explicit final review or the rule that the source save and every source slot remain unchanged.
+
+This feature is pending its own automatic Android compile before the Scarlet/Violet native batch deposit live selection count is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
