@@ -2076,7 +2076,17 @@ The Let's Go Bank now offers `Restore native PB7 batch` when at least two canoni
 
 Confirmation reopens the source and every selected Bank entry, writes each exact 260-byte PB7 into its reviewed unused native storage record, increments the native storage count once, and refreshes only the block 8 and block 9 CRCs. Verification reopens every PB7 byte-for-byte as an unassigned storage Pokémon and rejects protected destination bytes, storage-capacity overflow, changes to existing Pokémon, Party or partner pointers, Pokédex data, title identity, unrelated bytes, source identity, Bank identity or persisted-copy content. The transaction retains and rereads a verified recovery backup, requires a new empty document, reopens the saved copy, and removes a failed copy when possible. The original source and all Bank entries remain unchanged.
 
-This feature is pending its own automatic Android compile before the Let's Go native PB7 batch restore is called validated.
+Commit `84c11c19224964c3d94f613f78a09b33b73be689` passed automatic Android build run `45955080012`, attempt 1, and was reported by exact Slack event `1795763260.272169`. The Let's Go native PB7 batch restore is compile-validated.
+
+## Sword/Shield native PK8 batch selection shortcut
+
+After all supported native Switch-title batch restore paths compiled successfully, Sword/Shield remained the first title where choosing every native PK8 Bank entry still required checking each item individually.
+
+The native PK8 batch chooser now provides a non-dismissing `Select all` action. It marks every canonical `switch_swsh_<sha256>.pk8` candidate in the existing reviewed list while retaining the same explicit final destination review. The existing guard still rejects fewer than two entries and rejects a selected count larger than the current number of empty native Box slots, so the shortcut cannot overwrite occupied slots or silently omit entries.
+
+The change does not alter source or Bank identity checks, converted-entry Legalise routes, deterministic empty-slot mapping, checksum handling, recovery backup, persisted reopen verification or failed-copy cleanup.
+
+This feature is pending its own automatic Android compile before the Sword/Shield native PK8 batch selection shortcut is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

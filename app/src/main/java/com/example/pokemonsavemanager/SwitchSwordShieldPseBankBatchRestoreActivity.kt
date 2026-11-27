@@ -119,9 +119,16 @@ class SwitchSwordShieldPseBankBatchRestoreActivity : Activity() {
             .setTitle("Choose native PK8 entries")
             .setMultiChoiceItems(labels, selected) { _, index, checked -> selected[index] = checked }
             .setNegativeButton("Cancel", null)
+            .setNeutralButton("Select all", null)
             .setPositiveButton("Review destinations", null)
             .create()
         dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                selected.indices.forEach { index ->
+                    selected[index] = true
+                    dialog.listView.setItemChecked(index, true)
+                }
+            }
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val chosen = candidates.filterIndexed { index, _ -> selected[index] }
                 when {
