@@ -2522,7 +2522,15 @@ The native PK8 batch restore chooser now offers `Select available (N)`, where N 
 
 This change does not alter exact Bank-entry identity checks, distinct structurally empty destination binding, the minimum of two selected records, explicit final destination review, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback. It does not silently drop any Bank entry or choose a destination outside the later reviewed mapping.
 
-This feature is pending its own automatic Android compile before the Sword/Shield native batch restore capacity-aware selection shortcut is called validated.
+The Sword/Shield native batch restore capacity-aware selection shortcut was compile-validated on commit `8b37d55c8a0eda5288f61879c7820774bc388a0b` by the exact `PSE_BUILD_SUCCESS` event at Slack timestamp `1795804357.574119`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, Actions run `46048529451`, attempt `1`, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, signed-APK packaging remained skipped, the reporter job succeeded, and the event SHA was current HEAD before this next bounded change.
+
+## BDSP native batch restore capacity-aware selection shortcut
+
+The native PB8 batch restore chooser now offers `Select available (N)`, where N is the smaller of the readable Bank-entry count and the exact number of currently empty native destination slots. The shortcut keeps any manual selections, adds visible entries only until that reviewed capacity is reached, updates every changed checkbox and the live `Review destinations (N)` count, and changes to `Clear all` at the capacity limit. Manual over-selection remains visible and continues to be rejected by the existing explicit capacity check.
+
+This change does not alter exact Bank-entry identity checks, distinct structurally empty destination binding, the minimum of two selected records, explicit final destination review, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback. It does not silently drop any Bank entry or choose a destination outside the later reviewed mapping.
+
+This feature is pending its own automatic Android compile before the BDSP native batch restore capacity-aware selection shortcut is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
