@@ -1064,7 +1064,7 @@ class MainActivity : Activity() {
             parsePk6(raw,0,PK6_STORED_SIZE,false,maxSpecies)==null
     }
 
-    private fun chooseSelectedStandardBankDestination(chosen:List<File>,generation:Int){
+    private fun chooseSelectedStandardBankDestination(chosen:List<File>,generation:Int,copyOnly:Boolean=false){
         val file=importedFile?:return
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         runSelectedStandardBankBatchReview(
@@ -1084,9 +1084,9 @@ class MainActivity : Activity() {
             {title,message->showDialog(title,message)},
             {moved,targetBox->
                 selectedBankFiles.clear();bankMultiSelectMode=false
-                Toast.makeText(this,"${moved} Pokémon moved to Box ${targetBox+1} and verified",Toast.LENGTH_LONG).show()
+                Toast.makeText(this,"${moved} Pokémon ${if(copyOnly) "copied" else "moved"} to Box ${targetBox+1} and verified",Toast.LENGTH_LONG).show()
                 showBank()
-            }
+            },copyOnly
         )
     }
 
@@ -67875,6 +67875,17 @@ private data class Gen2ToGen5LegalisePlan(
                     val chosen=selectedBankFiles.map{File(it)}
                     if(chosen.isEmpty())showDialog("Copy selected to Gen 5 Box","Select one or more Gen 5 Bank Pokémon first.")
                     else chooseSelectedGen5BankDestination(chosen,true)
+                }
+            }
+        }
+        if(bankMultiSelectMode&&bankViewGeneration==6&&currentGen==6&&batchDestination!=null){
+            addButton(root,"📦  Copy selected to Gen 6 Box"){
+                if(importedFile?.absolutePath!=batchDestination.absolutePath||currentSourceUri!=batchDestinationUri||currentSourceLabel!=batchDestinationLabel){
+                    showDialog("Copy selected to Gen 6 Box","The loaded destination changed. Reopen PSE Bank. Nothing was changed.")
+                }else{
+                    val chosen=selectedBankFiles.map{File(it)}
+                    if(chosen.isEmpty())showDialog("Copy selected to Gen 6 Box","Select one or more Gen 6 Bank Pokémon first.")
+                    else chooseSelectedStandardBankDestination(chosen,6,true)
                 }
             }
         }

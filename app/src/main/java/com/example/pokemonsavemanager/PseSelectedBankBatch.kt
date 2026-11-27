@@ -3064,8 +3064,11 @@ internal fun runSelectedStandardBankBatchReview(
     retainBackup: (File,ByteArray) -> Unit,
     backupKept: (File) -> Boolean,
     showFailure: (String,String) -> Unit,
-    onSuccess: (Int,Int) -> Unit
+    onSuccess: (Int,Int) -> Unit,
+    copyOnly: Boolean = false
 ) {
+    val action=if(copyOnly) "Copy" else "Move"
+    val operation=if(copyOnly) "copy" else "withdrawal"
     val reviewedIdentity=runCatching {
         require(file.absoluteFile==file.canonicalFile&&file.isFile)
         file.canonicalPath
@@ -3092,7 +3095,7 @@ internal fun runSelectedStandardBankBatchReview(
         }
         "Box ${box+1} • $empty structurally empty slot${if(empty==1)"" else "s"}"
     }.toTypedArray()
-    android.app.AlertDialog.Builder(activity).setTitle("Move ${chosen.size} Pokémon to which box?")
+    android.app.AlertDialog.Builder(activity).setTitle("$action ${chosen.size} Pokémon to which box?")
         .setItems(labels){_,which->
             val current=runCatching{file.readBytes()}.getOrNull()
             if(current==null||!destinationIdentityBound()||!current.contentEquals(reviewedDestination)){
@@ -3132,9 +3135,11 @@ internal fun runSelectedStandardBankBatchReview(
                 return@setItems
             }
             val destinations=slots.joinToString(", "){slot->"Box ${slot/30+1} • Slot ${slot%30+1}"}
-            android.app.AlertDialog.Builder(activity).setTitle("Confirm PSE Bank batch withdrawal")
-                .setMessage("Generation $generation PSE withdrawal\n\nDestination slots: $destinations\n\nThe exact selected Bank bytes and destination save are bound to this review. No conversion or Legalise change occurs. This is not an official trade, Pokémon Bank or HOME transfer, legality certification, or verified provenance. Cancel leaves every file unchanged.")
-                .setPositiveButton("Move and verify"){_,_->
+            android.app.AlertDialog.Builder(activity).setTitle("Confirm PSE Bank batch $operation")
+                .setMessage("Generation $generation PSE $operation\n\nDestination slots: $destinations\n\nThe exact selected Bank bytes and destination save are bound to this review. No conversion or Legalise change occurs. "+
+                    if(copyOnly) "Every selected Bank original remains byte-for-byte unchanged. This is not an official trade, Pokémon Bank or HOME transfer, legality certification, or verified provenance. Cancel leaves every file unchanged."
+                    else "Bank records are removed only after the destination and retained recovery verify. This is not an official trade, Pokémon Bank or HOME transfer, legality certification, or verified provenance. Cancel leaves every file unchanged.")
+                .setPositiveButton("$action and verify"){_,_->
                     val original=runCatching{file.readBytes()}.getOrNull()
                     if(original==null||!destinationIdentityBound()||!original.contentEquals(reviewedDestination)){
                         showFailure("Move selected","The reviewed destination identity or bytes changed. Reopen PSE Bank. Nothing was changed.")
@@ -3144,12 +3149,12 @@ internal fun runSelectedStandardBankBatchReview(
                         chosen,generation,which,slots,reviewedSources,file,original,bankDirectory(),backupsDirectory(),backupBaseName(),
                         boxOffset,slotCount,232,bound,
                         {data,slot->structurallyEmpty(data,boxOffset,slotCount,maxSpecies,slot)},
-                        {raw->recordValid(raw,maxSpecies)},nativeValid,refreshDestination,retainBackup,backupKept
+                        {raw->recordValid(raw,maxSpecies)},nativeValid,refreshDestination,retainBackup,backupKept,copyOnly
                     )
-                    result.failure?.let{showFailure("Move selected failed",it);return@setPositiveButton}
+                    result.failure?.let{showFailure("$action selected failed",it);return@setPositiveButton}
                     onSuccess(result.moved,which)
                     result.notice?.let{
-                        showFailure("Move selected completed with retained recovery",it)
+                        showFailure("$action selected completed with retained recovery",it)
                     }
                 }.setNegativeButton("Cancel",null).show()
         }.setNegativeButton("Cancel",null).show()
@@ -3175,7 +3180,8 @@ internal fun executeSelectedStandardBankBatch(
     nativeValid: (ByteArray) -> Boolean,
     refreshDestination: (ByteArray) -> Unit,
     retainBackup: (File,ByteArray) -> Unit,
-    backupKept: (File) -> Boolean
+    backupKept: (File) -> Boolean,
+    copyOnly: Boolean = false
 ): PseSelectedBankBatchResult {
     var writeStarted=false
     var cleanupAttempted=false
@@ -3233,7 +3239,7 @@ internal fun executeSelectedStandardBankBatch(
         require(backupsDirectory.absoluteFile==backupsDirectory.canonicalFile&&backupsDirectory.isDirectory){
             "The destination backup directory is unresolved, noncanonical or unavailable."
         }
-        val backup=File.createTempFile(backupBaseName+"_PreSelectedBankMove_",".backup",backupsDirectory)
+        val backup=File.createTempFile(backupBaseName+if(copyOnly) "_PreSelectedBankCopy_" else "_PreSelectedBankMove_",".backup",backupsDirectory)
         safetyBackup=backup
         require(backup.absoluteFile==backup.canonicalFile&&backup.parentFile==backupsDirectory){
             "The destination recovery backup was not created at its canonical directory identity."
@@ -3283,40 +3289,43 @@ internal fun executeSelectedStandardBankBatch(
         sourceBytes.forEachIndexed { index,raw ->
             val off=boxOffset+plannedSlots[index]*recordSize
             val actual=verify.copyOfRange(off,off+recordSize)
-            require(actual.contentEquals(raw)&&recordValid(actual)){"A moved Pokémon did not verify after persistence."}
+            require(actual.contentEquals(raw)&&recordValid(actual)){"A ${if(copyOnly) "copied" else "moved"} Pokémon did not verify after persistence."}
         }
         require(sourcesValid()&&recoveriesValid()){
-            "A Bank record or retained recovery snapshot changed before cleanup."
+            "A Bank record or retained recovery snapshot changed after destination verification."
         }
-        cleanupAttempted=true
-        sources.forEachIndexed { index,source ->
-            require(destinationMatches(work)&&nativeValid(work)&&
-                retainedBankBackupMatches(backup,original,backupKept(backup))&&recoveriesValid()&&
-                exactBankPathsAbsent(removed)&&source.absoluteFile==source.canonicalFile&&source.isFile&&
-                source.readBytes().contentEquals(sourceBytes[index])){
-                "The verified destination, source record or retained recovery changed before Bank cleanup."
+        if(!copyOnly){
+            cleanupAttempted=true
+            sources.forEachIndexed { index,source ->
+                require(destinationMatches(work)&&nativeValid(work)&&
+                    retainedBankBackupMatches(backup,original,backupKept(backup))&&recoveriesValid()&&
+                    exactBankPathsAbsent(removed)&&source.absoluteFile==source.canonicalFile&&source.isFile&&
+                    source.readBytes().contentEquals(sourceBytes[index])){
+                    "The verified destination, source record or retained recovery changed before Bank cleanup."
+                }
+                require(source.delete()&&!source.exists()){"A Bank record could not be removed after destination verification."}
+                removed.add(source)
             }
-            require(source.delete()&&!source.exists()){"A Bank record could not be removed after destination verification."}
-            removed.add(source)
         }
         require(destinationMatches(work)&&nativeValid(work)&&
-            retainedBankBackupMatches(backup,original,backupKept(backup))&&removed.size==sources.size&&
-            exactBankPathsAbsent(removed)&&recoveriesValid()){
-            "The verified destination or retained recovery snapshots changed after Bank cleanup."
+            retainedBankBackupMatches(backup,original,backupKept(backup))&&
+            (copyOnly&&removed.isEmpty()&&sourcesValid()||!copyOnly&&removed.size==sources.size&&exactBankPathsAbsent(removed))&&
+            recoveriesValid()){
+            "The verified destination, Bank originals or retained recovery snapshots changed after persistence."
         }
         val bankRecoveryClean=cleanupExactBankRecoverySnapshots(
             bankRecoveries,sourceBytes
         )
         require(destinationMatches(work)&&nativeValid(work)&&
             retainedBankBackupMatches(backup,original,backupKept(backup))&&
-            removed.size==sources.size&&exactBankPathsAbsent(removed)&&
+            (copyOnly&&removed.isEmpty()&&sourcesValid()||!copyOnly&&removed.size==sources.size&&exactBankPathsAbsent(removed))&&
             (!bankRecoveryClean||exactBankPathsAbsent(bankRecoveries))){
-            "The verified destination, removed Bank batch or retained destination backup changed during recovery cleanup."
+            "The verified destination, Bank originals or retained destination backup changed during recovery cleanup."
         }
         return PseSelectedBankBatchResult(
             moved=sources.size,
             notice=if(bankRecoveryClean) null else
-                "The verified destination and selected Bank removals completed, but one or more exact temporary recovery snapshots could not be removed safely. Changed or unremovable snapshots were retained for review."
+                "The verified destination and selected Bank ${if(copyOnly) "copies" else "removals"} completed, but one or more exact temporary recovery snapshots could not be removed safely. Changed or unremovable snapshots were retained for review."
         )
     } catch(error:Exception) {
         val bankRestored=runCatching {

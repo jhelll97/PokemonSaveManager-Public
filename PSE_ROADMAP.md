@@ -1888,7 +1888,15 @@ Supported-title Bank inventory found the same native PC-copy gap in Generation 5
 
 Generation 5 multi-select now offers `Copy selected to Gen 5 Box`. It reuses the exact ordered structurally empty slot review, byte-for-byte PK5 staging, native box CRC and checksum-table updates, retained destination backup and persisted reopen verification while skipping every Bank removal. The final cancellable review names each destination Box and Slot, states that all selected PK5 Bank originals remain byte-for-byte unchanged, and rechecks those canonical sources before and after persistence. Temporary recovery snapshots are cleaned only after the destination, retained backup and every Bank original verify; destination rollback remains independent on failure.
 
-This feature is pending its own automatic Android compile before the native Generation 5 Bank batch copy is called validated.
+Commit `edc5e77a474e620349040ffbeb4d08290c72f77d` passed automatic Android build run `45917324837`, attempt 1, and was reported by exact Slack event `1795740184.401199`; the native Generation 5 Bank batch copy is validated.
+
+## Native Generation 6 Bank batch copy to PC Box
+
+Supported-title Bank inventory found the same native PC-copy gap in Generation 6: multi-selection could withdraw exact PK6 records into a chosen PC Box, but could not retain the selected Bank originals after placing the verified batch. Users who wanted an in-save copy therefore had only the destructive withdrawal action.
+
+Generation 6 multi-select now offers `Copy selected to Gen 6 Box`. It reuses the exact reviewed structurally empty destination slots, byte-for-byte PK6 staging, native box and block checksum refresh, retained destination backup and persisted reopen verification while skipping every Bank removal. The cancellable review states that every selected PK6 Bank original remains byte-for-byte unchanged. The transaction rechecks all canonical source files after persistence and after temporary recovery cleanup; destination rollback remains independent on failure.
+
+This feature is pending its own automatic Android compile before the native Generation 6 Bank batch copy is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
