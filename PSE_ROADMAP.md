@@ -2206,7 +2206,17 @@ The native PK8 batch restore chooser now changes its bulk action between `Select
 
 The change does not alter exact Bank-entry identity checks, distinct structurally empty destination binding, capacity blocking, explicit final destination review, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback.
 
-This feature is pending its own automatic Android compile before the Sword/Shield native batch restore selection toggle is called validated.
+Commit `76c1202d34ae872f121af4f718abf658c6e554d7` passed automatic Android build run `45978364313`, attempt 1, and was reported by exact Slack event `1795774458.313709`. The Sword/Shield native batch restore selection toggle is compile-validated.
+
+## BDSP native batch restore selection toggle
+
+After the Sword/Shield restore toggle compiled successfully, BDSP remained the next native batch restore chooser where `Select all` could not reverse its own bulk selection without unchecking every PB8 individually.
+
+The native PB8 batch restore chooser now changes its bulk action between `Select all` and `Clear all`. It follows manual checkbox changes, updates every visible selection without dismissing the chooser, and still requires at least two selected PB8 entries before destination review.
+
+The change does not alter exact Bank-entry identity checks, distinct structurally empty destination binding, capacity blocking, explicit final destination review, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback.
+
+This feature is pending its own automatic Android compile before the BDSP native batch restore selection toggle is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
