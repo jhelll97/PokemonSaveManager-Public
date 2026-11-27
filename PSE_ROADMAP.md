@@ -2394,7 +2394,15 @@ The native PB7 batch deposit chooser now shows the current selection directly on
 
 The existing requirement to select at least one readable native PB7 remains authoritative. This change does not alter source-save identity checks, exact native record rereads, content-addressed Bank names, duplicate-content handling, explicit final review or the rule that the source save and every source slot remain unchanged.
 
-This feature is pending its own automatic Android compile before the Let's Go native batch deposit live selection count is called validated.
+The Let's Go native batch deposit live selection count was compile-validated on commit `16f7979b07dc734cf75f189c00514238408114f3` by the exact `PSE_BUILD_SUCCESS` event at Slack timestamp `1795791805.893049`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, Actions run `46019777080`, attempt `1`, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, signed-APK packaging remained skipped, the reporter job succeeded, and the event SHA was current HEAD before this next bounded change.
+
+## Legends: Arceus native batch deposit live selection count
+
+The native PA8 batch deposit chooser now shows the current selection directly on its review action as `Review (N)`. The count refreshes after each manual checkbox change and after `Select all` or `Clear all`, so the number of exact source records entering final review is visible before leaving the chooser.
+
+The existing requirement to select at least one readable native PA8 remains authoritative. This change does not alter source-save identity checks, exact native record rereads, content-addressed Bank names, duplicate-content handling, explicit final review or the rule that the source save and every source slot remain unchanged.
+
+This feature is pending its own automatic Android compile before the Legends: Arceus native batch deposit live selection count is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
