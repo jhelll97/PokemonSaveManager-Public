@@ -2186,7 +2186,17 @@ The native PK9 Box deposit chooser now provides a non-dismissing `Select all` ac
 
 The change does not alter source reopen or identity checks, exact PK9 extraction, source Box slots, party data, atomic Bank writes, duplicate handling, rollback of newly created entries or final persisted-byte verification.
 
-This feature is pending its own automatic Android compile before the Scarlet/Violet native Box deposit selection shortcut is called validated.
+Commit `7afa23acd1882f2dc447c41681f53795e2bb6752` passed automatic Android build run `45974021509`, attempt 1, and was reported by exact Slack event `1795772573.986009`. The Scarlet/Violet native Box deposit selection shortcut is compile-validated.
+
+## Legends: Z-A native Box deposit selection shortcut
+
+After the Scarlet/Violet deposit shortcut compiled successfully, Legends: Z-A remained the next native Box batch deposit where copying every readable PA9 required checking each item individually.
+
+The native PA9 Box deposit chooser now provides a non-dismissing `Select all` action. It marks every readable checksum-valid Pokémon candidate in the selected Box while keeping the existing explicit final review of slot, Pokémon label and canonical `switch_za_<sha256>.pa9` destination. Empty and unreadable slots remain excluded, identical bytes still share one content-addressed Bank entry, and choosing nothing remains blocked.
+
+The change does not alter source reopen or identity checks, exact PA9 extraction, source Box slots, party data, atomic Bank writes, duplicate handling, rollback of newly created entries or final persisted-byte verification.
+
+This feature is pending its own automatic Android compile before the Legends: Z-A native Box deposit selection shortcut is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
