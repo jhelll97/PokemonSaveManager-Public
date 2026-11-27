@@ -2562,7 +2562,15 @@ The native PA9 batch restore chooser now offers `Select available (N)`, where N 
 
 This change does not alter exact Bank-entry identity checks, distinct structurally empty native destination binding, the minimum of two selected records, explicit final destination review, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback. It does not silently drop any Bank entry or choose a destination outside the later reviewed mapping.
 
-This feature is pending its own automatic Android compile before the Legends: Z-A native batch restore capacity-aware selection shortcut is called validated.
+The Legends: Z-A native batch restore capacity-aware selection shortcut was compile-validated on commit `b252f4f4f0441620cb76cd15674081654d46c5cc` by the exact `PSE_BUILD_SUCCESS` event at Slack timestamp `1795808749.045959`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, Actions run `46057243658`, attempt `1`, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, signed-APK packaging remained skipped, the reporter job succeeded, and the event SHA was current HEAD before this next bounded change. This completes the native batch restore capacity-aware selection pass across all six supported Switch titles.
+
+## Sword/Shield native batch restore capacity progress
+
+The native PK8 batch restore chooser now shows the selected count against the exact reviewed destination limit as `Review destinations (selected/capacity)`. The value refreshes after every manual checkbox change and after `Select available` or `Clear all`, so the user can see remaining native capacity before opening the final destination mapping.
+
+The existing minimum of two selected records and explicit over-capacity rejection remain authoritative. This display change does not alter exact Bank-entry identity checks, destination selection, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback.
+
+This feature is pending its own automatic Android compile before the Sword/Shield native batch restore capacity progress is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
