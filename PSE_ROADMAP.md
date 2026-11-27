@@ -2362,7 +2362,15 @@ The native PK9 batch restore chooser now shows the current selection directly on
 
 The existing minimum of two selected native PK9 entries and unused-box capacity limit remain authoritative. This change does not alter exact Bank-entry identity checks, distinct structurally empty native destination binding, explicit final destination review, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback.
 
-This feature is pending its own automatic Android compile before the Scarlet/Violet native batch restore live selection count is called validated.
+The Scarlet/Violet native batch restore live selection count was compile-validated on commit `ba0bc3c5406400831de4bba98ddeaf7f95aa71db` by the exact `PSE_BUILD_SUCCESS` event at Slack timestamp `1795788227.841619`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, Actions run `46010476221`, attempt `1`, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, signed-APK packaging remained skipped, the reporter job succeeded, and the event SHA was current HEAD before this next bounded change.
+
+## Legends: Z-A native batch restore live selection count
+
+The native PA9 batch restore chooser now shows the current selection directly on its review action as `Review destinations (N)`. The count refreshes after each manual checkbox change and after `Select all` or `Clear all`, so the reviewed batch size is visible before leaving the chooser.
+
+The existing minimum of two selected native PA9 entries and unused-box capacity limit remain authoritative. This change does not alter exact Bank-entry identity checks, distinct structurally empty native destination binding, explicit final destination review, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback.
+
+This feature is pending its own automatic Android compile before the Legends: Z-A native batch restore live selection count is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
