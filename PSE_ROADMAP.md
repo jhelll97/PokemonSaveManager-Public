@@ -2286,7 +2286,17 @@ The native PB7 storage-page deposit chooser now changes its bulk action between 
 
 The change does not alter source reopen or identity checks, exact PB7 extraction, source stored-list order, party or partner pointers, explicit final review, content-addressed Bank writes, duplicate handling, rollback of newly created entries or persisted-byte verification.
 
-This feature is pending its own automatic Android compile before the Let's Go native storage-page deposit selection toggle is called validated.
+Commit `81cf6cd1dfba605e2aaacc6bb0fda7dc641428a0` passed automatic Android build run `45994487662`, attempt 1, and was reported by exact Slack event `1795781393.607819`. The Let's Go native storage-page deposit selection toggle is compile-validated.
+
+## Legends: Arceus native Pasture deposit selection toggle
+
+After the Let's Go deposit toggle compiled successfully, Legends: Arceus remained the next native Pasture deposit chooser where `Select all` could not reverse its own bulk selection without unchecking every PA8 individually.
+
+The native PA8 Pasture deposit chooser now changes its bulk action between `Select all` and `Clear all`. It follows manual checkbox changes, updates every visible selection without dismissing the chooser, and still blocks review when no PA8 is selected.
+
+The change does not alter source reopen or identity checks, exact PA8 extraction, source Pasture slots, party data, explicit final review, content-addressed Bank writes, duplicate handling, rollback of newly created entries or persisted-byte verification.
+
+This feature is pending its own automatic Android compile before the Legends: Arceus native Pasture deposit selection toggle is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
