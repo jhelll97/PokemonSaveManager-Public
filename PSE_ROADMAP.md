@@ -2698,7 +2698,15 @@ The native Party PK9 batch-deposit chooser now states its valid selection range 
 
 The existing empty-selection check remains in the click handler as a safety backstop. This guidance does not alter source bytes, Party order or count, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
 
-This feature is pending its own automatic Android compile before the Scarlet/Violet native Party batch deposit selection guidance is called validated.
+The Scarlet/Violet native Party batch deposit selection guidance was compile-validated on commit `160e9ffeba238a5c5d4fad34ae1f694041bd077b` by exact PSE_BUILD_SUCCESS at Slack TS `1795821474.953589`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46080319739`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Legends: Z-A native Party batch deposit selection guidance
+
+The native Party PA9 batch-deposit chooser now states its valid selection range as `Choose 1-party-count native Party PA9 records`. Its live `Review (selected)` action remains disabled until at least one native Party record is selected, so an empty selection cannot advance to final Bank review.
+
+The existing empty-selection check remains in the click handler as a safety backstop. This guidance does not alter source bytes, Party order or stride, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
+
+This feature is pending its own automatic Android compile before the Legends: Z-A native Party batch deposit selection guidance is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
