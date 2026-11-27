@@ -1952,7 +1952,15 @@ Supported-title Bank inventory found the same native batch-deposit gap in Pokém
 
 Each Legends: Arceus Pasture now offers `Copy selected Pokémon to PSE Bank`. A separate activity reopens the exact validated Legends: Arceus source, excludes empty and unreadable slots, lets the user select several readable native 360-byte stored PA8 records from that Pasture, and presents a cancellable final review naming every exact Pasture slot and SHA-256-derived Bank filename. Confirmation reopens the source again, requires every selected record to remain byte-for-byte identical and checksum-valid, writes only missing content-addressed entries, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PA8 bytes explicitly share one Bank entry. Eggs, Noble flags and other native PA8 data may be preserved in Bank as exact records, while existing restore guards remain unchanged. The source save, title identity, pasture and party data, native records and container integrity are never written or normalized.
 
-This feature is pending its own automatic Android compile before the Legends: Arceus native Pasture batch deposit is called validated.
+Commit `e3dbae0ac46d4d19af28eeda02949d8590e97d1c` passed automatic Android build run `45931680426`, attempt 1, and was reported by exact Slack event `1795749252.040499`; the Legends: Arceus native Pasture batch deposit is validated.
+
+## Scarlet/Violet native Box batch deposit to PSE Bank
+
+Supported-title Bank inventory found the same native batch-deposit gap in Pokémon Scarlet and Pokémon Violet: users could copy one checksum-valid PK9 at a time from a box, party or the dedicated ride record, but could not select and preserve several native records from one Box in a complete reviewed Bank operation.
+
+Each Scarlet/Violet Box now offers `Copy selected Pokémon to PSE Bank`. A separate activity reopens the exact validated Scarlet/Violet source, excludes empty and unreadable slots, lets the user select several readable native 344-byte PK9 records from that Box, and presents a cancellable final review naming every exact Box slot and SHA-256-derived Bank filename. Confirmation reopens the source again, requires every selected record to remain byte-for-byte identical and checksum-valid, writes only missing content-addressed entries, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PK9 bytes explicitly share one Bank entry. Eggs and other native PK9 data may be preserved in Bank as exact records, while existing restore guards remain unchanged. The source save, title identity, boxes, party data, dedicated ride record, native records and container integrity are never written or normalized.
+
+This feature is pending its own automatic Android compile before the Scarlet/Violet native Box batch deposit is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
