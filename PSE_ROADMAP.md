@@ -2146,7 +2146,17 @@ The native PK8 Box deposit chooser now provides a non-dismissing `Select all` ac
 
 The change does not alter source reopen or identity checks, exact PK8 extraction, source-slot preservation, atomic Bank writes, duplicate handling, rollback of newly created entries or final persisted-byte verification.
 
-This feature is pending its own automatic Android compile before the Sword/Shield native Box deposit selection shortcut is called validated.
+Commit `12dcd7b0ff4eea20ed1fcece48401fac00d9b584` passed automatic Android build run `45966629246`, attempt 1, and was reported by exact Slack event `1795769244.106799`. The Sword/Shield native Box deposit selection shortcut is compile-validated.
+
+## BDSP native Box deposit selection shortcut
+
+After the Sword/Shield deposit shortcut compiled successfully, BDSP remained the next native Box batch deposit where copying every readable PB8 required checking each item individually.
+
+The native PB8 Box deposit chooser now provides a non-dismissing `Select all` action. It marks every readable checksum-valid Pokémon candidate in the selected Box while keeping the existing explicit final review of slot, Pokémon label and canonical `switch_bdsp_<sha256>.pb8` destination. Empty and unreadable slots remain excluded, identical bytes still share one content-addressed Bank entry, and choosing nothing remains blocked.
+
+The change does not alter source reopen or identity checks, exact PB8 extraction, source-slot preservation, atomic Bank writes, duplicate handling, rollback of newly created entries or final persisted-byte verification.
+
+This feature is pending its own automatic Android compile before the BDSP native Box deposit selection shortcut is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
