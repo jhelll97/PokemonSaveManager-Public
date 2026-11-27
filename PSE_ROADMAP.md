@@ -2642,7 +2642,15 @@ The native PA8 batch restore chooser now states the valid selection range as `Ch
 
 The existing minimum-two and over-capacity checks remain in the click handler as a safety backstop. This guidance does not alter exact Bank-entry identity, destination selection, recovery, checksums, persisted reopen verification, cleanup, or rollback behavior.
 
-This feature is pending its own automatic Android compile before the Legends: Arceus native batch restore selection guidance is called validated.
+The Legends: Arceus native batch restore selection guidance was compile-validated on commit `b5e85c2455efa56dd3e00aea896037f891987bc4` by exact PSE_BUILD_SUCCESS at Slack TS `1795815963.774849`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46071578636`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Scarlet/Violet native batch restore selection guidance
+
+The native PK9 batch restore chooser now states the valid selection range as `Choose 2-capacity native PK9 entries`. Its `Review destinations (selected/capacity)` action is enabled only while the selected count is within that reviewed range, so an incomplete or over-capacity selection cannot advance to destination mapping.
+
+The existing minimum-two and over-capacity checks remain in the click handler as a safety backstop. This guidance does not alter exact Bank-entry identity, destination selection, recovery, checksums, persisted reopen verification, cleanup, or rollback behavior.
+
+This feature is pending its own automatic Android compile before the Scarlet/Violet native batch restore selection guidance is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

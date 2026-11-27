@@ -122,9 +122,10 @@ class SwitchScarletVioletPseBankBatchRestoreActivity : Activity() {
             val selectedCount = selected.count { it }
             bulkButton?.text = if (selectedCount >= selectionLimit) "Clear all" else "Select available ($selectionLimit)"
             reviewButton?.text = "Review destinations ($selectedCount/$selectionLimit)"
+            reviewButton?.isEnabled = selectedCount in 2..selectionLimit
         }
         val dialog = AlertDialog.Builder(this)
-            .setTitle("Choose native PK9 entries")
+            .setTitle("Choose 2-$selectionLimit native PK9 entries")
             .setMultiChoiceItems(labels, selected) { _, index, checked ->
                 selected[index] = checked
                 refreshSelectionActions()
