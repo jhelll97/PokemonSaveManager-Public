@@ -2216,7 +2216,17 @@ The native PB8 batch restore chooser now changes its bulk action between `Select
 
 The change does not alter exact Bank-entry identity checks, distinct structurally empty destination binding, capacity blocking, explicit final destination review, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback.
 
-This feature is pending its own automatic Android compile before the BDSP native batch restore selection toggle is called validated.
+Commit `e9dd53586c5158d404a621906545f08ecb4a338f` passed automatic Android build run `45980573926`, attempt 1, and was reported by exact Slack event `1795775061.691219`. The BDSP native batch restore selection toggle is compile-validated.
+
+## Let's Go native batch restore selection toggle
+
+After the BDSP restore toggle compiled successfully, Let's Go remained the next native batch restore chooser where `Select all` could not reverse its own bulk selection without unchecking every PB7 individually.
+
+The native PB7 batch restore chooser now changes its bulk action between `Select all` and `Clear all`. It follows manual checkbox changes, updates every visible selection without dismissing the chooser, and still requires at least two selected PB7 entries before destination review.
+
+The change does not alter exact Bank-entry identity checks, distinct unused native storage-record binding, capacity blocking, explicit final destination review, retained recovery, native checksums, persisted reopen verification, source cleanup or rollback.
+
+This feature is pending its own automatic Android compile before the Let's Go native batch restore selection toggle is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
