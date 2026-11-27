@@ -38593,7 +38593,7 @@ class MainActivity : Activity() {
         val sourceBinding:PseBankSourceBinding
     )
 
-    private fun chooseSelectedGen4BankDestination(chosen:List<File>){
+    private fun chooseSelectedGen4BankDestination(chosen:List<File>,copyOnly:Boolean=false){
         val file=importedFile?:return showDialog("Gen 4 Bank multi-withdrawal","Import a Gen 4 destination save first.")
         val openedUri=currentSourceUri;val openedLabel=currentSourceLabel
         if(chosen.isEmpty())return showDialog("Gen 4 Bank multi-withdrawal","Select one or more Gen 4 Bank Pokémon first.")
@@ -38619,32 +38619,35 @@ class MainActivity : Activity() {
         }
         if(targets.isEmpty())return showDialog("Gen 4 Bank multi-withdrawal","No Gen 4 PC box has ${selected.size} structurally empty slots for the complete selection. Existing or nonzero slot data was left unchanged; free capacity, reduce the selection, or load another valid save.")
         var consumed=false
-        AlertDialog.Builder(this).setTitle("Move ${selected.size} Gen 4 Pokémon to which box?")
-            .setMessage("This is a PSE Bank withdrawal, not an official trade, Pokémon Bank transaction or provenance claim. No conversion or Legalise change is performed. PSE will copy the exact native PK4 records into the listed structurally empty slots in selection order, update only the active storage checksum, retain verified recovery data, reopen the destination, then remove Bank records last.")
+        val action=if(copyOnly) "Copy" else "Withdraw"
+        AlertDialog.Builder(this).setTitle("$action ${selected.size} Gen 4 Pokémon to which box?")
+            .setMessage("This is a PSE Bank ${if(copyOnly) "copy" else "withdrawal"}, not an official trade, Pokémon Bank transaction or provenance claim. No conversion or Legalise change is performed. PSE will copy the exact native PK4 records into the listed structurally empty slots in selection order, update only the active storage checksum, retain verified recovery data and reopen the destination"+
+                if(copyOnly) " while keeping every Bank original unchanged." else ", then remove Bank records last.")
             .setItems(targets.map{(box,slots)->"Box ${box+1} • Slots ${slots.joinToString(", "){(it+1).toString()}}"}.toTypedArray()){_,which->
                 if(consumed||which !in targets.indices){consumed=true;return@setItems};consumed=true
                 val(box,slots)=targets[which]
                 val placements=selected.indices.joinToString("\n"){index->
                     "${index+1}. ${selected[index].source.nickname.ifBlank{"Pokemon #${selected[index].source.species}"}} -> Box ${box+1} of 18, Slot ${slots[index]+1} of 30"
                 }
-                val review="Final native Gen 4 batch withdrawal review\n\n$placements\n\n"+
+                val review="Final native Gen 4 batch ${if(copyOnly) "copy" else "withdrawal"} review\n\n$placements\n\n"+
                     "No Pokemon conversion or Legalise change is performed. Every exact checksum-valid 136-byte PK4 is copied byte-for-byte in selection order; existing and nonzero destination records remain unchanged. Only the listed native slots and active storage checksum may change.\n\n"+
-                    "PSE retains exact destination and per-record Bank recovery data, reopens every persisted PK4, then removes each Bank record last. Cancel leaves the destination and all selected Bank records byte-for-byte unchanged. This is a PSE Bank withdrawal, not an official trade, Pokemon Bank or HOME transaction, legality certification or verified provenance."
+                    if(copyOnly) "PSE retains exact destination recovery data, reopens every persisted PK4 and keeps every selected Bank record byte-for-byte unchanged. Cancel leaves both sides unchanged. This is a PSE Bank copy, not an official trade, Pokemon Bank or HOME transaction, legality certification or verified provenance."
+                    else "PSE retains exact destination and per-record Bank recovery data, reopens every persisted PK4, then removes each Bank record last. Cancel leaves the destination and all selected Bank records byte-for-byte unchanged. This is a PSE Bank withdrawal, not an official trade, Pokemon Bank or HOME transaction, legality certification or verified provenance."
                 var submitted=false
-                AlertDialog.Builder(this).setTitle("Review ${selected.size} exact Gen 4 withdrawals")
-                    .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("Withdraw exact PK4 selection"){_,_->
-                        if(submitted){showDialog("Gen 4 Bank multi-withdrawal","This exact destination review was already submitted. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton};submitted=true
+                AlertDialog.Builder(this).setTitle("Review ${selected.size} exact Gen 4 ${if(copyOnly) "copies" else "withdrawals"}")
+                    .setMessage(review).setNegativeButton("Cancel",null).setPositiveButton("$action exact PK4 selection"){_,_->
+                        if(submitted){showDialog("Gen 4 Bank batch $action","This exact destination review was already submitted. Reopen PSE Bank. Nothing was changed.");return@setPositiveButton};submitted=true
                         val current=runCatching{file.readBytes()}.getOrNull()
                         val unchanged=current!=null&&current.contentEquals(destination)&&importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel&&
                             selected.all{item->runCatching{item.sourceBinding.matches(item.bankBytes,true)&&item.bankFile.readBytes().contentEquals(item.bankBytes)}.getOrDefault(false)}&&
                             slots.all{slot->val off=gen4BoxSlotOffset(current,profile,box*30+slot);val raw=current.copyOfRange(off,off+136);parsePk4(raw,false)==null&&raw.all{it==0.toByte()}}
-                        if(!unchanged){showDialog("Gen 4 Bank multi-withdrawal","The destination identity, selected Bank records or reviewed native slots changed. Nothing was changed.");return@setPositiveButton}
-                        withdrawSelectedGen4BankPokemon(selected,destination,profile,box,slots,file,openedUri,openedLabel)
+                        if(!unchanged){showDialog("Gen 4 Bank batch $action","The destination identity, selected Bank records or reviewed native slots changed. Nothing was changed.");return@setPositiveButton}
+                        withdrawSelectedGen4BankPokemon(selected,destination,profile,box,slots,file,openedUri,openedLabel,copyOnly)
                     }.show()
             }.setNegativeButton("Cancel"){_,_->consumed=true}.setOnCancelListener{consumed=true}.show()
     }
 
-    private fun withdrawSelectedGen4BankPokemon(selected:List<Gen4BankBatchItem>,openedDestination:ByteArray,openedProfile:Gen4Profile,targetBox:Int,targetSlots:List<Int>,file:File,openedUri:Uri?,openedLabel:String?){
+    private fun withdrawSelectedGen4BankPokemon(selected:List<Gen4BankBatchItem>,openedDestination:ByteArray,openedProfile:Gen4Profile,targetBox:Int,targetSlots:List<Int>,file:File,openedUri:Uri?,openedLabel:String?,copyOnly:Boolean=false){
         fun bound()=importedFile?.absolutePath==file.absolutePath&&currentSourceUri==openedUri&&currentSourceLabel==openedLabel
         val destinationBinding=PseBankDestinationBinding.capture(file)
         if(destinationBinding==null||!destinationBinding.matches(openedDestination,bound())){
@@ -38707,7 +38710,9 @@ class MainActivity : Activity() {
             require(writtenProfile==profile&&writtenValidation.generalChecksum&&writtenValidation.storageChecksum&&writtenValidation.badPk4==0){"The written Gen 4 destination failed validation."}
             require(written.indices.all{it in allowed||written[it]==original[it]}){"The persisted Gen 4 batch changed bytes outside the selected PK4 slots and active storage checksum."}
             for(i in refreshed.indices){val actual=written.copyOfRange(offsets[i],offsets[i]+136);val mon=parsePk4(actual,false);require(actual.contentEquals(refreshed[i].bankBytes)&&mon!=null&&mon.checksumValid){"An exact PK4 did not verify after destination reopen."}}
-            for(item in refreshed){
+            if(copyOnly){
+                require(refreshed.all{item->item.sourceBinding.matches(item.bankBytes,true)&&item.bankFile.readBytes().contentEquals(item.bankBytes)}){"A selected Gen 4 Bank original changed during the verified copy."}
+            }else for(item in refreshed){
                 require(destinationBinding.matches(work,bound())&&recoveryValid()){"The verified Gen 4 destination or retained recovery data changed before Bank cleanup."}
                 require(exactBankPathsAbsent(removedSources)){"An earlier removed Gen 4 Bank path reappeared before the next cleanup step."}
                 val current=item.bankFile.readBytes();require(item.sourceBinding.matches(item.bankBytes,true)&&current.contentEquals(item.bankBytes)&&parsePk4(current,false)?.checksumValid==true){"A selected Gen 4 Bank record changed before cleanup."}
@@ -38716,18 +38721,22 @@ class MainActivity : Activity() {
                 removedSources.add(item.bankFile)
                 require(exactBankPathsAbsent(removedSources)){"A removed Gen 4 Bank path did not remain absent after cleanup."}
             }
-            require(removedSources.size==refreshed.size&&exactBankPathsAbsent(removedSources)&&destinationBinding.matches(work,bound())&&recoveryValid()){"The verified Gen 4 destination, removed Bank paths or retained recovery data changed after Bank cleanup."}
+            require((copyOnly&&removedSources.isEmpty()||!copyOnly&&removedSources.size==refreshed.size&&exactBankPathsAbsent(removedSources))&&destinationBinding.matches(work,bound())&&recoveryValid()&&
+                (!copyOnly||refreshed.all{item->item.sourceBinding.matches(item.bankBytes,true)&&item.bankFile.readBytes().contentEquals(item.bankBytes)})){"The verified Gen 4 destination, Bank originals or retained recovery data changed after persistence."}
             retainedRecovery=!cleanupExactBankRecoverySnapshots(
                 recoveryCopies.map{it.second},recoveryCopies.map{it.first.bankBytes}
             )
-            requireSelectedNativeBankBatchPostCleanup(
+            if(copyOnly){
+                require(destinationBinding.matches(work,bound())&&file.readBytes().contentEquals(work)&&retainedBinding.matches(original,isBackupKept(backup))&&
+                    refreshed.all{item->item.sourceBinding.matches(item.bankBytes,true)&&item.bankFile.readBytes().contentEquals(item.bankBytes)}){"The verified Gen 4 copy, retained backup or Bank originals changed after recovery cleanup."}
+            }else requireSelectedNativeBankBatchPostCleanup(
                 4,destinationBinding.matches(work,bound()),retainedRecovery,recoveryCopies.map{it.second},
                 file,work,backup,original,retainedBinding.matches(original,isBackupKept(backup)),refreshed.map{it.bankFile}
             )
             selectedBankFiles.clear();bankMultiSelectMode=false
             val recoveryNotice=if(retainedRecovery)
                 "; one or more exact temporary Bank recoveries retained for review" else ""
-            Toast.makeText(this,"Withdrawn ${refreshed.size} Gen 4 Pokémon to Box ${targetBox+1} • Slots ${targetSlots.joinToString(", "){(it+1).toString()}} and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
+            Toast.makeText(this,"${if(copyOnly) "Copied" else "Withdrawn"} ${refreshed.size} Gen 4 Pokémon to Box ${targetBox+1} • Slots ${targetSlots.joinToString(", "){(it+1).toString()}} and verified$recoveryNotice",Toast.LENGTH_LONG).show();showBank()
         }catch(e:Exception){
             val bankRestored=selected.map{item->runCatching{
                 val copy=recoveryCopies.firstOrNull{it.first.bankFile.absolutePath==item.bankFile.absolutePath}?.second
@@ -38794,7 +38803,7 @@ class MainActivity : Activity() {
                     "Automatic recovery and all retained recovery snapshots could not be verified. Keep the current destination and Bank files for review."
             }
             showDialog(
-                "Gen 4 Bank multi-withdrawal failed",
+                "Gen 4 Bank batch ${if(copyOnly) "copy" else "withdrawal"} failed",
                 "${e.message?:"Unknown error"}\n\n$recovery"+
                     (safetyBackup?.takeIf{retainedBackup}?.let{"\n\nVerified recovery backup: ${it.name}"}?:"")+
                     (verifiedRecoveryCopies.filter{it.second.exists()}.takeIf{it.isNotEmpty()}?.joinToString(
@@ -67832,6 +67841,17 @@ private data class Gen2ToGen5LegalisePlan(
                     val chosen=selectedBankFiles.map{File(it)}
                     if(chosen.isEmpty())showDialog("Copy selected to Gen 3 Box","Select one or more Gen 3 Bank Pokémon first.")
                     else chooseSelectedGen3BankDestination(chosen,batchDestination,batchDestinationUri,batchDestinationLabel,true)
+                }
+            }
+        }
+        if(bankMultiSelectMode&&bankViewGeneration==4&&currentGen==4&&batchDestination!=null){
+            addButton(root,"📦  Copy selected to Gen 4 Box"){
+                if(importedFile?.absolutePath!=batchDestination.absolutePath||currentSourceUri!=batchDestinationUri||currentSourceLabel!=batchDestinationLabel){
+                    showDialog("Copy selected to Gen 4 Box","The loaded destination changed. Reopen PSE Bank. Nothing was changed.")
+                }else{
+                    val chosen=selectedBankFiles.map{File(it)}
+                    if(chosen.isEmpty())showDialog("Copy selected to Gen 4 Box","Select one or more Gen 4 Bank Pokémon first.")
+                    else chooseSelectedGen4BankDestination(chosen,true)
                 }
             }
         }

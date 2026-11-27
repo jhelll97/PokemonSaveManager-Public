@@ -1878,7 +1878,15 @@ Supported-title Bank inventory found that Generation 3 multi-selection could wit
 
 Generation 3 multi-select now offers `Copy selected to Gen 3 Box`. It reuses the exact ordered structurally empty slot review, byte-for-byte PK3 staging, scoped PC-storage checksum writes, retained destination backup and persisted reopen verification of the withdrawal transaction while skipping every Bank removal. The final cancellable review names each destination Box and Slot and states that all selected PK3 Bank originals remain byte-for-byte unchanged. The transaction rechecks each canonical source before and after persistence, cleans its temporary recovery snapshots only after the destination and originals verify, and restores the destination independently on failure.
 
-This feature is pending its own automatic Android compile before the native Generation 3 Bank batch copy is called validated.
+Commit `e1dcacc0772a42bd9ca0ec241ca9456a294e1d80` passed automatic Android build run `45914019245`, attempt 1, and was reported by exact Slack event `1795738166.077819`; the native Generation 3 Bank batch copy is validated.
+
+## Native Generation 4 Bank batch copy to PC Box
+
+Supported-title Bank inventory found the same native PC-copy gap in Generation 4: multi-selection could withdraw exact PK4 records into a chosen PC Box, but could not retain the selected Bank originals after placing the verified batch. Users who wanted an in-save copy therefore had only the destructive withdrawal action.
+
+Generation 4 multi-select now offers `Copy selected to Gen 4 Box`. It reuses the exact ordered structurally empty slot review, byte-for-byte PK4 staging, active storage checksum update, retained destination backup and persisted reopen verification while skipping every Bank removal. The final cancellable review names each destination Box and Slot, states that all selected PK4 Bank originals remain byte-for-byte unchanged, and rechecks those canonical sources before and after persistence. Temporary recovery snapshots are cleaned only after the destination, retained backup and every Bank original verify; destination rollback remains independent on failure.
+
+This feature is pending its own automatic Android compile before the native Generation 4 Bank batch copy is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
