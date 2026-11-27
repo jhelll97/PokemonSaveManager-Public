@@ -291,6 +291,7 @@
         <activity android:name=".SwitchLegendsZaPokemonSpeedStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaPokemonSpecialStatExpActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaPseBankRestoreActivity" android:exported="false"/>
+        <activity android:name=".SwitchLegendsZaPseBankBatchRestoreActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaPseBankBatchDepositActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaPseBankPartyBatchDepositActivity" android:exported="false"/>
         <activity android:name=".SwitchLegendsZaPokemonDuplicateActivity" android:exported="false"/>
