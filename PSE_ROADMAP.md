@@ -2176,7 +2176,17 @@ The native PA8 Pasture deposit chooser now provides a non-dismissing `Select all
 
 The change does not alter source reopen or identity checks, exact PA8 extraction, source Pasture slots, party data, atomic Bank writes, duplicate handling, rollback of newly created entries or final persisted-byte verification.
 
-This feature is pending its own automatic Android compile before the Legends: Arceus native Pasture deposit selection shortcut is called validated.
+Commit `f4739bb4541b647d633cac19f7c9d88470c688cc` passed automatic Android build run `45972411890`, attempt 1, and was reported by exact Slack event `1795771643.688899`. The Legends: Arceus native Pasture deposit selection shortcut is compile-validated.
+
+## Scarlet/Violet native Box deposit selection shortcut
+
+After the Legends: Arceus deposit shortcut compiled successfully, Scarlet/Violet remained the next native Box batch deposit where copying every readable PK9 required checking each item individually.
+
+The native PK9 Box deposit chooser now provides a non-dismissing `Select all` action. It marks every readable checksum-valid Pokémon candidate in the selected Box while keeping the existing explicit final review of slot, Pokémon label and canonical `switch_sv_<sha256>.pk9` destination. Empty and unreadable slots remain excluded, identical bytes still share one content-addressed Bank entry, and choosing nothing remains blocked.
+
+The change does not alter source reopen or identity checks, exact PK9 extraction, source Box slots, party data, atomic Bank writes, duplicate handling, rollback of newly created entries or final persisted-byte verification.
+
+This feature is pending its own automatic Android compile before the Scarlet/Violet native Box deposit selection shortcut is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
