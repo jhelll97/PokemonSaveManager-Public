@@ -2046,7 +2046,17 @@ The Legends: Arceus Bank now offers `Restore native PA8 batch` when at least two
 
 Confirmation reopens the source and every selected Bank entry, writes each exact 360-byte stored PA8 core into one new save copy, and refreshes the native SHA-256 footer through the existing container writer. A selected 376-byte Party PA8 retains its full record byte-for-byte in Bank while its exact 360-byte stored core enters the pasture; the 16-byte Party cache is explicitly disclosed as Bank-only. Verification reopens every stored PA8 exactly, rejects destination reuse, occupied-slot replacement, Party or Hisui Pokédex changes, changes outside the reviewed stored destinations and footer, title or size changes, source drift, Bank drift and persisted-copy mismatch. The transaction retains and rereads a verified recovery backup, requires a new empty document, reopens the saved copy, and independently verifies failed-copy cleanup. The original source and all Bank entries remain unchanged.
 
-This feature is pending its own automatic Android compile before the Legends: Arceus native PA8 batch restore is called validated.
+Commit `40a54c521bc9c388e3aaa5bb78f0c66d9e311dcb` passed automatic Android build run `45949545021`, attempt 1, and was reported by exact Slack event `1795760352.470779`. The Legends: Arceus native PA8 batch restore is compile-validated.
+
+## Scarlet/Violet native PK9 batch restore from PSE Bank
+
+After the Legends: Arceus batch restore compiled successfully, Scarlet/Violet remained the next supported title where several exact native PK9 Bank entries required repeated one-record save transactions.
+
+The Scarlet/Violet Bank now offers `Restore native PK9 batch` when at least two canonical native entries exist. A separate activity reopens the exact validated source, accepts only `switch_sv_<sha256>.pk9` files whose filenames, bytes and PK9 checksums agree, requires at least two empty PC-box slots, and lets the user choose a batch. PSE deterministically binds each selected exact Bank identity to a distinct currently empty destination and presents a cancellable final review naming every filename, SHA-256, species, level, Box, slot and encrypted byte offset. Converted entries remain on their existing one-record explicit Legalise routes.
+
+Confirmation reopens the source and every selected Bank entry, stages all writes into one new save copy, and refreshes the native SHA-256 footer through the existing container writer. Verification reopens every PK9 byte-for-byte and rejects destination reuse, occupied-slot replacement, Party, ride Pokémon or Pokédex changes, changes outside the reviewed 344-byte destinations and footer, title or size changes, source drift, Bank drift and persisted-copy mismatch. The transaction retains and rereads a verified recovery backup, requires a new empty document, reopens the saved copy, and removes a failed copy when possible. The original source and all Bank entries remain unchanged.
+
+This feature is pending its own automatic Android compile before the Scarlet/Violet native PK9 batch restore is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
