@@ -2682,7 +2682,15 @@ The native Party PB7 batch-deposit chooser now states its valid selection range 
 
 The existing empty-selection check remains in the click handler as a safety backstop. This guidance does not alter source bytes, Party order or count, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
 
-This feature is pending its own automatic Android compile before the Let's Go native Party batch deposit selection guidance is called validated.
+The Let's Go native Party batch deposit selection guidance was compile-validated on commit `f69d627c4f1cd54e44f837e7d31c05473b9a706d` by exact PSE_BUILD_SUCCESS at Slack TS `1795819742.356469`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46077881926`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Legends: Arceus native Party batch deposit selection guidance
+
+The native Party PA8 batch-deposit chooser now states its valid selection range as `Choose 1-party-count native Party PA8 records`. Its live `Review (selected)` action remains disabled until at least one native Party record is selected, so an empty selection cannot advance to final Bank review.
+
+The existing empty-selection check remains in the click handler as a safety backstop. This guidance does not alter source bytes, Party order or count, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
+
+This feature is pending its own automatic Android compile before the Legends: Arceus native Party batch deposit selection guidance is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
