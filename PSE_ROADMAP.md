@@ -1944,7 +1944,15 @@ Supported-title Bank inventory found the same native batch-deposit gap in Let's 
 
 Each Let's Go storage page now offers `Copy selected Pokémon to PSE Bank`. A separate activity reopens the exact validated Let's Go source, excludes empty and unreadable records, lets the user select several readable native PB7 records from that 25-record page, and presents a cancellable final review naming every exact native stored-list index and SHA-256-derived Bank filename. Confirmation reopens the source again, requires every selected 260-byte record to remain byte-for-byte identical and checksum-valid, writes only missing content-addressed entries, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PB7 bytes explicitly share one Bank entry. Eggs, party assignments and the save-bound partner record may be preserved in Bank as exact native records, while existing restore guards remain unchanged. The source save, title identity, native stored-list order, party pointers, partner pointer, records and checksums are never written or normalized.
 
-This feature is pending its own automatic Android compile before the Let's Go native storage-page batch deposit is called validated.
+Commit `ec7faef4d11be9bb0bcbf7a0b35fb9c1011f9590` passed automatic Android build run `45930284883`, attempt 1, and was reported by exact Slack event `1795748266.348879`; the Let's Go native storage-page batch deposit is validated.
+
+## Legends: Arceus native Pasture batch deposit to PSE Bank
+
+Supported-title Bank inventory found the same native batch-deposit gap in Pokémon Legends: Arceus: users could copy one checksum-valid PA8 at a time from a pasture or party, but could not select and preserve several native stored records from one Pasture in a complete reviewed Bank operation.
+
+Each Legends: Arceus Pasture now offers `Copy selected Pokémon to PSE Bank`. A separate activity reopens the exact validated Legends: Arceus source, excludes empty and unreadable slots, lets the user select several readable native 360-byte stored PA8 records from that Pasture, and presents a cancellable final review naming every exact Pasture slot and SHA-256-derived Bank filename. Confirmation reopens the source again, requires every selected record to remain byte-for-byte identical and checksum-valid, writes only missing content-addressed entries, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PA8 bytes explicitly share one Bank entry. Eggs, Noble flags and other native PA8 data may be preserved in Bank as exact records, while existing restore guards remain unchanged. The source save, title identity, pasture and party data, native records and container integrity are never written or normalized.
+
+This feature is pending its own automatic Android compile before the Legends: Arceus native Pasture batch deposit is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

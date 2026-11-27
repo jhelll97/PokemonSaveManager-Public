@@ -12928,6 +12928,26 @@ class SwitchReadOnlyActivity : Activity() {
         })
         val dialog = AlertDialog.Builder(this).setTitle("${bound.displayName} • Pasture ${pasture + 1}/32")
             .setView(scroll).setNegativeButton("Close", null).create()
+        list.addView(Button(this).apply {
+            text = "Copy selected Pokémon to PSE Bank"
+            isAllCaps = false
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && source != null) {
+                    dialog.dismiss()
+                    startActivity(
+                        Intent(
+                            this@SwitchReadOnlyActivity,
+                            SwitchLegendsArceusPseBankBatchDepositActivity::class.java
+                        )
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.pokemon.pasture", pasture + 1)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            }
+        })
         val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         nav.addView(Button(this).apply {
             text = "Previous"; isEnabled = pasture > 0

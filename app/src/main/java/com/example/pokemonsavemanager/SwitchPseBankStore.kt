@@ -131,6 +131,78 @@ object SwitchPseBankStore {
         }
     }
 
+    fun depositLegendsArceusBatch(
+        context: android.content.Context,
+        records: List<ByteArray>
+    ): SwitchPseBankBatchDepositResult {
+        require(records.isNotEmpty()) { "Choose at least one native Legends: Arceus Pokémon." }
+        val preserved = records.map { record ->
+            require(record.size == LegendsArceusPokemonReadOnly.STORED_SIZE) {
+                "Every selected record must be a complete native stored PA8."
+            }
+            require(LegendsArceusPokemonReadOnly.read(record) is LegendsArceusSlotRead.Pokemon) {
+                "Every selected Legends: Arceus Pokémon must remain readable and checksum-valid."
+            }
+            record.copyOf()
+        }
+        val directory = File(context.filesDir, "pse_bank").apply { mkdirs() }.canonicalFile
+        val targets = preserved.map { record ->
+            val digest = sha256(record)
+            File(directory, "switch_pla_$digest.pa8") to record
+        }
+        val uniqueTargets = LinkedHashMap<String, Pair<File, ByteArray>>()
+        targets.forEach { (target, record) -> uniqueTargets.putIfAbsent(target.name, target to record) }
+        val created = mutableListOf<Pair<File, ByteArray>>()
+        try {
+            uniqueTargets.values.forEach { (target, record) ->
+                require(target.canonicalFile.parentFile == directory) { "The PSE Bank destination is unavailable." }
+                if (target.exists()) {
+                    require(target.isFile && target.readBytes().contentEquals(record)) {
+                        "A Legends: Arceus Bank entry no longer matches its content hash. Nothing was changed."
+                    }
+                } else {
+                    val temporary = File(directory, ".${target.name}.${System.nanoTime()}.tmp")
+                    try {
+                        temporary.writeBytes(record)
+                        require(temporary.readBytes().contentEquals(record)) {
+                            "A staged Legends: Arceus Bank entry failed verification."
+                        }
+                        require(temporary.renameTo(target)) {
+                            "A native Legends: Arceus Bank entry could not be committed."
+                        }
+                        created += target to record
+                        require(target.readBytes().contentEquals(record)) {
+                            "A committed Legends: Arceus Bank entry failed verification."
+                        }
+                    } finally {
+                        if (temporary.exists()) temporary.delete()
+                    }
+                }
+            }
+            uniqueTargets.values.forEach { (target, record) ->
+                require(target.isFile && target.readBytes().contentEquals(record)) {
+                    "The complete Legends: Arceus Bank batch did not verify."
+                }
+            }
+            return SwitchPseBankBatchDepositResult(
+                targets.map { it.first }, created.map { it.first }
+            )
+        } catch (failure: Exception) {
+            val retained = created.mapNotNull { (target, record) ->
+                if (!target.exists()) null
+                else if (runCatching { target.readBytes().contentEquals(record) && target.delete() }
+                        .getOrDefault(false)) null
+                else target.name
+            }
+            throw IllegalStateException(
+                (failure.message ?: "The Legends: Arceus Bank batch could not be copied.") +
+                    if (retained.isEmpty()) " No new Bank entries were retained."
+                    else " These verified new entries could not be rolled back: ${retained.joinToString()}",
+                failure
+            )
+        }
+    }
+
     fun depositSwordShieldBatch(
         context: android.content.Context,
         records: List<ByteArray>
