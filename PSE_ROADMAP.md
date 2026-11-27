@@ -2296,7 +2296,17 @@ The native PA8 Pasture deposit chooser now changes its bulk action between `Sele
 
 The change does not alter source reopen or identity checks, exact PA8 extraction, source Pasture slots, party data, explicit final review, content-addressed Bank writes, duplicate handling, rollback of newly created entries or persisted-byte verification.
 
-This feature is pending its own automatic Android compile before the Legends: Arceus native Pasture deposit selection toggle is called validated.
+Commit `7bb7129b85ab7f8d477817fb71c1b9a15321f4e4` passed automatic Android build run `45996544090`, attempt 1, and was reported by exact Slack event `1795782117.442659`. The Legends: Arceus native Pasture deposit selection toggle is compile-validated.
+
+## Scarlet/Violet native Box deposit selection toggle
+
+After the Legends: Arceus deposit toggle compiled successfully, Scarlet/Violet remained the next native Box deposit chooser where `Select all` could not reverse its own bulk selection without unchecking every PK9 individually.
+
+The native PK9 Box deposit chooser now changes its bulk action between `Select all` and `Clear all`. It follows manual checkbox changes, updates every visible selection without dismissing the chooser, and still blocks review when no PK9 is selected.
+
+The change does not alter source reopen or identity checks, exact PK9 extraction, source Box slots, party data, explicit final review, content-addressed Bank writes, duplicate handling, rollback of newly created entries or persisted-byte verification.
+
+This feature is pending its own automatic Android compile before the Scarlet/Violet native Box deposit selection toggle is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
