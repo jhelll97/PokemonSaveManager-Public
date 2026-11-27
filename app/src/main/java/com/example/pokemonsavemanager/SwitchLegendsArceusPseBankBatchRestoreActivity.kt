@@ -115,19 +115,26 @@ class SwitchLegendsArceusPseBankBatchRestoreActivity : Activity() {
             "$name" + (if (candidate.pokemon.shiny) " • Shiny" else "") +
                 (if (candidate.pokemon.isAlpha) " • Alpha" else "") + "\n${candidate.name}"
         }.toTypedArray()
+        var bulkButton: Button? = null
         val dialog = AlertDialog.Builder(this)
             .setTitle("Choose native PA8 entries")
-            .setMultiChoiceItems(labels, selected) { _, index, checked -> selected[index] = checked }
+            .setMultiChoiceItems(labels, selected) { _, index, checked ->
+                selected[index] = checked
+                bulkButton?.text = if (selected.all { it }) "Clear all" else "Select all"
+            }
             .setNegativeButton("Cancel", null)
             .setNeutralButton("Select all", null)
             .setPositiveButton("Review destinations", null)
             .create()
         dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+            bulkButton = dialog.getButton(AlertDialog.BUTTON_NEUTRAL)
+            bulkButton?.setOnClickListener {
+                val check = selected.any { !it }
                 selected.indices.forEach { index ->
-                    selected[index] = true
-                    dialog.listView.setItemChecked(index, true)
+                    selected[index] = check
+                    dialog.listView.setItemChecked(index, check)
                 }
+                bulkButton?.text = if (check) "Clear all" else "Select all"
             }
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val chosen = candidates.filterIndexed { index, _ -> selected[index] }
