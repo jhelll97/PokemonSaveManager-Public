@@ -137,8 +137,9 @@ object SwitchPseBankStore {
     ): SwitchPseBankBatchDepositResult {
         require(records.isNotEmpty()) { "Choose at least one native Legends: Arceus Pokémon." }
         val preserved = records.map { record ->
-            require(record.size == LegendsArceusPokemonReadOnly.STORED_SIZE) {
-                "Every selected record must be a complete native stored PA8."
+            require(record.size == LegendsArceusPokemonReadOnly.STORED_SIZE ||
+                record.size == LegendsArceusPokemonReadOnly.PARTY_SIZE) {
+                "Every selected record must be a complete native stored or party PA8."
             }
             require(LegendsArceusPokemonReadOnly.read(record) is LegendsArceusSlotRead.Pokemon) {
                 "Every selected Legends: Arceus Pokémon must remain readable and checksum-valid."

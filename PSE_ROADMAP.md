@@ -1984,7 +1984,15 @@ BDSP users could copy one checksum-valid Party PB8 at a time or review a batch f
 
 The BDSP Party view now offers `Copy selected Party Pokémon to PSE Bank`. A separate activity reopens the exact validated BDSP source, excludes empty and unreadable Party slots, lets the user select several readable native 344-byte PB8 records, and presents a cancellable final review naming every exact Party slot and SHA-256-derived Bank filename. Confirmation reopens the source again, requires every selected record to remain byte-for-byte identical and checksum-valid, reuses the verified content-addressed PB8 batch writer, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PB8 bytes explicitly share one Bank entry. Eggs and cached Party fields may be preserved in Bank as exact native records, while existing restore guards remain unchanged. The source save, Party count and order, PC boxes, native records and container integrity are never written or normalized.
 
-This feature is pending its own automatic Android compile before the BDSP native Party batch deposit is called validated.
+Commit `3a03a07445764bf5e5ebea6363435a034e78bdd1` passed automatic Android build run `45938553401`, attempt 1, and was reported by exact Slack event `1795753346.595239`. The BDSP native Party batch deposit is compile-validated.
+
+## Legends: Arceus native Party batch deposit to PSE Bank
+
+Legends: Arceus users could copy one checksum-valid Party PA8 at a time or review a batch from one Pasture, but could not preserve several current Party records in one bounded Bank operation.
+
+The Legends: Arceus Party view now offers `Copy selected Party Pokémon to PSE Bank`. A separate activity reopens the exact validated Legends: Arceus source, excludes empty and unreadable Party slots, lets the user select several readable native 376-byte Party PA8 records, and presents a cancellable final review naming every exact Party slot and SHA-256-derived Bank filename. Confirmation reopens the source again, requires every selected record to remain byte-for-byte identical and checksum-valid, reuses the content-addressed PA8 batch writer extended to accept both native 360-byte stored and 376-byte Party records, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PA8 bytes explicitly share one Bank entry. The full Party PA8, including its encrypted cached Party tail, is retained byte-for-byte in Bank; existing restore guards for eggs, Noble Pokémon and native Pasture representation remain unchanged. The source save, Party count and order, Pastures, native records and container integrity are never written or normalized.
+
+This feature is pending its own automatic Android compile before the Legends: Arceus native Party batch deposit is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
