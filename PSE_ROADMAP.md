@@ -2266,7 +2266,17 @@ The native PK8 Box deposit chooser now changes its bulk action between `Select a
 
 The change does not alter source reopen or identity checks, exact PK8 extraction, source-slot preservation, explicit final review, content-addressed Bank writes, duplicate handling, rollback of newly created entries or persisted-byte verification.
 
-This feature is pending its own automatic Android compile before the Sword/Shield native Box deposit selection toggle is called validated.
+Commit `fc9084b02364edf260534dcfc5264b008fd86af6` passed automatic Android build run `45990358029`, attempt 1, and was reported by exact Slack event `1795779560.664569`. The Sword/Shield native Box deposit selection toggle is compile-validated.
+
+## BDSP native Box deposit selection toggle
+
+After the Sword/Shield deposit toggle compiled successfully, BDSP remained the next native Box deposit chooser where `Select all` could not reverse its own bulk selection without unchecking every PB8 individually.
+
+The native PB8 Box deposit chooser now changes its bulk action between `Select all` and `Clear all`. It follows manual checkbox changes, updates every visible selection without dismissing the chooser, and still blocks review when no PB8 is selected.
+
+The change does not alter source reopen or identity checks, exact PB8 extraction, source-slot preservation, explicit final review, content-addressed Bank writes, duplicate handling, rollback of newly created entries or persisted-byte verification.
+
+This feature is pending its own automatic Android compile before the BDSP native Box deposit selection toggle is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
