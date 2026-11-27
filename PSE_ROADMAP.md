@@ -1,12 +1,6 @@
-# Active priority — Omega Ruby UI parity across all games
+# Active priority — screenshot failures, then supported-title PSE Bank features
 
-Match every supported game's save screens to the supplied Pokémon Omega Ruby UI reference before resuming feature development. This phase changes presentation only: retain each game's existing fields, actions, capabilities, and save behavior.
-
-Use one shared visual system for every game: dark navy page background, teal rounded cards, blue selected tabs/actions, consistent typography and spacing, matching page hierarchy, and fixed Home / Pokémon / Bank / Backups navigation. Apply it to Home/current-save and saved-game cards, editor grid, Pokémon Boxes and Party, PSE Bank, Trainer Data, Pokémon detail/editor flows, and Switch game screens. Preserve game-specific labels and data while using the same layout components.
-
-Reference review identified the Switch Pokémon Boxes selector as a legacy alert dialog; it is being migrated to the full-page pattern. Continue the screen-by-screen parity pass across all supported generations and Switch titles, keeping a list of remaining mismatches. Do not declare parity complete until every supported game's equivalent screens use the shared layout.
-
-After UI parity is complete, resume the feature roadmap below, starting with PSE Bank transfer coverage and fixes across supported generations.
+Every confirmed user-submitted PSE Bank screenshot failure is resolved by a concrete code change and recorded successful automatic Android compile. Continue one bounded PSE Bank feature across supported game titles per valid new successful Slack validation event. Any new user-submitted screenshot failure takes priority over this feature sequence.
 
 ## Scope extension — add Generations 8 and 9 PSE Bank transfers
 
@@ -1886,7 +1880,15 @@ Supported-title Bank inventory found the same native PC-copy gap in Generation 4
 
 Generation 4 multi-select now offers `Copy selected to Gen 4 Box`. It reuses the exact ordered structurally empty slot review, byte-for-byte PK4 staging, active storage checksum update, retained destination backup and persisted reopen verification while skipping every Bank removal. The final cancellable review names each destination Box and Slot, states that all selected PK4 Bank originals remain byte-for-byte unchanged, and rechecks those canonical sources before and after persistence. Temporary recovery snapshots are cleaned only after the destination, retained backup and every Bank original verify; destination rollback remains independent on failure.
 
-This feature is pending its own automatic Android compile before the native Generation 4 Bank batch copy is called validated.
+Commit `599c5fb48f48ae5605b479a0cd1b5b17cba4c9c2` passed automatic Android build run `45915328875`, attempt 1, and was reported by exact Slack event `1795739218.029199`; the native Generation 4 Bank batch copy is validated.
+
+## Native Generation 5 Bank batch copy to PC Box
+
+Supported-title Bank inventory found the same native PC-copy gap in Generation 5: multi-selection could withdraw exact PK5 records into a chosen PC Box, but could not retain the selected Bank originals after placing the verified batch. Users who wanted an in-save copy therefore had only the destructive withdrawal action.
+
+Generation 5 multi-select now offers `Copy selected to Gen 5 Box`. It reuses the exact ordered structurally empty slot review, byte-for-byte PK5 staging, native box CRC and checksum-table updates, retained destination backup and persisted reopen verification while skipping every Bank removal. The final cancellable review names each destination Box and Slot, states that all selected PK5 Bank originals remain byte-for-byte unchanged, and rechecks those canonical sources before and after persistence. Temporary recovery snapshots are cleaned only after the destination, retained backup and every Bank original verify; destination rollback remains independent on failure.
+
+This feature is pending its own automatic Android compile before the native Generation 5 Bank batch copy is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
