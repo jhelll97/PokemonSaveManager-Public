@@ -13428,6 +13428,22 @@ class SwitchReadOnlyActivity : Activity() {
                 }
             })
         }
+        list.addView(Button(this).apply {
+            text = "Copy selected Party Pokémon to PSE Bank"
+            isAllCaps = false
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && source != null) startActivity(
+                    Intent(
+                        this@SwitchReadOnlyActivity,
+                        SwitchScarletVioletPseBankPartyBatchDepositActivity::class.java
+                    )
+                        .setData(source)
+                        .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                )
+            }
+        })
         OmegaRubyUi.styleStorageList(this, list)
         AlertDialog.Builder(this).setTitle("${bound.displayName} • Party ${storage.partyCount}/6")
             .setView(OmegaRubyUi.scrollingPage(this, list))

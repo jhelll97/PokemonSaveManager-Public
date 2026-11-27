@@ -256,6 +256,7 @@
         <activity android:name=".SwitchScarletVioletPokemonShinyActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPseBankRestoreActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPseBankBatchDepositActivity" android:exported="false"/>
+        <activity android:name=".SwitchScarletVioletPseBankPartyBatchDepositActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonDuplicateActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonSwapActivity" android:exported="false"/>
         <activity android:name=".SwitchScarletVioletPokemonPartyMoveActivity" android:exported="false"/>
