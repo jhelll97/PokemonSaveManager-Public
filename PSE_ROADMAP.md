@@ -2008,7 +2008,15 @@ Legends: Z-A users could copy one checksum-valid Party PA9 at a time or review a
 
 The Legends: Z-A Party view now offers `Copy selected Party Pokémon to PSE Bank`. A separate activity reopens the exact validated Legends: Z-A source, excludes empty and unreadable Party slots, extracts only each readable native 344-byte PA9 from its documented 480-byte Party stride, and presents a cancellable final review naming every exact Party slot and SHA-256-derived Bank filename. Confirmation reopens the source again, requires every selected PA9 to remain byte-for-byte identical and checksum-valid, reuses the verified content-addressed PA9 batch writer, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PA9 bytes explicitly share one Bank entry. Eggs, Alpha flags and cached Party fields may be preserved in Bank as exact native PA9 records, while stride-only Party metadata and existing restore guards remain unchanged. The source save, Party order and native presence prefix, all 480-byte Party strides, all 408-byte PC strides, revision identity and container integrity are never written or normalized.
 
-This feature is pending its own automatic Android compile before the Legends: Z-A native Party batch deposit is called validated.
+Commit `eca6e35100ee6f6e216db00b52c8600786d84bcb` passed automatic Android build run `45942361127`, attempt 1, and was reported by exact Slack event `1795755907.824679`. The Legends: Z-A native Party batch deposit is compile-validated.
+
+## Let's Go native Party batch deposit to PSE Bank
+
+Let's Go users could copy one checksum-valid Party PB7 at a time or review a batch from one shared-storage page, but could not preserve several current Party members in one bounded Bank operation.
+
+The Let's Go Party view now offers `Copy selected Party Pokémon to PSE Bank`. A separate activity reopens the exact validated Let's Go source, excludes empty and unreadable Party pointers, follows each selected native Party pointer to its exact 260-byte PB7 in the shared stored list, and presents a cancellable final review naming every Party slot, stored-record index and SHA-256-derived Bank filename. Confirmation reopens the source again, requires every selected Party slot to retain the same stored-record pointer and byte-for-byte identical checksum-valid PB7, reuses the verified content-addressed PB7 batch writer, verifies the complete unique batch, and rolls back newly created entries if any Bank write or verification fails. Identical PB7 bytes explicitly share one Bank entry. Eggs, partner assignments and cached fields may be preserved in Bank as exact native records, while existing restore guards remain unchanged. The source save, Party order and pointers, partner pointer, shared stored-list order, every native PB7 and container integrity are never written or normalized.
+
+This feature is pending its own automatic Android compile before the Let's Go native Party batch deposit is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
