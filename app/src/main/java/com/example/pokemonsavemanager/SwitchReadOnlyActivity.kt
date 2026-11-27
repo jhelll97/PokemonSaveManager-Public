@@ -1528,6 +1528,23 @@ class SwitchReadOnlyActivity : Activity() {
         val dialog = AlertDialog.Builder(this)
             .setTitle("Storage • Page ${page + 1}/40")
             .setView(scroll).setNegativeButton("Close", null).create()
+        list.addView(Button(this).apply {
+            text = "Copy selected Pokémon to PSE Bank"
+            isAllCaps = false
+            setOnClickListener {
+                val source = selectedSourceUri
+                if (session === bound && source != null) {
+                    dialog.dismiss()
+                    startActivity(
+                        Intent(this@SwitchReadOnlyActivity, SwitchLetsGoPseBankBatchDepositActivity::class.java)
+                            .setData(source)
+                            .putExtra("pse.switch.sha256", bound.snapshot.sourceSha256)
+                            .putExtra("pse.switch.storage.page", page)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            }
+        })
         val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         nav.addView(Button(this).apply {
             text = "Previous"; isEnabled = page > 0

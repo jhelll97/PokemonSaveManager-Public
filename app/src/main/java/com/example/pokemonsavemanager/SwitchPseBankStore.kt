@@ -59,6 +59,78 @@ object SwitchPseBankStore {
         return deposit(context, "switch_swsh_", "pk8", record)
     }
 
+    fun depositLetsGoBatch(
+        context: android.content.Context,
+        records: List<ByteArray>
+    ): SwitchPseBankBatchDepositResult {
+        require(records.isNotEmpty()) { "Choose at least one native Let's Go Pokémon." }
+        val preserved = records.map { record ->
+            require(record.size == LetsGoPokemonReadOnly.RECORD_SIZE) {
+                "Every selected record must be a complete native PB7."
+            }
+            require(LetsGoPokemonReadOnly.read(record) is LetsGoSlotRead.Pokemon) {
+                "Every selected Let's Go Pokémon must remain readable and checksum-valid."
+            }
+            record.copyOf()
+        }
+        val directory = File(context.filesDir, "pse_bank").apply { mkdirs() }.canonicalFile
+        val targets = preserved.map { record ->
+            val digest = sha256(record)
+            File(directory, "switch_lgpe_$digest.pb7") to record
+        }
+        val uniqueTargets = LinkedHashMap<String, Pair<File, ByteArray>>()
+        targets.forEach { (target, record) -> uniqueTargets.putIfAbsent(target.name, target to record) }
+        val created = mutableListOf<Pair<File, ByteArray>>()
+        try {
+            uniqueTargets.values.forEach { (target, record) ->
+                require(target.canonicalFile.parentFile == directory) { "The PSE Bank destination is unavailable." }
+                if (target.exists()) {
+                    require(target.isFile && target.readBytes().contentEquals(record)) {
+                        "A Let's Go Bank entry no longer matches its content hash. Nothing was changed."
+                    }
+                } else {
+                    val temporary = File(directory, ".${target.name}.${System.nanoTime()}.tmp")
+                    try {
+                        temporary.writeBytes(record)
+                        require(temporary.readBytes().contentEquals(record)) {
+                            "A staged Let's Go Bank entry failed verification."
+                        }
+                        require(temporary.renameTo(target)) {
+                            "A native Let's Go Bank entry could not be committed."
+                        }
+                        created += target to record
+                        require(target.readBytes().contentEquals(record)) {
+                            "A committed Let's Go Bank entry failed verification."
+                        }
+                    } finally {
+                        if (temporary.exists()) temporary.delete()
+                    }
+                }
+            }
+            uniqueTargets.values.forEach { (target, record) ->
+                require(target.isFile && target.readBytes().contentEquals(record)) {
+                    "The complete Let's Go Bank batch did not verify."
+                }
+            }
+            return SwitchPseBankBatchDepositResult(
+                targets.map { it.first }, created.map { it.first }
+            )
+        } catch (failure: Exception) {
+            val retained = created.mapNotNull { (target, record) ->
+                if (!target.exists()) null
+                else if (runCatching { target.readBytes().contentEquals(record) && target.delete() }
+                        .getOrDefault(false)) null
+                else target.name
+            }
+            throw IllegalStateException(
+                (failure.message ?: "The Let's Go Bank batch could not be copied.") +
+                    if (retained.isEmpty()) " No new Bank entries were retained."
+                    else " These verified new entries could not be rolled back: ${retained.joinToString()}",
+                failure
+            )
+        }
+    }
+
     fun depositSwordShieldBatch(
         context: android.content.Context,
         records: List<ByteArray>
