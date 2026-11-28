@@ -163,7 +163,7 @@ class SwitchLetsGoPseBankBatchDepositActivity : Activity() {
     private fun commit(chosen: List<LetsGoBatchDepositCandidate>) {
         if (busy) return
         setBusy(true)
-        status.text = "Reopening the source and verifying the complete Bank batch…"
+        status.text = "Reopening storage page ${page + 1} and verifying ${chosen.size} reviewed Bank record${if (chosen.size == 1) "" else "s"}…"
         worker.execute {
             val result = runCatching {
                 val current = candidatesFrom(readVerifiedSource())
