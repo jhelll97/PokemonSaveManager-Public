@@ -3330,7 +3330,15 @@ After the selected Legends: Z-A save and Box `1–32` are reopened and validated
 
 This display-only count does not alter source bytes, native 408-byte box strides, extracted 344-byte PA9 records, party data, native container integrity, candidate filtering, reviewed records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the Legends: Z-A Bank batch available-record action count is called validated.
+The Legends: Z-A Bank batch available-record action count was compile-validated on commit `53913a57a16fc5d0ba22a9c6a1ea2e5b2aff7b3c` by exact PSE_BUILD_SUCCESS at Slack TS `1795882667.761849`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46163362476`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Sword/Shield Bank party-batch available-record action count
+
+After the selected Pokémon Sword or Pokémon Shield save and its current Party are reopened and validated, the party-batch chooser action now reports the exact number of readable native PK8 records available, for example `Choose from 6 Pokémon`. Empty and unreadable party slots remain excluded, and an empty or failed load keeps the neutral disabled `Choose Pokémon` label.
+
+This display-only count does not alter source bytes, native party order or count, party records, PC slots, candidate filtering, reviewed records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Sword/Shield Bank party-batch available-record action count is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
