@@ -2794,7 +2794,15 @@ The native PK9 batch-deposit chooser now keeps the selected source box visible i
 
 This display-only context does not alter source bytes, box or party slots, the ride Pokémon, native container integrity, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
 
-This feature is pending its own automatic Android compile before the Scarlet/Violet native box batch deposit source context is called validated.
+The Scarlet/Violet native box batch deposit source context was compile-validated on commit `590a3073cc1e7f545cbab27068d35656b2c10f20` by exact PSE_BUILD_SUCCESS at Slack TS `1795831891.141669`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46095668599`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Legends: Z-A native box batch deposit source context
+
+The native PA9 batch-deposit chooser now keeps the selected source box visible in its title alongside the valid selection range: `Box source-number • Choose 1-readable-count native PA9 records`. This gives the user the exact source-box context while selecting records for final Bank review.
+
+This display-only context does not alter source bytes, native box strides, party data, container integrity, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
+
+This feature is pending its own automatic Android compile before the Legends: Z-A native box batch deposit source context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
