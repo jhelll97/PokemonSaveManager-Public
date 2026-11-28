@@ -3370,7 +3370,15 @@ After the selected Pokémon Scarlet or Pokémon Violet save and its current Part
 
 This display-only count does not alter source bytes, native party order or count, party records, PC slots, ride Pokémon, candidate filtering, reviewed records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the Scarlet/Violet Bank party-batch available-record action count is called validated.
+The Scarlet/Violet Bank party-batch available-record action count was compile-validated on commit `c85392349a7831a9890d57551fc6452c53da35d0` by exact PSE_BUILD_SUCCESS at Slack TS `1795887076.797709`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46169687471`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Legends: Z-A Bank party-batch available-record action count
+
+After the selected Legends: Z-A save and its current Party are reopened and validated, the party-batch chooser action now reports the exact number of readable native PA9 records available, for example `Choose from 6 Pokémon`. Empty and unreadable party slots remain excluded, and an empty or failed load keeps the neutral disabled `Choose Pokémon` label.
+
+This display-only count does not alter source bytes, native 480-byte Party strides, extracted 344-byte PA9 records, party order, PC strides, candidate filtering, reviewed records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Legends: Z-A Bank party-batch available-record action count is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
