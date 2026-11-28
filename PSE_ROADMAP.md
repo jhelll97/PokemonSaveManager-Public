@@ -2858,7 +2858,15 @@ After a successful, reopened Bank batch verification, the Sword/Shield completio
 
 This display-only completion context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
 
-This feature is pending its own automatic Android compile before the Sword/Shield verified batch completion source-box context is called validated.
+The Sword/Shield verified batch completion source-box context was compile-validated on commit `9704d30fda49712366f2b25676b4880424f2bd36` by exact PSE_BUILD_SUCCESS at Slack TS `1795837778.418299`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46103867458`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## BDSP verified batch completion source-box context
+
+After a successful, reopened Bank batch verification, the BDSP completion status now identifies the exact source box as `Native BDSP Bank batch from Box source-number verified`. The source container therefore remains visible after the explicit copy decision and content-addressed entry verification, alongside the exact available and newly created entry counts.
+
+This display-only completion context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
+
+This feature is pending its own automatic Android compile before the BDSP verified batch completion source-box context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
