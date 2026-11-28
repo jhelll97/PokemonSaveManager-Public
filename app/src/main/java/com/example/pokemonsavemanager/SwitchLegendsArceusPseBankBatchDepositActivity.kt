@@ -92,7 +92,7 @@ class SwitchLegendsArceusPseBankBatchDepositActivity : Activity() {
             reviewButton?.isEnabled = selected.any { it }
         }
         val dialog = AlertDialog.Builder(this)
-            .setTitle("Choose 1-${candidates.size} native PA8 records")
+            .setTitle("Pasture $pasture • Choose 1-${candidates.size} native PA8 records")
             .setMultiChoiceItems(candidates.map { it.label }.toTypedArray(), selected) { _, index, checked ->
                 selected[index] = checked
                 refreshSelectionActions()
