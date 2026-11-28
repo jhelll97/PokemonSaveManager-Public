@@ -2874,7 +2874,15 @@ After a successful, reopened Bank batch verification, the Let's Go completion st
 
 This display-only completion context does not alter source bytes, stored-list order, party or partner pointers, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
 
-This feature is pending its own automatic Android compile before the Let's Go verified batch completion storage-page context is called validated.
+The Let's Go verified batch completion storage-page context was compile-validated on commit `3d8696c5d8c15b9106ae8047b5fc0fbfe1621eb5` by exact PSE_BUILD_SUCCESS at Slack TS `1795839598.467719`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46105976428`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Legends: Arceus verified batch completion pasture context
+
+After a successful, reopened Bank batch verification, the Legends: Arceus completion status now identifies the exact source pasture as `Native Legends: Arceus Bank batch from Pasture source-number verified`. The source container therefore remains visible after the explicit copy decision and content-addressed entry verification, alongside the exact available and newly created entry counts.
+
+This display-only completion context does not alter source bytes, pasture slots, party data, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
+
+This feature is pending its own automatic Android compile before the Legends: Arceus verified batch completion pasture context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
