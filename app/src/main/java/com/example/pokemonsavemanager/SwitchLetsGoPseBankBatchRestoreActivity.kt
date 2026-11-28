@@ -93,6 +93,9 @@ class SwitchLetsGoPseBankBatchRestoreActivity : Activity() {
                 result.onSuccess { (entries, available) ->
                     candidates = entries
                     availableRecords = available
+                    choose.text = if (entries.size >= 2 && available >= 2)
+                        "Choose up to ${minOf(entries.size, available)} native Bank entries"
+                    else "Choose native Bank entries"
                     status.text = when {
                         entries.size < 2 -> "At least two checksum-valid native PB7 Bank entries are required. Converted entries remain available through their explicit Legalise routes."
                         available < 2 -> "At least two unused native Let's Go storage records are required. Existing Pokémon cannot be replaced."

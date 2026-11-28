@@ -3394,7 +3394,15 @@ After the selected Pokémon Brilliant Diamond or Pokémon Shining Pearl save, na
 
 This display-only capacity does not alter source bytes, Bank entries, destination selection, occupied-slot protection, reviewed mappings, copy creation, checksums, reopen verification, rollback, or exact Bank/source identity. Converted entries remain on their explicit one-record Legalise routes.
 
-This feature is pending its own automatic Android compile before the BDSP Bank batch-restore action capacity is called validated.
+The BDSP Bank batch-restore action capacity was compile-validated on commit `2cba890a387b1d29d488ca3afcd32adac1b50ad5` by exact PSE_BUILD_SUCCESS at Slack TS `1795889385.745529`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46173042182`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Let's Go Bank batch-restore action capacity
+
+After the selected Pokémon: Let's Go, Pikachu! or Pokémon: Let's Go, Eevee! save, native PB7 Bank entries and unused native storage records are reopened and validated, the batch-restore action now reports the exact safe selection capacity, for example `Choose up to 12 native Bank entries`. The capacity is the smaller of the checksum-valid native entry count and unused record count. Fewer than two entries or records keeps the neutral disabled `Choose native Bank entries` label and the existing clear safety explanation.
+
+This display-only capacity does not alter source bytes, Bank entries, native stored-list order, Party or partner pointers, existing-Pokémon protection, reviewed mappings, copy creation, checksums, reopen verification, rollback, or exact Bank/source identity. Converted entries remain on their explicit one-record Legalise routes.
+
+This feature is pending its own automatic Android compile before the Let's Go Bank batch-restore action capacity is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
