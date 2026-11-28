@@ -3058,7 +3058,15 @@ After a BDSP Bank batch is verified, the completion status now reports the revie
 
 This display-only completion context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the BDSP Bank batch completion reviewed-count context is called validated.
+The BDSP Bank batch completion reviewed-count context was compile-validated on commit `1183453174203bdfd64a35554d64c23662164908` by exact PSE_BUILD_SUCCESS at Slack TS `1795856833.407439`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46128294038`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Let's Go Bank batch completion reviewed-count context
+
+After a Let's Go Bank batch is verified, the completion status now reports the reviewed native-record count alongside the unique content-addressed entry count and newly-created entry count. This makes content-addressed deduplication visible without implying that identical native records were stored as separate Bank entries.
+
+This display-only completion context does not alter source bytes, storage slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Let's Go Bank batch completion reviewed-count context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
