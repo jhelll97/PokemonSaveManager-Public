@@ -3202,7 +3202,15 @@ Closing the Brilliant Diamond/Shining Pearl batch chooser with the system Back a
 
 This display-only cancellation context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the Brilliant Diamond/Shining Pearl Bank batch chooser Back/outside cancellation context is called validated.
+The Brilliant Diamond/Shining Pearl Bank batch chooser Back/outside cancellation context was compile-validated on commit `72383e8fa679a95654be9b687cc33d94582b36b8` by exact PSE_BUILD_SUCCESS at Slack TS `1795871094.984519`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46147129998`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Let's Go Pikachu/Eevee Bank batch chooser Back/outside cancellation context
+
+Closing the Let's Go Pikachu/Eevee batch chooser with the system Back action or an outside tap now reports the exact selected-record count and source storage page followed by `Nothing was copied`. Every chooser exit therefore leaves persistent confirmation that no selection entered PSE Bank.
+
+This display-only cancellation context does not alter source bytes, stored-list order, party pointers, partner pointer, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Let's Go Pikachu/Eevee Bank batch chooser Back/outside cancellation context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
