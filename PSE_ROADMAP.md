@@ -3018,7 +3018,15 @@ While opening a Let's Go Bank batch deposit, the initial validation status now k
 
 This display-only source context does not alter source bytes, storage slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the Let's Go Bank batch initial source context is called validated.
+The Let's Go Bank batch initial source context was compile-validated on commit `b5afaa9c84721be0e097b16ae88d19933cc73699` by exact PSE_BUILD_SUCCESS at Slack TS `1795853435.598249`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46123494517`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Legends: Arceus Bank batch initial source context
+
+While opening a Legends: Arceus Bank batch deposit, the initial validation status now keeps the exact source pasture visible as `Reopening and validating Pasture source-number from the selected save`. The user can therefore confirm which native container is being reopened before the candidate list replaces the loading state.
+
+This display-only source context does not alter source bytes, pasture slots, party data, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Legends: Arceus Bank batch initial source context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

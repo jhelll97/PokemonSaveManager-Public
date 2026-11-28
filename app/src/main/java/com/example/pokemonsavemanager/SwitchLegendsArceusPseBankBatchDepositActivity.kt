@@ -49,7 +49,7 @@ class SwitchLegendsArceusPseBankBatchDepositActivity : Activity() {
             text = "Choose several readable native Pokémon from this pasture. PSE reopens the exact save before copying, verifies every complete 360-byte stored PA8, and stores each content-addressed entry byte-for-byte. The Legends: Arceus save, every pasture slot, party data and native container integrity remain unchanged."
             textSize = 16f
         })
-        status = TextView(this).apply { text = "Reopening and validating the selected save…"; textSize = 16f }
+        status = TextView(this).apply { text = "Reopening and validating Pasture $pasture from the selected save…"; textSize = 16f }
         root.addView(status)
         choose = Button(this).apply {
             text = "Choose Pokémon"
