@@ -178,7 +178,7 @@ class SwitchScarletVioletPseBankBatchDepositActivity : Activity() {
                 status.text = result.fold(
                     onSuccess = {
                         val unique = it.entries.map { file -> file.name }.distinct()
-                        "Native Scarlet/Violet Bank batch from Box $box verified.\n${unique.size} content-addressed entr${if (unique.size == 1) "y" else "ies"} available; ${it.createdEntries.size} newly created.\n\n" +
+                        "Native Scarlet/Violet Bank batch from Box $box verified.\nReviewed ${chosen.size} native record${if (chosen.size == 1) "" else "s"}; ${unique.size} content-addressed entr${if (unique.size == 1) "y" else "ies"} available; ${it.createdEntries.size} newly created.\n\n" +
                             unique.joinToString("\n") + "\n\nThe source save and every native box slot remain unchanged."
                     },
                     onFailure = { (it.message ?: "The native Bank batch could not be copied.") + "\n\nThe Scarlet/Violet save was not changed." }
