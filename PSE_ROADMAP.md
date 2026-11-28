@@ -2994,7 +2994,15 @@ After the final copy decision, Legends: Z-A now keeps the exact source box and r
 
 This display-only progress context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
 
-This feature is pending its own automatic Android compile before the Legends: Z-A Bank batch verification progress context is called validated.
+The Legends: Z-A Bank batch verification progress context was compile-validated on commit `cf336703ab905e14ce7f11e00421a1434e1a563e` by exact PSE_BUILD_SUCCESS at Slack TS `1795851272.036689`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46120813828`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Sword/Shield Bank batch initial source context
+
+While opening a Sword/Shield Bank batch deposit, the initial validation status now keeps the exact source box visible as `Reopening and validating Box source-number from the selected save`. The user can therefore confirm which native container is being reopened before the candidate list replaces the loading state.
+
+This display-only source context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Sword/Shield Bank batch initial source context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
