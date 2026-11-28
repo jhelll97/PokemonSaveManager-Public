@@ -3170,7 +3170,15 @@ Cancelling the Legends: Arceus batch chooser now reports the exact selected-reco
 
 This display-only cancellation context does not alter source bytes, pasture slots, party data, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the Legends: Arceus Bank batch chooser cancellation context is called validated.
+The Legends: Arceus Bank batch chooser cancellation context was compile-validated on commit `123dfd5d7541b6a823c312930dcb5bcf0fb792f4` by exact PSE_BUILD_SUCCESS at Slack TS `1795868277.732879`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46143036638`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Scarlet/Violet Bank batch chooser cancellation context
+
+Cancelling the Scarlet/Violet batch chooser now reports the exact selected-record count and source box followed by `Nothing was copied`. The user gets persistent confirmation that no chooser selection entered PSE Bank.
+
+This display-only cancellation context does not alter source bytes, box slots, party data, ride Pokémon, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Scarlet/Violet Bank batch chooser cancellation context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
