@@ -104,6 +104,10 @@ class SwitchLegendsZaPseBankBatchDepositActivity : Activity() {
             .setNeutralButton("Select all", null)
             .setPositiveButton("Review (0)", null)
             .create()
+        dialog.setOnCancelListener {
+            val count = selected.count { it }
+            status.text = "Cancelled Bank selection from Box $box with $count record${if (count == 1) "" else "s"} selected. Nothing was copied."
+        }
         dialog.setOnShowListener {
             bulkButton = dialog.getButton(AlertDialog.BUTTON_NEUTRAL)
             reviewButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
