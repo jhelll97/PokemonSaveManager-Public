@@ -2986,7 +2986,15 @@ After the final copy decision, Scarlet/Violet now keeps the exact source box and
 
 This display-only progress context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
 
-This feature is pending its own automatic Android compile before the Scarlet/Violet Bank batch verification progress context is called validated.
+The Scarlet/Violet Bank batch verification progress context was compile-validated on commit `dc514270e27496b879cf2903c16d9f7d46935b32` by exact PSE_BUILD_SUCCESS at Slack TS `1795850342.613269`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46119820609`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Legends: Z-A Bank batch verification progress context
+
+After the final copy decision, Legends: Z-A now keeps the exact source box and reviewed record count visible while reopening and verifying the batch as `Reopening Box source-number and verifying selected-count reviewed Bank records`. The in-progress state therefore remains tied to the batch the user just approved until the existing verified completion or failure result replaces it.
+
+This display-only progress context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
+
+This feature is pending its own automatic Android compile before the Legends: Z-A Bank batch verification progress context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
