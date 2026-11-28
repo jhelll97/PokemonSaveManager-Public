@@ -155,7 +155,9 @@ class SwitchLetsGoPseBankBatchDepositActivity : Activity() {
         }
         AlertDialog.Builder(this).setTitle("Review storage page ${page + 1} Bank batch")
             .setMessage(message)
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton("Cancel") { _, _ ->
+                status.text = "Cancelled copying ${chosen.size} reviewed Bank record${if (chosen.size == 1) "" else "s"} from storage page ${page + 1}. Nothing was copied."
+            }
             .setPositiveButton("Copy ${chosen.size} to PSE Bank") { _, _ -> commit(chosen) }
             .show()
     }

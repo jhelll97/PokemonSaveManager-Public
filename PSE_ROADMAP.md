@@ -3106,7 +3106,15 @@ Cancelling the final BDSP Bank batch review now replaces the status with the exa
 
 This display-only cancellation context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the BDSP Bank batch final-review cancellation context is called validated.
+The BDSP Bank batch final-review cancellation context was compile-validated on commit `2cc9c23392aa0676bbc823578f377135dd5779d8` by exact PSE_BUILD_SUCCESS at Slack TS `1795861860.608789`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46134440255`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Let's Go Bank batch final-review cancellation context
+
+Cancelling the final Let's Go Bank batch review now replaces the status with the exact reviewed-record count and one-based source storage page followed by `Nothing was copied`. The user therefore gets an explicit, persistent confirmation that the approved-looking batch did not enter PSE Bank.
+
+This display-only cancellation context does not alter source bytes, storage slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Let's Go Bank batch final-review cancellation context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
