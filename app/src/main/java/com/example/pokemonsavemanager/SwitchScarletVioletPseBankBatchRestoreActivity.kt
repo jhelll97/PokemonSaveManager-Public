@@ -92,6 +92,9 @@ class SwitchScarletVioletPseBankBatchRestoreActivity : Activity() {
                 result.onSuccess { (entries, destinations) ->
                     candidates = entries
                     emptyDestinations = destinations
+                    choose.text = if (entries.size >= 2 && destinations.size >= 2)
+                        "Choose up to ${minOf(entries.size, destinations.size)} native Bank entries"
+                    else "Choose native Bank entries"
                     status.text = when {
                         entries.size < 2 -> "At least two checksum-valid native PK9 Bank entries are required. Converted entries remain available through their explicit Legalise routes."
                         destinations.size < 2 -> "At least two empty native Scarlet/Violet PC-box slots are required. No occupied slot can be replaced."
