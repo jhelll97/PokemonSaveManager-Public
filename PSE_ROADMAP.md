@@ -2722,7 +2722,15 @@ The native Box PB8 batch-deposit chooser now states its valid selection range as
 
 The existing empty-selection check remains in the click handler as a safety backstop. This guidance does not alter source bytes, box slots, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
 
-This feature is pending its own automatic Android compile before the BDSP native box batch deposit selection guidance is called validated.
+The BDSP native box batch deposit selection guidance was compile-validated on commit `35801b435838a32a10810122711c4180aa17d461` by exact PSE_BUILD_SUCCESS at Slack TS `1795824258.332699`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46084676830`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Let's Go native box batch deposit selection guidance
+
+The native Box PB7 batch-deposit chooser now states its valid selection range as `Choose 1-readable-count native PB7 records`. Its live `Review (selected)` action remains disabled until at least one readable native box record is selected, so an empty selection cannot advance to final Bank review.
+
+The existing empty-selection check remains in the click handler as a safety backstop. This guidance does not alter source bytes, box slots, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
+
+This feature is pending its own automatic Android compile before the Let's Go native box batch deposit selection guidance is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
