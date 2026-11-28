@@ -2802,7 +2802,15 @@ The native PA9 batch-deposit chooser now keeps the selected source box visible i
 
 This display-only context does not alter source bytes, native box strides, party data, container integrity, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
 
-This feature is pending its own automatic Android compile before the Legends: Z-A native box batch deposit source context is called validated.
+The Legends: Z-A native box batch deposit source context was compile-validated on commit `8b77831203182cc2f03d452797741e265af30d64` by exact PSE_BUILD_SUCCESS at Slack TS `1795832505.234539`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46096955678`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Sword/Shield native box batch deposit final-review context
+
+The final PK8 Bank batch review now keeps the exact source box visible in its dialog title as `Review Box source-number Bank batch`, matching the existing source-box disclosure in the review message. The source context therefore remains visible from record selection through the explicit final copy decision.
+
+This display-only context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
+
+This feature is pending its own automatic Android compile before the Sword/Shield native box batch deposit final-review context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
