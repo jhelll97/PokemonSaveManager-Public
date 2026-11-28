@@ -3250,7 +3250,15 @@ Closing the Brilliant Diamond/Shining Pearl final-review dialog with the system 
 
 This display-only cancellation context does not alter source bytes, native box slots, party data, reviewed records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the Brilliant Diamond/Shining Pearl Bank batch final-review Back/outside cancellation context is called validated.
+The Brilliant Diamond/Shining Pearl Bank batch final-review Back/outside cancellation context was compile-validated on commit `4c3e8a4b99a1f127cd3e78902df7327d76be3243` by exact PSE_BUILD_SUCCESS at Slack TS `1795875202.324149`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46152606950`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Let's Go Pikachu/Eevee Bank batch final-review Back/outside cancellation context
+
+Closing the Let's Go Pikachu/Eevee final-review dialog with the system Back action or an outside tap now reports the exact reviewed-record count and source storage page followed by `Nothing was copied`. Every final-review exit therefore leaves persistent confirmation that no reviewed selection entered PSE Bank.
+
+This display-only cancellation context does not alter source bytes, native stored-list order, party pointers, partner pointer, reviewed records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Let's Go Pikachu/Eevee Bank batch final-review Back/outside cancellation context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
