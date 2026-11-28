@@ -156,7 +156,7 @@ class SwitchLegendsArceusPseBankBatchDepositActivity : Activity() {
         AlertDialog.Builder(this).setTitle("Review Pasture $pasture Bank batch")
             .setMessage(message)
             .setNegativeButton("Cancel", null)
-            .setPositiveButton("Copy to PSE Bank") { _, _ -> commit(chosen) }
+            .setPositiveButton("Copy ${chosen.size} to PSE Bank") { _, _ -> commit(chosen) }
             .show()
     }
 
