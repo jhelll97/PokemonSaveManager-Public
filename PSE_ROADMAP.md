@@ -3034,7 +3034,15 @@ While opening a Scarlet/Violet Bank batch deposit, the initial validation status
 
 This display-only source context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the Scarlet/Violet Bank batch initial source context is called validated.
+The Scarlet/Violet Bank batch initial source context was compile-validated on commit `ff28434a96c649ba75927ac0d9028d9382e97ec7` by exact PSE_BUILD_SUCCESS at Slack TS `1795854884.920109`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46125622623`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Legends: Z-A Bank batch initial source context
+
+While opening a Legends: Z-A Bank batch deposit, the initial validation status now keeps the exact source box visible as `Reopening and validating Box source-number from the selected save`. The user can therefore confirm which native container is being reopened before the candidate list replaces the loading state.
+
+This display-only source context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Legends: Z-A Bank batch initial source context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

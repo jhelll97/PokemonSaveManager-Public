@@ -49,7 +49,7 @@ class SwitchLegendsZaPseBankBatchDepositActivity : Activity() {
             text = "Choose several readable native Pokémon from this box. PSE reopens the exact save before copying, extracts only each 344-byte PA9 from its native 408-byte box stride, and stores each content-addressed record byte-for-byte. The Legends: Z-A save, every native stride, party data and container integrity remain unchanged."
             textSize = 16f
         })
-        status = TextView(this).apply { text = "Reopening and validating the selected save…"; textSize = 16f }
+        status = TextView(this).apply { text = "Reopening and validating Box $box from the selected save…"; textSize = 16f }
         root.addView(status)
         choose = Button(this).apply {
             text = "Choose Pokémon"
