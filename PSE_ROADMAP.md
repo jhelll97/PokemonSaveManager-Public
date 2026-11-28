@@ -2890,7 +2890,15 @@ After a successful, reopened Bank batch verification, the Scarlet/Violet complet
 
 This display-only completion context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
 
-This feature is pending its own automatic Android compile before the Scarlet/Violet verified batch completion source-box context is called validated.
+The Scarlet/Violet verified batch completion source-box context was compile-validated on commit `6a6eb43aaca75c489aeb9e88cea00764d75999b6` by exact PSE_BUILD_SUCCESS at Slack TS `1795841421.026819`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46108338208`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Legends: Z-A verified batch completion source-box context
+
+After a successful, reopened Bank batch verification, the Legends: Z-A completion status now identifies the exact source box as `Native Legends: Z-A Bank batch from Box source-number verified`. The source container therefore remains visible after the explicit copy decision and content-addressed entry verification, alongside the exact available and newly created entry counts.
+
+This display-only completion context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
+
+This feature is pending its own automatic Android compile before the Legends: Z-A verified batch completion source-box context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

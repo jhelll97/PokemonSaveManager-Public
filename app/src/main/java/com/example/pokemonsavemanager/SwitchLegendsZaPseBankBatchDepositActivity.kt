@@ -178,7 +178,7 @@ class SwitchLegendsZaPseBankBatchDepositActivity : Activity() {
                 status.text = result.fold(
                     onSuccess = {
                         val unique = it.entries.map { file -> file.name }.distinct()
-                        "Native Legends: Z-A Bank batch verified.\n${unique.size} content-addressed entr${if (unique.size == 1) "y" else "ies"} available; ${it.createdEntries.size} newly created.\n\n" +
+                        "Native Legends: Z-A Bank batch from Box $box verified.\n${unique.size} content-addressed entr${if (unique.size == 1) "y" else "ies"} available; ${it.createdEntries.size} newly created.\n\n" +
                             unique.joinToString("\n") + "\n\nThe source save and every native box stride remain unchanged."
                     },
                     onFailure = { (it.message ?: "The native Bank batch could not be copied.") + "\n\nThe Legends: Z-A save was not changed." }
