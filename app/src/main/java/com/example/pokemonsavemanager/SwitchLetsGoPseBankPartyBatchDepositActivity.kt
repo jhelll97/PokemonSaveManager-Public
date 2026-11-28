@@ -69,6 +69,7 @@ class SwitchLetsGoPseBankPartyBatchDepositActivity : Activity() {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 result.onSuccess {
                     candidates = it
+                    choose.text = if (it.isEmpty()) "Choose Pokémon" else "Choose from ${it.size} Pokémon"
                     status.text = if (it.isEmpty())
                         "The current Party has no readable native Pokémon available to copy. Empty and unreadable Party pointers remain untouched."
                     else "${it.size} readable native Pokémon available in the current Party. Empty and unreadable Party pointers are excluded."
