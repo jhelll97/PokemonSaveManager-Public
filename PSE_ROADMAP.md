@@ -2898,7 +2898,15 @@ After a successful, reopened Bank batch verification, the Legends: Z-A completio
 
 This display-only completion context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
 
-This feature is pending its own automatic Android compile before the Legends: Z-A verified batch completion source-box context is called validated.
+The Legends: Z-A verified batch completion source-box context was compile-validated on commit `32a57759224f70109fb44bba03d22278c521aa31` by exact PSE_BUILD_SUCCESS at Slack TS `1795842130.300169`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46109464958`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD. This completes automatic compile validation of the six-title verified-completion source-container context sequence.
+
+## Sword/Shield final Bank copy selected-count action
+
+The final Sword/Shield batch review now labels its explicit commit action as `Copy selected-count to PSE Bank`, using the already reviewed selection size. The user can therefore recheck the exact number of native PK8 records at the final cancellable decision without reopening the earlier selection dialog.
+
+This display-only action label does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
+
+This feature is pending its own automatic Android compile before the Sword/Shield final Bank copy selected-count action is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
