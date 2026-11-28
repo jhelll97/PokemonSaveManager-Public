@@ -70,6 +70,7 @@ class SwitchSwordShieldPseBankBatchDepositActivity : Activity() {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 result.onSuccess {
                     candidates = it
+                    choose.text = if (it.isEmpty()) "Choose Pokémon" else "Choose from ${it.size} Pokémon"
                     status.text = if (it.isEmpty())
                         "Box $box has no readable native Pokémon available to copy. Empty and unreadable slots remain untouched."
                     else "${it.size} readable native Pokémon available in Box $box. Empty and unreadable slots are excluded."
