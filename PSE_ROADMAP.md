@@ -2906,7 +2906,15 @@ The final Sword/Shield batch review now labels its explicit commit action as `Co
 
 This display-only action label does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
 
-This feature is pending its own automatic Android compile before the Sword/Shield final Bank copy selected-count action is called validated.
+The Sword/Shield final Bank copy selected-count action was compile-validated on commit `c1ddaf1809d8104d45b52064c14816f63c9fc9aa` by exact PSE_BUILD_SUCCESS at Slack TS `1795843055.877419`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46110342668`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## BDSP final Bank copy selected-count action
+
+The final BDSP batch review now labels its explicit commit action as `Copy selected-count to PSE Bank`, using the already reviewed selection size. The user can therefore recheck the exact number of native PB8 records at the final cancellable decision without reopening the earlier selection dialog.
+
+This display-only action label does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
+
+This feature is pending its own automatic Android compile before the BDSP final Bank copy selected-count action is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
