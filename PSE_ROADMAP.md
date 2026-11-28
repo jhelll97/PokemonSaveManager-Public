@@ -2930,7 +2930,15 @@ The final Legends: Arceus batch review now labels its explicit commit action as 
 
 This display-only action label does not alter source bytes, pasture slots, party data, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
 
-This feature is pending its own automatic Android compile before the Legends: Arceus final Bank copy selected-count action is called validated.
+The Legends: Arceus final Bank copy selected-count action was compile-validated on commit `a76aea9d7df48e897789c111eb613ea25d02ec2a` by exact PSE_BUILD_SUCCESS at Slack TS `1795845064.097519`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46113338728`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Scarlet/Violet final Bank copy selected-count action
+
+The final Scarlet/Violet batch review now labels its explicit commit action as `Copy selected-count to PSE Bank`, using the already reviewed selection size. The user can therefore recheck the exact number of native PK9 records at the final cancellable decision without reopening the earlier box selection dialog.
+
+This display-only action label does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
+
+This feature is pending its own automatic Android compile before the Scarlet/Violet final Bank copy selected-count action is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
