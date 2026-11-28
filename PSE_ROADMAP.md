@@ -2826,7 +2826,15 @@ The final PB7 Bank batch review now keeps the exact source storage page visible 
 
 This display-only context does not alter source bytes, stored-list order, party or partner pointers, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
 
-This feature is pending its own automatic Android compile before the Let's Go native storage-page batch deposit final-review context is called validated.
+The Let's Go native storage-page batch deposit final-review context was compile-validated on commit `ed6470e1d8b6435d18120c662d64915292aef191` by exact PSE_BUILD_SUCCESS at Slack TS `1795834716.028849`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46099812936`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Legends: Arceus native pasture batch deposit final-review context
+
+The final PA8 Bank batch review now keeps the exact source pasture visible in its dialog title as `Review Pasture source-number Bank batch`, matching the existing source-pasture disclosure in the review message. The source context therefore remains visible from slot selection through the explicit final copy decision.
+
+This display-only context does not alter source bytes, pasture slots, selected records, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
+
+This feature is pending its own automatic Android compile before the Legends: Arceus native pasture batch deposit final-review context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
