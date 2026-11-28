@@ -153,7 +153,7 @@ class SwitchScarletVioletPseBankBatchDepositActivity : Activity() {
             chosen.forEach { append("• Slot ${it.position}: ${it.label.substringAfter(": ")}\n  ${it.bankName}\n") }
             append("\n$uniqueCount content-addressed Bank entr${if (uniqueCount == 1) "y" else "ies"} will exist after verification. Identical PK9 bytes share one Bank entry. The source save, boxes, party data, ride Pokémon, records, checksums and title identity remain unchanged.")
         }
-        AlertDialog.Builder(this).setTitle("Review native Bank batch")
+        AlertDialog.Builder(this).setTitle("Review Box $box Bank batch")
             .setMessage(message)
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Copy to PSE Bank") { _, _ -> commit(chosen) }
