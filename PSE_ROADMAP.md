@@ -3402,7 +3402,15 @@ After the selected Pokémon: Let's Go, Pikachu! or Pokémon: Let's Go, Eevee! sa
 
 This display-only capacity does not alter source bytes, Bank entries, native stored-list order, Party or partner pointers, existing-Pokémon protection, reviewed mappings, copy creation, checksums, reopen verification, rollback, or exact Bank/source identity. Converted entries remain on their explicit one-record Legalise routes.
 
-This feature is pending its own automatic Android compile before the Let's Go Bank batch-restore action capacity is called validated.
+The Let's Go Bank batch-restore action capacity was compile-validated on commit `a2ef4e1a080823d4d4cdeed42108326eaad24590` by exact PSE_BUILD_SUCCESS at Slack TS `1795890160.448049`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46174458628`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Legends: Arceus Bank batch-restore action capacity
+
+After the selected Legends: Arceus save, native PA8 Bank entries and empty pasture destinations are reopened and validated, the batch-restore action now reports the exact safe selection capacity, for example `Choose up to 12 native Bank entries`. The capacity is the smaller of the checksum-valid native entry count and empty destination count. Fewer than two entries or destinations keeps the neutral disabled `Choose native Bank entries` label and the existing clear safety explanation.
+
+This display-only capacity does not alter source bytes, Bank entries, destination selection, occupied-slot protection, reviewed mappings, party data, copy creation, checksums, reopen verification, rollback, or exact Bank/source identity. Converted entries remain on their explicit one-record Legalise routes.
+
+This feature is pending its own automatic Android compile before the Legends: Arceus Bank batch-restore action capacity is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
