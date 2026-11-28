@@ -97,7 +97,10 @@ class SwitchLegendsArceusPseBankBatchDepositActivity : Activity() {
                 selected[index] = checked
                 refreshSelectionActions()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton("Cancel") { _, _ ->
+                val count = selected.count { it }
+                status.text = "Cancelled Bank selection from Pasture $pasture with $count record${if (count == 1) "" else "s"} selected. Nothing was copied."
+            }
             .setNeutralButton("Select all", null)
             .setPositiveButton("Review (0)", null)
             .create()
