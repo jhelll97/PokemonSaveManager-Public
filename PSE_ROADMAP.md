@@ -3386,7 +3386,15 @@ After the selected Pokémon Sword or Pokémon Shield save, native PK8 Bank entri
 
 This display-only capacity does not alter source bytes, Bank entries, destination selection, occupied-slot protection, reviewed mappings, copy creation, checksums, reopen verification, rollback, or exact Bank/source identity. Converted entries remain on their explicit one-record Legalise routes.
 
-This feature is pending its own automatic Android compile before the Sword/Shield Bank batch-restore action capacity is called validated.
+The Sword/Shield Bank batch-restore action capacity was compile-validated on commit `1b0f6214e06961bbcd60486c3cd2a7060cc518bc` by exact PSE_BUILD_SUCCESS at Slack TS `1795888422.966079`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46172141127`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## BDSP Bank batch-restore action capacity
+
+After the selected Pokémon Brilliant Diamond or Pokémon Shining Pearl save, native PB8 Bank entries and empty PC-box destinations are reopened and validated, the batch-restore action now reports the exact safe selection capacity, for example `Choose up to 12 native Bank entries`. The capacity is the smaller of the checksum-valid native entry count and empty destination count. Fewer than two entries or destinations keeps the neutral disabled `Choose native Bank entries` label and the existing clear safety explanation.
+
+This display-only capacity does not alter source bytes, Bank entries, destination selection, occupied-slot protection, reviewed mappings, copy creation, checksums, reopen verification, rollback, or exact Bank/source identity. Converted entries remain on their explicit one-record Legalise routes.
+
+This feature is pending its own automatic Android compile before the BDSP Bank batch-restore action capacity is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
