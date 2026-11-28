@@ -3210,7 +3210,15 @@ Closing the Let's Go Pikachu/Eevee batch chooser with the system Back action or 
 
 This display-only cancellation context does not alter source bytes, stored-list order, party pointers, partner pointer, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the Let's Go Pikachu/Eevee Bank batch chooser Back/outside cancellation context is called validated.
+The Let's Go Pikachu/Eevee Bank batch chooser Back/outside cancellation context was compile-validated on commit `7b2ebaccff8d19ff86e09ce5db3707e9a3e1904b` by exact PSE_BUILD_SUCCESS at Slack TS `1795871807.939859`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46147933449`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Legends: Arceus Bank batch chooser Back/outside cancellation context
+
+Closing the Legends: Arceus batch chooser with the system Back action or an outside tap now reports the exact selected-record count and source pasture followed by `Nothing was copied`. Every chooser exit therefore leaves persistent confirmation that no selection entered PSE Bank.
+
+This display-only cancellation context does not alter source bytes, pasture slots, party data, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Legends: Arceus Bank batch chooser Back/outside cancellation context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
