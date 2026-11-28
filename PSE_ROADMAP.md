@@ -3042,7 +3042,15 @@ While opening a Legends: Z-A Bank batch deposit, the initial validation status n
 
 This display-only source context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the Legends: Z-A Bank batch initial source context is called validated.
+The Legends: Z-A Bank batch initial source context was compile-validated on commit `6aea9d8c93a2f6c7d4a348713ca6c55ecbd2d336` by exact PSE_BUILD_SUCCESS at Slack TS `1795855605.467089`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46126605390`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Sword/Shield Bank batch completion reviewed-count context
+
+After a Sword/Shield Bank batch is verified, the completion status now reports the reviewed native-record count alongside the unique content-addressed entry count and newly-created entry count. This makes content-addressed deduplication visible without implying that identical native records were stored as separate Bank entries.
+
+This display-only completion context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Sword/Shield Bank batch completion reviewed-count context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

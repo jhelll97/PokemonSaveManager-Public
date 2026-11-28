@@ -179,7 +179,7 @@ class SwitchSwordShieldPseBankBatchDepositActivity : Activity() {
                 status.text = result.fold(
                     onSuccess = {
                         val unique = it.entries.map { file -> file.name }.distinct()
-                        "Native Sword/Shield Bank batch from Box $box verified.\n${unique.size} content-addressed entr${if (unique.size == 1) "y" else "ies"} available; ${it.createdEntries.size} newly created.\n\n" +
+                        "Native Sword/Shield Bank batch from Box $box verified.\nReviewed ${chosen.size} native record${if (chosen.size == 1) "" else "s"}; ${unique.size} content-addressed entr${if (unique.size == 1) "y" else "ies"} available; ${it.createdEntries.size} newly created.\n\n" +
                             unique.joinToString("\n") + "\n\nThe source save and every native slot remain unchanged."
                     },
                     onFailure = { (it.message ?: "The native Bank batch could not be copied.") + "\n\nThe Sword/Shield save was not changed." }
