@@ -163,7 +163,7 @@ class SwitchLegendsArceusPseBankBatchDepositActivity : Activity() {
     private fun commit(chosen: List<LegendsArceusBatchDepositCandidate>) {
         if (busy) return
         setBusy(true)
-        status.text = "Reopening the source and verifying the complete Bank batch…"
+        status.text = "Reopening Pasture $pasture and verifying ${chosen.size} reviewed Bank record${if (chosen.size == 1) "" else "s"}…"
         worker.execute {
             val result = runCatching {
                 val current = candidatesFrom(readVerifiedSource())
