@@ -3146,7 +3146,15 @@ Cancelling the Sword/Shield batch chooser now reports the exact selected-record 
 
 This display-only cancellation context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the Sword/Shield Bank batch chooser cancellation context is called validated.
+The Sword/Shield Bank batch chooser cancellation context was compile-validated on commit `46a5eb27486696f5f0a4ebe4dea5ed95de6ab2b4` by exact PSE_BUILD_SUCCESS at Slack TS `1795865863.678829`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46139689569`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Brilliant Diamond/Shining Pearl Bank batch chooser cancellation context
+
+Cancelling the Brilliant Diamond/Shining Pearl batch chooser now reports the exact selected-record count and source box followed by `Nothing was copied`. The user gets persistent confirmation that no chooser selection entered PSE Bank.
+
+This display-only cancellation context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Brilliant Diamond/Shining Pearl Bank batch chooser cancellation context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
