@@ -49,7 +49,7 @@ class SwitchLetsGoPseBankBatchDepositActivity : Activity() {
             text = "Choose several readable native Pokémon from this storage page. PSE reopens the exact save before copying, verifies every complete 260-byte PB7, and stores each content-addressed entry byte-for-byte. The Let's Go save, stored-list order, party pointers, partner pointer and every native record remain unchanged."
             textSize = 16f
         })
-        status = TextView(this).apply { text = "Reopening and validating the selected save…"; textSize = 16f }
+        status = TextView(this).apply { text = "Reopening and validating storage page ${page + 1} from the selected save…"; textSize = 16f }
         root.addView(status)
         choose = Button(this).apply {
             text = "Choose Pokémon"

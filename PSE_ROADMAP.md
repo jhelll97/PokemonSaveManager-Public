@@ -3010,7 +3010,15 @@ While opening a BDSP Bank batch deposit, the initial validation status now keeps
 
 This display-only source context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the BDSP Bank batch initial source context is called validated.
+The BDSP Bank batch initial source context was compile-validated on commit `160140619f5662761047712993012d2ece859f2e` by exact PSE_BUILD_SUCCESS at Slack TS `1795852525.890349`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46122706009`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Let's Go Bank batch initial source context
+
+While opening a Let's Go Bank batch deposit, the initial validation status now keeps the exact one-based storage page visible as `Reopening and validating storage page source-number from the selected save`. The user can therefore confirm which native container is being reopened before the candidate list replaces the loading state.
+
+This display-only source context does not alter source bytes, storage slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Let's Go Bank batch initial source context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
