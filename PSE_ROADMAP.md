@@ -3258,7 +3258,15 @@ Closing the Let's Go Pikachu/Eevee final-review dialog with the system Back acti
 
 This display-only cancellation context does not alter source bytes, native stored-list order, party pointers, partner pointer, reviewed records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the Let's Go Pikachu/Eevee Bank batch final-review Back/outside cancellation context is called validated.
+The Let's Go Pikachu/Eevee Bank batch final-review Back/outside cancellation context was compile-validated on commit `c825d2d1c62258550f660b429d3d5eaf618b3a5c` by exact PSE_BUILD_SUCCESS at Slack TS `1795875774.560049`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46153661512`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Legends: Arceus Bank batch final-review Back/outside cancellation context
+
+Closing the Legends: Arceus final-review dialog with the system Back action or an outside tap now reports the exact reviewed-record count and source pasture followed by `Nothing was copied`. Every final-review exit therefore leaves persistent confirmation that no reviewed selection entered PSE Bank.
+
+This display-only cancellation context does not alter source bytes, native pasture slots, party data, reviewed records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Legends: Arceus Bank batch final-review Back/outside cancellation context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

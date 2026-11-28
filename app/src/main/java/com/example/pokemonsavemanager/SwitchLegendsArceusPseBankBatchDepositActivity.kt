@@ -160,13 +160,17 @@ class SwitchLegendsArceusPseBankBatchDepositActivity : Activity() {
             chosen.forEach { append("• Slot ${it.position}: ${it.label.substringAfter(": ")}\n  ${it.bankName}\n") }
             append("\n$uniqueCount content-addressed Bank entr${if (uniqueCount == 1) "y" else "ies"} will exist after verification. Identical PA8 bytes share one Bank entry. The source save, pasture slots, party data, records, checksums and title identity remain unchanged.")
         }
-        AlertDialog.Builder(this).setTitle("Review Pasture $pasture Bank batch")
+        val dialog = AlertDialog.Builder(this).setTitle("Review Pasture $pasture Bank batch")
             .setMessage(message)
             .setNegativeButton("Cancel") { _, _ ->
                 status.text = "Cancelled copying ${chosen.size} reviewed Bank record${if (chosen.size == 1) "" else "s"} from Pasture $pasture. Nothing was copied."
             }
             .setPositiveButton("Copy ${chosen.size} to PSE Bank") { _, _ -> commit(chosen) }
-            .show()
+            .create()
+        dialog.setOnCancelListener {
+            status.text = "Cancelled copying ${chosen.size} reviewed Bank record${if (chosen.size == 1) "" else "s"} from Pasture $pasture. Nothing was copied."
+        }
+        dialog.show()
     }
 
     private fun commit(chosen: List<LegendsArceusBatchDepositCandidate>) {
