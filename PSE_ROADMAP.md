@@ -2754,7 +2754,15 @@ The native Box PA9 batch-deposit chooser now states its valid selection range as
 
 The existing empty-selection check remains in the click handler as a safety backstop. This guidance does not alter source bytes, box slots or native strides, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
 
-This feature is pending its own automatic Android compile before the Legends: Z-A native box batch deposit selection guidance is called validated.
+The Legends: Z-A native box batch deposit selection guidance was compile-validated on commit `ebefe0c0a388adcb7d02d3779fa8c2e8ad5f0289` by exact PSE_BUILD_SUCCESS at Slack TS `1795827685.735229`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46089738109`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Sword/Shield native box batch deposit source context
+
+The native Box PK8 batch-deposit chooser now keeps the selected source box visible in its title alongside the valid selection range: `Box source-number • Choose 1-readable-count native PK8 records`. This gives the user the exact source-box context while selecting records for final Bank review.
+
+This display-only context does not alter source bytes, box slots, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
+
+This feature is pending its own automatic Android compile before the Sword/Shield native box batch deposit source context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
