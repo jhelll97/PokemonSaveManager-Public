@@ -3234,7 +3234,15 @@ Closing the Legends: Z-A batch chooser with the system Back action or an outside
 
 This display-only cancellation context does not alter source bytes, native box strides, party data, selected records, exact Bank-entry identity, content-addressed deduplication, validation, revision handling, or failure handling.
 
-This feature is pending its own automatic Android compile before the Legends: Z-A Bank batch chooser Back/outside cancellation context is called validated.
+The Legends: Z-A Bank batch chooser Back/outside cancellation context was compile-validated on commit `1e04c022b1a02ff38738b1251dcc5b674bdac173` by exact PSE_BUILD_SUCCESS at Slack TS `1795873869.731959`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46151006301`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Sword/Shield Bank batch final-review Back/outside cancellation context
+
+Closing the Sword/Shield final-review dialog with the system Back action or an outside tap now reports the exact reviewed-record count and source box followed by `Nothing was copied`. Every final-review exit therefore leaves persistent confirmation that no reviewed selection entered PSE Bank.
+
+This display-only cancellation context does not alter source bytes, native box slots, party data, reviewed records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Sword/Shield Bank batch final-review Back/outside cancellation context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
