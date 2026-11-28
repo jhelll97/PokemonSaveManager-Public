@@ -3298,7 +3298,15 @@ After the selected Brilliant Diamond or Shining Pearl save and Box `1–40` are 
 
 This display-only count does not alter source bytes, native box slots, party data, candidate filtering, reviewed records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the BDSP Bank batch available-record action count is called validated.
+The BDSP Bank batch available-record action count was compile-validated on commit `67828cf02f4c6cace77728fd93e79cf558515668` by exact PSE_BUILD_SUCCESS at Slack TS `1795879795.622859`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46159002924`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Let's Go Bank batch available-record action count
+
+After the selected Let's Go Pikachu or Let's Go Eevee save and storage page `1–40` are reopened and validated, the batch chooser action now reports the exact number of readable native PB7 records available, for example `Choose from 12 Pokémon`. Empty and unreadable records remain excluded, and an empty or failed load keeps the neutral disabled `Choose Pokémon` label.
+
+This display-only count does not alter source bytes, native stored-list order, party pointers, partner pointer, candidate filtering, reviewed records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Let's Go Bank batch available-record action count is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 

@@ -70,6 +70,7 @@ class SwitchLetsGoPseBankBatchDepositActivity : Activity() {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 result.onSuccess {
                     candidates = it
+                    choose.text = if (it.isEmpty()) "Choose Pokémon" else "Choose from ${it.size} Pokémon"
                     status.text = if (it.isEmpty())
                         "Storage page ${page + 1} has no readable native Pokémon available to copy. Empty and unreadable records remain untouched."
                     else "${it.size} readable native Pokémon available on storage page ${page + 1}. Empty and unreadable records are excluded."
