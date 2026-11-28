@@ -2770,7 +2770,15 @@ The native Box PB8 batch-deposit chooser now keeps the selected source box visib
 
 This display-only context does not alter source bytes, box slots, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
 
-This feature is pending its own automatic Android compile before the BDSP native box batch deposit source context is called validated.
+The BDSP native box batch deposit source context was compile-validated on commit `a87462d3832b9dccd28ac2debbe66fdad6e46ce7` by exact PSE_BUILD_SUCCESS at Slack TS `1795829356.408729`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46092415770`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Let's Go native storage-page batch deposit source context
+
+The native PB7 batch-deposit chooser now keeps the selected storage page visible in its title alongside the valid selection range: `Storage page source-number • Choose 1-readable-count native PB7 records`. This preserves Let's Go's native stored-list terminology while giving the user the exact source-page context during final Bank selection.
+
+This display-only context does not alter source bytes, stored-list order, party or partner pointers, exact Bank-entry identity, content-addressed deduplication, verification, or failure handling.
+
+This feature is pending its own automatic Android compile before the Let's Go native storage-page batch deposit source context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
