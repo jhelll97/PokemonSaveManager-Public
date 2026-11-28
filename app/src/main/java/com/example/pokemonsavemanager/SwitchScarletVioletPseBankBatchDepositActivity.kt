@@ -155,7 +155,9 @@ class SwitchScarletVioletPseBankBatchDepositActivity : Activity() {
         }
         AlertDialog.Builder(this).setTitle("Review Box $box Bank batch")
             .setMessage(message)
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton("Cancel") { _, _ ->
+                status.text = "Cancelled copying ${chosen.size} reviewed Bank record${if (chosen.size == 1) "" else "s"} from Box $box. Nothing was copied."
+            }
             .setPositiveButton("Copy ${chosen.size} to PSE Bank") { _, _ -> commit(chosen) }
             .show()
     }
