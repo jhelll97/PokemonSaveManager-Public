@@ -3090,7 +3090,15 @@ After a Legends: Z-A Bank batch is verified, the completion status now reports t
 
 This display-only completion context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the Legends: Z-A Bank batch completion reviewed-count context is called validated.
+The Legends: Z-A Bank batch completion reviewed-count context was compile-validated on commit `7303a44c8978dad047200f7eec1ba4ea1758dac6` by exact PSE_BUILD_SUCCESS at Slack TS `1795860052.476459`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46132410416`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Sword/Shield Bank batch final-review cancellation context
+
+Cancelling the final Sword/Shield Bank batch review now replaces the status with the exact reviewed-record count and source box followed by `Nothing was copied`. The user therefore gets an explicit, persistent confirmation that the approved-looking batch did not enter PSE Bank.
+
+This display-only cancellation context does not alter source bytes, box slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Sword/Shield Bank batch final-review cancellation context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
