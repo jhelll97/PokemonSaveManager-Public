@@ -49,7 +49,7 @@ class SwitchBdspPseBankBatchDepositActivity : Activity() {
             text = "Choose several readable native Pokémon from this box. PSE reopens the exact save before copying, verifies every complete 344-byte PB8, and stores each content-addressed entry byte-for-byte. The BDSP save and every box slot remain unchanged."
             textSize = 16f
         })
-        status = TextView(this).apply { text = "Reopening and validating the selected save…"; textSize = 16f }
+        status = TextView(this).apply { text = "Reopening and validating Box $box from the selected save…"; textSize = 16f }
         root.addView(status)
         choose = Button(this).apply {
             text = "Choose Pokémon"
