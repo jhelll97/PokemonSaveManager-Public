@@ -70,6 +70,7 @@ class SwitchLegendsArceusPseBankBatchDepositActivity : Activity() {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 result.onSuccess {
                     candidates = it
+                    choose.text = if (it.isEmpty()) "Choose Pokémon" else "Choose from ${it.size} Pokémon"
                     status.text = if (it.isEmpty())
                         "Pasture $pasture has no readable native Pokémon available to copy. Empty and unreadable slots remain untouched."
                     else "${it.size} readable native Pokémon available in Pasture $pasture. Empty and unreadable slots are excluded."
