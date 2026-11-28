@@ -3338,7 +3338,15 @@ After the selected Pokémon Sword or Pokémon Shield save and its current Party 
 
 This display-only count does not alter source bytes, native party order or count, party records, PC slots, candidate filtering, reviewed records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the Sword/Shield Bank party-batch available-record action count is called validated.
+The Sword/Shield Bank party-batch available-record action count was compile-validated on commit `8aa79f50935306e7d607a1abca1884b34d3b8935` by exact PSE_BUILD_SUCCESS at Slack TS `1795883603.927879`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46164515617`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## BDSP Bank party-batch available-record action count
+
+After the selected Pokémon Brilliant Diamond or Pokémon Shining Pearl save and its current Party are reopened and validated, the party-batch chooser action now reports the exact number of readable native PB8 records available, for example `Choose from 6 Pokémon`. Empty and unreadable party slots remain excluded, and an empty or failed load keeps the neutral disabled `Choose Pokémon` label.
+
+This display-only count does not alter source bytes, native party order or count, party records, PC slots, candidate filtering, reviewed records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the BDSP Bank party-batch available-record action count is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
