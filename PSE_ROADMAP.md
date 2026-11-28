@@ -3066,7 +3066,15 @@ After a Let's Go Bank batch is verified, the completion status now reports the r
 
 This display-only completion context does not alter source bytes, storage slots, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
 
-This feature is pending its own automatic Android compile before the Let's Go Bank batch completion reviewed-count context is called validated.
+The Let's Go Bank batch completion reviewed-count context was compile-validated on commit `a86a9b85a61b7e3df3bca7bc2fef18ec3eb85e9d` by exact PSE_BUILD_SUCCESS at Slack TS `1795857548.871379`: repository `jhelll97/PokemonSaveManager-Public`, branch `pse-phone-auto-v2-test`, run `46129069063`, attempt 1, event `push`, workflow `Android build`, conclusion `success`. The compile job succeeded, the signed APK job was skipped, the reporter job succeeded, and the event SHA was current HEAD.
+
+## Legends: Arceus Bank batch completion reviewed-count context
+
+After a Legends: Arceus Bank batch is verified, the completion status now reports the reviewed native-record count alongside the unique content-addressed entry count and newly-created entry count. This makes content-addressed deduplication visible without implying that identical native records were stored as separate Bank entries.
+
+This display-only completion context does not alter source bytes, pasture slots, party data, selected records, exact Bank-entry identity, content-addressed deduplication, validation, or failure handling.
+
+This feature is pending its own automatic Android compile before the Legends: Arceus Bank batch completion reviewed-count context is called validated.
 
 ## Generation 1 -> Legends: Z-A reviewed-source identity repair
 
